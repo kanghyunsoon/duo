@@ -1,23 +1,23 @@
 # TASKS
 
-상태: Draft (T00 2차)
+상태: **Frozen** (T00 final, 2026-09-27). Task는 구현 중 필요가 발견될 때만 추가하거나 나눈다.
 
 ## 규칙
 
 - Task는 한 번에 하나씩 구현하고, 끝나면 "검증 대상 Requirement"의 문서와 실제 구현을 대조한다. 차이는 [conflicts.md](../conflicts.md)에 기록한 뒤 status를 `done`으로 바꾼다.
-- 각 Task의 `duo` block은 DUO가 Issue Node로 읽는 정규 데이터다([03](../03-data-model.md#markdown-정의-형식)). Acceptance Criteria는 `**AC-NNN-NN**`로 시작하는 목록 항목이다.
+- 각 Task의 `duo` block은 DUO가 Issue Node로 읽는 정규 데이터다([03](../03-data-model.md#markdown-정의-형식)). Acceptance Criteria는 `**AC-NNN-NN**`로 시작하는 목록 항목이다(나뉜 Task는 `AC-012A-01`처럼 접미사를 포함).
 - status: `todo` · `in_progress` · `review`(Human 검토 대기) · `done`
 
 ## 병렬 개발 Lane
 
-6개 패키지가 곧 6개 Lane이다. 같은 Milestone 안에서 의존성이 없는 Task는 동시에 진행할 수 있다.
+6개 패키지가 곧 6개 Lane이다. 같은 단계 안에서 의존성이 없는 Task는 동시에 진행할 수 있다.
 
 | Lane | Task |
 |---|---|
 | core | TASK-002, TASK-009 |
 | analyzer | TASK-004, TASK-005, TASK-006 |
 | graph | TASK-003, TASK-007, TASK-008 |
-| director | TASK-010, TASK-011, TASK-012, TASK-013, TASK-014 |
+| director | TASK-010, TASK-011, TASK-012A, TASK-012B, TASK-013, TASK-014 |
 | integration | TASK-016, TASK-017 |
 | ui | TASK-018 |
 | 공통(repo, apps/cli, bench, E2E) | TASK-001, TASK-015, TASK-019, TASK-020 |
@@ -43,7 +43,8 @@ flowchart LR
     TASK009["TASK-009<br/>Decision 생명주기"]
     TASK010["TASK-010<br/>Context Compiler"]
     TASK011["TASK-011<br/>Knowledge Gap"]
-    TASK012["TASK-012<br/>LLMProvider와 OpenAI 호환 Provider"]
+    TASK012A["TASK-012A<br/>LLMProvider 계약과 no-op"]
+    TASK012B["TASK-012B<br/>OpenAI Responses Provider"]
     TASK013["TASK-013<br/>Review 엔진"]
     TASK014["TASK-014<br/>init 파이프라인"]
   end
@@ -71,12 +72,14 @@ flowchart LR
   TASK008 --> TASK010
   TASK009 --> TASK010
   TASK008 --> TASK011
-  TASK002 --> TASK012
+  TASK002 --> TASK012A
+  TASK010 --> TASK012B
+  TASK013 --> TASK012B
   TASK008 --> TASK013
   TASK009 --> TASK013
   TASK010 --> TASK013
   TASK011 --> TASK013
-  TASK012 --> TASK013
+  TASK012A --> TASK013
   TASK008 --> TASK014
   TASK011 --> TASK014
   TASK009 --> TASK015
@@ -97,30 +100,33 @@ flowchart LR
   TASK017 --> TASK020
   TASK018 --> TASK020
   TASK019 --> TASK020
+  TASK012B --> TASK020
 ```
 
-구현 순서(위상 정렬, 번호 순): TASK-000 → TASK-001 → TASK-002 → TASK-003 → TASK-004 → TASK-005 → TASK-006 → TASK-007 → TASK-008 → TASK-009 → TASK-010 → TASK-011 → TASK-012 → TASK-013 → TASK-014 → TASK-015 → TASK-016 → TASK-017 → TASK-018 → TASK-019 → TASK-020
+구현 순서(위상 정렬): TASK-000 → TASK-001 → TASK-002 → TASK-003 → TASK-004 → TASK-006 → TASK-009 → TASK-012A → TASK-005 → TASK-007 → TASK-008 → TASK-010 → TASK-011 → TASK-013 → TASK-014 → TASK-012B → TASK-015 → TASK-016 → TASK-019 → TASK-017 → TASK-018 → TASK-020
 
-병렬 가능 묶음(선행 Task 완료 기준):
+병렬 가능 단계(선행 Task 완료 기준):
 
 1. TASK-000
 2. TASK-001
 3. TASK-002
-4. TASK-003, TASK-004, TASK-006, TASK-009, TASK-012
+4. TASK-003, TASK-004, TASK-006, TASK-009, TASK-012A
 5. TASK-005
 6. TASK-007
 7. TASK-008
 8. TASK-010, TASK-011
 9. TASK-013, TASK-014
-10. TASK-015, TASK-016, TASK-019
+10. TASK-012B, TASK-015, TASK-016, TASK-019
 11. TASK-017, TASK-018
 12. TASK-020
+
+TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TASK-013)의 입출력 계약이 안정된 뒤에 구현한다. 그 전까지 Review는 TASK-012A의 NoneProvider로 동작한다(H-15).
 
 ## MVP End-to-End 흐름과 Task
 
 | 흐름 단계 | 담당 Task |
 |---|---|
-| Repository | TASK-002(fixture), TASK-020(이 저장소 self fixture) |
+| Repository | TASK-002(fixture, self fixture) |
 | DUO 설치 | TASK-001(패키지), TASK-017(`duo install codex/claude`) |
 | `duo init` | TASK-014(InitService), TASK-015(명령) |
 | 자동 프로젝트 분석 | TASK-004(스캔), TASK-005(AST), TASK-006(Git) |
@@ -130,7 +136,7 @@ flowchart LR
 | Agent가 MCP로 Context 요청 | TASK-016(Gateway), TASK-010(Compiler), TASK-011(Gap), TASK-017(설정) |
 | 코딩 | Coding Agent(DUO 범위 밖) |
 | Git Diff | TASK-006, TASK-008(변경 Symbol) |
-| Duo Review | TASK-013, TASK-012(의미 판정), TASK-009(Lock) |
+| Duo Review | TASK-013, TASK-012A(LLM 계약, no-op), TASK-012B(의미 판정 Provider), TASK-009(Lock) |
 | PASS / WARN / BLOCK / ASK | TASK-013, TASK-015/016(출력) |
 | UI에서 Evidence와 Drift 확인, Decision Confirm/Reject | TASK-018, TASK-009 |
 | 전체 검증 | TASK-020 |
@@ -139,7 +145,7 @@ flowchart LR
 
 | ID | Title | Lane | Milestone | Dependencies | Status |
 |---|---|---|---|---|---|
-| [TASK-000](#task-000-sdd-문서-작성) | SDD 문서 작성 | - | M0 | - | review |
+| [TASK-000](#task-000-sdd-문서-작성) | SDD 문서 작성 | - | M0 | - | done |
 | [TASK-001](#task-001-저장소-골격) | 저장소 골격 | 공통 | M1 | TASK-000 | todo |
 | [TASK-002](#task-002-core-스키마-loader-추적성-파서) | core 스키마, loader, 추적성 파서 | core | M1 | TASK-001 | todo |
 | [TASK-003](#task-003-graphstore) | GraphStore | graph | M1 | TASK-002 | todo |
@@ -151,15 +157,16 @@ flowchart LR
 | [TASK-009](#task-009-decision-생명주기) | Decision 생명주기 | core | M2 | TASK-002 | todo |
 | [TASK-010](#task-010-context-compiler) | Context Compiler | director | M2 | TASK-008, TASK-009 | todo |
 | [TASK-011](#task-011-knowledge-gap) | Knowledge Gap | director | M2 | TASK-008 | todo |
-| [TASK-012](#task-012-llmprovider와-openai-호환-provider) | LLMProvider와 OpenAI 호환 Provider | director | M2 | TASK-002 | todo |
-| [TASK-013](#task-013-review-엔진) | Review 엔진 | director | M2 | TASK-008, TASK-009, TASK-010, TASK-011, TASK-012 | todo |
+| [TASK-012A](#task-012a-llmprovider-계약과-no-op) | LLMProvider 계약과 no-op | director | M2 | TASK-002 | todo |
+| [TASK-012B](#task-012b-openai-responses-provider) | OpenAI Responses Provider | director | M2 | TASK-010, TASK-013 | todo |
+| [TASK-013](#task-013-review-엔진) | Review 엔진 | director | M2 | TASK-008, TASK-009, TASK-010, TASK-011, TASK-012A | todo |
 | [TASK-014](#task-014-init-파이프라인) | init 파이프라인 | director | M2 | TASK-008, TASK-011 | todo |
 | [TASK-015](#task-015-cli) | CLI | apps/cli | M3 | TASK-009, TASK-010, TASK-013, TASK-014 | todo |
 | [TASK-016](#task-016-mcp-서버) | MCP 서버 | integration | M3 | TASK-010, TASK-013 | todo |
 | [TASK-017](#task-017-agent-adapter와-duo-install) | Agent Adapter와 duo install | integration | M3 | TASK-015, TASK-016 | todo |
 | [TASK-018](#task-018-local-http-api와-web-ui) | Local HTTP API와 Web UI | ui | M3 | TASK-009, TASK-013, TASK-015 | todo |
 | [TASK-019](#task-019-benchmark) | Benchmark | bench | M4 | TASK-010, TASK-013 | todo |
-| [TASK-020](#task-020-e2e와-문서-구현-대조) | E2E와 문서-구현 대조 | 공통 | M4 | TASK-015, TASK-016, TASK-017, TASK-018, TASK-019 | todo |
+| [TASK-020](#task-020-e2e와-문서-구현-대조) | E2E와 문서-구현 대조 | 공통 | M4 | TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-012B | todo |
 
 ## 상세
 
@@ -167,7 +174,7 @@ flowchart LR
 
 ```duo
 type: issue
-status: review
+status: done
 milestone: M0
 package: docs
 requirements: [REQ-TRACE-001]
@@ -180,7 +187,7 @@ depends_on: []
 - **Output**: docs/ 13개 문서, conflicts.md, ADR 14개, TASKS.md
 - **Dependencies**: 없음
 - **Files expected to change**: `docs/**`
-- **Status**: review
+- **Status**: done
 - **검증 대상 Requirement**: [REQ-TRACE-001](../01-requirements.md#req-trace-001-id-기반-추적성)
 - **관련 ADR**: [ADR-014](../adr/ADR-014-traceability-ids.md)
 
@@ -233,7 +240,7 @@ depends_on: [TASK-001]
 
 - **Goal**: .duo 파일과 추적성 Markdown을 읽고 검증하는 core를 만든다.
 - **Input**: 03 문서, ADR-006, ADR-014
-- **Output**: zod 스키마, loader, Markdown duo block/frontmatter 파서, ID 검사, fs-guard, fixtures/auth-app
+- **Output**: zod 스키마, loader, Markdown 정의 파서, External Source provenance(path, hash), ID 검사, fs-guard, fixtures/auth-app
 - **Dependencies**: [TASK-001](#task-001-저장소-골격)
 - **Files expected to change**: `packages/core/src/schema/**`, `packages/core/src/loader/**`, `packages/core/src/trace/**`, `packages/core/src/fs-guard.ts`, `fixtures/auth-app/**`
 - **Status**: todo
@@ -244,7 +251,7 @@ Acceptance Criteria
 
 - **AC-002-01** fixtures/auth-app/.duo 전체가 오류 없이 로드된다
 - **AC-002-02** 잘못된 파일 10종이 파일:줄을 포함한 오류를 낸다
-- **AC-002-03** 이 저장소의 docs/를 sources로 읽으면 REQ/ADR/TASK/Milestone이 모두 파싱되고 참조가 전부 해석된다(self fixture)
+- **AC-002-03** 이 저장소 docs/의 정의 파일을 임시 저장소의 .duo/로 복사해 로드하면 REQ/ADR/TASK/Milestone이 모두 파싱되고 참조가 전부 해석된다(self fixture)
 - **AC-002-04** fs-guard가 허용 경로 밖 쓰기를 거부한다
 - **AC-002-05** Windows 경로가 POSIX 상대경로로 정규화된다
 
@@ -262,9 +269,9 @@ depends_on: [TASK-002]
 
 - **Goal**: Node/Edge 저장과 bounded traversal을 제공한다.
 - **Input**: 03 SQLite 스키마, 04 탐색 규칙
-- **Output**: node:sqlite GraphStore, 스키마 생성, 인접 조회, BFS, 쓰기 잠금
+- **Output**: GraphStore 인터페이스, NodeSqliteGraphStore, graph_schema_version, 인접 조회, BFS, 쓰기 잠금
 - **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
-- **Files expected to change**: `packages/graph/src/store/**`, `packages/graph/src/traverse.ts`
+- **Files expected to change**: `packages/graph/src/store/**`, `packages/graph/src/store/node-sqlite/**`, `packages/graph/src/traverse.ts`
 - **Status**: todo
 - **검증 대상 Requirement**: [REQ-GRAPH-001](../01-requirements.md#req-graph-001-node-8종과-edge-9종의-embedded-저장), [REQ-GRAPH-002](../01-requirements.md#req-graph-002-결정적-bounded-traversal-trace-impact)
 - **관련 ADR**: [ADR-002](../adr/ADR-002-graph-storage.md)
@@ -274,7 +281,7 @@ Acceptance Criteria
 - **AC-003-01** 메모리와 파일 DB에서 같은 테스트가 통과한다
 - **AC-003-02** traverse가 maxDepth, nodeLimit, edgeTypes를 지키고 방문 순서가 결정적이다
 - **AC-003-03** 쓰기 잠금을 얻지 못한 두 번째 프로세스는 stale 표시와 함께 읽기만 한다
-- **AC-003-04** SQL이 graph 패키지 밖으로 노출되지 않는다
+- **AC-003-04** node:sqlite import는 NodeSqliteGraphStore 안에만 있고 GraphStore 인터페이스에 SQL이나 storage 전용 타입이 노출되지 않는다. graph_schema_version이 다르면 재생성한다
 
 ### TASK-004 파일 스캔, fingerprint, 토큰 측정
 
@@ -385,7 +392,7 @@ Acceptance Criteria
 
 - **AC-007-01** fixture Graph의 Node/Edge가 golden과 같다
 - **AC-007-02** 불변식 1~4와 6(정의 ID 전역 유일성)이 통과한다
-- **AC-007-03** 이 저장소 docs/로 만든 Graph에서 REQ-CONTEXT-001 → ADR-005 → TASK-010 경로가 탐색된다
+- **AC-007-03** self fixture로 만든 Graph에서 REQ-CONTEXT-001 → ADR-005 → TASK-010 경로가 탐색된다
 - **AC-007-04** Edge 방향과 endpoint 타입이 04 표와 일치한다
 
 ### TASK-008 증분 인덱싱, trace, impact
@@ -502,34 +509,58 @@ Acceptance Criteria
 - **AC-011-03** 무관한 Gap은 Packet에 없고 gaps_suppressed만 증가한다
 - **AC-011-04** UNKNOWN: 줄을 지우면 resolved가 된다
 
-### TASK-012 LLMProvider와 OpenAI 호환 Provider
+### TASK-012A LLMProvider 계약과 no-op
 
 ```duo
 type: issue
 status: todo
 milestone: M2
 package: director
-requirements: [REQ-LLM-002, REQ-LLM-003, REQ-LLM-004, REQ-NFR-002]
+requirements: [REQ-LLM-002, REQ-LLM-003, REQ-LLM-004]
 decisions: [ADR-008, ADR-012]
 depends_on: [TASK-002]
 ```
 
-- **Goal**: 의미 판정 인터페이스와 동작하는 Provider 1종을 만든다.
+- **Goal**: Provider에 종속되지 않는 LLMProvider 계약, NoneProvider, 응답 검증, 사용량 기록 형식을 만든다.
 - **Input**: ADR-008, ADR-012
-- **Output**: LLMProvider, NoneProvider, OpenAICompatibleProvider, 응답 cache, usage 기록
+- **Output**: LLMProvider 인터페이스, NoneProvider, 응답 스키마와 Evidence 인용 검증, usage 기록
 - **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
-- **Files expected to change**: `packages/director/src/llm/**`
+- **Files expected to change**: `packages/director/src/llm/contract/**`, `packages/director/src/llm/none/**`
 - **Status**: todo
-- **검증 대상 Requirement**: [REQ-LLM-002](../01-requirements.md#req-llm-002-llmprovider와-동작하는-provider-1종), [REQ-LLM-003](../01-requirements.md#req-llm-003-llm-없이도-동작), [REQ-LLM-004](../01-requirements.md#req-llm-004-llm-사용량-기록), [REQ-NFR-002](../01-requirements.md#req-nfr-002-local-first)
+- **검증 대상 Requirement**: [REQ-LLM-002](../01-requirements.md#req-llm-002-llmprovider와-동작하는-provider-1종), [REQ-LLM-003](../01-requirements.md#req-llm-003-llm-없이도-동작), [REQ-LLM-004](../01-requirements.md#req-llm-004-llm-사용량-기록)
 - **관련 ADR**: [ADR-008](../adr/ADR-008-deterministic-first.md), [ADR-012](../adr/ADR-012-llm-provider.md)
 
 Acceptance Criteria
 
-- **AC-012-01** Provider 미설정이나 API Key 없음이면 NoneProvider가 선택되고 모든 호출이 UNAVAILABLE을 반환한다
-- **AC-012-02** 가짜 HTTP 서버로 요청 형식, 타임아웃, 재시도, 스키마 검증 실패 처리를 검증한다
-- **AC-012-03** 응답이 제공된 Evidence ID 밖을 인용하면 결과를 버리고 UNKNOWN으로 처리한다
-- **AC-012-04** usage(입력/출력 토큰)가 runtime/metrics.jsonl에 기록된다
-- **AC-012-05** API Key는 환경 변수에서만 읽고 파일이나 로그에 쓰지 않는다
+- **AC-012A-01** Provider가 꺼져 있거나 API Key가 없으면 NoneProvider가 선택되고 모든 호출이 UNAVAILABLE을 반환한다
+- **AC-012A-02** 응답이 Packet에 없는 Evidence ID를 인용하거나 스키마가 맞지 않으면 결과를 버리고 UNKNOWN으로 처리한다(가짜 Provider로 검증)
+- **AC-012A-03** usage(입력/출력 토큰, 출처 provider 또는 estimated)가 runtime/metrics.jsonl 형식으로 기록된다
+
+### TASK-012B OpenAI Responses Provider
+
+```duo
+type: issue
+status: todo
+milestone: M2
+package: director
+requirements: [REQ-LLM-002, REQ-NFR-002]
+decisions: [ADR-012]
+depends_on: [TASK-010, TASK-013]
+```
+
+- **Goal**: 안정된 Context Compiler와 Review 계약 위에 OpenAI Responses API Adapter를 구현한다.
+- **Input**: ADR-012, TASK-010과 TASK-013의 입출력 계약, OpenAI 공식 문서
+- **Output**: OpenAIResponsesProvider
+- **Dependencies**: [TASK-010](#task-010-context-compiler), [TASK-013](#task-013-review-엔진)
+- **Files expected to change**: `packages/director/src/llm/openai-responses/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-LLM-002](../01-requirements.md#req-llm-002-llmprovider와-동작하는-provider-1종), [REQ-NFR-002](../01-requirements.md#req-nfr-002-local-first)
+- **관련 ADR**: [ADR-012](../adr/ADR-012-llm-provider.md)
+
+Acceptance Criteria
+
+- **AC-012B-01** 착수 시 Responses API 공식 문서를 확인해 ADR-012에 기록하고, 가짜 HTTP 서버로 요청 형식, 타임아웃, 재시도, 스키마 검증 실패 처리를 검증한다
+- **AC-012B-02** API Key는 api_key_env 환경 변수에서만 읽고 파일, 로그, metrics, 오류 메시지에 쓰지 않는다
 
 ### TASK-013 Review 엔진
 
@@ -540,13 +571,13 @@ milestone: M2
 package: director
 requirements: [REQ-REVIEW-001, REQ-REVIEW-002, REQ-REVIEW-003, REQ-REVIEW-004, REQ-EVIDENCE-001, REQ-LLM-001, REQ-DECISION-003]
 decisions: [ADR-007, ADR-008, ADR-013]
-depends_on: [TASK-008, TASK-009, TASK-010, TASK-011, TASK-012]
+depends_on: [TASK-008, TASK-009, TASK-010, TASK-011, TASK-012A]
 ```
 
 - **Goal**: 변경을 규칙과 의미 판정으로 검수하고 Verdict를 낸다.
 - **Input**: ADR-007 규칙 표
-- **Output**: 규칙 실행, semantic escalation, 집계, runtime evidence, Review Record, 구조적 Drift
-- **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact), [TASK-009](#task-009-decision-생명주기), [TASK-010](#task-010-context-compiler), [TASK-011](#task-011-knowledge-gap), [TASK-012](#task-012-llmprovider와-openai-호환-provider)
+- **Output**: 규칙 실행, semantic escalation, 집계, runtime evidence, Review Record, 구조적 Drift, External Source Drift
+- **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact), [TASK-009](#task-009-decision-생명주기), [TASK-010](#task-010-context-compiler), [TASK-011](#task-011-knowledge-gap), [TASK-012A](#task-012a-llmprovider-계약과-no-op)
 - **Files expected to change**: `packages/director/src/review/**`, `packages/director/src/evidence/**`
 - **Status**: todo
 - **검증 대상 Requirement**: [REQ-REVIEW-001](../01-requirements.md#req-review-001-diff-review-파이프라인), [REQ-REVIEW-002](../01-requirements.md#req-review-002-두-수준-verdict-모델), [REQ-REVIEW-003](../01-requirements.md#req-review-003-scope-drift와-spec-conflict-감지), [REQ-REVIEW-004](../01-requirements.md#req-review-004-specdecisionissue와-code-사이의-drift), [REQ-EVIDENCE-001](../01-requirements.md#req-evidence-001-claim-evidence-verdict와-근거-보존), [REQ-LLM-001](../01-requirements.md#req-llm-001-deterministic-first-판단-순서), [REQ-DECISION-003](../01-requirements.md#req-decision-003-decision-lock)
@@ -554,11 +585,11 @@ depends_on: [TASK-008, TASK-009, TASK-010, TASK-011, TASK-012]
 
 Acceptance Criteria
 
-- **AC-013-01** 변경 세트 6종의 Verdict와 규칙 ID가 기대값과 같다
+- **AC-013-01** 변경 세트 7종의 Verdict와 규칙 ID가 기대값과 같다
 - **AC-013-02** 모든 Claim이 Evidence를 1개 이상 가진다
 - **AC-013-03** LLM 없이 실행하면 의미 판단 Claim은 UNKNOWN이고 skipped_checks에 기록된다
 - **AC-013-04** LLM이나 heuristic 근거만으로는 BLOCK이 나오지 않는다
-- **AC-013-05** --record는 .duo/reviews/에 코드 본문 없이 참조만 저장한다
+- **AC-013-05** --record는 .duo/reviews/에 코드 본문 없이 Evidence Pointer(commit SHA, 경로, Symbol, 줄 범위, content hash, ID)만 저장한다
 
 ### TASK-014 init 파이프라인
 
@@ -742,13 +773,13 @@ milestone: M4
 package: all
 requirements: [REQ-TRACE-001, REQ-NFR-001]
 decisions: [ADR-014]
-depends_on: [TASK-015, TASK-016, TASK-017, TASK-018, TASK-019]
+depends_on: [TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-012B]
 ```
 
 - **Goal**: MVP End-to-End 흐름을 검증한다.
 - **Input**: 11 E2E 시나리오
 - **Output**: E2E 테스트, self fixture 테스트, 대조 결과
-- **Dependencies**: [TASK-015](#task-015-cli), [TASK-016](#task-016-mcp-서버), [TASK-017](#task-017-agent-adapter와-duo-install), [TASK-018](#task-018-local-http-api와-web-ui), [TASK-019](#task-019-benchmark)
+- **Dependencies**: [TASK-015](#task-015-cli), [TASK-016](#task-016-mcp-서버), [TASK-017](#task-017-agent-adapter와-duo-install), [TASK-018](#task-018-local-http-api와-web-ui), [TASK-019](#task-019-benchmark), [TASK-012B](#task-012b-openai-responses-provider)
 - **Files expected to change**: `tests/e2e/**`, `docs/**`
 - **Status**: todo
 - **검증 대상 Requirement**: [REQ-TRACE-001](../01-requirements.md#req-trace-001-id-기반-추적성), [REQ-NFR-001](../01-requirements.md#req-nfr-001-cross-platform)
@@ -757,5 +788,5 @@ depends_on: [TASK-015, TASK-016, TASK-017, TASK-018, TASK-019]
 Acceptance Criteria
 
 - **AC-020-01** 11의 E2E 단계가 3 OS CI에서 통과한다
-- **AC-020-02** DUO가 이 저장소 docs/를 인덱싱해 `duo trace REQ-CONTEXT-001`로 ADR과 Task를 찾는다
+- **AC-020-02** self fixture에서 `duo trace REQ-CONTEXT-001`로 ADR-005와 TASK-010을 찾는다
 - **AC-020-03** 모든 문서와 구현을 대조하고 차이를 conflicts.md에 기록한다

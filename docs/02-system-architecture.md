@@ -1,6 +1,6 @@
 # 02. System Architecture
 
-상태: Draft · 관련: [ADR-010](adr/ADR-010-package-structure.md), [ADR-008](adr/ADR-008-deterministic-first.md)
+상태: Frozen (T00 final, 2026-09-27) · 관련: [ADR-010](adr/ADR-010-package-structure.md), [ADR-008](adr/ADR-008-deterministic-first.md)
 
 ## 패키지와 의존 방향
 
@@ -34,9 +34,9 @@ flowchart TD
 |---|---|---|---|
 | `LanguageAnalyzer` | analyzer | TypeScriptAnalyzer, JavaScriptAnalyzer | PythonAnalyzer |
 | `EvidenceProvider` | core(인터페이스) | GitEvidenceProvider(analyzer) | Jira, GitHub Issues(integration) |
-| `LLMProvider` | director | NoneProvider, OpenAICompatibleProvider | Anthropic 등 |
+| `LLMProvider` | director | NoneProvider, OpenAIResponsesProvider | OpenAICompatibleChatProvider, AnthropicProvider, LocalProvider |
 | `TokenEstimator` | core | o200k_base, chars4(approx) | - |
-| `GraphStore` | graph | node:sqlite | better-sqlite3 |
+| `GraphStore` | graph | NodeSqliteGraphStore(`node:sqlite`는 이 구현 안에서만 import) | better-sqlite3 기반 구현 |
 | `AgentAdapter` | integration | codex, claude | 기타 MCP Agent |
 
 ## 판단 순서 (Deterministic First)

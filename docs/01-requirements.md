@@ -1,10 +1,10 @@
 # 01. Requirements
 
-상태: Draft (T00 2차, Human 결정 H-1~H-11 반영)
+상태: **Frozen** (T00 final, 2026-09-27). 새 Requirement는 구현 중 필요가 발견될 때만 추가한다.
 
 ## 읽는 법
 
-Requirement마다 Heading과 `duo` block을 둔다. 이 형식은 [03-data-model.md](03-data-model.md#markdown-정의-형식)와 [ADR-014](adr/ADR-014-traceability-ids.md)에 정의되어 있어 DUO가 이 문서를 그대로 인덱싱할 수 있다. 연결 방향은 ADR 쪽의 `governs`와 Task 쪽의 `requirements`가 정규 원본이며, 각 Requirement 아래의 링크 줄과 맨 아래 추적 표는 같은 데이터에서 생성한 읽기용 사본이다.
+Requirement마다 Heading과 `duo` block을 둔다. 이 형식은 [03-data-model.md](03-data-model.md#markdown-정의-형식)와 [ADR-014](adr/ADR-014-traceability-ids.md)에 정의되어 있다. 연결 방향은 ADR 쪽의 `governs`와 Task 쪽의 `requirements`가 정규 원본이며, 각 Requirement 아래의 링크 줄과 맨 아래 추적 표는 같은 데이터에서 생성한 읽기용 사본이다.
 
 출처 표기: **D§n** [개발 지시문](references/development-directive.md) n절 · **P§n** [기획서](../Duo%20기획서.md) n절 · **H-n** [Human 결정](conflicts.md#human-결정-기록) n번
 
@@ -31,10 +31,10 @@ type: requirement
 status: planned
 milestone: M1
 priority: must
-source: [D§2, H-7]
+source: [D§2, H-7, H-14]
 ```
 
-Human-owned 정의(project.yaml, intent, specs, decisions, milestones, integrations)는 Git 추적한다. Human이 기록한 Review Record(`.duo/reviews/`)는 선택적으로 추적한다. `generated/`, `cache/`, `runtime/`은 ignore한다.
+Project Truth(project.yaml, intent, specs, decisions, milestones, integrations)와 Human이 보존하거나 승인한 Review(`.duo/reviews/`)만 Git 추적한다. 재생성 가능하거나 실행 중 생기는 데이터(`generated/`, `cache/`, `runtime/`)는 ignore한다.
 
 상세: [03-data-model](03-data-model.md) · ADR: [ADR-006](adr/ADR-006-duo-layout-git-policy.md) · Task: [TASK-014](tasks/TASKS.md#task-014-init-파이프라인)
 
@@ -45,10 +45,10 @@ type: requirement
 status: planned
 milestone: M1
 priority: must
-source: [P§7, H-11]
+source: [P§7, H-11, H-16]
 ```
 
-Human-owned 데이터는 Markdown/YAML이며 스키마로 검증하고 오류를 파일:줄로 보고한다. `project.yaml`의 `sources`로 `.duo` 밖 Markdown을 읽기 전용 정의 소스로 추가할 수 있다.
+Project Truth는 Markdown/YAML이며 스키마로 검증하고 오류를 파일:줄로 보고한다. `sources.markdown`으로 지정한 `.duo` 밖 문서는 Truth가 아니라 External Evidence/Input Source다. init 초안, Review 근거, Drift 탐지에만 쓰며, 외부 문서가 바뀌어도 `.duo`를 자동으로 바꾸지 않는다.
 
 상세: [03-data-model](03-data-model.md) · ADR: [ADR-014](adr/ADR-014-traceability-ids.md) · Task: [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서)
 
@@ -62,7 +62,7 @@ priority: must
 source: [H-11]
 ```
 
-Requirement, Decision(ADR 포함), Issue(Task 포함), Milestone은 전역에서 유일한 ID를 가지고 ID 참조로 연결된다. 이 저장소의 `docs/`도 같은 형식을 따르므로 DUO 자체의 Project Graph fixture가 된다.
+Requirement, Decision(ADR 포함), Issue(Task 포함), Milestone은 전역에서 유일한 ID를 가지고 ID 참조로 연결된다. 이 저장소의 `docs/`도 같은 형식을 따르므로, 테스트에서 임시 `.duo/`로 복사해 DUO 자체의 Project Graph fixture로 쓴다.
 
 상세: [03-data-model](03-data-model.md) · ADR: [ADR-014](adr/ADR-014-traceability-ids.md) · Task: [TASK-000](tasks/TASKS.md#task-000-sdd-문서-작성), [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-007](tasks/TASKS.md#task-007-graph-builder와-일관성-검사), [TASK-020](tasks/TASKS.md#task-020-e2e와-문서-구현-대조)
 
@@ -293,10 +293,10 @@ type: requirement
 status: planned
 milestone: M2
 priority: must
-source: [D§12]
+source: [D§12, H-16]
 ```
 
-Spec ↔ Code, Decision ↔ Code, Issue ↔ Code 불일치를 구조적 규칙과 Review Claim으로 계산해 UI에 제공한다.
+Spec ↔ Code, Decision ↔ Code, Issue ↔ Code 불일치와 External Source가 확정된 Truth와 달라진 경우를 구조적 규칙과 Review Claim으로 계산해 UI에 제공한다.
 
 상세: [08-ui-spec](08-ui-spec.md) · Task: [TASK-013](tasks/TASKS.md#task-013-review-엔진), [TASK-018](tasks/TASKS.md#task-018-local-http-api와-web-ui)
 
@@ -307,10 +307,10 @@ type: requirement
 status: planned
 milestone: M2
 priority: must
-source: [D§6, P§13, H-7]
+source: [D§6, P§13, H-7, H-14]
 ```
 
-모든 Claim은 Evidence 참조를 하나 이상 가진다. 실행마다 생기는 runtime evidence와 Human이 기록한 Review Record를 구분해 저장한다.
+모든 Claim은 Evidence Pointer를 하나 이상 가진다. 실행마다 생기는 runtime evidence는 ignore하고, Human이 보존하거나 승인한 Review만 `.duo/reviews/`에 Pointer 형식(commit SHA, 경로, Symbol, 줄 범위, content hash, ID)으로 남긴다.
 
 상세: [03-data-model](03-data-model.md) · ADR: [ADR-006](adr/ADR-006-duo-layout-git-policy.md), [ADR-007](adr/ADR-007-verdict-model.md) · Task: [TASK-013](tasks/TASKS.md#task-013-review-엔진)
 
@@ -397,12 +397,12 @@ type: requirement
 status: planned
 milestone: M2
 priority: must
-source: [D§15, H-3]
+source: [D§15, H-3, H-15]
 ```
 
-`LLMProvider` 인터페이스와 실제로 동작하는 Provider 하나를 구현한다. 특정 Provider에 종속되지 않는다.
+`LLMProvider` 인터페이스와 실제로 동작하는 `OpenAIResponsesProvider`(OpenAI Responses API) 1종을 구현한다. 인터페이스는 OpenAI에 종속되지 않는다.
 
-상세: [ADR-012](adr/ADR-012-llm-provider.md) · ADR: [ADR-012](adr/ADR-012-llm-provider.md) · Task: [TASK-012](tasks/TASKS.md#task-012-llmprovider와-openai-호환-provider)
+상세: [ADR-012](adr/ADR-012-llm-provider.md) · ADR: [ADR-012](adr/ADR-012-llm-provider.md) · Task: [TASK-012A](tasks/TASKS.md#task-012a-llmprovider-계약과-no-op), [TASK-012B](tasks/TASKS.md#task-012b-openai-responses-provider)
 
 ### REQ-LLM-003 LLM 없이도 동작
 
@@ -416,7 +416,7 @@ source: [H-3]
 
 API Key나 Provider가 없어도 deterministic 기능은 모두 동작한다. 의미 판단은 추측하지 않고 UNKNOWN 또는 ASK로 처리한다(LLM unavailable ≠ DUO unavailable).
 
-상세: [ADR-008](adr/ADR-008-deterministic-first.md) · ADR: [ADR-008](adr/ADR-008-deterministic-first.md) · Task: [TASK-012](tasks/TASKS.md#task-012-llmprovider와-openai-호환-provider)
+상세: [ADR-008](adr/ADR-008-deterministic-first.md) · ADR: [ADR-008](adr/ADR-008-deterministic-first.md) · Task: [TASK-012A](tasks/TASKS.md#task-012a-llmprovider-계약과-no-op)
 
 ### REQ-LLM-004 LLM 사용량 기록
 
@@ -430,7 +430,7 @@ source: [H-3]
 
 LLM 호출 수와 입력/출력 토큰을 기록하고 `duo stats`에 보여 준다.
 
-상세: [09-token-strategy](09-token-strategy.md) · ADR: [ADR-012](adr/ADR-012-llm-provider.md) · Task: [TASK-012](tasks/TASKS.md#task-012-llmprovider와-openai-호환-provider)
+상세: [09-token-strategy](09-token-strategy.md) · ADR: [ADR-012](adr/ADR-012-llm-provider.md) · Task: [TASK-012A](tasks/TASKS.md#task-012a-llmprovider-계약과-no-op)
 
 ## 외부 근거와 안전
 
@@ -592,7 +592,7 @@ source: [D§16, P§7]
 
 기본 설정에서 네트워크 호출, telemetry, Cloud 저장소가 없다. 네트워크는 사용자가 LLM Provider를 설정했을 때만 그 Provider로 발생한다.
 
-상세: [10-security](10-security.md) · ADR: [ADR-012](adr/ADR-012-llm-provider.md) · Task: [TASK-012](tasks/TASKS.md#task-012-llmprovider와-openai-호환-provider)
+상세: [10-security](10-security.md) · ADR: [ADR-012](adr/ADR-012-llm-provider.md) · Task: [TASK-012B](tasks/TASKS.md#task-012b-openai-responses-provider)
 
 ### REQ-NFR-003 네이티브 빌드 없는 설치
 
@@ -668,7 +668,7 @@ MCP stdio 서버는 stdout에 JSON-RPC 메시지만 쓴다.
 
 두 원본 문서의 제외 목록을 합쳤다. 필요성이 검증되면 별도 Spec을 작성한 뒤 추가한다.
 
-Vector Database, Neo4j 필수 설치, Multi-Agent 토론, Cloud Account/Dashboard, Team Chat, Kanban, Sprint Manager, Jira 대체 기능, Jira Write, Jira Issue 삭제, Git GUI/Client, 자동 Source Code 수정, 자동 Requirement/Spec 수정, 자동 Confirmed Decision 변경, UI의 Intent/Spec/Milestone 편집(H-4).
+Vector Database, Neo4j 필수 설치, Multi-Agent 토론, Cloud Account/Dashboard, Team Chat, Kanban, Sprint Manager, Jira 대체 기능, Jira Write, Jira Issue 삭제, Git GUI/Client, 자동 Source Code 수정, 자동 Requirement/Spec 수정, 자동 Confirmed Decision 변경, UI의 Intent/Spec/Milestone 편집(H-4), OpenAI Responses 외 LLM Provider(H-15).
 
 ## Post-MVP
 
@@ -721,10 +721,10 @@ type: requirement
 status: deferred
 milestone: null
 priority: could
-source: [D§15]
+source: [D§15, H-15]
 ```
 
-Anthropic 등. MVP Provider 1종이 안정된 뒤 추가한다.
+OpenAICompatibleChatProvider, AnthropicProvider, LocalProvider. MVP Provider가 안정된 뒤 `LLMProvider` 구현으로 추가한다.
 
 상세: [12-roadmap](12-roadmap.md)
 
@@ -800,9 +800,9 @@ Node SEA 등으로 단일 실행 파일을 만든다.
 | [REQ-DECISION-003](#req-decision-003-decision-lock) | M2 | [ADR-013](adr/ADR-013-decision-lifecycle.md) | [TASK-009](tasks/TASKS.md#task-009-decision-생명주기), [TASK-013](tasks/TASKS.md#task-013-review-엔진) | 10 |
 | [REQ-GAP-001](#req-gap-001-knowledge-gap-기록과-관련성-기반-질문) | M2 | [ADR-008](adr/ADR-008-deterministic-first.md) | [TASK-011](tasks/TASKS.md#task-011-knowledge-gap) | 4 |
 | [REQ-LLM-001](#req-llm-001-deterministic-first-판단-순서) | M2 | [ADR-008](adr/ADR-008-deterministic-first.md) | [TASK-013](tasks/TASKS.md#task-013-review-엔진) | 5 |
-| [REQ-LLM-002](#req-llm-002-llmprovider와-동작하는-provider-1종) | M2 | [ADR-012](adr/ADR-012-llm-provider.md) | [TASK-012](tasks/TASKS.md#task-012-llmprovider와-openai-호환-provider) | 5 |
-| [REQ-LLM-003](#req-llm-003-llm-없이도-동작) | M2 | [ADR-008](adr/ADR-008-deterministic-first.md) | [TASK-012](tasks/TASKS.md#task-012-llmprovider와-openai-호환-provider) | 5 |
-| [REQ-LLM-004](#req-llm-004-llm-사용량-기록) | M2 | [ADR-012](adr/ADR-012-llm-provider.md) | [TASK-012](tasks/TASKS.md#task-012-llmprovider와-openai-호환-provider) | 5 |
+| [REQ-LLM-002](#req-llm-002-llmprovider와-동작하는-provider-1종) | M2 | [ADR-012](adr/ADR-012-llm-provider.md) | [TASK-012A](tasks/TASKS.md#task-012a-llmprovider-계약과-no-op), [TASK-012B](tasks/TASKS.md#task-012b-openai-responses-provider) | 5 |
+| [REQ-LLM-003](#req-llm-003-llm-없이도-동작) | M2 | [ADR-008](adr/ADR-008-deterministic-first.md) | [TASK-012A](tasks/TASKS.md#task-012a-llmprovider-계약과-no-op) | 3 |
+| [REQ-LLM-004](#req-llm-004-llm-사용량-기록) | M2 | [ADR-012](adr/ADR-012-llm-provider.md) | [TASK-012A](tasks/TASKS.md#task-012a-llmprovider-계약과-no-op) | 3 |
 | [REQ-PROVIDER-001](#req-provider-001-evidenceprovider와-git-provider) | M1 | - | [TASK-006](tasks/TASKS.md#task-006-git-evidence-provider) | 4 |
 | [REQ-SAFETY-001](#req-safety-001-source-code-비수정과-쓰기-경로-제한) | M1 | [ADR-010](adr/ADR-010-package-structure.md) | [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정) | 9 |
 | [REQ-MCP-001](#req-mcp-001-mcp-context-gateway) | M3 | [ADR-004](adr/ADR-004-mcp-context-gateway.md), [ADR-011](adr/ADR-011-agent-integration.md) | [TASK-016](tasks/TASKS.md#task-016-mcp-서버) | 5 |
@@ -813,7 +813,7 @@ Node SEA 등으로 단일 실행 파일을 만든다.
 | [REQ-TOKEN-001](#req-token-001-토큰-측정-방식과-표기) | M1 | [ADR-005](adr/ADR-005-token-measurement.md) | [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정) | 4 |
 | [REQ-TOKEN-002](#req-token-002-재현-가능한-benchmark) | M4 | [ADR-005](adr/ADR-005-token-measurement.md) | [TASK-019](tasks/TASKS.md#task-019-benchmark) | 4 |
 | [REQ-NFR-001](#req-nfr-001-cross-platform) | M1 | [ADR-001](adr/ADR-001-language-runtime.md) | [TASK-001](tasks/TASKS.md#task-001-저장소-골격), [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정), [TASK-020](tasks/TASKS.md#task-020-e2e와-문서-구현-대조) | 11 |
-| [REQ-NFR-002](#req-nfr-002-local-first) | M1 | [ADR-012](adr/ADR-012-llm-provider.md) | [TASK-012](tasks/TASKS.md#task-012-llmprovider와-openai-호환-provider) | 5 |
+| [REQ-NFR-002](#req-nfr-002-local-first) | M1 | [ADR-012](adr/ADR-012-llm-provider.md) | [TASK-012B](tasks/TASKS.md#task-012b-openai-responses-provider) | 2 |
 | [REQ-NFR-003](#req-nfr-003-네이티브-빌드-없는-설치) | M1 | [ADR-001](adr/ADR-001-language-runtime.md), [ADR-010](adr/ADR-010-package-structure.md) | [TASK-001](tasks/TASKS.md#task-001-저장소-골격) | 4 |
 | [REQ-NFR-004](#req-nfr-004-성능-목표) | M4 | - | [TASK-019](tasks/TASKS.md#task-019-benchmark) | 4 |
 | [REQ-NFR-005](#req-nfr-005-결정적-출력) | M2 | - | [TASK-010](tasks/TASKS.md#task-010-context-compiler) | 5 |

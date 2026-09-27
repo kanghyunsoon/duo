@@ -1,6 +1,6 @@
 # 03. Data Model
 
-상태: Draft · 관련: [ADR-006](adr/ADR-006-duo-layout-git-policy.md), [ADR-013](adr/ADR-013-decision-lifecycle.md), [ADR-014](adr/ADR-014-traceability-ids.md)
+상태: Frozen (T00 final, 2026-09-27) · 관련: [ADR-006](adr/ADR-006-duo-layout-git-policy.md), [ADR-013](adr/ADR-013-decision-lifecycle.md), [ADR-014](adr/ADR-014-traceability-ids.md)
 
 ## .duo 디렉터리
 
@@ -14,10 +14,11 @@
 ├─ specs/*.md                Human · tracked · Requirement
 ├─ decisions/
 │  ├─ D-###.yaml             Human 확정(DecisionService가 기록) · tracked
+│  ├─ *.md                   Human이 작성한 ADR 형식 Decision · tracked
 │  └─ proposals/P-*.yaml     DUO/Agent 제안, Human 거절 기록 · tracked
 ├─ milestones/*.yaml         Human · tracked · Milestone, 로컬 Issue
 ├─ integrations/             Human · tracked · (Post-MVP) jira.yaml
-├─ reviews/*.json            Human이 기록한 Review Record · tracked(기본, 설정으로 ignore)
+├─ reviews/*.json            Human이 보존·승인한 Review만 · tracked
 ├─ generated/                ignored · 재생성 가능(Derived)
 │  ├─ graph.db               Project Graph, fingerprints
 │  ├─ gaps.json              Knowledge Gap
@@ -30,7 +31,7 @@
    └─ backup/                duo install 백업
 ```
 
-분류 근거는 [ADR-006](adr/ADR-006-duo-layout-git-policy.md)에 있다. 지시문 D§2의 `state/`, `evidence/`는 쓰지 않는다([conflicts.md C19](conflicts.md)).
+Git 정책은 "Truth / Human Decision → tracked, Derived / Runtime → ignored" 한 가지다. 분류 근거는 [ADR-006](adr/ADR-006-duo-layout-git-policy.md)에 있다. 지시문 D§2의 `state/`, `evidence/`는 쓰지 않는다([conflicts.md C19](conflicts.md)).
 
 ## 소유권
 
@@ -44,7 +45,7 @@
 
 ## ID
 
-형식과 규칙은 [ADR-014](adr/ADR-014-traceability-ids.md)에 있다. 공통 정규식은 `^([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+|M\d+)$`이며, 모든 ID는 종류와 관계없이 전역에서 유일하다. 사용자 프로젝트는 `AUTH-03`, `D-004`, `GAME-42` 같은 형식을 쓸 수 있고, 이 저장소는 `REQ-*`, `ADR-*`, `TASK-*`를 쓴다. Proposal ID는 `P-YYYYMMDD-[a-z0-9]{6}`, Knowledge Gap ID는 `GAP-[0-9a-f]{8}`(hash 기반)이다.
+형식과 규칙은 [ADR-014](adr/ADR-014-traceability-ids.md)에 있다. 공통 정규식은 `^([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Z]?|M\d+)$`이며, 모든 ID는 종류와 관계없이 전역에서 유일하다. 사용자 프로젝트는 `AUTH-03`, `D-004`, `GAME-42` 같은 형식을 쓸 수 있고, 이 저장소는 `REQ-*`, `ADR-*`, `TASK-*`를 쓴다. Proposal ID는 `P-YYYYMMDD-[a-z0-9]{6}`, Knowledge Gap ID는 `GAP-[0-9a-f]{8}`(hash 기반)이다.
 
 ## project.yaml
 
@@ -52,11 +53,8 @@
 schema_version: 1
 name: auth-app
 current_milestone: M1
-sources:                      # 정의 소스. 기본값은 .duo 내부
-  specs: [".duo/specs/**/*.md"]
-  decisions: [".duo/decisions/**/*.yaml"]
-  milestones: [".duo/milestones/**/*.yaml"]
-  markdown: []                # .duo 밖 Markdown 정의(읽기 전용). 예: ["docs/01-requirements.md", "docs/adr/*.md"]
+sources:
+  markdown: []                # External Evidence / Input Source(Truth 아님). 예: ["README.md", "docs/**/*.md"]
 index:
   include: []                 # 비어 있으면 Git이 추적하는 모든 파일
   exclude: []                 # 기본 제외에 추가
@@ -67,13 +65,11 @@ context:
 review:
   warn_on_untested_change: true
   warn_on_unlinked_addition: true
-reviews:
-  git: tracked                # tracked | ignored
 test_command: null            # 설정 시에만 duo review --run-tests가 실행
 llm:                          # ADR-012
-  provider: none              # none | openai-compatible
-  base_url: null
+  provider: none              # none | openai-responses
   model: null
+  base_url: null              # null이면 OpenAI 기본 endpoint
   api_key_env: OPENAI_API_KEY
   max_calls_per_review: 3
   max_input_tokens: 4000
@@ -82,7 +78,7 @@ llm:                          # ADR-012
 
 ## Markdown 정의 형식
 
-specs와 `sources.markdown`의 파일은 같은 규칙으로 읽는다. 이 저장소의 docs/도 이 형식을 따른다(self fixture).
+`.duo/specs/`, `.duo/decisions/`, `.duo/milestones/`의 Markdown 파일은 이 규칙으로 읽는다. `sources.markdown`의 외부 문서도 같은 규칙으로 파싱하지만 정의가 아니라 External Evidence로만 쓴다([ADR-014](adr/ADR-014-traceability-ids.md#project-truth와-external-source)). 이 저장소의 docs/도 이 형식을 따르며, 테스트에서 임시 `.duo/`로 복사해 self fixture로 쓴다.
 
 1. **Heading + duo block**: `#` 2~4개 Heading이 ID로 시작하고, 바로 아래(빈 줄 허용)에 info string이 `duo`인 fenced block이 있으면 정의다. Heading 정규식은 `^#{2,4}\s+(<ID>)\s+(.+)$`이다. block의 `type`이 Node 종류를 정하고, 생략하면 `requirement`다.
 2. **Frontmatter**: 파일 첫 줄의 `---` YAML frontmatter에 `id`와 `type: decision`이 있으면 파일 전체가 Decision 하나다(ADR 형식).
@@ -94,7 +90,7 @@ specs와 `sources.markdown`의 파일은 같은 규칙으로 읽는다. 이 저�
 
 | type | 필드 |
 |---|---|
-| requirement | `status`(planned, in_progress, done, deferred), `milestone`, `priority`(must, should, could), `source`, `implements`({paths, symbols}), `tests`(이름 패턴), `depends_on` |
+| requirement | `status`(planned, in_progress, done, deferred), `milestone`, `priority`(must, should, could), `source`(인용 라벨 문자열 또는 외부 출처 `{path, hash, section?}`), `implements`({paths, symbols}), `tests`(이름 패턴), `depends_on` |
 | issue | `status`(todo, in_progress, review, done), `milestone`, `package`, `requirements`, `decisions`, `depends_on` |
 | milestone | `state`(planned, active, done), `title` |
 
@@ -141,6 +137,7 @@ constraints:
     statement: OAuth is outside MVP.
     state: confirmed          # draft | confirmed | retired
     enforcement: warn         # warn | block
+    source: [{path: README.md, hash: "sha256:abc123", section: Scope}]   # 선택: 외부 출처(ADR-014)
     match:                    # 결정적 판정용 패턴(하나 이상)
       paths: ["src/**/oauth/**"]
       symbols: ["*OAuth*"]
@@ -171,7 +168,7 @@ forbids:                  # 선택: 이 결정과 충돌하는 패턴
 supersedes: null
 superseded_by: null
 evidence:                 # proposal에서 옮겨진 근거 참조
-  - {kind: review, ref: R-20260927-153012-91aca1}
+  - {kind: review, id: R-20260927-153012-91aca1}
 confirmed_at: 2026-09-27T15:40:00+09:00
 confirmed_by: kanghyunsoon
 lock:
@@ -199,7 +196,7 @@ Requirement와 Milestone의 연결은 Requirement의 `milestone` 필드가 정�
 
 ## Review 결과 (runtime/reviews/, reviews/)
 
-두 위치의 스키마는 같다. `reviews/`(Record)에는 `recorded_by`, `recorded_at`이 추가되고, 코드 본문 없이 참조만 담는다.
+두 위치의 스키마는 같다. `runtime/reviews/`에는 모든 실행 결과가, `reviews/`에는 Human이 `duo review --record`로 보존한 Review만 저장된다([ADR-006](adr/ADR-006-duo-layout-git-policy.md)). Record에는 `recorded_by`, `recorded_at`이 추가되고, Evidence는 원본을 복사하지 않는 Pointer만 담는다.
 
 ```json
 {
@@ -213,9 +210,9 @@ Requirement와 Milestone의 연결은 Requirement의 `milestone` 필드가 정�
     "expected": "MVP에서는 OAuth를 지원하지 않는다.",
     "observed": "GoogleOAuthService가 새로 추가되었다.",
     "evidence": [
-      {"kind": "constraint", "ref": "CON-001"},
-      {"kind": "symbol", "ref": "src/auth/GoogleOAuthService.ts#GoogleOAuthService", "lines": [1, 42]},
-      {"kind": "diff", "ref": "src/auth/GoogleOAuthService.ts", "change": "added"}
+      {"kind": "constraint", "id": "CON-001"},
+      {"kind": "symbol", "path": "src/auth/GoogleOAuthService.ts", "symbol": "GoogleOAuthService", "lines": [1, 42], "commit": "WORKTREE", "content_hash": "sha256:7d9e…"},
+      {"kind": "diff", "path": "src/auth/GoogleOAuthService.ts", "change": "added"}
     ]
   }],
   "skipped_checks": [{"rule": "R-INTENT", "reason": "llm_unavailable"}],
@@ -223,7 +220,7 @@ Requirement와 Milestone의 연결은 Requirement의 `milestone` 필드가 정�
 }
 ```
 
-EvidenceRef `kind`: requirement, decision, constraint, issue, milestone, file, symbol, test, commit, diff, document, review, llm.
+EvidenceRef는 `kind`와 Pointer 필드(`id`, `path`, `symbol`, `lines`, `commit`, `content_hash`) 중 해당하는 것을 가진다. `kind`: requirement, decision, constraint, issue, milestone, file, symbol, test, commit, diff, document, review, llm.
 
 ## generated/gaps.json
 
@@ -236,7 +233,7 @@ Gap마다 `id`, `question`, `source`(파일:줄 또는 규칙 ID), `anchors`(Nod
 ## SQLite 스키마 (generated/graph.db)
 
 ```sql
-CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);   -- schema_version, graph_revision
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);   -- graph_schema_version, graph_revision
 CREATE TABLE nodes (
   id TEXT PRIMARY KEY,          -- 예: sym:src/auth/a.ts#AuthService.refresh
   type TEXT NOT NULL,           -- Project|Milestone|Requirement|Decision|Issue|File|Symbol|Test
@@ -267,4 +264,4 @@ CREATE INDEX edges_owner ON edges(owner_file);
 CREATE INDEX nodes_name ON nodes(type, name);
 ```
 
-스키마 버전이 다르면 migration 대신 재생성한다(generated 데이터이므로).
+`meta.graph_schema_version`이 코드가 기대하는 값과 다르면 migration 대신 재생성한다([ADR-002](adr/ADR-002-graph-storage.md)). 범용 migration framework는 만들지 않는다.

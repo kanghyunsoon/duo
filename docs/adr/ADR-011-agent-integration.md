@@ -45,3 +45,4 @@ This repo uses DUO for project direction. Do not read or edit files under .duo/ 
 
 - 설치는 idempotent이고, 백업, `--dry-run`, `--uninstall`을 지원한다.
 - 새 Agent를 추가할 때는 Adapter 하나만 추가하면 된다.
+- MCP Core(TASK-016)는 ADR-004의 v2 기준으로 진행하며 Adapter 설정에 의존하지 않는다. 외부 제품의 설정 변경은 Adapter 안에서만 흡수한다(H-17).

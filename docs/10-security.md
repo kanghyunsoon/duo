@@ -1,6 +1,6 @@
 # 10. Security
 
-상태: Draft · 관련: REQ-SAFETY-001, REQ-NFR-002, REQ-DECISION-003
+상태: Frozen (T00 final, 2026-09-27) · 관련: REQ-SAFETY-001, REQ-NFR-002, REQ-DECISION-003
 
 ## 신뢰 모델
 

@@ -1,6 +1,6 @@
 # 05. Context Compiler
 
-상태: Draft · 관련: REQ-CONTEXT-001~003, REQ-GAP-001, REQ-NFR-005, [ADR-005](adr/ADR-005-token-measurement.md), [ADR-008](adr/ADR-008-deterministic-first.md)
+상태: Frozen (T00 final, 2026-09-27) · 관련: REQ-CONTEXT-001~003, REQ-GAP-001, REQ-NFR-005, [ADR-005](adr/ADR-005-token-measurement.md), [ADR-008](adr/ADR-008-deterministic-first.md)
 
 Context Compiler는 Task 하나에 대해 token budget 이하의 **Director Context Packet**을 결정적으로 만든다. LLM을 호출하지 않는다. MCP의 `duo_get_context`가 이 기능의 주 사용자다(Context Gateway, [ADR-004](adr/ADR-004-mcp-context-gateway.md)).
 

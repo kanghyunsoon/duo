@@ -1,6 +1,6 @@
 # 07. CLI Interface
 
-상태: Draft · 관련: REQ-CLI-001, REQ-DECISION-002, REQ-NFR-006
+상태: Frozen (T00 final, 2026-09-27) · 관련: REQ-CLI-001, REQ-DECISION-002, REQ-NFR-006
 
 CLI(`apps/cli`)는 얇은 진입점이다. 인자 파싱, 대화형 입력, 출력 형식, 종료 코드만 담당하고 모든 동작은 packages의 서비스를 호출한다. Human과 Agent가 함께 쓰며, 기본 출력은 짧은 text이고 `--json`은 MCP structuredContent와 같은 스키마를 쓴다.
 
@@ -25,7 +25,7 @@ CLI(`apps/cli`)는 얇은 진입점이다. 인자 파싱, 대화형 입력, 출�
 | `duo install <codex\|claude>` | Agent 연동 | `--dry-run`, `--uninstall` | integration agents |
 | `duo mcp` | MCP stdio 서버(Agent 설정이 호출) | | integration mcp |
 
-지시문 D§11의 최소 목록에 없는 `decision`(H-1), `install`(D§10), `mcp`(D§9)은 다른 요구를 위해 추가했다([conflicts.md C16](conflicts.md)).
+지시문 D§11의 최소 목록에 없는 `decision`(H-1), `install`(D§10), `mcp`(D§9)은 다른 요구를 위해 추가했다([conflicts.md C16](conflicts.md)). `duo review --record`는 그 Review를 Human이 보존할 기록으로 `.duo/reviews/`에 남긴다([ADR-006](adr/ADR-006-duo-layout-git-policy.md)). MCP로는 Record를 만들 수 없다.
 
 ## duo decision
 
@@ -60,7 +60,7 @@ TTY이고 `--yes`가 아니면 세 가지만 묻는다. 각 질문은 추론한 
 $ duo stats --last 20
 context  20 requests · avg loaded 4,310 · avg reduction 97.12% · estimator o200k_base
 review   6 runs · PASS 2 · WARN 3 · BLOCK 1 · ASK 0
-llm      provider openai-compatible · calls 4 · input 11,820 · output 1,044 (provider usage)
+llm      provider openai-responses · calls 4 · input 11,820 · output 1,044 (provider usage)
 ```
 
 ## 종료 코드

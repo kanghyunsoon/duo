@@ -1,6 +1,6 @@
 # 04. Project Graph
 
-상태: Draft · 관련: REQ-GRAPH-001~003, REQ-INDEX-001~003, [ADR-002](adr/ADR-002-graph-storage.md), [ADR-003](adr/ADR-003-language-analysis.md)
+상태: Frozen (T00 final, 2026-09-27) · 관련: REQ-GRAPH-001~003, REQ-INDEX-001~003, [ADR-002](adr/ADR-002-graph-storage.md), [ADR-003](adr/ADR-003-language-analysis.md)
 
 Project Graph의 1차 목적은 **Context Localisation**이다. Task나 변경 Symbol을 seed로 작은 Subgraph만 탐색한다. UI 시각화는 같은 데이터를 읽는 보조 기능이다([conflicts.md C3](conflicts.md)).
 

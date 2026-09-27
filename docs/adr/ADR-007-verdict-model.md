@@ -74,6 +74,7 @@ interface Claim {
 | R-SCOPE | 새 파일이나 exported Symbol이 어떤 Requirement와도 연결되지 않음 | UNKNOWN → 의미 판정 | LLM 결과에 따름 | graph → llm |
 | R-INTENT | 변경이 연결된 Requirement의 의도와 충돌하는지 | 의미 판정 | LLM 결과에 따름 | llm |
 | R-DRIFT | 문서와 구현 사이의 애매한 불일치(heuristic 연결만 있는 done Requirement 등) | UNKNOWN → 의미 판정 | LLM 결과에 따름 | heuristic → llm |
+| R-DRIFT | Truth 항목의 External Source provenance hash가 바뀜, 또는 외부 문서가 Truth와 같은 ID를 다르게 서술(ADR-014) | PARTIAL → 필요 시 의미 판정 | non-blocking. 의미 판정이 확정 Truth와의 충돌을 근거와 함께 보이면 ask | git, rule → llm |
 
 의미 판정 규칙(R-SCOPE, R-INTENT, R-DRIFT)과 연결이 애매한 Gap의 중요도 판단은 ADR-008의 escalation 절차를 따른다. LLM을 쓸 수 없으면 R-SCOPE와 R-DRIFT는 UNKNOWN(non-ask)으로 남고, R-INTENT는 실행하지 않은 채 `skipped_checks`에 기록된다.
 

@@ -2,6 +2,8 @@
 
 DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문서들에 정의된 범위 안에서만 진행하고, 문서와 구현이 어긋나면 한쪽을 임의로 고치지 않고 [conflicts.md](conflicts.md)에 기록한다.
 
+**T00 동결(2026-09-27)**: Requirement 52, ADR 14, Task 22, Milestone 5, AC 93. 새 Requirement와 ADR은 구현 중 필요가 발견될 때만 추가한다. 추적성은 `node scripts/validate-docs.mjs`로 검증한다.
+
 | 문서 | 내용 |
 |---|---|
 | [00-product-vision.md](00-product-vision.md) | 문제, 역할 분리, 포지셔닝, 성공 기준 |
@@ -19,7 +21,7 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [12-roadmap.md](12-roadmap.md) | Milestone(M0~M4)과 MVP 이후 |
 | [conflicts.md](conflicts.md) | 원본 충돌, Human 결정 기록(H-*), 미결 사항 |
 | [adr/](adr/README.md) | ADR-001~014 |
-| [tasks/TASKS.md](tasks/TASKS.md) | TASK-000~020, 의존성, E2E 매핑 |
+| [tasks/TASKS.md](tasks/TASKS.md) | TASK-000~020(TASK-012A/012B 포함), 의존성, E2E 매핑 |
 
 ## 추적성
 

@@ -52,7 +52,7 @@ proposal 파일에 `state: rejected`, `rejected_at`, `rejected_by`, `reason`(선
 - `lock.digest` = `sha256`(내용 필드를 정규화한 JSON). 내용 필드는 title, kind, question, answer, rationale, governs, forbids, match, enforcement, supersedes다.
 - Review의 R-LOCK은 digest 불일치와 HEAD 기준 내용 변경을 모두 검사한다(ADR-007).
 - digest는 **실수 탐지용 무결성 표시이며 보안 서명이 아니다**. 악의적인 Agent는 digest를 다시 계산할 수 있다. 이 한계는 [10-security.md](../10-security.md)에 적는다.
-- `sources`로 읽는 외부 Markdown Decision(예: 이 저장소의 docs/adr)은 DUO가 쓰지 않는다. 이들은 HEAD 기준 검사만 받는다.
+- `.duo/decisions/` 안의 Markdown Decision(ADR 형식)은 DecisionService가 쓰지 않으며 HEAD 기준 검사만 받는다. `.duo` 밖 문서의 결정 서술은 Decision이 아니라 External Evidence다(ADR-014).
 
 ## 결과
 

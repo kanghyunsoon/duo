@@ -1,6 +1,6 @@
 # 08. UI Spec
 
-상태: Draft · 관련: REQ-UI-001, REQ-UI-002, REQ-REVIEW-004, [ADR-009](adr/ADR-009-ui-stack.md), [ADR-013](adr/ADR-013-decision-lifecycle.md)
+상태: Frozen (T00 final, 2026-09-27) · 관련: REQ-UI-001, REQ-UI-002, REQ-REVIEW-004, [ADR-009](adr/ADR-009-ui-stack.md), [ADR-013](adr/ADR-013-decision-lifecycle.md)
 
 ## 원칙
 
@@ -52,6 +52,7 @@ Pending 항목에만 버튼 두 개가 있다.
 | Spec ↔ Code | status done인데 IMPLEMENTS 없음 / IMPLEMENTS가 있는데 planned / Requirement에 연결되지 않은 exported Symbol 수 | R-SCOPE, R-TEST, R-REQ, R-INTENT, R-DRIFT |
 | Decision ↔ Code | forbids 패턴과 일치하는 기존 코드나 dependency / lock digest 불일치 | R-DECISION, R-CONSTRAINT, R-LOCK |
 | Issue ↔ Code | Issue done인데 연결 Requirement에 IMPLEMENTS 없음 / Issue todo인데 해당 키를 언급한 커밋 있음 | - |
+| External Source ↔ .duo | Truth 항목의 `source` hash 변경 / 외부 문서가 같은 ID를 다르게 서술 | R-DRIFT |
 
 각 항목은 Claim / Expected / Observed / Evidence 형식으로 보여 주고, Evidence는 파일:줄, 커밋, ID 링크를 가진다. Claim의 `basis`(rule, static, git, test, graph, heuristic, llm)를 배지로 표시한다.
 

@@ -1,6 +1,6 @@
 # 09. Token Strategy
 
-상태: Draft · 관련: REQ-TOKEN-001~002, REQ-CONTEXT-003, REQ-LLM-004, [ADR-005](adr/ADR-005-token-measurement.md), [ADR-008](adr/ADR-008-deterministic-first.md)
+상태: Frozen (T00 final, 2026-09-27) · 관련: REQ-TOKEN-001~002, REQ-CONTEXT-003, REQ-LLM-004, [ADR-005](adr/ADR-005-token-measurement.md), [ADR-008](adr/ADR-008-deterministic-first.md)
 
 토큰 최적화는 DUO의 핵심 기능이다. 절감 주장은 이 문서의 정의와 측정 방식이 명시된 재현 가능한 benchmark로만 한다.
 

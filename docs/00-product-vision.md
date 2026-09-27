@@ -1,6 +1,6 @@
 # 00. Product Vision
 
-상태: Draft
+상태: Frozen (T00 final, 2026-09-27)
 
 ## 한 문장 정의
 

@@ -1,6 +1,6 @@
 # 06. MCP Interface
 
-상태: Draft · 관련: REQ-MCP-001, REQ-NFR-007, [ADR-004](adr/ADR-004-mcp-context-gateway.md)
+상태: Frozen (T00 final, 2026-09-27) · 관련: REQ-MCP-001, REQ-NFR-007, [ADR-004](adr/ADR-004-mcp-context-gateway.md)
 
 ## 역할: Context Gateway
 
