@@ -11,13 +11,14 @@ import {
 import type { Node, Tree } from "web-tree-sitter";
 import { parseDuoAnnotations } from "../annotations.js";
 import type {
-  AnalyzedSymbol, AnalyzedTest, CallSite, CallSiteKind, DuoAnnotation, ImportBinding, MemberScope, ModuleReference,
+  AnalyzedSymbol, AnalyzedTest, CallSite, CallSiteKind, DuoAnnotation, ImportBinding, LocalExport, MemberScope, ModuleReference,
   ModuleReferenceKind, ReExportBinding, SymbolKind, TestConfidence, TestFrameworkHint, TestKind, TestModifier,
 } from "../types.js";
 
 export interface Extraction {
   readonly symbols: AnalyzedSymbol[];
   readonly moduleReferences: ModuleReference[];
+  readonly exports: LocalExport[];
   readonly callSites: CallSite[];
   readonly annotations: DuoAnnotation[];
   readonly tests: AnalyzedTest[];
@@ -30,6 +31,12 @@ export interface Extraction {
 const MAX_PARSE_DIAGNOSTICS = 20;
 
 const FUNCTION_VALUES = new Set(["arrow_function", "function_expression", "function", "generator_function"]);
+/** Nodes that open a function scope for local names (parameters, var/let/const, inner declarations). */
+const FUNCTION_SCOPES = new Set([
+  "function_declaration", "generator_function_declaration", "function_expression", "function", "generator_function",
+  "arrow_function", "method_definition", "class_static_block",
+]);
+const INNER_DECLARATIONS = new Set(["function_declaration", "generator_function_declaration", "class_declaration", "abstract_class_declaration"]);
 const IDENTIFIER = /^[\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*$/u;
 
 /** Test framework modules and the exports that declare tests (explicit confidence). */
@@ -114,6 +121,25 @@ function memberName(node: Node | null): { name: string; identifier: boolean } | 
   }
 }
 
+/** A callee as a dotted name path (identifiers, this, super, property names); undefined for anything computed. */
+function namePath(node: Node): string[] | undefined {
+  if (node.type === "identifier" || node.type === "this" || node.type === "super") return [node.text];
+  if (node.type !== "member_expression") return undefined;
+  const object = node.childForFieldName("object");
+  const property = node.childForFieldName("property");
+  if (object === null || property === null) return undefined;
+  if (property.type !== "property_identifier" && property.type !== "private_property_identifier") return undefined;
+  const base = namePath(object);
+  return base === undefined ? undefined : [...base, property.text];
+}
+
+/** Identifiers bound by a parameter list or a binding pattern (conservative: may include default-value names). */
+function boundNames(node: Node | null): string[] {
+  if (node === null) return [];
+  if (node.type === "identifier" || node.type === "shorthand_property_identifier_pattern" || node.type === "type_identifier") return [node.text];
+  return node.descendantsOfType(["identifier", "shorthand_property_identifier_pattern"]).flatMap((n) => (n === null ? [] : [n.text]));
+}
+
 /** Member identity: "C.m" (instance), "C.static.m" (static); non-identifier names quoted: 'C["a.b"]'. */
 function memberIdentity(className: string, name: string, identifier: boolean, scope: MemberScope): string {
   const segment = identifier ? `.${name}` : `[${JSON.stringify(name)}]`;
@@ -125,12 +151,15 @@ class Extractor {
   private readonly exportedNames = new Set<string>();
   private readonly scopes = new Map<number, SymbolRef>();
   private readonly moduleReferences: ModuleReference[] = [];
+  private readonly exports: LocalExport[] = [];
   private readonly callSites: CallSite[] = [];
   private readonly annotations: DuoAnnotation[] = [];
   private readonly tests: AnalyzedTest[] = [];
   private readonly diagnostics: Diagnostic[] = [];
   private readonly errors: { node: Node; missing: boolean }[] = [];
   private readonly testBindings = new Map<string, TestBinding>();
+  /** Function-scope node id → names declared in that scope (parameters, locals, inner declarations). */
+  private readonly localScopes = new Map<number, Set<string>>();
   /** Local names bound by imports or declarations: a global test function name bound here is not a test function. */
   private readonly localNames = new Set<string>();
   private readonly testFile: boolean;
@@ -143,6 +172,7 @@ class Extractor {
     for (const statement of this.tree.rootNode.namedChildren) this.topLevel(statement);
     const symbols = this.mergeDeclarations();
     this.collectTestBindings();
+    this.collectLocalScopes();
     this.walk();
     const partial = this.errors.length > 0 || this.tree.rootNode.hasError;
     this.reportErrors();
@@ -150,6 +180,7 @@ class Extractor {
       symbols,
       moduleReferences: this.moduleReferences.sort((a, b) =>
         compareSourceLocations(a.location, b.location) || compareUtf8(a.specifier, b.specifier) || compareUtf8(a.kind, b.kind)),
+      exports: this.exports.sort((a, b) => compareSourceLocations(a.location, b.location) || compareUtf8(a.exported, b.exported)),
       callSites: this.callSites.sort((a, b) => compareSourceLocations(a.location, b.location) || compareUtf8(a.calleeText, b.calleeText)),
       annotations: this.annotations.sort((a, b) => compareSourceLocations(a.location, b.location) || compareUtf8(a.ids.join(","), b.ids.join(","))),
       tests: this.tests.sort((a, b) => compareSourceLocations(a.location, b.location) || compareUtf8(a.fullName, b.fullName)),
@@ -169,20 +200,124 @@ class Extractor {
     const declaration = node.childForFieldName("declaration");
     const value = unwrapParens(node.childForFieldName("value"));
     const isDefault = hasToken(node, "default");
-    if (declaration !== null) this.declaration(declaration, true);
-    else if (value !== null && isDefault) {
-      if (FUNCTION_VALUES.has(value.type)) this.add({ name: "default", qualifiedName: "default", identity: "default", kind: "function", node: value, hasBody: true, exported: true, scope: value });
-      else if (value.type === "class") this.classDeclaration(value, "default", true);
-      else if (value.type === "identifier") this.exportedNames.add(value.text);
+    const at = location(this.path, node);
+    const exportAs = (exported: string, local: string | undefined, typeOnly: boolean) =>
+      this.exports.push({ exported, ...(local === undefined ? {} : { local }), typeOnly, location: at });
+    if (declaration !== null) {
+      this.declaration(declaration, true);
+      for (const d of this.declaredNames(declaration)) exportAs(isDefault ? "default" : d.name, d.name, d.typeOnly);
+    } else if (value !== null && isDefault) {
+      if (FUNCTION_VALUES.has(value.type)) {
+        this.add({ name: "default", qualifiedName: "default", identity: "default", kind: "function", node: value, hasBody: true, exported: true, scope: value });
+        exportAs("default", "default", false);
+      } else if (value.type === "class") {
+        this.classDeclaration(value, "default", true);
+        exportAs("default", "default", false);
+      } else if (value.type === "identifier") {
+        this.exportedNames.add(value.text);
+        exportAs("default", value.text, false);
+      } else exportAs("default", undefined, false);
     }
     if (node.childForFieldName("source") === null) {
+      const statementType = hasToken(node, "type");
       for (const clause of node.namedChildren.filter((c) => c.type === "export_clause")) {
         for (const specifier of clause.namedChildren) {
           const local = specifier.childForFieldName("name");
-          if (specifier.type === "export_specifier" && local !== null) this.exportedNames.add(local.text);
+          if (specifier.type !== "export_specifier" || local === null) continue;
+          this.exportedNames.add(local.text);
+          const localName = specifierName(local) ?? local.text;
+          exportAs(specifierName(specifier.childForFieldName("alias")) ?? localName, localName, statementType || hasToken(specifier, "type"));
         }
       }
     }
+  }
+
+  /** Names a top-level declaration binds (for its export entries). */
+  private declaredNames(node: Node): { name: string; typeOnly: boolean }[] {
+    const name = node.childForFieldName("name")?.text;
+    switch (node.type) {
+      case "function_declaration": case "generator_function_declaration": case "function_signature":
+      case "class_declaration": case "abstract_class_declaration": case "enum_declaration":
+        return name === undefined ? [] : [{ name, typeOnly: false }];
+      case "interface_declaration": case "type_alias_declaration":
+        return name === undefined ? [] : [{ name, typeOnly: true }];
+      case "lexical_declaration": case "variable_declaration":
+        return node.namedChildren.flatMap((d) => {
+          const id = d.type === "variable_declarator" ? d.childForFieldName("name") : null;
+          return id?.type === "identifier" ? [{ name: id.text, typeOnly: false }] : [];
+        });
+      case "ambient_declaration":
+        return node.namedChildren.flatMap((c) => this.declaredNames(c));
+      default:
+        return [];
+    }
+  }
+
+  /**
+   * Names declared inside each function scope, so that a call's first name can be recognized as a
+   * parameter or local rather than a module-level name. Conservative: a name declared anywhere in an
+   * enclosing function counts, whatever the block.
+   */
+  private collectLocalScopes(): void {
+    const cursor = this.tree.walk();
+    const stack: { id: number; names: Set<string> }[] = [];
+    const declare = (names: readonly string[]) => {
+      const top = stack.at(-1);
+      if (top !== undefined) for (const n of names) top.names.add(n);
+    };
+    const enter = (node: Node): boolean => {
+      if (node.isError || node.isMissing) return false;
+      if (INNER_DECLARATIONS.has(node.type)) declare(boundNames(node.childForFieldName("name")));
+      if (FUNCTION_SCOPES.has(node.type)) {
+        const names = new Set<string>();
+        this.localScopes.set(node.id, names);
+        stack.push({ id: node.id, names });
+        if (node.type !== "function_declaration" && node.type !== "generator_function_declaration") declare(boundNames(node.childForFieldName("name")));
+        declare(boundNames(node.childForFieldName("parameter")));
+      }
+      if (node.type === "formal_parameters") declare(boundNames(node));
+      else if (node.type === "variable_declarator") declare(boundNames(node.childForFieldName("name")));
+      else if (node.type === "catch_clause") declare(boundNames(node.childForFieldName("parameter")));
+      return true;
+    };
+    const leave = (node: Node) => {
+      if (stack.at(-1)?.id === node.id) stack.pop();
+    };
+    try {
+      let descend = enter(cursor.currentNode);
+      for (;;) {
+        if (descend && cursor.gotoFirstChild()) {
+          descend = enter(cursor.currentNode);
+          continue;
+        }
+        leave(cursor.currentNode);
+        let moved = cursor.gotoNextSibling();
+        while (!moved) {
+          if (!cursor.gotoParent()) return;
+          leave(cursor.currentNode);
+          moved = cursor.gotoNextSibling();
+        }
+        descend = enter(cursor.currentNode);
+      }
+    } finally {
+      cursor.delete();
+    }
+  }
+
+  /** Whether name is declared in a function scope around node. */
+  private isLocal(node: Node, name: string): boolean {
+    for (let n: Node | null = node.parent; n !== null; n = n.parent) {
+      if (this.localScopes.get(n.id)?.has(name) === true) return true;
+    }
+    return false;
+  }
+
+  /** "member" when the nearest non-arrow function around node is a class member (its "this"). */
+  private thisBinding(node: Node): "member" | "other" {
+    for (let n: Node | null = node.parent; n !== null; n = n.parent) {
+      if (FUNCTION_SCOPES.has(n.type) && n.type !== "arrow_function") return n.type === "method_definition" ? "member" : "other";
+    }
+    return "other";
   }
 
   private declaration(node: Node, exported: boolean): void {
@@ -539,8 +674,15 @@ class Extractor {
   }
 
   private callSite(kind: CallSiteKind, callee: Node, node: Node, enclosing: SymbolRef | undefined): void {
+    const calleePath = namePath(callee);
+    const root = calleePath?.[0];
+    const structure = {
+      ...(calleePath === undefined ? {} : { calleePath }),
+      ...(root !== undefined && root !== "this" && root !== "super" && this.isLocal(node, root) ? { rootLocal: true as const } : {}),
+      ...(root === "this" ? { thisBinding: this.thisBinding(node) } : {}),
+    };
     this.callSites.push({
-      kind, calleeText: compact(callee.text), ...(enclosing === undefined ? {} : { enclosingSymbol: enclosing }), location: location(this.path, node),
+      kind, calleeText: compact(callee.text), ...structure, ...(enclosing === undefined ? {} : { enclosingSymbol: enclosing }), location: location(this.path, node),
     });
   }
 

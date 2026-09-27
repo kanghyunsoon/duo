@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadProjectTruth, STATE_DIR_NAME } from "@duo-director/core";
+import { applyGraphPlan, buildGraphPlan, checkGraph, openNodeSqliteGraphStore, traverse } from "@duo-director/graph";
 import { afterAll, describe, expect, it } from "vitest";
 import { validateDocs } from "../../scripts/validate-docs.mjs";
 
@@ -87,3 +88,32 @@ describe("validate-docs reports problems found by @duo-director/core", () => {
     expect(problems.some((p) => p.startsWith("README.md:") && p.includes("broken link docs/nope.md"))).toBe(true);
   });
 });
+
+describe("AC-007-03 the self fixture as a Project Graph", () => {
+  const loaded = loadProjectTruth(selfFixture());
+  const value = loaded.value;
+  if (value === undefined) throw new Error(JSON.stringify(loaded.diagnostics));
+  const plan = buildGraphPlan({
+    truth: value.truth, trace: value.trace, files: [], analyses: [], sourceText: () => undefined,
+    moduleResolver: { resolve: () => ({ status: "unsupported", reason: "no code" }), diagnostics: [] },
+  });
+  const store = openNodeSqliteGraphStore({ path: ":memory:" }).value;
+  if (store === undefined) throw new Error("no store");
+  afterAll(() => store.close());
+
+  it("builds a valid definition graph that passes graph.check()", () => {
+    expect(plan.valid).toBe(true);
+    expect(applyGraphPlan(store, plan).diagnostics).toEqual([]);
+    expect(checkGraph(store)).toEqual([]);
+    expect(plan.stats.nodes).toMatchObject({ requirement: value.truth.requirements.length, decision: value.truth.decisions.length, issue: value.truth.issues.length });
+  });
+
+  it("finds REQ-CONTEXT-001 → ADR-005 → TASK-010", () => {
+    const r = traverse(store, [{ type: "requirement", id: "REQ-CONTEXT-001" }], { maxDepth: 2, nodeLimit: 500, direction: "both", edgeTypes: ["GOVERNS"] });
+    const depth = Object.fromEntries(r.nodes.map((n) => [n.node.id, n.depth]));
+    expect(depth["dec:ADR-005"]).toBe(1);
+    expect(depth["issue:TASK-010"]).toBe(2);
+    expect(r.edges.map((e) => `${e.from} ${e.type} ${e.to}`)).toEqual(expect.arrayContaining(["dec:ADR-005 GOVERNS req:REQ-CONTEXT-001", "dec:ADR-005 GOVERNS issue:TASK-010"]));
+  });
+});
+

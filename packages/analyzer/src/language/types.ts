@@ -78,13 +78,34 @@ export interface ModuleReference {
   readonly location: SourceLocation;
 }
 
+/**
+ * A name this module exports from its own declarations (not a re-export): "export function f",
+ * "export default class Foo" (exported "default", local "Foo"), "export { a as b }" (exported "b",
+ * local "a"). local is absent when the default export is an expression without a name.
+ */
+export interface LocalExport {
+  readonly exported: string;
+  readonly local?: string;
+  readonly typeOnly: boolean;
+  readonly location: SourceLocation;
+}
+
 export type CallSiteKind = "identifier" | "member" | "constructor";
 
-/** A call as written. The target is not resolved: "auth.login()" is not claimed to call AuthService.login. */
+/**
+ * A call as written. The target is not resolved: "auth.login()" is not claimed to call AuthService.login.
+ * The structured fields let the Graph Builder resolve without reading source text.
+ */
 export interface CallSite {
   readonly kind: CallSiteKind;
   /** Callee source text with line breaks and their indentation removed, e.g. "client.user.login". */
   readonly calleeText: string;
+  /** The callee as a dotted name path when it is one: ["login"], ["Auth", "login"], ["this", "#refresh"]. Absent for computed callees. */
+  readonly calleePath?: readonly string[];
+  /** The first name of calleePath is declared inside an enclosing function (parameter or local), so it is not a module-level name. */
+  readonly rootLocal?: true;
+  /** For "this" callees: "member" when "this" belongs to the enclosing class member, "other" inside a nested function or elsewhere. */
+  readonly thisBinding?: "member" | "other";
   /** Innermost extracted symbol containing the call; absent at module level. */
   readonly enclosingSymbol?: SymbolRef;
   readonly location: SourceLocation;
@@ -138,6 +159,8 @@ export interface SourceAnalysis {
   readonly parseStatus: ParseStatus;
   readonly symbols: readonly AnalyzedSymbol[];
   readonly moduleReferences: readonly ModuleReference[];
+  /** Local exports (re-exports are in moduleReferences). */
+  readonly exports: readonly LocalExport[];
   readonly callSites: readonly CallSite[];
   readonly annotations: readonly DuoAnnotation[];
   readonly tests: readonly AnalyzedTest[];

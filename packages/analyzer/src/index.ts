@@ -31,7 +31,7 @@ export type {
 export { openGitProvider, type GitProvider } from "./git/provider.js";
 export { computeCoChangeCandidates, extractIssueKeys, type CoChangeCandidate, type CoChangeOptions } from "./git/history.js";
 export type {
-  AnalyzedSymbol, AnalyzedTest, CallSite, CallSiteKind, DuoAnnotation, ImportBinding, LanguageAnalyzer, MemberScope, ModuleReference,
+  AnalyzedSymbol, AnalyzedTest, CallSite, CallSiteKind, DuoAnnotation, ImportBinding, LanguageAnalyzer, LocalExport, MemberScope, ModuleReference,
   ModuleReferenceKind, ParseStatus, ReExportBinding, SourceAnalysis, SourceInput, SourceLanguage, SymbolKind, TestConfidence,
   TestFrameworkHint, TestKind, TestModifier,
 } from "./language/types.js";

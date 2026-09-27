@@ -41,6 +41,8 @@ describe("AC-001-02 lint enforces the ADR-010 dependency direction", () => {
     ["analyzer contract cannot import web-tree-sitter", "packages/analyzer/src/language/probe.ts", 'import type { Node } from "web-tree-sitter";', false],
     ["analyzer scanner cannot import web-tree-sitter", "packages/analyzer/src/scan/probe.ts", 'import { Parser } from "web-tree-sitter";', false],
     ["analyzer tree-sitter layer may import web-tree-sitter", "packages/analyzer/src/language/tree-sitter/probe.ts", 'import { Parser } from "web-tree-sitter";', true],
+    ["graph builder cannot import the TypeScript API", "packages/graph/src/build/probe.ts", 'import ts from "typescript";', false],
+    ["TypeScriptModuleResolver may import the TypeScript API", "packages/graph/src/build/resolve/typescript/probe.ts", 'import ts from "typescript";', true],
   ];
   for (const [name, file, code, allowed] of cases) {
     it(name, async () => {

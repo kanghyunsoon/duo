@@ -1,0 +1,12 @@
+id: D-002
+title: Passkey login
+kind: decision
+state: confirmed
+question: login_mechanism
+answer: passkey
+owner: human
+governs:
+  requirements: [APP-01]
+supersedes: D-001
+confirmed_at: "2026-09-27T00:00:00Z"
+confirmed_by: tester

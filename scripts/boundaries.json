@@ -66,6 +66,13 @@
       "web-tree-sitter"
     ]
   },
+  "typescriptApi": {
+    "$comment": "TypeScript Compiler API는 graph의 TypeScriptModuleResolver에서만 import한다(T07). TypeScript 7 API 변화가 이 adapter 밖으로 번지지 않게 한다.",
+    "dir": "packages/graph/src/build/resolve/typescript",
+    "modules": [
+      "typescript"
+    ]
+  },
   "cliForbiddenNodeModules": [
     "node:fs",
     "node:fs/promises",

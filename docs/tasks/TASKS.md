@@ -152,7 +152,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-004](#task-004-파일-스캔과-fingerprint) | 파일 스캔과 fingerprint | analyzer | M1 | TASK-002 | done |
 | [TASK-005](#task-005-languageanalyzer와-tsjs-analyzer) | LanguageAnalyzer와 TS/JS Analyzer | analyzer | M1 | TASK-004 | done |
 | [TASK-006](#task-006-git-evidence-provider) | Git Evidence Provider | analyzer | M1 | TASK-002 | done |
-| [TASK-007](#task-007-graph-builder와-일관성-검사) | Graph builder와 일관성 검사 | graph | M1 | TASK-003, TASK-005, TASK-006 | todo |
+| [TASK-007](#task-007-graph-builder와-일관성-검사) | Graph builder와 일관성 검사 | graph | M1 | TASK-003, TASK-005, TASK-006 | done |
 | [TASK-008](#task-008-증분-인덱싱-trace-impact) | 증분 인덱싱, trace, impact | graph | M1 | TASK-007 | todo |
 | [TASK-009](#task-009-decision-생명주기) | Decision 생명주기 | core | M2 | TASK-002 | todo |
 | [TASK-010](#task-010-context-compiler) | Context Compiler | director | M2 | TASK-008, TASK-009 | todo |
@@ -371,7 +371,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M1
 package: graph
 requirements: [REQ-GRAPH-001, REQ-GRAPH-003, REQ-TRACE-001]
@@ -379,18 +379,18 @@ decisions: [ADR-002, ADR-014]
 depends_on: [TASK-003, TASK-005, TASK-006]
 ```
 
-- **Goal**: core, analyzer 결과로 Project Graph를 만든다.
+- **Goal**: core, analyzer 결과로 Project Graph를 만든다. Evidence로 설명할 수 있는 관계만 저장한다(H-24).
 - **Input**: 04 Node/Edge 표
-- **Output**: builder, provenance, graph.check()
+- **Output**: `collectGraphFacts` → `buildGraphPlan`(payload schema, endpoint matrix, `ModuleResolver` / `TypeScriptModuleResolver`, ExportIndex, exact CALLS, annotation attachment, Test/VALIDATED_BY, CHANGED_WITH, stats) → `applyGraphPlan`(transaction 하나), `checkGraph`(불변식 1~4, 6, 7)
 - **Dependencies**: [TASK-003](#task-003-graphstore), [TASK-005](#task-005-languageanalyzer와-tsjs-analyzer), [TASK-006](#task-006-git-evidence-provider)
-- **Files expected to change**: `packages/graph/src/build/**`, `packages/graph/src/check.ts`
-- **Status**: todo
+- **Files expected to change**: `packages/graph/src/build/**`, `packages/graph/src/check.ts`, Analyzer v3 사실(`packages/analyzer/src/language/**`, C51), `packages/core/src/diagnostics.ts`, `scripts/boundaries.json`·`eslint.config.js`(`typescriptApi` 경계), `fixtures/graph/**`
+- **Status**: done (T07)
 - **검증 대상 Requirement**: [REQ-GRAPH-001](../01-requirements.md#req-graph-001-node-8종과-edge-10종의-embedded-저장), [REQ-GRAPH-003](../01-requirements.md#req-graph-003-graph-일관성-불변식), [REQ-TRACE-001](../01-requirements.md#req-trace-001-id-기반-추적성)
 - **관련 ADR**: [ADR-002](../adr/ADR-002-graph-storage.md), [ADR-014](../adr/ADR-014-traceability-ids.md)
 
 Acceptance Criteria
 
-- **AC-007-01** fixture Graph의 Node/Edge가 golden과 같다
+- **AC-007-01** fixture Graph의 Node/Edge를 GraphStore에서 읽어 관계별로 직접 assertion한다(단일 golden snapshot 대신, C56)
 - **AC-007-02** 불변식 1~4와 6(정의 ID 전역 유일성)이 통과한다
 - **AC-007-03** self fixture로 만든 Graph에서 REQ-CONTEXT-001 → ADR-005 → TASK-010 경로가 탐색된다
 - **AC-007-04** Edge 방향과 endpoint 타입이 04 표와 일치한다

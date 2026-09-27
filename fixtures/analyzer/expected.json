@@ -80,6 +80,44 @@
         }
       ],
       "moduleReferences": [],
+      "exports": [
+        {
+          "exported": "login",
+          "local": "login",
+          "typeOnly": false,
+          "location": {
+            "path": "annotations.ts",
+            "startLine": 2,
+            "startColumn": 1,
+            "endLine": 2,
+            "endColumn": 27
+          }
+        },
+        {
+          "exported": "logout",
+          "local": "logout",
+          "typeOnly": false,
+          "location": {
+            "path": "annotations.ts",
+            "startLine": 7,
+            "startColumn": 1,
+            "endLine": 7,
+            "endColumn": 28
+          }
+        },
+        {
+          "exported": "Game",
+          "local": "Game",
+          "typeOnly": false,
+          "location": {
+            "path": "annotations.ts",
+            "startLine": 10,
+            "startColumn": 1,
+            "endLine": 10,
+            "endColumn": 21
+          }
+        }
+      ],
       "callSites": [],
       "annotations": [
         {
@@ -239,10 +277,27 @@
           }
         }
       ],
+      "exports": [
+        {
+          "exported": "registerTests",
+          "local": "registerTests",
+          "typeOnly": false,
+          "location": {
+            "path": "auth.vitest.ts",
+            "startLine": 23,
+            "startColumn": 1,
+            "endLine": 25,
+            "endColumn": 2
+          }
+        }
+      ],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "describe",
+          "calleePath": [
+            "describe"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 4,
@@ -254,6 +309,9 @@
         {
           "kind": "identifier",
           "calleeText": "describe",
+          "calleePath": [
+            "describe"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 5,
@@ -265,6 +323,9 @@
         {
           "kind": "identifier",
           "calleeText": "spec",
+          "calleePath": [
+            "spec"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 6,
@@ -276,6 +337,10 @@
         {
           "kind": "member",
           "calleeText": "test.skip",
+          "calleePath": [
+            "test",
+            "skip"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 7,
@@ -287,6 +352,10 @@
         {
           "kind": "member",
           "calleeText": "it.only",
+          "calleePath": [
+            "it",
+            "only"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 9,
@@ -298,6 +367,10 @@
         {
           "kind": "member",
           "calleeText": "test.only",
+          "calleePath": [
+            "test",
+            "only"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 10,
@@ -309,6 +382,10 @@
         {
           "kind": "member",
           "calleeText": "test.todo",
+          "calleePath": [
+            "test",
+            "todo"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 11,
@@ -320,6 +397,9 @@
         {
           "kind": "identifier",
           "calleeText": "test",
+          "calleePath": [
+            "test"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 12,
@@ -331,6 +411,9 @@
         {
           "kind": "identifier",
           "calleeText": "makeName",
+          "calleePath": [
+            "makeName"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 12,
@@ -342,6 +425,9 @@
         {
           "kind": "identifier",
           "calleeText": "test",
+          "calleePath": [
+            "test"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 13,
@@ -353,6 +439,9 @@
         {
           "kind": "identifier",
           "calleeText": "test",
+          "calleePath": [
+            "test"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 14,
@@ -364,6 +453,9 @@
         {
           "kind": "identifier",
           "calleeText": "describe",
+          "calleePath": [
+            "describe"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 17,
@@ -375,6 +467,9 @@
         {
           "kind": "identifier",
           "calleeText": "dynamicSuite",
+          "calleePath": [
+            "dynamicSuite"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 17,
@@ -386,6 +481,9 @@
         {
           "kind": "identifier",
           "calleeText": "test",
+          "calleePath": [
+            "test"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 18,
@@ -397,6 +495,10 @@
         {
           "kind": "member",
           "calleeText": "vt.it",
+          "calleePath": [
+            "vt",
+            "it"
+          ],
           "location": {
             "path": "auth.vitest.ts",
             "startLine": 21,
@@ -408,6 +510,9 @@
         {
           "kind": "identifier",
           "calleeText": "test",
+          "calleePath": [
+            "test"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "auth.vitest.ts",
@@ -688,10 +793,51 @@
         }
       ],
       "moduleReferences": [],
+      "exports": [
+        {
+          "exported": "ok",
+          "local": "ok",
+          "typeOnly": false,
+          "location": {
+            "path": "broken.ts",
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 1,
+            "endColumn": 33
+          }
+        },
+        {
+          "exported": "broken",
+          "local": "broken",
+          "typeOnly": false,
+          "location": {
+            "path": "broken.ts",
+            "startLine": 2,
+            "startColumn": 1,
+            "endLine": 2,
+            "endColumn": 39
+          }
+        },
+        {
+          "exported": "After",
+          "local": "After",
+          "typeOnly": false,
+          "location": {
+            "path": "broken.ts",
+            "startLine": 3,
+            "startColumn": 1,
+            "endLine": 3,
+            "endColumn": 40
+          }
+        }
+      ],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "call",
+          "calleePath": [
+            "call"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "broken.ts",
@@ -708,6 +854,9 @@
         {
           "kind": "identifier",
           "calleeText": "later",
+          "calleePath": [
+            "later"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "broken.ts",
@@ -862,10 +1011,27 @@
           }
         }
       ],
+      "exports": [
+        {
+          "exported": "run",
+          "local": "run",
+          "typeOnly": false,
+          "location": {
+            "path": "calls.ts",
+            "startLine": 9,
+            "startColumn": 1,
+            "endLine": 17,
+            "endColumn": 3
+          }
+        }
+      ],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "b",
+          "calleePath": [
+            "b"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "calls.ts",
@@ -882,6 +1048,9 @@
         {
           "kind": "identifier",
           "calleeText": "a",
+          "calleePath": [
+            "a"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "calls.ts",
@@ -898,6 +1067,11 @@
         {
           "kind": "member",
           "calleeText": "helper.util.go",
+          "calleePath": [
+            "helper",
+            "util",
+            "go"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "calls.ts",
@@ -914,6 +1088,9 @@
         {
           "kind": "constructor",
           "calleeText": "AuthService",
+          "calleePath": [
+            "AuthService"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "calls.ts",
@@ -930,6 +1107,11 @@
         {
           "kind": "member",
           "calleeText": "service.login",
+          "calleePath": [
+            "service",
+            "login"
+          ],
+          "rootLocal": true,
           "enclosingSymbol": {
             "type": "symbol",
             "path": "calls.ts",
@@ -946,6 +1128,9 @@
         {
           "kind": "identifier",
           "calleeText": "b",
+          "calleePath": [
+            "b"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "calls.ts",
@@ -962,6 +1147,10 @@
         {
           "kind": "member",
           "calleeText": "items.forEach",
+          "calleePath": [
+            "items",
+            "forEach"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "calls.ts",
@@ -978,6 +1167,9 @@
         {
           "kind": "identifier",
           "calleeText": "format",
+          "calleePath": [
+            "format"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "calls.ts",
@@ -994,6 +1186,9 @@
         {
           "kind": "identifier",
           "calleeText": "setup",
+          "calleePath": [
+            "setup"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "calls.ts",
@@ -1010,6 +1205,11 @@
         {
           "kind": "member",
           "calleeText": "this.draw",
+          "calleePath": [
+            "this",
+            "draw"
+          ],
+          "thisBinding": "member",
           "enclosingSymbol": {
             "type": "symbol",
             "path": "calls.ts",
@@ -1026,6 +1226,10 @@
         {
           "kind": "member",
           "calleeText": "super.render",
+          "calleePath": [
+            "super",
+            "render"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "calls.ts",
@@ -1042,6 +1246,9 @@
         {
           "kind": "identifier",
           "calleeText": "top",
+          "calleePath": [
+            "top"
+          ],
           "location": {
             "path": "calls.ts",
             "startLine": 28,
@@ -1053,6 +1260,9 @@
         {
           "kind": "constructor",
           "calleeText": "Map",
+          "calleePath": [
+            "Map"
+          ],
           "location": {
             "path": "calls.ts",
             "startLine": 29,
@@ -1064,6 +1274,9 @@
         {
           "kind": "identifier",
           "calleeText": "tag",
+          "calleePath": [
+            "tag"
+          ],
           "location": {
             "path": "calls.ts",
             "startLine": 30,
@@ -1126,10 +1339,28 @@
           }
         }
       ],
+      "exports": [
+        {
+          "exported": "read",
+          "local": "read",
+          "typeOnly": false,
+          "location": {
+            "path": "common.cts",
+            "startLine": 3,
+            "startColumn": 1,
+            "endLine": 5,
+            "endColumn": 2
+          }
+        }
+      ],
       "callSites": [
         {
           "kind": "member",
           "calleeText": "fs.readFileSync",
+          "calleePath": [
+            "fs",
+            "readFileSync"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "common.cts",
@@ -1197,10 +1428,27 @@
           }
         }
       ],
+      "exports": [
+        {
+          "exported": "Button",
+          "local": "Button",
+          "typeOnly": false,
+          "location": {
+            "path": "component.tsx",
+            "startLine": 3,
+            "startColumn": 1,
+            "endLine": 5,
+            "endColumn": 2
+          }
+        }
+      ],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "track",
+          "calleePath": [
+            "track"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "component.tsx",
@@ -1267,10 +1515,27 @@
         }
       ],
       "moduleReferences": [],
+      "exports": [
+        {
+          "exported": "default",
+          "local": "default",
+          "typeOnly": false,
+          "location": {
+            "path": "default-class.js",
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 5,
+            "endColumn": 2
+          }
+        }
+      ],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "draw",
+          "calleePath": [
+            "draw"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "default-class.js",
@@ -1317,10 +1582,27 @@
         }
       ],
       "moduleReferences": [],
+      "exports": [
+        {
+          "exported": "default",
+          "local": "default",
+          "typeOnly": false,
+          "location": {
+            "path": "default-function.ts",
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 3,
+            "endColumn": 2
+          }
+        }
+      ],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "run",
+          "calleePath": [
+            "run"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "default-function.ts",
@@ -1388,10 +1670,27 @@
           }
         }
       ],
+      "exports": [
+        {
+          "exported": "default",
+          "local": "default",
+          "typeOnly": false,
+          "location": {
+            "path": "esm.mjs",
+            "startLine": 3,
+            "startColumn": 1,
+            "endLine": 3,
+            "endColumn": 26
+          }
+        }
+      ],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "a",
+          "calleePath": [
+            "a"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "esm.mjs",
@@ -1419,10 +1718,14 @@
       "parseStatus": "complete",
       "symbols": [],
       "moduleReferences": [],
+      "exports": [],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "describe",
+          "calleePath": [
+            "describe"
+          ],
           "location": {
             "path": "globals-source.ts",
             "startLine": 1,
@@ -1434,6 +1737,9 @@
         {
           "kind": "identifier",
           "calleeText": "it",
+          "calleePath": [
+            "it"
+          ],
           "location": {
             "path": "globals-source.ts",
             "startLine": 2,
@@ -1456,10 +1762,14 @@
       "parseStatus": "complete",
       "symbols": [],
       "moduleReferences": [],
+      "exports": [],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "describe",
+          "calleePath": [
+            "describe"
+          ],
           "location": {
             "path": "globals.test.ts",
             "startLine": 1,
@@ -1471,6 +1781,9 @@
         {
           "kind": "identifier",
           "calleeText": "it",
+          "calleePath": [
+            "it"
+          ],
           "location": {
             "path": "globals.test.ts",
             "startLine": 2,
@@ -1482,6 +1795,10 @@
         {
           "kind": "member",
           "calleeText": "test.skip",
+          "calleePath": [
+            "test",
+            "skip"
+          ],
           "location": {
             "path": "globals.test.ts",
             "startLine": 3,
@@ -1909,6 +2226,7 @@
           }
         }
       ],
+      "exports": [],
       "callSites": [],
       "annotations": [],
       "tests": []
@@ -1954,10 +2272,14 @@
           }
         }
       ],
+      "exports": [],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "describe",
+          "calleePath": [
+            "describe"
+          ],
           "location": {
             "path": "jest.test.js",
             "startLine": 3,
@@ -1969,6 +2291,9 @@
         {
           "kind": "identifier",
           "calleeText": "it",
+          "calleePath": [
+            "it"
+          ],
           "location": {
             "path": "jest.test.js",
             "startLine": 4,
@@ -1980,6 +2305,9 @@
         {
           "kind": "identifier",
           "calleeText": "expect",
+          "calleePath": [
+            "expect"
+          ],
           "location": {
             "path": "jest.test.js",
             "startLine": 5,
@@ -2064,10 +2392,15 @@
           }
         }
       ],
+      "exports": [],
       "callSites": [
         {
           "kind": "member",
           "calleeText": "path.join",
+          "calleePath": [
+            "path",
+            "join"
+          ],
           "location": {
             "path": "legacy.cjs",
             "startLine": 4,
@@ -2287,6 +2620,20 @@
         }
       ],
       "moduleReferences": [],
+      "exports": [
+        {
+          "exported": "User",
+          "local": "User",
+          "typeOnly": false,
+          "location": {
+            "path": "members.ts",
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 15,
+            "endColumn": 2
+          }
+        }
+      ],
       "callSites": [],
       "annotations": [],
       "tests": []
@@ -2332,6 +2679,20 @@
             "startColumn": 10,
             "endLine": 2,
             "endColumn": 27
+          }
+        }
+      ],
+      "exports": [
+        {
+          "exported": "load",
+          "local": "load",
+          "typeOnly": false,
+          "location": {
+            "path": "module.mts",
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 3,
+            "endColumn": 2
           }
         }
       ],
@@ -2588,10 +2949,27 @@
           }
         }
       ],
+      "exports": [
+        {
+          "exported": "local",
+          "local": "local",
+          "typeOnly": false,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 15,
+            "startColumn": 1,
+            "endLine": 15,
+            "endColumn": 18
+          }
+        }
+      ],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "require",
+          "calleePath": [
+            "require"
+          ],
           "location": {
             "path": "modules.ts",
             "startLine": 13,
@@ -2645,10 +3023,14 @@
           }
         }
       ],
+      "exports": [],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "test",
+          "calleePath": [
+            "test"
+          ],
           "location": {
             "path": "node-test.mjs",
             "startLine": 3,
@@ -2660,6 +3042,9 @@
         {
           "kind": "identifier",
           "calleeText": "describe",
+          "calleePath": [
+            "describe"
+          ],
           "location": {
             "path": "node-test.mjs",
             "startLine": 4,
@@ -2671,6 +3056,9 @@
         {
           "kind": "identifier",
           "calleeText": "it",
+          "calleePath": [
+            "it"
+          ],
           "location": {
             "path": "node-test.mjs",
             "startLine": 5,
@@ -2777,10 +3165,14 @@
           }
         }
       ],
+      "exports": [],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "it",
+          "calleePath": [
+            "it"
+          ],
           "location": {
             "path": "shadow.test.ts",
             "startLine": 7,
@@ -2792,6 +3184,9 @@
         {
           "kind": "identifier",
           "calleeText": "test",
+          "calleePath": [
+            "test"
+          ],
           "location": {
             "path": "shadow.test.ts",
             "startLine": 8,
@@ -2803,6 +3198,9 @@
         {
           "kind": "identifier",
           "calleeText": "describe",
+          "calleePath": [
+            "describe"
+          ],
           "location": {
             "path": "shadow.test.ts",
             "startLine": 9,
@@ -2829,6 +3227,458 @@
           }
         }
       ]
+    },
+    "diagnostics": []
+  },
+  "structure.ts": {
+    "analysis": {
+      "path": "structure.ts",
+      "language": "typescript",
+      "contentHash": "sha256:e7a124070ed34aed0f026c7225f769a33f28f6b64144e1e864d109913319b496",
+      "parseStatus": "complete",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "Foo"
+          },
+          "name": "Foo",
+          "qualifiedName": "Foo",
+          "kind": "class",
+          "exported": true,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 4,
+            "startColumn": 16,
+            "endLine": 15,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "Foo.save"
+          },
+          "name": "save",
+          "qualifiedName": "Foo.save",
+          "kind": "method",
+          "exported": true,
+          "memberScope": "instance",
+          "parent": "Foo",
+          "location": {
+            "path": "structure.ts",
+            "startLine": 5,
+            "startColumn": 3,
+            "endLine": 12,
+            "endColumn": 4
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "Foo.validate"
+          },
+          "name": "validate",
+          "qualifiedName": "Foo.validate",
+          "kind": "method",
+          "exported": true,
+          "memberScope": "instance",
+          "parent": "Foo",
+          "location": {
+            "path": "structure.ts",
+            "startLine": 14,
+            "startColumn": 3,
+            "endLine": 14,
+            "endColumn": 16
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "a"
+          },
+          "name": "a",
+          "qualifiedName": "a",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 17,
+            "startColumn": 1,
+            "endLine": 19,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "outer"
+          },
+          "name": "outer",
+          "qualifiedName": "outer",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 21,
+            "startColumn": 1,
+            "endLine": 26,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "fn"
+          },
+          "name": "fn",
+          "qualifiedName": "fn",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 29,
+            "startColumn": 25,
+            "endLine": 29,
+            "endColumn": 38
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "T"
+          },
+          "name": "T",
+          "qualifiedName": "T",
+          "kind": "interface",
+          "exported": true,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 30,
+            "startColumn": 8,
+            "endLine": 30,
+            "endColumn": 22
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "U"
+          },
+          "name": "U",
+          "qualifiedName": "U",
+          "kind": "type-alias",
+          "exported": true,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 31,
+            "startColumn": 8,
+            "endLine": 31,
+            "endColumn": 24
+          }
+        }
+      ],
+      "moduleReferences": [
+        {
+          "specifier": "./helper",
+          "kind": "import",
+          "typeOnly": false,
+          "bindings": [
+            {
+              "local": "helper",
+              "imported": "helper",
+              "typeOnly": false
+            }
+          ],
+          "reexports": [],
+          "location": {
+            "path": "structure.ts",
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 1,
+            "endColumn": 35
+          }
+        },
+        {
+          "specifier": "./auth",
+          "kind": "import",
+          "typeOnly": false,
+          "bindings": [
+            {
+              "local": "Auth",
+              "imported": "*",
+              "typeOnly": false
+            }
+          ],
+          "reexports": [],
+          "location": {
+            "path": "structure.ts",
+            "startLine": 2,
+            "startColumn": 1,
+            "endLine": 2,
+            "endColumn": 32
+          }
+        }
+      ],
+      "exports": [
+        {
+          "exported": "default",
+          "local": "Foo",
+          "typeOnly": false,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 4,
+            "startColumn": 1,
+            "endLine": 15,
+            "endColumn": 2
+          }
+        },
+        {
+          "exported": "outer",
+          "local": "outer",
+          "typeOnly": false,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 28,
+            "startColumn": 1,
+            "endLine": 28,
+            "endColumn": 32
+          }
+        },
+        {
+          "exported": "renamed",
+          "local": "a",
+          "typeOnly": false,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 28,
+            "startColumn": 1,
+            "endLine": 28,
+            "endColumn": 32
+          }
+        },
+        {
+          "exported": "fn",
+          "local": "fn",
+          "typeOnly": false,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 29,
+            "startColumn": 1,
+            "endLine": 29,
+            "endColumn": 39
+          }
+        },
+        {
+          "exported": "value",
+          "local": "value",
+          "typeOnly": false,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 29,
+            "startColumn": 1,
+            "endLine": 29,
+            "endColumn": 39
+          }
+        },
+        {
+          "exported": "T",
+          "local": "T",
+          "typeOnly": true,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 30,
+            "startColumn": 1,
+            "endLine": 30,
+            "endColumn": 22
+          }
+        },
+        {
+          "exported": "U",
+          "local": "U",
+          "typeOnly": true,
+          "location": {
+            "path": "structure.ts",
+            "startLine": 31,
+            "startColumn": 1,
+            "endLine": 31,
+            "endColumn": 24
+          }
+        }
+      ],
+      "callSites": [
+        {
+          "kind": "member",
+          "calleeText": "this.validate",
+          "calleePath": [
+            "this",
+            "validate"
+          ],
+          "thisBinding": "member",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "Foo.save"
+          },
+          "location": {
+            "path": "structure.ts",
+            "startLine": 6,
+            "startColumn": 5,
+            "endLine": 6,
+            "endColumn": 20
+          }
+        },
+        {
+          "kind": "member",
+          "calleeText": "this.validate",
+          "calleePath": [
+            "this",
+            "validate"
+          ],
+          "thisBinding": "other",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "Foo.save"
+          },
+          "location": {
+            "path": "structure.ts",
+            "startLine": 8,
+            "startColumn": 7,
+            "endLine": 8,
+            "endColumn": 22
+          }
+        },
+        {
+          "kind": "member",
+          "calleeText": "this.validate",
+          "calleePath": [
+            "this",
+            "validate"
+          ],
+          "thisBinding": "member",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "Foo.save"
+          },
+          "location": {
+            "path": "structure.ts",
+            "startLine": 10,
+            "startColumn": 25,
+            "endLine": 10,
+            "endColumn": 40
+          }
+        },
+        {
+          "kind": "identifier",
+          "calleeText": "helper",
+          "calleePath": [
+            "helper"
+          ],
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "Foo.save"
+          },
+          "location": {
+            "path": "structure.ts",
+            "startLine": 11,
+            "startColumn": 5,
+            "endLine": 11,
+            "endColumn": 13
+          }
+        },
+        {
+          "kind": "identifier",
+          "calleeText": "helper",
+          "calleePath": [
+            "helper"
+          ],
+          "rootLocal": true,
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "a"
+          },
+          "location": {
+            "path": "structure.ts",
+            "startLine": 18,
+            "startColumn": 3,
+            "endLine": 18,
+            "endColumn": 11
+          }
+        },
+        {
+          "kind": "identifier",
+          "calleeText": "local",
+          "calleePath": [
+            "local"
+          ],
+          "rootLocal": true,
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "outer"
+          },
+          "location": {
+            "path": "structure.ts",
+            "startLine": 23,
+            "startColumn": 3,
+            "endLine": 23,
+            "endColumn": 10
+          }
+        },
+        {
+          "kind": "member",
+          "calleeText": "Auth.login",
+          "calleePath": [
+            "Auth",
+            "login"
+          ],
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "outer"
+          },
+          "location": {
+            "path": "structure.ts",
+            "startLine": 24,
+            "startColumn": 3,
+            "endLine": 24,
+            "endColumn": 15
+          }
+        },
+        {
+          "kind": "identifier",
+          "calleeText": "helper",
+          "calleePath": [
+            "helper"
+          ],
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "structure.ts",
+            "symbol": "outer"
+          },
+          "location": {
+            "path": "structure.ts",
+            "startLine": 25,
+            "startColumn": 3,
+            "endLine": 25,
+            "endColumn": 11
+          }
+        }
+      ],
+      "annotations": [],
+      "tests": []
     },
     "diagnostics": []
   },
@@ -3243,10 +4093,159 @@
           }
         }
       ],
+      "exports": [
+        {
+          "exported": "Session",
+          "local": "Session",
+          "typeOnly": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 4,
+            "startColumn": 1,
+            "endLine": 6,
+            "endColumn": 2
+          }
+        },
+        {
+          "exported": "SessionId",
+          "local": "SessionId",
+          "typeOnly": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 8,
+            "startColumn": 1,
+            "endLine": 8,
+            "endColumn": 32
+          }
+        },
+        {
+          "exported": "Role",
+          "local": "Role",
+          "typeOnly": false,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 10,
+            "startColumn": 1,
+            "endLine": 13,
+            "endColumn": 2
+          }
+        },
+        {
+          "exported": "Login",
+          "local": "Login",
+          "typeOnly": false,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 17,
+            "startColumn": 1,
+            "endLine": 19,
+            "endColumn": 3
+          }
+        },
+        {
+          "exported": "legacy",
+          "local": "legacy",
+          "typeOnly": false,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 21,
+            "startColumn": 1,
+            "endLine": 24,
+            "endColumn": 3
+          }
+        },
+        {
+          "exported": "parse",
+          "local": "parse",
+          "typeOnly": false,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 26,
+            "startColumn": 1,
+            "endLine": 26,
+            "endColumn": 42
+          }
+        },
+        {
+          "exported": "parse",
+          "local": "parse",
+          "typeOnly": false,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 27,
+            "startColumn": 1,
+            "endLine": 27,
+            "endColumn": 42
+          }
+        },
+        {
+          "exported": "parse",
+          "local": "parse",
+          "typeOnly": false,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 28,
+            "startColumn": 1,
+            "endLine": 30,
+            "endColumn": 2
+          }
+        },
+        {
+          "exported": "declared",
+          "local": "declared",
+          "typeOnly": false,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 32,
+            "startColumn": 1,
+            "endLine": 32,
+            "endColumn": 42
+          }
+        },
+        {
+          "exported": "Base",
+          "local": "Base",
+          "typeOnly": false,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 34,
+            "startColumn": 1,
+            "endLine": 36,
+            "endColumn": 2
+          }
+        },
+        {
+          "exported": "AuthService",
+          "local": "AuthService",
+          "typeOnly": false,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 38,
+            "startColumn": 1,
+            "endLine": 73,
+            "endColumn": 2
+          }
+        },
+        {
+          "exported": "Internal",
+          "local": "Internal",
+          "typeOnly": false,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 77,
+            "startColumn": 1,
+            "endLine": 77,
+            "endColumn": 21
+          }
+        }
+      ],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "super",
+          "calleePath": [
+            "super"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "symbols.ts",
@@ -3263,6 +4262,9 @@
         {
           "kind": "constructor",
           "calleeText": "AuthService",
+          "calleePath": [
+            "AuthService"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "symbols.ts",
@@ -3279,6 +4281,11 @@
         {
           "kind": "member",
           "calleeText": "this.#refresh",
+          "calleePath": [
+            "this",
+            "#refresh"
+          ],
+          "thisBinding": "member",
           "enclosingSymbol": {
             "type": "symbol",
             "path": "symbols.ts",
@@ -3363,10 +4370,39 @@
         }
       ],
       "moduleReferences": [],
+      "exports": [
+        {
+          "exported": "인사",
+          "local": "인사",
+          "typeOnly": false,
+          "location": {
+            "path": "unicode.ts",
+            "startLine": 2,
+            "startColumn": 1,
+            "endLine": 2,
+            "endColumn": 49
+          }
+        },
+        {
+          "exported": "사용자",
+          "local": "사용자",
+          "typeOnly": false,
+          "location": {
+            "path": "unicode.ts",
+            "startLine": 4,
+            "startColumn": 1,
+            "endLine": 6,
+            "endColumn": 2
+          }
+        }
+      ],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "로그",
+          "calleePath": [
+            "로그"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "unicode.ts",
@@ -3383,6 +4419,9 @@
         {
           "kind": "identifier",
           "calleeText": "표시",
+          "calleePath": [
+            "표시"
+          ],
           "location": {
             "path": "unicode.ts",
             "startLine": 8,
@@ -3424,10 +4463,27 @@
         }
       ],
       "moduleReferences": [],
+      "exports": [
+        {
+          "exported": "Widget",
+          "local": "Widget",
+          "typeOnly": false,
+          "location": {
+            "path": "widget.jsx",
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 1,
+            "endColumn": 52
+          }
+        }
+      ],
       "callSites": [
         {
           "kind": "identifier",
           "calleeText": "format",
+          "calleePath": [
+            "format"
+          ],
           "enclosingSymbol": {
             "type": "symbol",
             "path": "widget.jsx",

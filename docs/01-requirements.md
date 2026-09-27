@@ -122,7 +122,7 @@ priority: must
 source: [D§3, H-2]
 ```
 
-분석은 `LanguageAnalyzer` 인터페이스로 추상화한다. MVP는 TypeScriptAnalyzer와 JavaScriptAnalyzer만 제공한다. CALLS는 타입 정보 없는 이름 기반 heuristic이며 그 한계를 문서화한다.
+분석은 `LanguageAnalyzer` 인터페이스로 추상화한다. MVP는 TypeScriptAnalyzer와 JavaScriptAnalyzer만 제공한다. CALLS는 타입 정보 없이 syntax 사실과 module resolution으로 해석하고 exact 결과만 Edge로 저장하며, 해석하지 못하는 경우를 한계로 문서화한다(C48).
 
 상세: [04-project-graph](04-project-graph.md) · ADR: [ADR-003](adr/ADR-003-language-analysis.md) · Task: [TASK-005](tasks/TASKS.md#task-005-languageanalyzer와-tsjs-analyzer)
 

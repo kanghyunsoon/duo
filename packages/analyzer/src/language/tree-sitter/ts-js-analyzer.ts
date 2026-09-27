@@ -20,9 +20,9 @@ export const JAVASCRIPT_EXTENSIONS: Readonly<Record<string, GrammarId>> = { js: 
 
 /**
  * Bump when extraction output changes (04: a new version re-analyzes that analyzer's files).
- * 2: T05.1 static member identity, import bindings, tests.
+ * 2: T05.1 static member identity, import bindings, tests. 3: T07 local exports and call structure.
  */
-export const TS_JS_ANALYZER_VERSION = "2";
+export const TS_JS_ANALYZER_VERSION = "3";
 /** Per-file parse limit (docs/10-security.md). */
 export const DEFAULT_PARSE_TIMEOUT_MS = 2000;
 
@@ -91,6 +91,7 @@ class TreeSitterAnalyzer implements LanguageAnalyzer {
         parseStatus: x.partial ? "partial" : "complete",
         symbols: x.symbols,
         moduleReferences: x.moduleReferences,
+        exports: x.exports,
         callSites: x.callSites,
         annotations: x.annotations,
         tests: x.tests,

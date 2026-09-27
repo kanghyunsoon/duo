@@ -35,6 +35,7 @@ interface LanguageAnalyzer {
 - `SourceAnalysis`(symbols, moduleReferences, callSites, annotations, parseStatus)는 [04-project-graph.md](../04-project-graph.md#sourceanalysis)에 있다. 추가 언어는 `createAnalyzerRegistry([...])`에 LanguageAnalyzer를 더하면 되고 다른 패키지를 고치지 않는다(AC-005-04).
 - MVP 구현: `TypeScriptAnalyzer`(.ts .mts .cts → TypeScript grammar, .tsx → TSX grammar)와 `JavaScriptAnalyzer`(.js .mjs .cjs .jsx → JavaScript grammar). Flow, Vue, Svelte 문법은 범위 밖이다.
 - T05.1: static member는 identity가 `Class.static.name`이고(instance와 구분), getter/setter는 같은 scope 안에서만 합친다. import binding, re-export, test 정의(vitest, @jest/globals, node:test explicit / test 파일 전역 heuristic)도 syntax 사실로 낸다. Analyzer version 2.
+- T07: Graph Builder가 원문을 다시 읽지 않도록 `SourceAnalysis.exports`(자기 선언의 export)와 CallSite `calleePath`, `rootLocal`, `thisBinding`을 syntax 사실로 더했다. Analyzer version 3.
 - Post-MVP: `PythonAnalyzer`(REQ-POST-003).
 
 ### 의존성과 WASM
@@ -49,11 +50,23 @@ interface LanguageAnalyzer {
 - grammar 패키지의 native binding 빌드 스크립트는 실행하지 않는다(`pnpm-workspace.yaml` `allowBuilds: false`). native Tree-sitter binding으로 바꾸지 않는다.
 - 버전 번호만으로 호환을 가정하지 않는다. CI의 `pnpm test:grammars`가 3개 OS에서 grammar마다 `Parser.init()`, `Language.load()`, 최소 source parse를 실제로 한다(AC-005-01). ABI가 runtime 범위(`MIN_COMPATIBLE_VERSION`..`LANGUAGE_VERSION`) 밖이거나 load가 실패하면 `ANALYZER_INIT_FAILED`다.
 
+## Module resolution(TASK-007)
+
+- Graph Builder는 `ModuleResolver` interface(`packages/graph/src/build/resolve/module-resolver.ts`)만 쓴다. 결과 모델은 resolved, external, unresolved, ambiguous, unsupported이고 TypeScript 타입을 노출하지 않는다.
+- 구현 `TypeScriptModuleResolver`는 TypeScript Compiler API의 `ts.resolveModuleName`을 쓴다. DUO는 NodeNext, `.js` → `.ts` 대체, extensionless와 index, `paths`, `baseUrl`, package `exports`/`imports`를 다시 구현하지 않는다. import mode는 `getImpliedNodeFormatForFile`로 정하고 `require`는 CommonJS, dynamic import는 ESM으로 넘긴다.
+- config는 source 파일에서 Repository root까지 올라가며 가장 가까운 `tsconfig.json`, 없으면 `jsconfig.json`(`allowJs`)이다. `ts.readConfigFile` + `parseJsonConfigFileContent`로 읽어 `extends`를 TypeScript가 처리하고 config별로 cache한다. 입력 파일이 없다는 오류(18003)는 무시하고 나머지 오류는 `TSCONFIG_INVALID`(warning)다. resolution cache는 config별 `ModuleResolutionCache`와 결과 cache다.
+- config가 없으면 프로젝트 semantics를 아는 척하지 않는다. 상대 경로만 Bundler 규칙으로 해석하고 bare specifier는 external이다(C52).
+- `node_modules`나 `isExternalLibraryImport` 결과는 external(package), Repository 밖 경로는 external(outside-repository), builtin과 `node:`는 external(builtin), URL과 절대 경로는 unsupported, Repository 안이지만 index되지 않은 파일은 unresolved(not-indexed)다. 어느 경우에도 File Node를 만들지 않는다.
+- resolved 결과의 `claim`은 `typescript-resolution`이다. "TypeScript가 이 파일로 해석했다"는 뜻이며 runtime이 그 파일을 실행한다는 주장과 구분한다(`extensionSubstituted`, `declarationOnly`).
+- **격리**: `typescript` import는 `packages/graph/src/build/resolve/typescript/` 안에서만 허용한다(`scripts/boundaries.json` `typescriptApi`, ESLint, `tests/workspace/boundaries.test.ts`). `typescript` 6.0.3과 `zod` 4.6.5는 graph 패키지의 runtime dependency로 정확히 고정한다.
+- **TypeScript 7 위험**: TypeScript 7(native)은 Compiler API가 바뀔 수 있다. 그때는 `TypeScriptModuleResolver`만 교체한다. adapter 계약은 `typescript-module-resolver.test.ts`가 TypeScript 6 기준으로 고정하므로 upgrade 시 차이가 그 테스트에서 드러난다.
+- **Type Checker 금지**: TypeScript Program 생성, type checking, symbol 해석은 쓰지 않는다. Compiler API는 module resolution에만 쓴다.
+
 ## CALLS 한계
 
-**CALLS extraction is syntactic. Call target resolution is not performed in TASK-005.** Analyzer는 CallSite(kind, calleeText, enclosingSymbol)만 내고 `auth.login()`을 `AuthService.login`으로 추론하지 않는다. TS/JS CALLS는 TASK-007이 정적 타입 정보 없이 **이름 기반 heuristic**으로 해석한다. 해석 순서와 놓치는 경우는 [04-project-graph.md](../04-project-graph.md#calls-해석과-한계)에 명시한다. 이 Edge의 provenance는 `static`(이름이 유일하게 해석된 경우) 또는 `heuristic`(후보가 여럿이거나 전역 이름 추정)이며, heuristic Edge만으로는 BLOCK을 낼 수 없다(ADR-007).
+**CALLS extraction is syntactic. Call target resolution is not performed in TASK-005.** Analyzer는 CallSite 사실만 내고 `auth.login()`을 `AuthService.login`으로 추론하지 않는다. TASK-007 Graph Builder가 syntax 사실과 module resolution만으로 해석하며 **exact 결과만** CALLS Edge(provenance `static`)로 저장한다. 같은 파일 identifier, named·aliased·default·namespace import, class member 안의 `this.m()`, class static `C.m()`만 exact가 될 수 있고, 변수 receiver(`user.load()`), 인터페이스 구현체, DI, 동적 접근, callback은 unresolved다. 이름 기반 heuristic(Repository 전체의 unique 이름 연결)은 쓰지 않는다(C48, H-24). 규칙은 [04-project-graph.md](../04-project-graph.md#calls-해석task-007)에 있다.
 
 ## 결과
 
-- 정확도는 benchmark Coverage로 측정한다. 누락의 주원인이 CALLS라면 TS에 한해 Compiler API 보조 해석을 별도 ADR로 검토한다.
+- 정확도는 benchmark Coverage로 측정한다. 누락의 주원인이 CALLS라면 TS에 한해 Type Checker 기반 보조 해석을 별도 기능(필요하면 별도 ADR)으로 검토한다. resolution 비율을 높이려고 heuristic을 더하지 않는다.
 - 성능 문제가 benchmark에서 확인되기 전에는 native binding이나 증분 parse를 도입하지 않는다.

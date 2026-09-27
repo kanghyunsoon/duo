@@ -1,0 +1,11 @@
+id: D-001
+title: Password login
+kind: decision
+state: superseded
+question: login_mechanism
+answer: password
+governs:
+  requirements: [APP-01]
+  paths: ["src/auth/**"]
+supersedes: null
+superseded_by: D-002

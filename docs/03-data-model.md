@@ -230,7 +230,7 @@ WAL에서 다른 연결이 쓰는 동안 마지막 commit 상태를 읽는 것�
 - **Symbol identity**: core `symbolRef(path, symbol)`와 `nodeId()`만 쓴다. `symbol`은 top-level과 instance member가 qualifiedName(`User.load`), static member가 `User.static.load`다. identifier가 아닌 member 이름은 JSON 문자열로 감싼다(`User["a.b"]`, `User.static["a.b"]`). 그래서 `static User.load` ≠ `instance User.load`이고 문자열 이름 안의 `.`이 static 접두사와 충돌하지 않는다. `qualifiedName`은 표시용이며 scope 간에 겹칠 수 있다. 위치나 byte offset은 ID에 넣지 않는다.
 - **정렬**: 모든 목록은 `compareSourceLocations` 순서, 같으면 symbol identity / specifier, kind / calleeText / ids / fullName(`compareUtf8`) 순서다. AST 순회 순서에 기대지 않는다.
 - **partial**: 트리에 ERROR나 MISSING 노드가 있으면 `parseStatus: "partial"`과 `AST_PARSE_ERROR`(warning, 파일당 20개 + 요약 1개). ERROR 노드 안은 읽지 않고 나머지는 계속 추출한다. parse가 파일당 제한 시간(기본 2초)을 넘으면 `AST_PARSE_TIMEOUT`이고 결과가 없다.
-- **버전**: `TS_JS_ANALYZER_VERSION` 2(T05.1: static identity, binding, test). 버전이 바뀌면 그 Analyzer의 파일을 다시 분석한다(04).
+- **버전**: `TS_JS_ANALYZER_VERSION` 3(T05.1: static identity, binding, test. T07: `exports`, CallSite `calleePath` / `rootLocal` / `thisBinding`). 버전이 바뀌면 그 Analyzer의 파일을 다시 분석한다(04).
 
 ## Git Provider
 
@@ -245,6 +245,25 @@ WAL에서 다른 연결이 쓰는 동안 마지막 commit 상태를 읽는 것�
 - **submodule**: gitlink entry는 `submodule: true`인 사실로만 기록하고 안으로 들어가지 않는다(T04 Scanner의 nested-repository 제외와 같은 정책).
 - **history**: `listCommits({ maxCommits = 500 })`는 최신순 `{ oid, parents, message, files }`다(merge commit은 files 없음). `computeCoChangeCandidates`가 04의 CHANGED_WITH 규칙(3회 이상, 50파일 초과 commit 제외)으로 후보 쌍을 만들고(AC-006-03), `extractIssueKeys`가 commit message와 branch 이름에서 ID 후보를 뽑는다(AC-006-04). Project Truth와 대조는 TASK-007이다.
 - **Evidence provenance primitives**: commit SHA(`headOid`, commit oid), RepoPath, HEAD blob OID, Index blob OID, working-tree `contentHash`(fingerprint), diff range(hunk의 new/old 줄 범위). Evidence 조립은 TASK-013이다.
+
+## Graph Build
+
+Project Graph를 만드는 계약이다(TASK-007, 관계 규칙은 [04](04-project-graph.md)). AST를 다시 parse하지 않고 T04~T06 사실만 쓰며 LLM을 호출하지 않는다.
+
+```text
+collectGraphFacts(root)      ProjectTruth + TraceModel, Scan/fingerprint, SourceAnalysis[], Git state + 최근 500 commit, ModuleResolver
+  → buildGraphPlan(input)    GraphBuildPlan { nodes, edges, diagnostics, stats, moduleResolutions, callResolutions, valid }
+  → applyGraphPlan(store, plan)   GraphStore transaction 하나
+```
+
+- **Plan**: nodes는 Node ID, edges는 (from, type, to)의 UTF-8 순서다. 입력 순서나 파일 시스템 순회 순서가 결과를 바꾸지 않는다. 같은 입력이면 같은 plan이다.
+- **Validation**: 모든 Edge의 endpoint 존재와 04 endpoint matrix, Node payload schema, 같은 Node ID의 서로 다른 내용을 검사한다. 오류(`EDGE_ENDPOINT_INVALID`, `GRAPH_PAYLOAD_INVALID`, `GRAPH_NODE_CONFLICT`)가 하나라도 있으면 `valid: false`다.
+- **Transaction**: `applyGraphPlan`은 invalid plan을 쓰지 않는다(`GRAPH_WRITE_REFUSED`). 쓰기는 한 transaction에서 기존 Node 전체 삭제(Edge는 cascade) 후 Node, Edge upsert이며 도중 실패는 rollback되어 DB가 반쯤 바뀐 상태로 남지 않는다. T07은 전체 재구축만 하고 증분은 TASK-008이다.
+- **상태**: ExportIndex, module resolution cache, tsconfig cache는 build 호출 단위이며 전역 가변 상태가 없다.
+- **Node payload**: 종류별 zod strict schema(`NODE_PAYLOAD_SCHEMAS`)다. 목록은 [04 Node](04-project-graph.md#node). payload는 lookup record라 제목, 상태, 종류만 두고 본문을 복사하지 않는다. 위치는 Node `source`(`SourceLocation`), 내용 hash는 `contentHash` 칼럼이다(File은 fingerprint, Symbol·Test는 SourceAnalysis `contentHash`).
+- **File Node 범위**: T04 fingerprint가 있는 파일 중 `.duo-project/` 밖의 파일이다. Project Truth 문서는 Requirement·Decision Node의 `source.path`로 찾으며 IMPORTS·CALLS graph에 섞지 않는다(C47).
+- **Symbol 이름 참조**: `implements.symbols`, `governs.symbols`는 같은 정의의 `paths`에 맞는 파일 안에서 qualifiedName으로 찾는다. 후보가 없거나 둘 이상이면 `DECLARED_SYMBOL_UNRESOLVED`(warning)이고 Edge가 없다(C55).
+- **Stats**: Node·Edge 종류별 수, module 결과(resolved, external, unresolved, ambiguous, unsupported), call 결과(exact, heuristic, ambiguous, unresolved, exactWithoutSourceSymbol), annotation 결과(symbol, test, file, unknownId, unsupportedId). Graph 품질 benchmark의 입력이다.
 
 ## SourceLocation
 
@@ -277,6 +296,7 @@ Parser와 loader는 예외를 던지지 않고 모든 문제를 모은다. 일�
 | 정의 구조 | `METADATA_BLOCK_WITHOUT_HEADING`, `METADATA_BLOCK_MISSING`(warning) |
 | 추적성 | `DUPLICATE_ID`, `BROKEN_REFERENCE`, `REFERENCE_TYPE_MISMATCH`, `DECISION_SUPERSEDES_SELF`, `DECISION_SUPERSEDE_CYCLE`, `TRACE_MILESTONE_MISMATCH`(warning), `TRACE_DECISION_UNRELATED`(warning), `TRACE_REQUIREMENT_UNTRACKED`(info) |
 | Graph DB | `GRAPH_SCHEMA_UNSUPPORTED`, `GRAPH_OPEN_FAILED` |
+| Graph build(T07) | `TSCONFIG_INVALID`(warning), `MODULE_UNRESOLVED`(warning), `MODULE_AMBIGUOUS`(warning), `CALL_AMBIGUOUS`(info), `CALL_UNRESOLVED`(info, 통계로만), `ANNOTATION_TARGET_UNKNOWN`(warning), `ANNOTATION_TARGET_UNSUPPORTED`(info), `TEST_ID_CONFLICT`(warning), `DECLARED_SYMBOL_UNRESOLVED`(warning), `EDGE_ENDPOINT_INVALID`, `GRAPH_NODE_CONFLICT`, `GRAPH_PAYLOAD_INVALID`, `GRAPH_WRITE_REFUSED`, `GRAPH_INVARIANT_VIOLATED` |
 
 ## 추적 관계
 

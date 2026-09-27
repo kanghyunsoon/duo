@@ -88,6 +88,34 @@ export const DIAGNOSTIC_SEVERITY = {
   DUO_ANNOTATION_INVALID: "warning",
   /** A test/suite call whose name is not a literal; it (and tests inside a suite) is not recorded (T05.1). */
   TEST_NAME_DYNAMIC: "info",
+  /** Graph Builder (T07): a tsconfig.json / jsconfig.json that TypeScript reports as invalid. */
+  TSCONFIG_INVALID: "warning",
+  /** A relative import that resolves to no indexed repository file (likely a broken import). */
+  MODULE_UNRESOLVED: "warning",
+  /** A module reference with more than one candidate file. */
+  MODULE_AMBIGUOUS: "warning",
+  /** A call with more than one exact candidate target. Unresolved calls are counted in stats, not reported. */
+  CALL_AMBIGUOUS: "info",
+  /** Unresolved call sites (reported only as stats; kept for completeness of the model). */
+  CALL_UNRESOLVED: "info",
+  /** A "duo:" annotation ID that is not in Project Truth. */
+  ANNOTATION_TARGET_UNKNOWN: "warning",
+  /** A "duo:" annotation ID of a type that annotations cannot link (only Requirement IDs link). */
+  ANNOTATION_TARGET_UNSUPPORTED: "info",
+  /** An edge whose endpoint types are not allowed by 04 (a builder bug; the build is refused). */
+  EDGE_ENDPOINT_INVALID: "error",
+  /** Two facts produce the same Node ID with different content (the build is refused). */
+  GRAPH_NODE_CONFLICT: "error",
+  /** A node payload that does not match its schema (a builder bug; the build is refused). */
+  GRAPH_PAYLOAD_INVALID: "error",
+  /** applyGraphPlan() wrote nothing: the plan was invalid or the transaction rolled back. */
+  GRAPH_WRITE_REFUSED: "error",
+  /** Tests with the same fullName in one file: none of them becomes a Test Node. */
+  TEST_ID_CONFLICT: "warning",
+  /** A declared implements/governs symbol name that matches no symbol or more than one. */
+  DECLARED_SYMBOL_UNRESOLVED: "warning",
+  /** graph.check(): a consistency invariant (04) does not hold. */
+  GRAPH_INVARIANT_VIOLATED: "error",
 } as const satisfies Record<string, DiagnosticSeverity>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_SEVERITY;
