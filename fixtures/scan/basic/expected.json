@@ -3,7 +3,7 @@
     {
       "path": ".duo-project/project.yaml",
       "state": "tracked",
-      "kind": "text",
+      "fingerprintMode": "normalized-text",
       "contentHash": "sha256:5c9536c0f64193f535c425baf9f2c7431b89eb46bab5fb85d4bfcffabb565f43",
       "size": 18,
       "gitBlobOid": "258d23b7fd542d28a0423417f231c32d2970a61e"
@@ -11,7 +11,7 @@
     {
       "path": ".gitignore",
       "state": "tracked",
-      "kind": "text",
+      "fingerprintMode": "normalized-text",
       "contentHash": "sha256:295aa1f18923880afebb2e08aa70a8c4f285cc52baea238b8d2864d10e45d825",
       "size": 20,
       "gitBlobOid": "552f22184f212d5dc7566f5dcaf6ac9ccb2a98d5"
@@ -19,7 +19,7 @@
     {
       "path": "README.md",
       "state": "tracked",
-      "kind": "text",
+      "fingerprintMode": "normalized-text",
       "contentHash": "sha256:2509cf62f345fb26dd6944e827b5460bd0ab334a2375223baed92d1a063690d6",
       "size": 18,
       "gitBlobOid": "d0e8644a654037615f35eda8fec18a8bbc20dd5d"
@@ -27,7 +27,7 @@
     {
       "path": "assets/logo.png",
       "state": "tracked",
-      "kind": "binary",
+      "fingerprintMode": "raw",
       "contentHash": "sha256:02a3e298f1533f62558c58e4c70edcab9af5a50d62d925fd5390942020fb0fb8",
       "size": 16,
       "gitBlobOid": "029ace0fcbb58feb758971feed0457fd34dbb60b"
@@ -35,7 +35,7 @@
     {
       "path": "docs/guide.md",
       "state": "tracked",
-      "kind": "text",
+      "fingerprintMode": "normalized-text",
       "contentHash": "sha256:3274fcad886cde4e2ca86b11d30fd7c44858eadf1c437a9583f31e7815db1af6",
       "size": 6,
       "gitBlobOid": "bd0570d75246007fcef031025d2f6c0d8a5cd8d2"
@@ -43,7 +43,7 @@
     {
       "path": "src/index.ts",
       "state": "tracked",
-      "kind": "text",
+      "fingerprintMode": "normalized-text",
       "contentHash": "sha256:a2098bd92b10bf8b816d24b7556b1ce8c49a879d130489065ef1051c17e042f6",
       "size": 26,
       "gitBlobOid": "64a32fd291e405a963aacf964a021809dd206c46"
@@ -51,14 +51,14 @@
     {
       "path": "src/new-feature.ts",
       "state": "untracked",
-      "kind": "text",
+      "fingerprintMode": "normalized-text",
       "contentHash": "sha256:8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
       "size": 11
     },
     {
       "path": "src/util/str.ts",
       "state": "tracked",
-      "kind": "text",
+      "fingerprintMode": "normalized-text",
       "contentHash": "sha256:6d916e5f7cc649ab05cbe6921428d0dfd3285d4be0553f3e2a98b4a4490f649d",
       "size": 48,
       "gitBlobOid": "e1e6375b41c57a1692002f2d369e69e86f46e633"
@@ -66,14 +66,14 @@
     {
       "path": "src/한글.ts",
       "state": "untracked",
-      "kind": "text",
+      "fingerprintMode": "normalized-text",
       "contentHash": "sha256:5241aadcec61801b7a76a6e918af820763827bc47021f704521df146f59aeede",
       "size": 30
     },
     {
       "path": "tracked.log",
       "state": "tracked",
-      "kind": "binary",
+      "fingerprintMode": "raw",
       "contentHash": "sha256:a184d05887f928b71a6bc2e635b3cc1c584bb4be280dc89d897155440a3b1897",
       "size": 34,
       "gitBlobOid": "59721d5e78ead95794cf5b9b96716d5922ed017a"
@@ -116,5 +116,6 @@
       "reason": "secret"
     }
   ],
+  "typeChanges": [],
   "diagnostics": []
 }

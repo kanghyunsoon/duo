@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:grammars": "vitest run packages/analyzer/src/language/tree-sitter/grammars.test.ts",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "docs:validate": "tsc -b packages/core && node scripts/validate-docs.mjs",
     "verify": "pnpm check:boundaries && pnpm lint && pnpm typecheck && pnpm build && pnpm test && pnpm docs:validate",

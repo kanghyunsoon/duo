@@ -20,7 +20,7 @@
 | 경로 조작(Tool, API 입력) | 모든 경로를 Repository root 기준으로 정규화하고 root 밖이면 거부. `/api/source`는 인덱싱 대상 파일만 허용 |
 | Source Code 변경 | 모든 파일 쓰기는 먼저 core의 순수 정책 `checkWriteBoundary`로 판정한다. 허용 영역은 `.duo-project/` 아래의 Project Truth, Human-approved History, Regenerable 영역뿐이고 Repository 밖은 항상 거부한다([03 Write Boundary](03-data-model.md#write-boundary)). 실제 writer는 symlink를 풀어 다시 확인한다. `duoctl install` 대상 파일은 TASK-017에서 별도 writeKind로 추가. 테스트로 검증(AC-002-04) |
 | Agent 설정 파일 손상 | `duoctl install`은 `--dry-run`, 수정 전 백업(`runtime/backup/`), `<!-- duo-director:begin -->` 블록 안만 교체, 반복 실행 시 같은 결과 |
-| 대형·악성 파일로 인한 자원 고갈 | max_file_bytes, 확장자 기반 text/binary 분류(TASK-004), 파일당 parse timeout 2초, nodeLimit |
+| 대형·악성 파일로 인한 자원 고갈 | max_file_bytes, 확장자 기반 fingerprint mode(TASK-004), 파일당 parse timeout 2초(TASK-005 `AST_PARSE_TIMEOUT`), nodeLimit |
 | LLM 응답 조작(프롬프트 주입된 코드 주석 등) | 응답은 스키마 검증, Packet 밖 ID 인용 시 폐기, `basis: llm` Claim은 BLOCK 불가 |
 | Supply chain | 의존성 최소화, lockfile 커밋, CI에서 `pnpm audit`(경고만) |
 

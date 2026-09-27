@@ -51,7 +51,9 @@ export const DIAGNOSTIC_SEVERITY = {
   TRACE_REQUIREMENT_UNTRACKED: "info",
   GRAPH_SCHEMA_UNSUPPORTED: "error",
   GRAPH_OPEN_FAILED: "error",
-  /** Repository scan (T04). The scan root must be the top level of a Git work tree. */
+  /** DUO MVP requires a Git repository (C36). duoctl init reports this for a non-Git directory (TASK-014). */
+  GIT_REPOSITORY_REQUIRED: "error",
+  /** Repository scan (T04). The scan root must be the top level of its Git work tree. */
   SCAN_ROOT_INVALID: "error",
   GIT_COMMAND_FAILED: "error",
   /** A repository entry the scanner does not index: submodule, nested repository, non-portable name, not a regular file. */
@@ -60,8 +62,22 @@ export const DIAGNOSTIC_SEVERITY = {
   SYMLINK_SKIPPED: "info",
   /** A symlink whose target is outside the repository. The target is never read. */
   SYMLINK_OUTSIDE_REPOSITORY: "warning",
+  /** The Git index and the working tree disagree on symlink vs regular file (T04.1). A fact for the Indexer. */
+  FILE_TYPE_CHANGED: "info",
   /** generated/fingerprints.json is unreadable or has another format version; it is regenerated. */
   FINGERPRINT_CACHE_INVALID: "warning",
+  /** LanguageAnalyzer (T05). A grammar or the Tree-sitter runtime could not be loaded (for example an ABI mismatch). */
+  ANALYZER_INIT_FAILED: "error",
+  /** No registered LanguageAnalyzer supports the file; it is not parsed. */
+  LANGUAGE_UNSUPPORTED: "info",
+  /** Source bytes are not valid UTF-8. */
+  SOURCE_DECODE_ERROR: "error",
+  /** The syntax tree contains ERROR or MISSING nodes; the analysis is partial. */
+  AST_PARSE_ERROR: "warning",
+  /** Parsing exceeded the per-file time limit (docs/10-security.md); no analysis. */
+  AST_PARSE_TIMEOUT: "error",
+  /** A "duo:" comment line that does not start with a definition ID. */
+  DUO_ANNOTATION_INVALID: "warning",
 } as const satisfies Record<string, DiagnosticSeverity>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_SEVERITY;

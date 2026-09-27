@@ -10,9 +10,9 @@ afterAll(removeTempDirs);
 
 const h = (c: string) => `sha256:${c.repeat(64)}`;
 const FPS: FileFingerprint[] = [
-  { path: "src/\u{1F600}.ts" as RepoPath, state: "untracked", kind: "text", contentHash: h("b"), size: 3 },
-  { path: "src/\uFF5E.ts" as RepoPath, state: "tracked", kind: "text", contentHash: h("a"), size: 2, gitBlobOid: "1".repeat(40) },
-  { path: "README.md" as RepoPath, state: "tracked", kind: "binary", contentHash: h("c"), size: 0 },
+  { path: "src/\u{1F600}.ts" as RepoPath, state: "untracked", fingerprintMode: "normalized-text", contentHash: h("b"), size: 3 },
+  { path: "src/\uFF5E.ts" as RepoPath, state: "tracked", fingerprintMode: "normalized-text", contentHash: h("a"), size: 2, gitBlobOid: "1".repeat(40) },
+  { path: "README.md" as RepoPath, state: "tracked", fingerprintMode: "raw", contentHash: h("c"), size: 0 },
 ];
 const codes = (r: { diagnostics: readonly { code: string }[] }) => r.diagnostics.map((d) => d.code);
 
@@ -24,7 +24,7 @@ describe("fingerprints.json", () => {
     const doc = JSON.parse(text) as { format: string; version: number; files: { path: string }[] };
     expect(Object.keys(doc)).toEqual(["format", "version", "files"]);
     expect(doc.files.map((f) => f.path)).toEqual(["README.md", "src/\uFF5E.ts", "src/\u{1F600}.ts"]);
-    expect(Object.keys(doc.files[1] ?? {})).toEqual(["path", "state", "kind", "contentHash", "size", "gitBlobOid"]);
+    expect(Object.keys(doc.files[1] ?? {})).toEqual(["path", "state", "fingerprintMode", "contentHash", "size", "gitBlobOid"]);
   });
 
   it("round-trips", () => {
@@ -34,11 +34,11 @@ describe("fingerprints.json", () => {
   it.each([
     ["not JSON", "{"],
     ["another format", JSON.stringify({ format: "x", version: 1, files: [] })],
-    ["another version", JSON.stringify({ format: "duo-fingerprints", version: 2, files: [] })],
-    ["unknown key", JSON.stringify({ format: "duo-fingerprints", version: 1, files: [{ path: "a", state: "tracked", kind: "text", contentHash: h("a"), size: 1, mtime: 5 }] })],
-    ["bad path", JSON.stringify({ format: "duo-fingerprints", version: 1, files: [{ path: "../a", state: "tracked", kind: "text", contentHash: h("a"), size: 1 }] })],
-    ["bad hash", JSON.stringify({ format: "duo-fingerprints", version: 1, files: [{ path: "a", state: "tracked", kind: "text", contentHash: "md5:x", size: 1 }] })],
-    ["duplicate", JSON.stringify({ format: "duo-fingerprints", version: 1, files: [{ path: "a", state: "tracked", kind: "text", contentHash: h("a"), size: 1 }, { path: "a", state: "tracked", kind: "text", contentHash: h("a"), size: 1 }] })],
+    ["the previous version", JSON.stringify({ format: "duo-fingerprints", version: 1, files: [] })],
+    ["unknown key", JSON.stringify({ format: "duo-fingerprints", version: 2, files: [{ path: "a", state: "tracked", fingerprintMode: "normalized-text", contentHash: h("a"), size: 1, mtime: 5 }] })],
+    ["bad path", JSON.stringify({ format: "duo-fingerprints", version: 2, files: [{ path: "../a", state: "tracked", fingerprintMode: "normalized-text", contentHash: h("a"), size: 1 }] })],
+    ["bad hash", JSON.stringify({ format: "duo-fingerprints", version: 2, files: [{ path: "a", state: "tracked", fingerprintMode: "normalized-text", contentHash: "md5:x", size: 1 }] })],
+    ["duplicate", JSON.stringify({ format: "duo-fingerprints", version: 2, files: [{ path: "a", state: "tracked", fingerprintMode: "normalized-text", contentHash: h("a"), size: 1 }, { path: "a", state: "tracked", fingerprintMode: "normalized-text", contentHash: h("a"), size: 1 }] })],
   ])("rejects %s as FINGERPRINT_CACHE_INVALID", (_name, text) => {
     const r = parseFingerprints(text);
     expect(r.value).toBeUndefined();

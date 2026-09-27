@@ -5,7 +5,7 @@ import type { FileFingerprint } from "./fingerprint.js";
 
 const h = (c: string) => `sha256:${c.repeat(64)}`;
 const fp = (path: string, hash: string, extra: Partial<FileFingerprint> = {}): FileFingerprint =>
-  ({ path: path as RepoPath, state: "tracked", kind: "text", contentHash: h(hash), size: 1, ...extra });
+  ({ path: path as RepoPath, state: "tracked", fingerprintMode: "normalized-text", contentHash: h(hash), size: 1, ...extra });
 
 describe("compareFingerprints", () => {
   it("classifies every path as UNCHANGED, CHANGED, ADDED or DELETED in UTF-8 order", () => {
@@ -21,11 +21,11 @@ describe("compareFingerprints", () => {
     ]);
   });
 
-  it("ignores state, size and gitBlobOid; compares content hash and kind", () => {
+  it("ignores state, size and gitBlobOid; compares content hash and fingerprint mode", () => {
     const a = fp("a.ts", "a", { state: "untracked" });
     const b = fp("a.ts", "a", { state: "tracked", gitBlobOid: "0".repeat(40), size: 99 });
     expect(compareFingerprints([a], [b])).toEqual([{ path: "a.ts", status: "UNCHANGED", previous: a, current: b }]);
-    expect(compareFingerprints([a], [fp("a.ts", "a", { kind: "binary" })])[0]?.status).toBe("CHANGED");
+    expect(compareFingerprints([a], [fp("a.ts", "a", { fingerprintMode: "raw" })])[0]?.status).toBe("CHANGED");
   });
 
   it("treats a rename as DELETED + ADDED", () => {

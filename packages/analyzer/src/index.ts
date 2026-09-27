@@ -9,10 +9,12 @@ export const packageInfo: PackageInfo = {
   dependsOn: [core.name],
 };
 
-export type { ExcludedFile, ExclusionReason, RepositoryFile, RepositoryFileState, RepositoryScan, ScanOptions } from "./scan/types.js";
+export type {
+  ExcludedFile, ExclusionReason, FileTypeChange, RepositoryEntryType, RepositoryFile, RepositoryFileState, RepositoryScan, ScanOptions,
+} from "./scan/types.js";
 export { scanRepository } from "./scan/scanner.js";
 export { SECRET_FILE_PATTERNS, isSecretFileName } from "./scan/policy.js";
-export { TEXT_FILE_EXTENSIONS, TEXT_FILE_NAMES, classifyContentKind, type FileContentKind } from "./fingerprint/content-kind.js";
+export { NORMALIZED_TEXT_EXTENSIONS, NORMALIZED_TEXT_FILE_NAMES, fingerprintModeOf, type FingerprintMode } from "./fingerprint/fingerprint-mode.js";
 export { CONTENT_HASH_PREFIX, canonicalContent, computeContentHash, type ContentHash } from "./fingerprint/content-hash.js";
 export {
   fingerprintRepositoryFiles, type FileFingerprint, type FingerprintOptions, type FingerprintResult,
@@ -22,3 +24,14 @@ export {
   parseFingerprints, readFingerprintFile, serializeFingerprints, writeFingerprintFile,
 } from "./fingerprint/store.js";
 export { compareFingerprints, type FingerprintChange, type FingerprintChangeStatus } from "./fingerprint/compare.js";
+export type {
+  AnalyzedSymbol, CallSite, CallSiteKind, DuoAnnotation, LanguageAnalyzer, ModuleReference, ModuleReferenceKind, ParseStatus,
+  SourceAnalysis, SourceInput, SourceLanguage, SymbolKind,
+} from "./language/types.js";
+export { createAnalyzerRegistry, type AnalyzerRegistry } from "./language/registry.js";
+export { parseDuoAnnotations } from "./language/annotations.js";
+export { GRAMMAR_FILES, type GrammarId, type GrammarLocator } from "./language/tree-sitter/runtime.js";
+export {
+  DEFAULT_PARSE_TIMEOUT_MS, JAVASCRIPT_EXTENSIONS, TS_JS_ANALYZER_VERSION, TYPESCRIPT_EXTENSIONS,
+  createDefaultAnalyzerRegistry, createJavaScriptAnalyzer, createTypeScriptAnalyzer, type TreeSitterAnalyzerOptions,
+} from "./language/tree-sitter/ts-js-analyzer.js";

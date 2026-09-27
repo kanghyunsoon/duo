@@ -7,14 +7,14 @@ import path from "node:path";
 import { compareDiagnostics, compareUtf8, createDiagnostic, type Diagnostic, type RepoPath } from "@duo-director/core";
 import type { RepositoryFile, RepositoryFileState } from "../scan/types.js";
 import { computeContentHash } from "./content-hash.js";
-import { classifyContentKind, type FileContentKind } from "./content-kind.js";
+import { fingerprintModeOf, type FingerprintMode } from "./fingerprint-mode.js";
 
 export interface FileFingerprint {
   readonly path: RepoPath;
   readonly state: RepositoryFileState;
-  readonly kind: FileContentKind;
+  readonly fingerprintMode: FingerprintMode;
   readonly contentHash: string;
-  /** Bytes of the canonical content (text after CRLF → LF). */
+  /** Bytes of the canonical content (after CRLF → LF in normalized-text mode). */
   readonly size: number;
   /** Index blob OID, tracked files only. Provenance, never compared. */
   readonly gitBlobOid?: string;
@@ -38,9 +38,9 @@ async function fingerprintOne(root: string, file: RepositoryFile): Promise<FileF
     const stat = await fs.lstat(absolute);
     if (stat.isSymbolicLink()) return createDiagnostic("SYMLINK_SKIPPED", `Symlink "${file.path}" is not followed`, { path: file.path });
     if (!stat.isFile()) return createDiagnostic("SCAN_ENTRY_SKIPPED", `"${file.path}" is not a regular file`, { path: file.path });
-    const kind = classifyContentKind(file.path);
-    const { contentHash, size } = computeContentHash(await fs.readFile(absolute), kind);
-    const base = { path: file.path, state: file.state, kind, contentHash, size };
+    const fingerprintMode = fingerprintModeOf(file.path);
+    const { contentHash, size } = computeContentHash(await fs.readFile(absolute), fingerprintMode);
+    const base = { path: file.path, state: file.state, fingerprintMode, contentHash, size };
     return file.gitBlobOid === undefined ? base : { ...base, gitBlobOid: file.gitBlobOid };
   } catch (error) {
     return createDiagnostic("FILE_READ_ERROR", `Cannot read "${file.path}": ${(error as Error).message}`, { path: file.path });

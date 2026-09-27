@@ -195,17 +195,19 @@ glob 패턴(`implements.paths`, `index.include/exclude` 등)은 구분자만 바
 
 `@duo-director/analyzer`의 Scanner 계약이다(TASK-004). Graph Node payload(TASK-007)와는 별개다.
 
-- **경로 출처**: scan root는 Git work tree의 최상위여야 한다(아니면 `SCAN_ROOT_INVALID`). tracked 파일은 Git index 철자, untracked 파일은 Git이 파일 시스템에서 읽은 철자를 RepoPath로 쓴다. 파일 시스템 `readdir()` 철자는 tracked 파일의 ID에 쓰지 않는다. Git 호출은 `rev-parse --show-prefix`, `ls-files -z --stage`, `ls-files -z --others --exclude-standard` 세 번이고 파일마다 호출하지 않는다. Git CLI 세부는 analyzer 밖으로 export하지 않는다.
+- **Git 필수**: DUO MVP는 Git 저장소를 전제로 한다(C36). Git이 아닌 디렉터리 fallback은 없다. scan root가 Git work tree가 아니면 `GIT_REPOSITORY_REQUIRED`, 최상위가 아니면 `SCAN_ROOT_INVALID`다. `duoctl init`(TASK-014)도 Git이 아닌 디렉터리에 같은 진단을 쓴다.
+- **경로 출처**: tracked 파일은 Git index 철자, untracked 파일은 Git이 파일 시스템에서 읽은 철자를 RepoPath로 쓴다. 파일 시스템 `readdir()` 철자는 tracked 파일의 ID에 쓰지 않는다. Git 호출은 `rev-parse --show-prefix`, `ls-files -z --stage`, `ls-files -z --others --exclude-standard`, `diff-files -z --name-only --diff-filter=T` 네 번이고 파일마다 호출하지 않는다. Git CLI 세부는 analyzer 밖으로 export하지 않는다.
 - **상태**: `RepositoryFileState = "tracked" | "untracked"`. ignored 파일과 `.git/`은 목록에 없다.
 - **제외**(`ExclusionReason`): `.duo-project/generated|cache|runtime/`(duo-regenerable), 비밀 파일 패턴(secret, include보다 우선하고 대소문자 무시), `index.exclude`, `index.include` 불일치, symlink, working tree에 없는 tracked 파일(missing), submodule과 중첩 저장소, 일반 파일이 아닌 항목과 RepoPath로 표현할 수 없는 이름(unsupported-entry). tracked 파일은 .gitignore 패턴에 맞아도 포함한다.
 - **Symlink**: 따라가지 않는다. index mode가 symlink(120000)면 checkout 형태(Windows `core.symlinks=false`의 일반 파일 포함)와 관계없이 symlink로 본다. 상위 디렉터리가 symlink인 파일도 제외한다. link 문자열만 읽어 대상이 저장소 밖이면 `SYMLINK_OUTSIDE_REPOSITORY`(warning), 안이면 `SYMLINK_SKIPPED`(info)를 낸다. 대상 파일은 읽지 않는다.
+- **파일 타입 변경**(T04.1): index와 working tree의 symlink/일반 파일이 다르면 `FILE_TYPE_CHANGED`(info)와 `RepositoryScan.typeChanges`(`{ path, index, workingTree }`)에 사실만 남긴다. freshness 판정은 Indexer가 한다. index 일반 파일이 symlink가 되면 계속 symlink로 제외하고 대상을 읽지 않는다. index symlink가 일반 파일이 된 것은 Git이 typechange로 보고할 때만이다(Git이 `core.symlinks`를 반영하므로 Windows 기본 checkout은 해당하지 않음). 이 경우 일반 파일로 인덱싱하고 `gitBlobOid`는 붙이지 않는다(index blob은 이전 link 문자열).
 - **충돌 검사**: 포함된 tracked와 untracked 경로 전체에 `PATH_PORTABILITY_COLLISION`을 적용한다.
-- **text/binary**: 확장자와 파일 이름 목록(`TEXT_FILE_EXTENSIONS`, `TEXT_FILE_NAMES`, 소문자 비교)으로만 정한다. 목록에 없으면 binary다. 내용으로 추측하지 않는다.
-- **`contentHash`** = `sha256:` + 64자리 hex. text는 CRLF(0x0D 0x0A)를 LF로 바꾼 bytes, binary는 원본 bytes를 hash한다. Unicode 정규화, trim, BOM 제거, 대소문자·공백·formatting 정규화는 하지 않고 lone CR도 그대로 둔다. bytes 단위로 처리하므로 decode/encode가 없다. `size`는 이 canonical bytes의 길이다.
+- **Fingerprint mode**(C37): `fingerprintMode: "normalized-text" | "raw"`. hash 정책을 나타낼 뿐 파일의 실제 MIME/content type을 주장하지 않고, LanguageAnalyzer의 언어 지원 여부와도 별개다. 확장자와 파일 이름 목록(`NORMALIZED_TEXT_EXTENSIONS`, `NORMALIZED_TEXT_FILE_NAMES`, 소문자 비교)에 있으면 normalized-text, 없으면 raw다. 지원 source 확장자와 Project Truth 확장자(`.md`, `.yaml`, `.yml`, `.json`)는 모두 목록에 있다. 내용으로 추측하지 않는다.
+- **`contentHash`** = `sha256:` + 64자리 hex. `normalized-text`는 CRLF(0x0D 0x0A)를 LF로 바꾼 bytes, `raw`는 원본 bytes를 hash한다. checkout EOL과 무관한 같은 hash는 normalized-text 파일에만 보장한다. 목록에 없는 텍스트 파일(예: `.log`)은 raw이므로 EOL 설정에 따라 hash가 달라질 수 있다. Unicode 정규화, trim, BOM 제거, 대소문자·공백·formatting 정규화는 하지 않고 lone CR도 그대로 둔다. bytes 단위로 처리하므로 decode/encode가 없다. `size`는 이 canonical bytes의 길이다.
 - **`gitBlobOid`**: tracked 파일의 index blob OID(provenance)다. working tree 내용과 다를 수 있고 fingerprint로 쓰지 않으며 비교하지 않는다. untracked와 merge 충돌 파일에는 없다.
-- **저장**: `.duo-project/generated/fingerprints.json`(graph.db와 분리). `{ format: "duo-fingerprints", version: 1, files: FileFingerprint[] }`이고 `FileFingerprint = { path, state, kind, contentHash, size, gitBlobOid? }`다. 경로는 UTF-8 순, 키 순서 고정, timestamp 없음. 쓰기는 `checkWriteBoundary(..., "regenerable")` 뒤 경로에 symlink가 없는지 확인하고 임시 파일 + rename으로 한다. 파일이 없으면 빈 cache, 읽을 수 없거나 형식·version이 다르면 `FINGERPRINT_CACHE_INVALID`(warning)와 빈 cache다. hash 규칙이나 text 목록을 바꾸면 version을 올린다.
+- **저장**: `.duo-project/generated/fingerprints.json`(graph.db와 분리). `{ format: "duo-fingerprints", version: 2, files: FileFingerprint[] }`이고 `FileFingerprint = { path, state, fingerprintMode, contentHash, size, gitBlobOid? }`다(version 2: T04.1의 `kind` → `fingerprintMode`). 경로는 UTF-8 순, 키 순서 고정, timestamp 없음. 쓰기는 `checkWriteBoundary(..., "regenerable")` 뒤 경로에 symlink가 없는지 확인하고 임시 파일 + rename으로 한다. 파일이 없으면 빈 cache, 읽을 수 없거나 형식·version이 다르면 `FINGERPRINT_CACHE_INVALID`(warning)와 빈 cache다. hash 규칙이나 normalized-text 목록을 바꾸면 version을 올린다.
 - **mtime**: fingerprint에 없다. 이후 fast path hint로 쓰더라도 내용 동일성은 `contentHash`로만 판단한다.
-- **비교**: `compareFingerprints(previous, current)`는 경로마다 `UNCHANGED | CHANGED | ADDED | DELETED`를 UTF-8 경로 순으로 돌려준다. CHANGED는 `contentHash`나 `kind`가 다를 때다. state만 바뀌면 UNCHANGED, rename은 DELETED + ADDED다. Graph는 갱신하지 않는다.
+- **비교**: `compareFingerprints(previous, current)`는 경로마다 `UNCHANGED | CHANGED | ADDED | DELETED`를 UTF-8 경로 순으로 돌려준다. CHANGED는 `contentHash`나 `fingerprintMode`가 다를 때다. state만 바뀌면 UNCHANGED, rename은 DELETED + ADDED다. Graph는 갱신하지 않는다.
 
 ### Freshness 책임
 
@@ -219,6 +221,16 @@ glob 패턴(`implements.paths`, `index.include/exclude` 등)은 구분자만 바
 WAL에서 다른 연결이 쓰는 동안 마지막 commit 상태를 읽는 것은 snapshot visibility이며 freshness 판정과 다르다(C31).
 
 
+## Source analysis
+
+¦LanguageAnalyzer¦의 결과 계약이다(TASK-005, [ADR-003](adr/ADR-003-language-analysis.md), 형식은 [04 SourceAnalysis](04-project-graph.md#sourceanalysis)). Graph를 만들지 않고 syntax 사실만 낸다.
+
+- **대상**: 지원 확장자만 parse한다(.ts .mts .cts → TypeScript, .tsx → TSX, .js .mjs .cjs .jsx → JavaScript grammar). Scanner는 ¦.duo-project/¦의 Truth 파일도 찾지만 Markdown/YAML은 LanguageAnalyzer가 ¦supports() == false¦이며 parse하지 않는다. Project Truth parsing은 core가 맡는다.
+- **입력과 hash**: 입력은 파일 bytes다. fingerprint와 같은 canonical bytes(normalized-text)를 UTF-8로 decode해 parse하므로 ¦SourceAnalysis.contentHash¦는 ¦FileFingerprint.contentHash¦와 같다. UTF-8이 아니면 ¦SOURCE_DECODE_ERROR¦. BOM은 그대로 두고 칸 수에 포함한다.
+- **Symbol identity**: core ¦symbolRef(path, qualifiedName)¦와 ¦nodeId()¦만 쓴다. 위치나 byte offset은 ID에 넣지 않는다.
+- **정렬**: 모든 목록은 ¦compareSourceLocations¦ 순서, 같으면 qualifiedName / specifier, kind / calleeText / ids(¦compareUtf8¦) 순서다. AST 순회 순서에 기대지 않는다.
+- **partial**: 트리에 ERROR나 MISSING 노드가 있으면 ¦parseStatus: "partial"¦과 ¦AST_PARSE_ERROR¦(warning, 파일당 20개 + 요약 1개). ERROR 노드 안은 읽지 않고 나머지는 계속 추출한다. parse가 파일당 제한 시간(기본 2초)을 넘으면 ¦AST_PARSE_TIMEOUT¦이고 결과가 없다.
+
 ## SourceLocation
 
 ```ts
@@ -229,6 +241,8 @@ type SourceLocation = { path: string; startLine?: number; startColumn?: number; 
 - Markdown 정의와 YAML 정의가 같은 계약을 쓴다. Markdown 정의는 Heading부터 섹션 끝까지, YAML 파일 전체가 정의인 경우(Decision, Milestone)는 문서 내용의 범위, 목록 항목(Constraint)은 그 항목의 범위다.
 - 범위 끝을 알 수 없는 예외(파일 누락 등)에서만 end 필드를 생략한다.
 - Evidence Pointer와 diagnostic이 이 위치를 그대로 쓴다.
+- **단위**: 줄은 LF로 센다. 칸은 UTF-16 code unit(JS 문자열 index + 1)이다. YAML(`LineCounter`), Markdown, Tree-sitter(web-tree-sitter는 JS 문자열을 UTF-16으로 넘긴다) 모두 같은 단위이며 UTF-8 byte나 code point가 아니다. 예: `/* 😀😀 */ 표시()`의 `표시`는 12번째 칸이다(UTF-8 byte로는 16, code point로는 10). LF 앞의 CR은 그 줄 끝에 속하므로 LF와 CRLF checkout에서 같은 위치가 같은 텍스트를 가리킨다.
+- core `sliceSourceLocation(text, location)`이 위치의 원문을 돌려주고(Evidence 재탐색), `compareSourceLocations`가 path(UTF-8), 시작, 끝 순으로 정렬한다.
 
 ## Diagnostics
 

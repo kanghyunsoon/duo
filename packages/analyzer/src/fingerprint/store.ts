@@ -14,10 +14,10 @@ import type { FileFingerprint } from "./fingerprint.js";
 
 export const FINGERPRINT_FILE_PATH = `${STATE_DIR_NAME}/generated/fingerprints.json` as RepoPath;
 export const FINGERPRINT_FORMAT = "duo-fingerprints";
-/** Bump when the file layout, the hash rules or the text/binary lists change. */
-export const FINGERPRINT_FORMAT_VERSION = 1;
+/** Bump when the file layout, the hash rules or the normalized-text lists change. 2: kind → fingerprintMode (T04.1). */
+export const FINGERPRINT_FORMAT_VERSION = 2;
 
-const ENTRY_KEYS = new Set(["path", "state", "kind", "contentHash", "size", "gitBlobOid"]);
+const ENTRY_KEYS = new Set(["path", "state", "fingerprintMode", "contentHash", "size", "gitBlobOid"]);
 const HASH = /^sha256:[0-9a-f]{64}$/;
 const OID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 
@@ -26,7 +26,7 @@ export function serializeFingerprints(fingerprints: readonly FileFingerprint[]):
   const files = [...fingerprints]
     .sort((a, b) => compareUtf8(a.path, b.path))
     .map((f) => {
-      const entry = { path: f.path, state: f.state, kind: f.kind, contentHash: f.contentHash, size: f.size };
+      const entry = { path: f.path, state: f.state, fingerprintMode: f.fingerprintMode, contentHash: f.contentHash, size: f.size };
       return f.gitBlobOid === undefined ? entry : { ...entry, gitBlobOid: f.gitBlobOid };
     });
   return `${JSON.stringify({ format: FINGERPRINT_FORMAT, version: FINGERPRINT_FORMAT_VERSION, files }, null, 2)}\n`;
@@ -46,11 +46,11 @@ function parseEntry(value: unknown): FileFingerprint | string {
   const p = typeof e.path === "string" ? normalizeRepoPath(e.path).value : undefined;
   if (p === undefined || p !== e.path) return `invalid path ${JSON.stringify(e.path)}`;
   if (e.state !== "tracked" && e.state !== "untracked") return `invalid state for ${p}`;
-  if (e.kind !== "text" && e.kind !== "binary") return `invalid kind for ${p}`;
+  if (e.fingerprintMode !== "normalized-text" && e.fingerprintMode !== "raw") return `invalid fingerprintMode for ${p}`;
   if (typeof e.contentHash !== "string" || !HASH.test(e.contentHash)) return `invalid contentHash for ${p}`;
   if (typeof e.size !== "number" || !Number.isSafeInteger(e.size) || e.size < 0) return `invalid size for ${p}`;
   if (e.gitBlobOid !== undefined && (typeof e.gitBlobOid !== "string" || !OID.test(e.gitBlobOid))) return `invalid gitBlobOid for ${p}`;
-  const base = { path: p, state: e.state, kind: e.kind, contentHash: e.contentHash, size: e.size } as const;
+  const base = { path: p, state: e.state, fingerprintMode: e.fingerprintMode, contentHash: e.contentHash, size: e.size } as const;
   return e.gitBlobOid === undefined ? base : { ...base, gitBlobOid: e.gitBlobOid };
 }
 

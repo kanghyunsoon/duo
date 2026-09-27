@@ -4,7 +4,9 @@
  */
 import { execFile } from "node:child_process";
 
-export type GitResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly message: string };
+export type GitResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly message: string; readonly gitMissing?: boolean };
 
 export interface GitIndexEntry {
   readonly path: string;
@@ -30,9 +32,12 @@ function runGit(root: string, args: readonly string[]): Promise<GitResult<string
           resolve({ ok: true, value: stdout.toString("utf8") });
           return;
         }
-        const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          resolve({ ok: false, message: "git executable not found", gitMissing: true });
+          return;
+        }
         const detail = stderr.toString("utf8").trim();
-        resolve({ ok: false, message: missing ? "git executable not found" : detail === "" ? error.message : detail });
+        resolve({ ok: false, message: detail === "" ? error.message : detail });
       },
     );
   });
@@ -69,4 +74,14 @@ export async function listIndexEntries(root: string): Promise<GitResult<GitIndex
 export async function listUntrackedPaths(root: string): Promise<GitResult<string[]>> {
   const result = await runGit(root, ["ls-files", "-z", "--others", "--exclude-standard"]);
   return result.ok ? { ok: true, value: result.value.split("\0").filter((p) => p !== "") } : result;
+}
+
+/**
+ * Index entries whose working-tree file type differs from the index (`git diff-files --diff-filter=T`).
+ * Git applies core.symlinks here: a symlink checked out as a plain file where symlinks are
+ * unsupported (Windows default) is not a type change.
+ */
+export async function listTypeChangedPaths(root: string): Promise<GitResult<Set<string>>> {
+  const result = await runGit(root, ["diff-files", "-z", "--name-only", "--diff-filter=T"]);
+  return result.ok ? { ok: true, value: new Set(result.value.split("\0").filter((p) => p !== "")) } : result;
 }

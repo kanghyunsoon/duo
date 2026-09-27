@@ -34,7 +34,7 @@ describe("scanRepository golden (AC-004-01, AC-004-02)", () => {
     const repo = buildScenario();
     const scan = await scanRepository(repo.root, scenario.options);
     const { fingerprints, diagnostics } = await fingerprintRepositoryFiles(repo.root, scan.files);
-    const actual = { files: fingerprints, excluded: scan.excluded, diagnostics: [...codes(scan), ...codes({ diagnostics })] };
+    const actual = { files: fingerprints, excluded: scan.excluded, typeChanges: scan.typeChanges, diagnostics: [...codes(scan), ...codes({ diagnostics })] };
     const golden = new URL("expected.json", FIXTURE);
     if (process.env.DUO_UPDATE_GOLDEN === "1") fs.writeFileSync(golden, `${JSON.stringify(actual, null, 2)}\n`);
     expect(actual).toEqual(JSON.parse(fs.readFileSync(golden, "utf8")));
@@ -64,10 +64,10 @@ describe("scanRepository golden (AC-004-01, AC-004-02)", () => {
 });
 
 describe("scan root", () => {
-  it("rejects a directory that is not a Git work tree", async () => {
+  it("requires a Git repository (C36)", async () => {
     const scan = await scanRepository(makeTempDir("duo-nogit-"));
     expect(scan.files).toEqual([]);
-    expect(codes(scan)).toEqual([["SCAN_ROOT_INVALID", undefined]]);
+    expect(codes(scan)).toEqual([["GIT_REPOSITORY_REQUIRED", undefined]]);
   });
 
   it("rejects a subdirectory of a work tree", async () => {
@@ -179,6 +179,43 @@ describe("symlinks are never followed", () => {
   });
 
   const symlinks = canCreateSymlinks();
+
+  it("treats a symlink checked out as a plain file (core.symlinks=false) as the expected checkout, not a type change", async () => {
+    const repo = createTempRepo();
+    repo.git("config", "core.symlinks", "false");
+    repo.addSymlinkEntry("link", "src/a.ts");
+    repo.write("link", "src/a.ts");
+    const scan = await scanRepository(repo.root);
+    expect(scan.typeChanges).toEqual([]);
+    expect(scan.excluded).toEqual([{ path: "link", state: "tracked", reason: "symlink" }]);
+  });
+
+  it("reports an index symlink replaced by a regular file (FILE_TYPE_CHANGED) and indexes the file without gitBlobOid", async () => {
+    const repo = createTempRepo();
+    repo.git("config", "core.symlinks", "true");
+    repo.addSymlinkEntry("link", "src/a.ts");
+    repo.write("link", "now a real file\n");
+    const scan = await scanRepository(repo.root);
+    expect(scan.typeChanges).toEqual([{ path: "link", index: "symlink", workingTree: "regular-file" }]);
+    expect(scan.files).toEqual([{ path: "link", state: "tracked" }]);
+    expect(codes(scan)).toEqual([["FILE_TYPE_CHANGED", "link"]]);
+  });
+
+  it.runIf(symlinks)("reports a tracked file replaced by a symlink and still does not read the target", async () => {
+    const repo = createTempRepo();
+    repo.write("a.ts", "x\n");
+    repo.add("a.ts");
+    const outside = makeTempDir("duo-outside-");
+    fs.writeFileSync(path.join(outside, "secret.ts"), "outside\n");
+    fs.rmSync(path.join(repo.root, "a.ts"));
+    fs.symlinkSync(path.join(outside, "secret.ts"), path.join(repo.root, "a.ts"), "file");
+    const scan = await scanRepository(repo.root);
+    const { fingerprints } = await fingerprintRepositoryFiles(repo.root, scan.files);
+    expect(fingerprints).toEqual([]);
+    expect(scan.typeChanges).toEqual([{ path: "a.ts", index: "regular-file", workingTree: "symlink" }]);
+    expect(scan.excluded).toEqual([{ path: "a.ts", state: "tracked", reason: "symlink" }]);
+    expect(codes(scan)).toEqual([["FILE_TYPE_CHANGED", "a.ts"], ["SYMLINK_OUTSIDE_REPOSITORY", "a.ts"]]);
+  });
 
   it.runIf(symlinks)("does not read the target of an untracked symlink to a file outside the repository", async () => {
     const repo = createTempRepo();

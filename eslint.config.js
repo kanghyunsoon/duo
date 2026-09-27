@@ -13,7 +13,7 @@ const dirs = Object.values(packages).map((p) => p.dir.split("/")[1]);
 
 /**
  * @param {string} name
- * @param {{ sqliteAllowed?: boolean, cliNode?: boolean, sourceParsingAllowed?: boolean }} [opts]
+ * @param {{ sqliteAllowed?: boolean, cliNode?: boolean, sourceParsingAllowed?: boolean, treeSitterAllowed?: boolean }} [opts]
  */
 function restrictions(name, opts = {}) {
   const spec = packages[name];
@@ -32,6 +32,10 @@ function restrictions(name, opts = {}) {
     ...(opts.sourceParsingAllowed ? [] : boundaries.sourceParsing.modules.map((m) => ({
       name: m,
       message: `${m} may be imported only in ${boundaries.sourceParsing.dir}/ (source parsing layer).`,
+    }))),
+    ...(opts.treeSitterAllowed ? [] : boundaries.treeSitter.modules.map((m) => ({
+      name: m,
+      message: `${m} may be imported only in ${boundaries.treeSitter.dir}/ (Tree-sitter layer, ADR-003).`,
     }))),
     ...(opts.cliNode ? boundaries.cliForbiddenNodeModules.filter((m) => m !== "node:sqlite").map((m) => ({
       name: m,
@@ -54,7 +58,8 @@ function restrictions(name, opts = {}) {
 const RULE = "@typescript-eslint/no-restricted-imports";
 
 export default defineConfig(
-  { ignores: ["**/dist/**", "**/coverage/**", "tmp/**", ".worklog/**"] },
+  // fixtures/ holds analyzer inputs (including deliberate syntax errors), not project code.
+  { ignores: ["**/dist/**", "**/coverage/**", "tmp/**", ".worklog/**", "fixtures/**"] },
   js.configs.recommended,
   tseslint.configs.recommended,
   { files: ["**/*.{js,mjs,cjs}"], languageOptions: { globals: globals.node } },
@@ -75,5 +80,9 @@ export default defineConfig(
   {
     files: [`${boundaries.nodeSqliteAllowed}/${TS}`],
     rules: { [RULE]: restrictions("@duo-director/graph", { sqliteAllowed: true }) },
+  },
+  {
+    files: [`${boundaries.treeSitter.dir}/${TS}`],
+    rules: { [RULE]: restrictions("@duo-director/analyzer", { treeSitterAllowed: true }) },
   },
 );

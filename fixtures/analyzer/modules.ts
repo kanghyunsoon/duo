@@ -1,0 +1,16 @@
+import { a, type B } from "./a";
+import type { C } from "./c";
+import "./side-effect";
+import * as ns from "node:path";
+import def, { named } from "pkg";
+export { x } from "./x";
+export type { Y } from "./y";
+export * from "./all";
+export * as grouped from "./grouped";
+import legacy = require("./legacy");
+const lazy = import("./lazy");
+const cjs = require("./cjs");
+const notLiteral = require(name);
+const templ = import(`./t`);
+export { local };
+const local = 1;

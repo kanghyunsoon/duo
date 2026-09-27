@@ -150,7 +150,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-002](#task-002-core-스키마-loader-추적성-파서) | core 스키마, loader, 추적성 파서 | core | M1 | TASK-001 | done |
 | [TASK-003](#task-003-graphstore) | GraphStore | graph | M1 | TASK-002 | done |
 | [TASK-004](#task-004-파일-스캔과-fingerprint) | 파일 스캔과 fingerprint | analyzer | M1 | TASK-002 | done |
-| [TASK-005](#task-005-languageanalyzer와-tsjs-analyzer) | LanguageAnalyzer와 TS/JS Analyzer | analyzer | M1 | TASK-004 | todo |
+| [TASK-005](#task-005-languageanalyzer와-tsjs-analyzer) | LanguageAnalyzer와 TS/JS Analyzer | analyzer | M1 | TASK-004 | done |
 | [TASK-006](#task-006-git-evidence-provider) | Git Evidence Provider | analyzer | M1 | TASK-002 | todo |
 | [TASK-007](#task-007-graph-builder와-일관성-검사) | Graph builder와 일관성 검사 | graph | M1 | TASK-003, TASK-005, TASK-006 | todo |
 | [TASK-008](#task-008-증분-인덱싱-trace-impact) | 증분 인덱싱, trace, impact | graph | M1 | TASK-007 | todo |
@@ -297,7 +297,7 @@ depends_on: [TASK-002]
 
 - **Goal**: 인덱싱 대상 파일을 찾고, OS와 checkout EOL에 관계없는 content fingerprint와 파일 단위 변경 비교를 제공한다. 토큰 측정은 TASK-010으로 옮겼다(H-21).
 - **Input**: 03 project.yaml index 설정과 [Repository scan](../03-data-model.md#repository-scan과-fingerprint) 절, 10 제외 규칙
-- **Output**: `scanRepository`(Git index/untracked 기준, symlink 비추적), 확장자 기반 text/binary 분류, `contentHash`, `generated/fingerprints.json`, `compareFingerprints`(UNCHANGED/CHANGED/ADDED/DELETED), 공통 정렬 `compareUtf8`
+- **Output**: `scanRepository`(Git index/untracked 기준, symlink 비추적), 확장자 기반 fingerprint mode(`normalized-text` / `raw`), `contentHash`, 파일 타입 변경 사실(`FILE_TYPE_CHANGED`), `generated/fingerprints.json`, `compareFingerprints`(UNCHANGED/CHANGED/ADDED/DELETED), 공통 정렬 `compareUtf8`
 - **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
 - **Files expected to change**: `packages/analyzer/src/scan/**`, `packages/analyzer/src/fingerprint/**`. 정렬 통일(H-21)로 `packages/core/src/order.ts`, `packages/core/src/paths.ts`(glob), `packages/graph/src/traverse.ts`, `packages/graph/src/store/json.ts`
 - **Status**: done (T04)
@@ -309,13 +309,13 @@ Acceptance Criteria
 - **AC-004-01** fixture의 포함/제외 파일 목록과 fingerprint가 golden과 같다(3개 OS에서 같은 golden)
 - **AC-004-02** 비밀 파일 패턴, .gitignore 대상, `.git/`, DUO regenerable 영역, symlink가 제외되고 symlink 대상은 읽지 않는다
 - **AC-004-03** 변경 판정은 `contentHash`로 한다. mtime만 바뀐 파일은 UNCHANGED, 크기가 같아도 내용이 바뀐 파일은 CHANGED다(C33)
-- **AC-004-04** text는 CRLF → LF만 정규화한 SHA-256, binary는 원본 bytes의 SHA-256이다. BOM, Unicode 정규화, 공백, lone CR은 보존된다(C34)
+- **AC-004-04** `normalized-text` 모드는 CRLF → LF만 정규화한 SHA-256, `raw` 모드는 원본 bytes의 SHA-256이다. BOM, Unicode 정규화, 공백, lone CR은 보존된다(C34, C37)
 
 ### TASK-005 LanguageAnalyzer와 TS/JS Analyzer
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M1
 package: analyzer
 requirements: [REQ-INDEX-001]
@@ -323,20 +323,20 @@ decisions: [ADR-003]
 depends_on: [TASK-004]
 ```
 
-- **Goal**: 언어 비종속 인터페이스와 TypeScript/JavaScript 구현을 만든다.
-- **Input**: ADR-003, 04 AnalysisResult
-- **Output**: LanguageAnalyzer, TypeScriptAnalyzer, JavaScriptAnalyzer, grammar wasm
+- **Goal**: 언어 비종속 인터페이스와 TypeScript/JavaScript 구현으로 syntax 사실(Symbol, module reference, call site, DUO annotation, parse diagnostic)을 추출한다. Graph와 resolution은 하지 않는다.
+- **Input**: ADR-003, 04 SourceAnalysis
+- **Output**: LanguageAnalyzer, AnalyzerRegistry, TypeScriptAnalyzer, JavaScriptAnalyzer, grammar smoke test, core `sliceSourceLocation`/`compareSourceLocations`
 - **Dependencies**: [TASK-004](#task-004-파일-스캔과-fingerprint)
-- **Files expected to change**: `packages/analyzer/src/language/**`, `packages/analyzer/grammars/*.wasm`
-- **Status**: todo
+- **Files expected to change**: `packages/analyzer/src/language/**`. grammar WASM은 공식 패키지 파일을 쓰므로 `packages/analyzer/grammars/`는 없다(C38)
+- **Status**: done (T05)
 - **검증 대상 Requirement**: [REQ-INDEX-001](../01-requirements.md#req-index-001-언어-비종속-languageanalyzer)
 - **관련 ADR**: [ADR-003](../adr/ADR-003-language-analysis.md)
 
 Acceptance Criteria
 
-- **AC-005-01** grammar wasm과 web-tree-sitter ABI 호환 테스트가 먼저 통과한다
-- **AC-005-02** fixture의 Symbol, import, call reference, test 추출 결과가 golden과 같다
-- **AC-005-03** parse 오류 파일은 diagnostics와 함께 File 수준 결과만 낸다
+- **AC-005-01** grammar wasm과 web-tree-sitter ABI 호환 테스트가 먼저 통과한다(CI `pnpm test:grammars`, 3개 OS)
+- **AC-005-02** fixture의 Symbol, module reference, call site, DUO annotation 추출 결과가 기대값·golden과 같다(3개 OS). 테스트 추출은 이 Task에 없다(C40)
+- **AC-005-03** parse 오류 파일은 `parseStatus: "partial"`과 `AST_PARSE_ERROR`를 내고 ERROR 노드 밖의 사실은 계속 추출한다(C39)
 - **AC-005-04** Analyzer 등록부에 새 언어를 추가하는 데 다른 패키지 수정이 필요 없다(테스트용 더미 Analyzer로 검증)
 
 ### TASK-006 Git Evidence Provider

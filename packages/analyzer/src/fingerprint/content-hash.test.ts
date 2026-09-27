@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { canonicalContent, computeContentHash } from "./content-hash.js";
 
 const bytes = (s: string) => Buffer.from(s, "utf8");
-const text = (s: string) => computeContentHash(bytes(s), "text");
+const text = (s: string) => computeContentHash(bytes(s), "normalized-text");
 
 describe("computeContentHash", () => {
   it("is sha256 of the content with a prefix", () => {
@@ -28,20 +28,20 @@ describe("computeContentHash", () => {
   });
 
   it("CR CR LF becomes CR LF, not LF", () => {
-    expect([...canonicalContent(bytes("a\r\r\nb"), "text")]).toEqual([...bytes("a\r\nb")]);
+    expect([...canonicalContent(bytes("a\r\r\nb"), "normalized-text")]).toEqual([...bytes("a\r\nb")]);
   });
 
   it("hashes binary files as raw bytes, CRLF included", () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const lf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0a, 0x1a, 0x0a]);
-    expect(computeContentHash(png, "binary").size).toBe(8);
-    expect(computeContentHash(png, "binary").contentHash).not.toBe(computeContentHash(lf, "binary").contentHash);
-    expect(canonicalContent(png, "binary")).toBe(png);
+    expect(computeContentHash(png, "raw").size).toBe(8);
+    expect(computeContentHash(png, "raw").contentHash).not.toBe(computeContentHash(lf, "raw").contentHash);
+    expect(canonicalContent(png, "raw")).toBe(png);
   });
 
   it("size is the canonical byte length", () => {
     expect(text("\u00E9\r\n").size).toBe(3);
-    expect(computeContentHash(new Uint8Array(), "text")).toEqual({
+    expect(computeContentHash(new Uint8Array(), "normalized-text")).toEqual({
       contentHash: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", size: 0,
     });
   });

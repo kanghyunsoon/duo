@@ -38,6 +38,9 @@ describe("AC-001-02 lint enforces the ADR-010 dependency direction", () => {
     ["core domain cannot import the YAML library", "packages/core/src/domain/probe.ts", 'import { parseDocument } from "yaml";', false],
     ["core domain cannot import mdast types", "packages/core/src/domain/probe.ts", 'import type { Root } from "mdast";', false],
     ["core source layer may import the YAML library", "packages/core/src/source/probe.ts", 'import { parseDocument } from "yaml";', true],
+    ["analyzer contract cannot import web-tree-sitter", "packages/analyzer/src/language/probe.ts", 'import type { Node } from "web-tree-sitter";', false],
+    ["analyzer scanner cannot import web-tree-sitter", "packages/analyzer/src/scan/probe.ts", 'import { Parser } from "web-tree-sitter";', false],
+    ["analyzer tree-sitter layer may import web-tree-sitter", "packages/analyzer/src/language/tree-sitter/probe.ts", 'import { Parser } from "web-tree-sitter";', true],
   ];
   for (const [name, file, code, allowed] of cases) {
     it(name, async () => {

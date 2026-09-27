@@ -35,6 +35,9 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build
+      # AC-005-01: the official grammar WASM files load into web-tree-sitter and parse on this OS.
+      - name: tree-sitter grammar smoke test
+        run: pnpm test:grammars
       - run: pnpm test
       - name: validate docs traceability
         run: pnpm docs:validate

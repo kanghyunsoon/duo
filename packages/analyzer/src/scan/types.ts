@@ -62,5 +62,21 @@ export interface RepositoryScan {
   readonly files: readonly RepositoryFile[];
   /** Entries Git reported that are not indexed, in UTF-8 byte order of path. */
   readonly excluded: readonly ExcludedFile[];
+  /** Tracked entries whose working-tree type differs from the index, in UTF-8 byte order of path. */
+  readonly typeChanges: readonly FileTypeChange[];
   readonly diagnostics: readonly Diagnostic[];
+}
+
+export type RepositoryEntryType = "regular-file" | "symlink";
+
+/**
+ * A fact for the Indexer (FILE_TYPE_CHANGED): the index records one type, the working tree has
+ * another. The scanner does not decide freshness. A working-tree symlink stays excluded and its
+ * target is not read; a working-tree regular file that replaced an index symlink is indexed as a
+ * file, without gitBlobOid (the index blob is the old link text).
+ */
+export interface FileTypeChange {
+  readonly path: RepoPath;
+  readonly index: RepositoryEntryType;
+  readonly workingTree: RepositoryEntryType;
 }

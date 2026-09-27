@@ -2,5 +2,10 @@ packages:
   - packages/*
   - apps/*
 
+# Grammar 패키지는 WASM만 쓴다(ADR-003). native binding 빌드 스크립트는 실행하지 않는다.
+allowBuilds:
+  tree-sitter-javascript: false
+  tree-sitter-typescript: false
+
 # package.json engines(node >=24.15.0)를 설치 시 강제한다(ADR-001).
 engineStrict: true

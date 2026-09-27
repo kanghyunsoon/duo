@@ -5,6 +5,7 @@
 export * from "./constants.js";
 export * from "./diagnostics.js";
 export * from "./ids.js";
+export * from "./location.js";
 export * from "./order.js";
 export * from "./paths.js";
 export * from "./write-boundary.js";

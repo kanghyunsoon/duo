@@ -16,8 +16,8 @@ Node ID는 core의 `nodeId(EntityRef)`만 만든다. 경로와 Symbol 구성 요
 | Decision | `dec:D-004`, `dec:CON-001`, `dec:ADR-005` | decisions/, constraints.yaml, frontmatter Markdown | kind(decision, constraint), state, answer, enforcement, lock |
 | Issue | `issue:GAME-42`, `issue:TASK-010` | milestones/*.yaml, Markdown `type: issue`, 커밋 메시지 | status, acceptance[], commits[] |
 | File | `file:src/auth/a.ts` | 스캔 | language, tokens, bytes, chars, is_test |
-| Symbol | `sym:src/auth/a.ts#AuthService.refresh` | LanguageAnalyzer | kind(function, class, method, variable), exported, signature |
-| Test | `test:src/auth/a.test.ts#AuthService > refresh` | LanguageAnalyzer 테스트 탐지 | framework |
+| Symbol | `sym:src/auth/a.ts#AuthService.refresh` | LanguageAnalyzer | kind(`SymbolKind`), exported, static, parent |
+| Test | `test:src/auth/a.test.ts#AuthService > refresh` | 테스트 탐지(담당 Task 미정, C40) | framework |
 
 Proposal(P-*)은 Graph Node로 만들지 않는다. `duo_search_evidence`와 UI가 파일로 조회한다.
 
@@ -44,28 +44,45 @@ Proposal(P-*)은 Graph Node로 만들지 않는다. `duo_search_evidence`와 UI�
 
 Edge마다 `declared`, `static`, `git`, `heuristic` 중 하나를 기록한다. 수치 confidence는 쓰지 않는다. heuristic Edge만을 근거로 한 Claim은 BLOCK에 기여할 수 없다([ADR-007](adr/ADR-007-verdict-model.md)).
 
-## AnalysisResult
+## SourceAnalysis
 
-`LanguageAnalyzer.analyze()`의 반환 형식이다([ADR-003](adr/ADR-003-language-analysis.md)). 언어와 무관하게 같다.
+`LanguageAnalyzer.analyze()`의 반환 형식이다([ADR-003](adr/ADR-003-language-analysis.md), TASK-005). 언어와 무관하게 같고 Tree-sitter 타입을 노출하지 않는다. 정렬, 위치 단위, partial 규칙은 [03 Source analysis](03-data-model.md#source-analysis)에 있다.
 
 ```ts
-interface AnalysisResult {
-  symbols: { name: string; qualifiedName: string; kind: SymbolKind; exported: boolean;
-             signature: string; startLine: number; endLine: number; parent?: string }[];
-  imports: { module: string; names: string[]; resolvedPath?: string; line: number }[];
-  references: { from: string; name: string; receiver?: string; line: number }[];  // call 후보
-  tests: { name: string; path: string[]; startLine: number; endLine: number; framework: string }[];
-  diagnostics: { line: number; message: string }[];
+interface SourceAnalysis {
+  path: RepoPath;
+  language: "typescript" | "tsx" | "javascript" | string;
+  contentHash: string;                       // FileFingerprint.contentHash와 같음
+  parseStatus: "complete" | "partial";
+  symbols: { ref: SymbolRef; name: string; qualifiedName: string; kind: SymbolKind; exported: boolean;
+             static?: true; parent?: string; location: SourceLocation; additionalLocations?: SourceLocation[] }[];
+  moduleReferences: { specifier: string; kind: "import" | "export-from" | "dynamic-import" | "require";
+                      typeOnly: boolean; location: SourceLocation }[];
+  callSites: { kind: "identifier" | "member" | "constructor"; calleeText: string;
+               enclosingSymbol?: SymbolRef; location: SourceLocation }[];
+  annotations: { ids: string[]; location: SourceLocation }[];   // "duo: AUTH-03"
 }
+type SymbolKind = "class" | "interface" | "type-alias" | "enum" | "function"
+                | "method" | "constructor" | "getter" | "setter" | "accessor";
 ```
 
+- **Symbol 범위**: top-level class, interface, type alias, enum, function 선언, initializer가 arrow function이나 function expression인 top-level 변수, 익명 default export(function, class, arrow), class의 method, constructor, getter, setter. 중첩 함수와 일반 상수(`const TIMEOUT = 5000`)는 Symbol이 아니다.
+- **qualifiedName**: top-level은 이름, class member는 `Class.member`(private은 `AuthService.#refresh`), 익명 default export는 `default`(member는 `default.render`). 문자열 이름 method는 따옴표 없이 쓰고 computed name(`[Symbol.iterator]`)은 Symbol로 만들지 않는다.
+- **overload와 병합**: 같은 qualifiedName은 한 Symbol이다. primary 위치는 본문이 있는 선언, 없으면 첫 선언이고 나머지는 `additionalLocations`다. getter와 setter 쌍은 `accessor` 한 개다.
+- **exported**: `export` 선언, `export default`, `export { a }` 목록. member는 class를 따른다.
+- **ModuleReference**: 문자열 literal specifier만 기록하고 파일로 해석하지 않는다(상대 경로, tsconfig paths, package exports, node_modules 해석과 IMPORTS Edge는 TASK-007). `typeOnly`는 문장 전체가 `import type` / `export type ... from`일 때만이다. `import x = require("y")`와 `require("y")`는 `require`다.
+- **CallSite**: 이름이 있는 callee만 기록한다(identifier와 `super`는 identifier, member와 subscript는 member, `new`는 constructor). `calleeText`는 callee 원문에서 줄바꿈과 그 들여쓰기만 뺀 값이다. `enclosingSymbol`은 호출을 감싸는 가장 안쪽 Symbol이며 class field initializer는 class다.
+- **DuoAnnotation**: Tree-sitter comment 노드에서만 찾는다. 줄 주석 `// duo: AUTH-03`, block 주석의 각 줄(` * duo: AUTH-04, AUTH-05`)에서 `duo:`가 주석 줄의 시작에 있어야 한다. 앞쪽의 definition ID들이 ID 후보이고 첫 non-ID token부터는 설명이다. ID가 없으면 `DUO_ANNOTATION_INVALID`. 문자열 안의 `"duo: AUTH-03"`은 annotation이 아니다. Project Truth ID인지는 TASK-007이 확인한다.
+
 ### CALLS 해석과 한계
+
+**CALLS extraction is syntactic. Call target resolution is not performed in TASK-005.** TASK-005는 CallSite 사실(`auth.login()`의 `calleeText: "auth.login"`)만 내고, 같은 파일의 명백한 호출(`function a() { b() }`)도 Edge로 만들지 않는다. 해석은 Graph Builder(TASK-007)가 한 곳에서 한다.
 
 TS/JS CALLS는 정적 타입 정보 없이 **이름 기반 heuristic**으로 해석한다(REQ-INDEX-001).
 
 해석 순서:
 
-1. 같은 파일의 Symbol 이름
+1. 같은 파일의 Symbol 이름(TASK-007)
 2. import한 이름(named, default, namespace 접근 `ns.fn`)
 3. `this.method()`, `super.method()`는 같은 class 계층
 4. 위에서 찾지 못했고 Repository 전체에서 같은 이름의 exported Symbol이 **하나뿐**이면 연결(provenance: heuristic)

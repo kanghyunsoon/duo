@@ -1,0 +1,1776 @@
+{
+  "annotations.ts": {
+    "analysis": {
+      "path": "annotations.ts",
+      "language": "typescript",
+      "contentHash": "sha256:86ce9b46ca9a8c604f5b99276451c9774e54b166e1cb5d649a23ce1d88261fd6",
+      "parseStatus": "complete",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "annotations.ts",
+            "symbol": "login"
+          },
+          "name": "login",
+          "qualifiedName": "login",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "annotations.ts",
+            "startLine": 2,
+            "startColumn": 8,
+            "endLine": 2,
+            "endColumn": 27
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "annotations.ts",
+            "symbol": "logout"
+          },
+          "name": "logout",
+          "qualifiedName": "logout",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "annotations.ts",
+            "startLine": 7,
+            "startColumn": 8,
+            "endLine": 7,
+            "endColumn": 28
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "annotations.ts",
+            "symbol": "Game"
+          },
+          "name": "Game",
+          "qualifiedName": "Game",
+          "kind": "class",
+          "exported": true,
+          "location": {
+            "path": "annotations.ts",
+            "startLine": 10,
+            "startColumn": 8,
+            "endLine": 10,
+            "endColumn": 21
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "annotations.ts",
+            "symbol": "helper"
+          },
+          "name": "helper",
+          "qualifiedName": "helper",
+          "kind": "function",
+          "exported": false,
+          "location": {
+            "path": "annotations.ts",
+            "startLine": 18,
+            "startColumn": 1,
+            "endLine": 20,
+            "endColumn": 2
+          }
+        }
+      ],
+      "moduleReferences": [],
+      "callSites": [],
+      "annotations": [
+        {
+          "ids": [
+            "AUTH-03"
+          ],
+          "location": {
+            "path": "annotations.ts",
+            "startLine": 1,
+            "startColumn": 4,
+            "endLine": 1,
+            "endColumn": 16
+          }
+        },
+        {
+          "ids": [
+            "AUTH-04",
+            "AUTH-05"
+          ],
+          "location": {
+            "path": "annotations.ts",
+            "startLine": 5,
+            "startColumn": 4,
+            "endLine": 5,
+            "endColumn": 25
+          }
+        },
+        {
+          "ids": [
+            "GAME-42"
+          ],
+          "location": {
+            "path": "annotations.ts",
+            "startLine": 9,
+            "startColumn": 5,
+            "endLine": 9,
+            "endColumn": 17
+          }
+        },
+        {
+          "ids": [
+            "AUTH-06"
+          ],
+          "location": {
+            "path": "annotations.ts",
+            "startLine": 17,
+            "startColumn": 4,
+            "endLine": 17,
+            "endColumn": 15
+          }
+        },
+        {
+          "ids": [
+            "AUTH-07"
+          ],
+          "location": {
+            "path": "annotations.ts",
+            "startLine": 19,
+            "startColumn": 6,
+            "endLine": 19,
+            "endColumn": 27
+          }
+        }
+      ]
+    },
+    "diagnostics": [
+      {
+        "code": "DUO_ANNOTATION_INVALID",
+        "severity": "warning",
+        "message": "\"duo:\" comment does not start with a definition ID: \"duo: see docs\"",
+        "source": {
+          "path": "annotations.ts",
+          "startLine": 16,
+          "startColumn": 4,
+          "endLine": 16,
+          "endColumn": 17
+        }
+      }
+    ]
+  },
+  "broken.ts": {
+    "analysis": {
+      "path": "broken.ts",
+      "language": "typescript",
+      "contentHash": "sha256:1b8e7dff6fa4ac740de50f650eea6e8674e2ba15fa9335ebe611e0156c691327",
+      "parseStatus": "partial",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "broken.ts",
+            "symbol": "ok"
+          },
+          "name": "ok",
+          "qualifiedName": "ok",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "broken.ts",
+            "startLine": 1,
+            "startColumn": 8,
+            "endLine": 1,
+            "endColumn": 33
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "broken.ts",
+            "symbol": "broken"
+          },
+          "name": "broken",
+          "qualifiedName": "broken",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "broken.ts",
+            "startLine": 2,
+            "startColumn": 8,
+            "endLine": 2,
+            "endColumn": 39
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "broken.ts",
+            "symbol": "After"
+          },
+          "name": "After",
+          "qualifiedName": "After",
+          "kind": "class",
+          "exported": true,
+          "location": {
+            "path": "broken.ts",
+            "startLine": 3,
+            "startColumn": 8,
+            "endLine": 3,
+            "endColumn": 40
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "broken.ts",
+            "symbol": "After.m"
+          },
+          "name": "m",
+          "qualifiedName": "After.m",
+          "kind": "method",
+          "exported": true,
+          "parent": "After",
+          "location": {
+            "path": "broken.ts",
+            "startLine": 3,
+            "startColumn": 22,
+            "endLine": 3,
+            "endColumn": 38
+          }
+        }
+      ],
+      "moduleReferences": [],
+      "callSites": [
+        {
+          "kind": "identifier",
+          "calleeText": "call",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "broken.ts",
+            "symbol": "ok"
+          },
+          "location": {
+            "path": "broken.ts",
+            "startLine": 1,
+            "startColumn": 24,
+            "endLine": 1,
+            "endColumn": 30
+          }
+        },
+        {
+          "kind": "identifier",
+          "calleeText": "later",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "broken.ts",
+            "symbol": "After.m"
+          },
+          "location": {
+            "path": "broken.ts",
+            "startLine": 3,
+            "startColumn": 28,
+            "endLine": 3,
+            "endColumn": 35
+          }
+        }
+      ],
+      "annotations": []
+    },
+    "diagnostics": [
+      {
+        "code": "AST_PARSE_ERROR",
+        "severity": "warning",
+        "message": "Syntax error: missing \")\"",
+        "source": {
+          "path": "broken.ts",
+          "startLine": 2,
+          "startColumn": 25,
+          "endLine": 2,
+          "endColumn": 25
+        }
+      }
+    ]
+  },
+  "calls.ts": {
+    "analysis": {
+      "path": "calls.ts",
+      "language": "typescript",
+      "contentHash": "sha256:1e061d983a7d081374d0371a6c31b120756957fb44e7eab555cb9e83bbc1dd63",
+      "parseStatus": "complete",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "a"
+          },
+          "name": "a",
+          "qualifiedName": "a",
+          "kind": "function",
+          "exported": false,
+          "location": {
+            "path": "calls.ts",
+            "startLine": 3,
+            "startColumn": 1,
+            "endLine": 5,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "b"
+          },
+          "name": "b",
+          "qualifiedName": "b",
+          "kind": "function",
+          "exported": false,
+          "location": {
+            "path": "calls.ts",
+            "startLine": 7,
+            "startColumn": 1,
+            "endLine": 7,
+            "endColumn": 16
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "run"
+          },
+          "name": "run",
+          "qualifiedName": "run",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "calls.ts",
+            "startLine": 9,
+            "startColumn": 14,
+            "endLine": 17,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "Widget"
+          },
+          "name": "Widget",
+          "qualifiedName": "Widget",
+          "kind": "class",
+          "exported": false,
+          "location": {
+            "path": "calls.ts",
+            "startLine": 19,
+            "startColumn": 1,
+            "endLine": 26,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "Widget.render"
+          },
+          "name": "render",
+          "qualifiedName": "Widget.render",
+          "kind": "method",
+          "exported": false,
+          "parent": "Widget",
+          "location": {
+            "path": "calls.ts",
+            "startLine": 22,
+            "startColumn": 3,
+            "endLine": 25,
+            "endColumn": 4
+          }
+        }
+      ],
+      "moduleReferences": [
+        {
+          "specifier": "./helper",
+          "kind": "import",
+          "typeOnly": false,
+          "location": {
+            "path": "calls.ts",
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 1,
+            "endColumn": 35
+          }
+        }
+      ],
+      "callSites": [
+        {
+          "kind": "identifier",
+          "calleeText": "b",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "a"
+          },
+          "location": {
+            "path": "calls.ts",
+            "startLine": 4,
+            "startColumn": 3,
+            "endLine": 4,
+            "endColumn": 6
+          }
+        },
+        {
+          "kind": "identifier",
+          "calleeText": "a",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "run"
+          },
+          "location": {
+            "path": "calls.ts",
+            "startLine": 10,
+            "startColumn": 9,
+            "endLine": 10,
+            "endColumn": 12
+          }
+        },
+        {
+          "kind": "member",
+          "calleeText": "helper.util.go",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "run"
+          },
+          "location": {
+            "path": "calls.ts",
+            "startLine": 11,
+            "startColumn": 3,
+            "endLine": 11,
+            "endColumn": 19
+          }
+        },
+        {
+          "kind": "constructor",
+          "calleeText": "AuthService",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "run"
+          },
+          "location": {
+            "path": "calls.ts",
+            "startLine": 12,
+            "startColumn": 19,
+            "endLine": 12,
+            "endColumn": 36
+          }
+        },
+        {
+          "kind": "member",
+          "calleeText": "service.login",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "run"
+          },
+          "location": {
+            "path": "calls.ts",
+            "startLine": 13,
+            "startColumn": 3,
+            "endLine": 14,
+            "endColumn": 16
+          }
+        },
+        {
+          "kind": "identifier",
+          "calleeText": "b",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "run"
+          },
+          "location": {
+            "path": "calls.ts",
+            "startLine": 15,
+            "startColumn": 10,
+            "endLine": 15,
+            "endColumn": 13
+          }
+        },
+        {
+          "kind": "member",
+          "calleeText": "items.forEach",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "run"
+          },
+          "location": {
+            "path": "calls.ts",
+            "startLine": 16,
+            "startColumn": 3,
+            "endLine": 16,
+            "endColumn": 40
+          }
+        },
+        {
+          "kind": "identifier",
+          "calleeText": "format",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "run"
+          },
+          "location": {
+            "path": "calls.ts",
+            "startLine": 16,
+            "startColumn": 27,
+            "endLine": 16,
+            "endColumn": 39
+          }
+        },
+        {
+          "kind": "identifier",
+          "calleeText": "setup",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "Widget"
+          },
+          "location": {
+            "path": "calls.ts",
+            "startLine": 20,
+            "startColumn": 13,
+            "endLine": 20,
+            "endColumn": 20
+          }
+        },
+        {
+          "kind": "member",
+          "calleeText": "this.draw",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "Widget.render"
+          },
+          "location": {
+            "path": "calls.ts",
+            "startLine": 23,
+            "startColumn": 5,
+            "endLine": 23,
+            "endColumn": 16
+          }
+        },
+        {
+          "kind": "member",
+          "calleeText": "super.render",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "calls.ts",
+            "symbol": "Widget.render"
+          },
+          "location": {
+            "path": "calls.ts",
+            "startLine": 24,
+            "startColumn": 5,
+            "endLine": 24,
+            "endColumn": 21
+          }
+        },
+        {
+          "kind": "identifier",
+          "calleeText": "top",
+          "location": {
+            "path": "calls.ts",
+            "startLine": 28,
+            "startColumn": 1,
+            "endLine": 28,
+            "endColumn": 6
+          }
+        },
+        {
+          "kind": "constructor",
+          "calleeText": "Map",
+          "location": {
+            "path": "calls.ts",
+            "startLine": 29,
+            "startColumn": 1,
+            "endLine": 29,
+            "endColumn": 10
+          }
+        },
+        {
+          "kind": "identifier",
+          "calleeText": "tag",
+          "location": {
+            "path": "calls.ts",
+            "startLine": 30,
+            "startColumn": 1,
+            "endLine": 30,
+            "endColumn": 7
+          }
+        }
+      ],
+      "annotations": []
+    },
+    "diagnostics": []
+  },
+  "common.cts": {
+    "analysis": {
+      "path": "common.cts",
+      "language": "typescript",
+      "contentHash": "sha256:c8c5ff0181ddb7b649fd27e8ff79f9be7c8f2621e80417bfabace67fdf152a4d",
+      "parseStatus": "complete",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "common.cts",
+            "symbol": "read"
+          },
+          "name": "read",
+          "qualifiedName": "read",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "common.cts",
+            "startLine": 3,
+            "startColumn": 8,
+            "endLine": 5,
+            "endColumn": 2
+          }
+        }
+      ],
+      "moduleReferences": [
+        {
+          "specifier": "node:fs",
+          "kind": "require",
+          "typeOnly": false,
+          "location": {
+            "path": "common.cts",
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 1,
+            "endColumn": 32
+          }
+        }
+      ],
+      "callSites": [
+        {
+          "kind": "member",
+          "calleeText": "fs.readFileSync",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "common.cts",
+            "symbol": "read"
+          },
+          "location": {
+            "path": "common.cts",
+            "startLine": 4,
+            "startColumn": 10,
+            "endLine": 4,
+            "endColumn": 30
+          }
+        }
+      ],
+      "annotations": []
+    },
+    "diagnostics": []
+  },
+  "component.tsx": {
+    "analysis": {
+      "path": "component.tsx",
+      "language": "tsx",
+      "contentHash": "sha256:eac6f34d75fa380be1e73a24ca0b53156b97ec12fb094def750cd8b1b8da15ca",
+      "parseStatus": "complete",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "component.tsx",
+            "symbol": "Button"
+          },
+          "name": "Button",
+          "qualifiedName": "Button",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "component.tsx",
+            "startLine": 3,
+            "startColumn": 8,
+            "endLine": 5,
+            "endColumn": 2
+          }
+        }
+      ],
+      "moduleReferences": [
+        {
+          "specifier": "react",
+          "kind": "import",
+          "typeOnly": false,
+          "location": {
+            "path": "component.tsx",
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 1,
+            "endColumn": 27
+          }
+        }
+      ],
+      "callSites": [
+        {
+          "kind": "identifier",
+          "calleeText": "track",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "component.tsx",
+            "symbol": "Button"
+          },
+          "location": {
+            "path": "component.tsx",
+            "startLine": 4,
+            "startColumn": 33,
+            "endLine": 4,
+            "endColumn": 47
+          }
+        }
+      ],
+      "annotations": []
+    },
+    "diagnostics": []
+  },
+  "default-class.js": {
+    "analysis": {
+      "path": "default-class.js",
+      "language": "javascript",
+      "contentHash": "sha256:8b7fa9693b1983b8ffb561b4429a2211724d86308839829b9e5778a12754b2f2",
+      "parseStatus": "complete",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "default-class.js",
+            "symbol": "default"
+          },
+          "name": "default",
+          "qualifiedName": "default",
+          "kind": "class",
+          "exported": true,
+          "location": {
+            "path": "default-class.js",
+            "startLine": 1,
+            "startColumn": 16,
+            "endLine": 5,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "default-class.js",
+            "symbol": "default.render"
+          },
+          "name": "render",
+          "qualifiedName": "default.render",
+          "kind": "method",
+          "exported": true,
+          "parent": "default",
+          "location": {
+            "path": "default-class.js",
+            "startLine": 2,
+            "startColumn": 3,
+            "endLine": 4,
+            "endColumn": 4
+          }
+        }
+      ],
+      "moduleReferences": [],
+      "callSites": [
+        {
+          "kind": "identifier",
+          "calleeText": "draw",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "default-class.js",
+            "symbol": "default.render"
+          },
+          "location": {
+            "path": "default-class.js",
+            "startLine": 3,
+            "startColumn": 5,
+            "endLine": 3,
+            "endColumn": 11
+          }
+        }
+      ],
+      "annotations": []
+    },
+    "diagnostics": []
+  },
+  "default-function.ts": {
+    "analysis": {
+      "path": "default-function.ts",
+      "language": "typescript",
+      "contentHash": "sha256:5f0349464b98ee19588914d402da0dff286451d7df8e17bc4e1bcf0f87cac217",
+      "parseStatus": "complete",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "default-function.ts",
+            "symbol": "default"
+          },
+          "name": "default",
+          "qualifiedName": "default",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "default-function.ts",
+            "startLine": 1,
+            "startColumn": 16,
+            "endLine": 3,
+            "endColumn": 2
+          }
+        }
+      ],
+      "moduleReferences": [],
+      "callSites": [
+        {
+          "kind": "identifier",
+          "calleeText": "run",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "default-function.ts",
+            "symbol": "default"
+          },
+          "location": {
+            "path": "default-function.ts",
+            "startLine": 2,
+            "startColumn": 3,
+            "endLine": 2,
+            "endColumn": 8
+          }
+        }
+      ],
+      "annotations": []
+    },
+    "diagnostics": []
+  },
+  "esm.mjs": {
+    "analysis": {
+      "path": "esm.mjs",
+      "language": "javascript",
+      "contentHash": "sha256:11bd6a191c65cd533ba23a781ae4db68d424f50eb1a5da7d6b1882bec890b992",
+      "parseStatus": "complete",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "esm.mjs",
+            "symbol": "default"
+          },
+          "name": "default",
+          "qualifiedName": "default",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "esm.mjs",
+            "startLine": 3,
+            "startColumn": 16,
+            "endLine": 3,
+            "endColumn": 25
+          }
+        }
+      ],
+      "moduleReferences": [
+        {
+          "specifier": "./a.mjs",
+          "kind": "import",
+          "typeOnly": false,
+          "location": {
+            "path": "esm.mjs",
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 1,
+            "endColumn": 29
+          }
+        }
+      ],
+      "callSites": [
+        {
+          "kind": "identifier",
+          "calleeText": "a",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "esm.mjs",
+            "symbol": "default"
+          },
+          "location": {
+            "path": "esm.mjs",
+            "startLine": 3,
+            "startColumn": 22,
+            "endLine": 3,
+            "endColumn": 25
+          }
+        }
+      ],
+      "annotations": []
+    },
+    "diagnostics": []
+  },
+  "legacy.cjs": {
+    "analysis": {
+      "path": "legacy.cjs",
+      "language": "javascript",
+      "contentHash": "sha256:6a3bebf43ab2a4dfa53da494bfb3b2ee3ed3d2dfd7233aba07bb12cf044660f0",
+      "parseStatus": "complete",
+      "symbols": [],
+      "moduleReferences": [
+        {
+          "specifier": "node:path",
+          "kind": "require",
+          "typeOnly": false,
+          "location": {
+            "path": "legacy.cjs",
+            "startLine": 1,
+            "startColumn": 14,
+            "endLine": 1,
+            "endColumn": 34
+          }
+        }
+      ],
+      "callSites": [
+        {
+          "kind": "member",
+          "calleeText": "path.join",
+          "location": {
+            "path": "legacy.cjs",
+            "startLine": 4,
+            "startColumn": 10,
+            "endLine": 4,
+            "endColumn": 24
+          }
+        }
+      ],
+      "annotations": []
+    },
+    "diagnostics": []
+  },
+  "module.mts": {
+    "analysis": {
+      "path": "module.mts",
+      "language": "typescript",
+      "contentHash": "sha256:654527a6098e7b9a803d274cb29412405a9a1c195cea87923717379f2e5e6f61",
+      "parseStatus": "complete",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "module.mts",
+            "symbol": "load"
+          },
+          "name": "load",
+          "qualifiedName": "load",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "module.mts",
+            "startLine": 1,
+            "startColumn": 8,
+            "endLine": 3,
+            "endColumn": 2
+          }
+        }
+      ],
+      "moduleReferences": [
+        {
+          "specifier": "./x.mjs",
+          "kind": "dynamic-import",
+          "typeOnly": false,
+          "location": {
+            "path": "module.mts",
+            "startLine": 2,
+            "startColumn": 10,
+            "endLine": 2,
+            "endColumn": 27
+          }
+        }
+      ],
+      "callSites": [],
+      "annotations": []
+    },
+    "diagnostics": []
+  },
+  "modules.ts": {
+    "analysis": {
+      "path": "modules.ts",
+      "language": "typescript",
+      "contentHash": "sha256:df199f38c9e4c0b9aadcae2ff9c42a25bc389cb839da6b57c61b57f8b64b7402",
+      "parseStatus": "complete",
+      "symbols": [],
+      "moduleReferences": [
+        {
+          "specifier": "./a",
+          "kind": "import",
+          "typeOnly": false,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 1,
+            "endColumn": 33
+          }
+        },
+        {
+          "specifier": "./c",
+          "kind": "import",
+          "typeOnly": true,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 2,
+            "startColumn": 1,
+            "endLine": 2,
+            "endColumn": 30
+          }
+        },
+        {
+          "specifier": "./side-effect",
+          "kind": "import",
+          "typeOnly": false,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 3,
+            "startColumn": 1,
+            "endLine": 3,
+            "endColumn": 24
+          }
+        },
+        {
+          "specifier": "node:path",
+          "kind": "import",
+          "typeOnly": false,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 4,
+            "startColumn": 1,
+            "endLine": 4,
+            "endColumn": 33
+          }
+        },
+        {
+          "specifier": "pkg",
+          "kind": "import",
+          "typeOnly": false,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 5,
+            "startColumn": 1,
+            "endLine": 5,
+            "endColumn": 34
+          }
+        },
+        {
+          "specifier": "./x",
+          "kind": "export-from",
+          "typeOnly": false,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 6,
+            "startColumn": 1,
+            "endLine": 6,
+            "endColumn": 25
+          }
+        },
+        {
+          "specifier": "./y",
+          "kind": "export-from",
+          "typeOnly": true,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 7,
+            "startColumn": 1,
+            "endLine": 7,
+            "endColumn": 30
+          }
+        },
+        {
+          "specifier": "./all",
+          "kind": "export-from",
+          "typeOnly": false,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 8,
+            "startColumn": 1,
+            "endLine": 8,
+            "endColumn": 23
+          }
+        },
+        {
+          "specifier": "./grouped",
+          "kind": "export-from",
+          "typeOnly": false,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 9,
+            "startColumn": 1,
+            "endLine": 9,
+            "endColumn": 38
+          }
+        },
+        {
+          "specifier": "./legacy",
+          "kind": "require",
+          "typeOnly": false,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 10,
+            "startColumn": 1,
+            "endLine": 10,
+            "endColumn": 37
+          }
+        },
+        {
+          "specifier": "./lazy",
+          "kind": "dynamic-import",
+          "typeOnly": false,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 11,
+            "startColumn": 14,
+            "endLine": 11,
+            "endColumn": 30
+          }
+        },
+        {
+          "specifier": "./cjs",
+          "kind": "require",
+          "typeOnly": false,
+          "location": {
+            "path": "modules.ts",
+            "startLine": 12,
+            "startColumn": 13,
+            "endLine": 12,
+            "endColumn": 29
+          }
+        }
+      ],
+      "callSites": [
+        {
+          "kind": "identifier",
+          "calleeText": "require",
+          "location": {
+            "path": "modules.ts",
+            "startLine": 13,
+            "startColumn": 20,
+            "endLine": 13,
+            "endColumn": 33
+          }
+        }
+      ],
+      "annotations": []
+    },
+    "diagnostics": []
+  },
+  "symbols.ts": {
+    "analysis": {
+      "path": "symbols.ts",
+      "language": "typescript",
+      "contentHash": "sha256:aa85eeaa8431955da7df6e116d5c93b2705d1ed953a780ac515fcbcc5ed16fcc",
+      "parseStatus": "complete",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "Session"
+          },
+          "name": "Session",
+          "qualifiedName": "Session",
+          "kind": "interface",
+          "exported": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 4,
+            "startColumn": 8,
+            "endLine": 6,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "SessionId"
+          },
+          "name": "SessionId",
+          "qualifiedName": "SessionId",
+          "kind": "type-alias",
+          "exported": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 8,
+            "startColumn": 8,
+            "endLine": 8,
+            "endColumn": 32
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "Role"
+          },
+          "name": "Role",
+          "qualifiedName": "Role",
+          "kind": "enum",
+          "exported": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 10,
+            "startColumn": 8,
+            "endLine": 13,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "Login"
+          },
+          "name": "Login",
+          "qualifiedName": "Login",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 17,
+            "startColumn": 14,
+            "endLine": 19,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "legacy"
+          },
+          "name": "legacy",
+          "qualifiedName": "legacy",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 21,
+            "startColumn": 12,
+            "endLine": 24,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "parse"
+          },
+          "name": "parse",
+          "qualifiedName": "parse",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 28,
+            "startColumn": 8,
+            "endLine": 30,
+            "endColumn": 2
+          },
+          "additionalLocations": [
+            {
+              "path": "symbols.ts",
+              "startLine": 26,
+              "startColumn": 8,
+              "endLine": 26,
+              "endColumn": 42
+            },
+            {
+              "path": "symbols.ts",
+              "startLine": 27,
+              "startColumn": 8,
+              "endLine": 27,
+              "endColumn": 42
+            }
+          ]
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "declared"
+          },
+          "name": "declared",
+          "qualifiedName": "declared",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 32,
+            "startColumn": 16,
+            "endLine": 32,
+            "endColumn": 42
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "Base"
+          },
+          "name": "Base",
+          "qualifiedName": "Base",
+          "kind": "class",
+          "exported": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 34,
+            "startColumn": 8,
+            "endLine": 36,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "Base.run"
+          },
+          "name": "run",
+          "qualifiedName": "Base.run",
+          "kind": "method",
+          "exported": true,
+          "parent": "Base",
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 35,
+            "startColumn": 3,
+            "endLine": 35,
+            "endColumn": 23
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "AuthService"
+          },
+          "name": "AuthService",
+          "qualifiedName": "AuthService",
+          "kind": "class",
+          "exported": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 38,
+            "startColumn": 8,
+            "endLine": 73,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "AuthService.constructor"
+          },
+          "name": "constructor",
+          "qualifiedName": "AuthService.constructor",
+          "kind": "constructor",
+          "exported": true,
+          "parent": "AuthService",
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 42,
+            "startColumn": 3,
+            "endLine": 44,
+            "endColumn": 4
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "AuthService.token"
+          },
+          "name": "token",
+          "qualifiedName": "AuthService.token",
+          "kind": "accessor",
+          "exported": true,
+          "parent": "AuthService",
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 46,
+            "startColumn": 3,
+            "endLine": 48,
+            "endColumn": 4
+          },
+          "additionalLocations": [
+            {
+              "path": "symbols.ts",
+              "startLine": 50,
+              "startColumn": 3,
+              "endLine": 52,
+              "endColumn": 4
+            }
+          ]
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "AuthService.create"
+          },
+          "name": "create",
+          "qualifiedName": "AuthService.create",
+          "kind": "method",
+          "exported": true,
+          "static": true,
+          "parent": "AuthService",
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 54,
+            "startColumn": 3,
+            "endLine": 56,
+            "endColumn": 4
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "AuthService.login"
+          },
+          "name": "login",
+          "qualifiedName": "AuthService.login",
+          "kind": "method",
+          "exported": true,
+          "parent": "AuthService",
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 60,
+            "startColumn": 3,
+            "endLine": 62,
+            "endColumn": 4
+          },
+          "additionalLocations": [
+            {
+              "path": "symbols.ts",
+              "startLine": 58,
+              "startColumn": 3,
+              "endLine": 58,
+              "endColumn": 31
+            },
+            {
+              "path": "symbols.ts",
+              "startLine": 59,
+              "startColumn": 3,
+              "endLine": 59,
+              "endColumn": 50
+            }
+          ]
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "AuthService.#refresh"
+          },
+          "name": "#refresh",
+          "qualifiedName": "AuthService.#refresh",
+          "kind": "method",
+          "exported": true,
+          "parent": "AuthService",
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 64,
+            "startColumn": 3,
+            "endLine": 66,
+            "endColumn": 4
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "AuthService.run"
+          },
+          "name": "run",
+          "qualifiedName": "AuthService.run",
+          "kind": "method",
+          "exported": true,
+          "parent": "AuthService",
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 68,
+            "startColumn": 3,
+            "endLine": 68,
+            "endColumn": 17
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "AuthService.quoted-name"
+          },
+          "name": "quoted-name",
+          "qualifiedName": "AuthService.quoted-name",
+          "kind": "method",
+          "exported": true,
+          "parent": "AuthService",
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 70,
+            "startColumn": 3,
+            "endLine": 70,
+            "endColumn": 27
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "Internal"
+          },
+          "name": "Internal",
+          "qualifiedName": "Internal",
+          "kind": "class",
+          "exported": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 75,
+            "startColumn": 1,
+            "endLine": 75,
+            "endColumn": 18
+          }
+        }
+      ],
+      "moduleReferences": [
+        {
+          "specifier": "./clock",
+          "kind": "import",
+          "typeOnly": true,
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 2,
+            "startColumn": 1,
+            "endLine": 2,
+            "endColumn": 38
+          }
+        }
+      ],
+      "callSites": [
+        {
+          "kind": "identifier",
+          "calleeText": "super",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "AuthService.constructor"
+          },
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 43,
+            "startColumn": 5,
+            "endLine": 43,
+            "endColumn": 12
+          }
+        },
+        {
+          "kind": "constructor",
+          "calleeText": "AuthService",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "AuthService.create"
+          },
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 55,
+            "startColumn": 12,
+            "endLine": 55,
+            "endColumn": 45
+          }
+        },
+        {
+          "kind": "member",
+          "calleeText": "this.#refresh",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "symbols.ts",
+            "symbol": "AuthService.login"
+          },
+          "location": {
+            "path": "symbols.ts",
+            "startLine": 61,
+            "startColumn": 12,
+            "endLine": 61,
+            "endColumn": 50
+          }
+        }
+      ],
+      "annotations": []
+    },
+    "diagnostics": []
+  },
+  "unicode.ts": {
+    "analysis": {
+      "path": "unicode.ts",
+      "language": "typescript",
+      "contentHash": "sha256:f384b8608ba1c3be8b69d0b62f4e1f88ba65ed72c295d945a72fad6d51036b3a",
+      "parseStatus": "complete",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "unicode.ts",
+            "symbol": "인사"
+          },
+          "name": "인사",
+          "qualifiedName": "인사",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "unicode.ts",
+            "startLine": 2,
+            "startColumn": 14,
+            "endLine": 2,
+            "endColumn": 48
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "unicode.ts",
+            "symbol": "사용자"
+          },
+          "name": "사용자",
+          "qualifiedName": "사용자",
+          "kind": "class",
+          "exported": true,
+          "location": {
+            "path": "unicode.ts",
+            "startLine": 4,
+            "startColumn": 8,
+            "endLine": 6,
+            "endColumn": 2
+          }
+        },
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "unicode.ts",
+            "symbol": "사용자.이름변경"
+          },
+          "name": "이름변경",
+          "qualifiedName": "사용자.이름변경",
+          "kind": "method",
+          "exported": true,
+          "parent": "사용자",
+          "location": {
+            "path": "unicode.ts",
+            "startLine": 5,
+            "startColumn": 3,
+            "endLine": 5,
+            "endColumn": 39
+          }
+        }
+      ],
+      "moduleReferences": [],
+      "callSites": [
+        {
+          "kind": "identifier",
+          "calleeText": "로그",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "unicode.ts",
+            "symbol": "사용자.이름변경"
+          },
+          "location": {
+            "path": "unicode.ts",
+            "startLine": 5,
+            "startColumn": 23,
+            "endLine": 5,
+            "endColumn": 36
+          }
+        },
+        {
+          "kind": "identifier",
+          "calleeText": "표시",
+          "location": {
+            "path": "unicode.ts",
+            "startLine": 8,
+            "startColumn": 12,
+            "endLine": 8,
+            "endColumn": 16
+          }
+        }
+      ],
+      "annotations": []
+    },
+    "diagnostics": []
+  },
+  "widget.jsx": {
+    "analysis": {
+      "path": "widget.jsx",
+      "language": "javascript",
+      "contentHash": "sha256:1e16a58b101971dc5c6587f8b93c72a113a324236fdbb1c558ec25f2ac09f254",
+      "parseStatus": "complete",
+      "symbols": [
+        {
+          "ref": {
+            "type": "symbol",
+            "path": "widget.jsx",
+            "symbol": "Widget"
+          },
+          "name": "Widget",
+          "qualifiedName": "Widget",
+          "kind": "function",
+          "exported": true,
+          "location": {
+            "path": "widget.jsx",
+            "startLine": 1,
+            "startColumn": 14,
+            "endLine": 1,
+            "endColumn": 51
+          }
+        }
+      ],
+      "moduleReferences": [],
+      "callSites": [
+        {
+          "kind": "identifier",
+          "calleeText": "format",
+          "enclosingSymbol": {
+            "type": "symbol",
+            "path": "widget.jsx",
+            "symbol": "Widget"
+          },
+          "location": {
+            "path": "widget.jsx",
+            "startLine": 1,
+            "startColumn": 35,
+            "endLine": 1,
+            "endColumn": 44
+          }
+        }
+      ],
+      "annotations": []
+    },
+    "diagnostics": []
+  }
+}

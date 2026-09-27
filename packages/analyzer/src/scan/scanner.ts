@@ -9,12 +9,15 @@ import {
   compareDiagnostics, compareUtf8, createDiagnostic, findPathPortabilityCollisions, normalizeRepoPath,
   type Diagnostic, type RepoPath,
 } from "@duo-director/core";
-import { gitWorkTreePrefix, listIndexEntries, listUntrackedPaths, type GitIndexEntry } from "./git-index.js";
+import { gitWorkTreePrefix, listIndexEntries, listTypeChangedPaths, listUntrackedPaths, type GitIndexEntry } from "./git-index.js";
 import { createPathPolicy } from "./policy.js";
-import type { ExcludedFile, ExclusionReason, RepositoryFile, RepositoryFileState, RepositoryScan, ScanOptions } from "./types.js";
+import type {
+  ExcludedFile, ExclusionReason, FileTypeChange, RepositoryFile, RepositoryFileState, RepositoryScan, ScanOptions,
+} from "./types.js";
 
 const MODE_SYMLINK = "120000";
 const MODE_GITLINK = "160000";
+const REGULAR_MODES = new Set(["100644", "100755"]);
 /** Longest symlink text read from a checked-out link file (core.symlinks=false). */
 const MAX_LINK_TEXT = 4096;
 
@@ -70,28 +73,41 @@ interface Candidate {
 }
 
 /**
- * Lists the files to index under root, which must be the top level of a Git work tree.
- * Uses three batch Git queries and one lstat per file and per directory; reads no file content
- * except the text of symlinks checked out as plain files.
+ * Lists the files to index under root, which must be the top level of a Git work tree (DUO MVP
+ * requires Git: GIT_REPOSITORY_REQUIRED otherwise). Uses four batch Git queries and one lstat per
+ * file and per directory; reads no file content except the text of symlinks checked out as plain files.
  */
 export async function scanRepository(root: string, options: ScanOptions = {}): Promise<RepositoryScan> {
   const rootDir = path.resolve(root);
-  const fail = (d: Diagnostic): RepositoryScan => ({ files: [], excluded: [], diagnostics: [d] });
+  const fail = (d: Diagnostic): RepositoryScan => ({ files: [], excluded: [], typeChanges: [], diagnostics: [d] });
 
   const prefix = await gitWorkTreePrefix(rootDir);
-  if (!prefix.ok) return fail(createDiagnostic("SCAN_ROOT_INVALID", `"${rootDir}" is not a Git work tree: ${prefix.message}`));
+  if (!prefix.ok) {
+    return fail(prefix.gitMissing === true
+      ? createDiagnostic("GIT_COMMAND_FAILED", `Cannot scan "${rootDir}": ${prefix.message}`)
+      : createDiagnostic("GIT_REPOSITORY_REQUIRED", `"${rootDir}" is not a Git work tree; DUO requires a Git repository: ${prefix.message}`));
+  }
   if (prefix.value !== "") {
     return fail(createDiagnostic("SCAN_ROOT_INVALID", `"${rootDir}" is not the top level of its Git work tree (it is "${prefix.value}")`));
   }
-  const [indexResult, untrackedResult] = await Promise.all([listIndexEntries(rootDir), listUntrackedPaths(rootDir)]);
+  const [indexResult, untrackedResult, typeChangedResult] = await Promise.all([
+    listIndexEntries(rootDir), listUntrackedPaths(rootDir), listTypeChangedPaths(rootDir),
+  ]);
   if (!indexResult.ok) return fail(createDiagnostic("GIT_COMMAND_FAILED", `git ls-files --stage failed: ${indexResult.message}`));
   if (!untrackedResult.ok) return fail(createDiagnostic("GIT_COMMAND_FAILED", `git ls-files --others failed: ${untrackedResult.message}`));
+  if (!typeChangedResult.ok) return fail(createDiagnostic("GIT_COMMAND_FAILED", `git diff-files failed: ${typeChangedResult.message}`));
+  const gitTypeChanged = typeChangedResult.value;
 
   const policy = createPathPolicy(options.include, options.exclude);
   const diagnostics: Diagnostic[] = policy.invalidPatterns.map((p) =>
     createDiagnostic("INVALID_PATH", `index pattern "${p}" is not a repository-relative glob; it is ignored`));
   const files: RepositoryFile[] = [];
   const excluded: ExcludedFile[] = [];
+  const typeChanges: FileTypeChange[] = [];
+  const typeChanged = (p: RepoPath, index: FileTypeChange["index"], workingTree: FileTypeChange["workingTree"]) => {
+    typeChanges.push({ path: p, index, workingTree });
+    diagnostics.push(createDiagnostic("FILE_TYPE_CHANGED", `"${p}" is a ${index} in the Git index but a ${workingTree} in the working tree`, { path: p }));
+  };
   const exclude = (c: { path: RepoPath; state: RepositoryFileState }, reason: ExclusionReason) =>
     excluded.push({ path: c.path, state: c.state, reason });
 
@@ -158,11 +174,20 @@ export async function scanRepository(root: string, options: ScanOptions = {}): P
     }
     const absolute = path.join(rootDir, candidate.path);
     const kind = entryKind(absolute);
-    if (kind === "symlink" || candidate.index?.mode === MODE_SYMLINK) {
+    const indexMode = candidate.index?.mode;
+    // Index symlink, working-tree regular file, and Git (with core.symlinks) calls it a type change.
+    const symlinkReplacedByFile = indexMode === MODE_SYMLINK && kind === "file" && gitTypeChanged.has(candidate.path);
+    if (symlinkReplacedByFile) {
+      typeChanged(candidate.path, "symlink", "regular-file");
+      files.push({ path: candidate.path, state: candidate.state });
+      continue;
+    }
+    if (kind === "symlink" || indexMode === MODE_SYMLINK) {
       if (kind === "missing") {
         exclude(candidate, "missing");
         continue;
       }
+      if (kind === "symlink" && indexMode !== undefined && REGULAR_MODES.has(indexMode)) typeChanged(candidate.path, "regular-file", "symlink");
       exclude(candidate, "symlink");
       reportSymlink(candidate.path, kind);
       continue;
@@ -182,6 +207,7 @@ export async function scanRepository(root: string, options: ScanOptions = {}): P
 
   files.sort((a, b) => compareUtf8(a.path, b.path));
   excluded.sort((a, b) => compareUtf8(a.path, b.path));
+  typeChanges.sort((a, b) => compareUtf8(a.path, b.path));
   diagnostics.push(...findPathPortabilityCollisions(files.map((f) => f.path)));
-  return { files, excluded, diagnostics: diagnostics.sort(compareDiagnostics) };
+  return { files, excluded, typeChanges, diagnostics: diagnostics.sort(compareDiagnostics) };
 }

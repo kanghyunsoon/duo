@@ -17,7 +17,7 @@ export interface FingerprintChange {
 
 /**
  * One entry per path in either set, in UTF-8 path order. CHANGED means a different contentHash or
- * kind. A state change (untracked → tracked) with the same content is UNCHANGED; both
+ * fingerprintMode. A state change (untracked → tracked) with the same content is UNCHANGED; both
  * fingerprints are attached so the caller can see it. A rename is DELETED + ADDED.
  */
 export function compareFingerprints(previous: readonly FileFingerprint[], current: readonly FileFingerprint[]): FingerprintChange[] {
@@ -31,7 +31,7 @@ export function compareFingerprints(previous: readonly FileFingerprint[], curren
     if (a === undefined && b !== undefined) changes.push({ path: p, status: "ADDED", current: b });
     else if (b === undefined && a !== undefined) changes.push({ path: p, status: "DELETED", previous: a });
     else if (a !== undefined && b !== undefined) {
-      const same = a.contentHash === b.contentHash && a.kind === b.kind;
+      const same = a.contentHash === b.contentHash && a.fingerprintMode === b.fingerprintMode;
       changes.push({ path: p, status: same ? "UNCHANGED" : "CHANGED", previous: a, current: b });
     }
   }
