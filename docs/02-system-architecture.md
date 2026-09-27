@@ -101,7 +101,7 @@ CLI 명령과 MCP Tool은 실행 전 증분 인덱싱을 한 번 한다. 변경 
 | MCP 서버 | Agent 세션 동안 | generated/, cache/, runtime/, decisions/proposals/(새 파일) |
 | UI 서버 | 사용자가 종료할 때까지 | decisions/(Confirm/Reject만) |
 
-SQLite는 WAL 모드로 연다. Graph 쓰기는 `generated/.lock` 파일 잠금으로 한 프로세스만 하고, 잠금을 얻지 못한 프로세스는 마지막 commit 상태를 읽기만 한다(snapshot visibility). 이때 갱신하지 못한 Node의 freshness는 `unknown`으로 표시한다. freshness는 GraphStore가 아니라 Indexer의 비교 결과다(C31). Decision 파일 쓰기는 임시 파일에 쓴 뒤 rename하는 원자적 교체로 한다.
+SQLite는 WAL 모드로 연다. Graph 쓰기는 SQLite writer lock(`BEGIN IMMEDIATE`)으로 한 프로세스만 하고 Indexer는 transaction 안에서 index state token을 다시 확인한다(T08). 잠금을 얻지 못한 프로세스는 마지막 commit 상태를 읽기만 한다(snapshot visibility). 이때 갱신하지 못한 Node의 freshness는 `unknown`으로 표시한다. freshness는 GraphStore가 아니라 Indexer의 비교 결과다(C31). Decision 파일 쓰기는 임시 파일에 쓴 뒤 rename하는 원자적 교체로 한다.
 
 ## 오류 처리
 

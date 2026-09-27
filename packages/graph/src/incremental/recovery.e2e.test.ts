@@ -7,7 +7,8 @@ import type { GraphStore } from "../store/types.js";
 import { ANALYSIS_CACHE_DIR } from "./analysis-cache.js";
 import { indexRepository, type IndexOptions } from "./indexer.js";
 import { INDEX_STATE_FILE_PATH } from "./state.js";
-import { baseRegistry, cleanRebuild, countingRegistry, invariantProblems, makeRepo, memoryStore, type TestRepo } from "./testing.js";
+import { persistentDiagnostics } from "@duo-director/core";
+import { baseRegistry, cleanRebuildWithDiagnostics, countingRegistry, invariantProblems, makeRepo, memoryStore, type TestRepo } from "./testing.js";
 
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
 
@@ -32,7 +33,9 @@ const statePath = () => path.join(repo.root, INDEX_STATE_FILE_PATH);
 async function run(options: Partial<IndexOptions> = {}, registry: AnalyzerRegistry = base, oracle: AnalyzerRegistry = registry) {
   const r = await indexRepository(repo.root, { store, registry, historyWindow: WINDOW, ...options });
   if (r.value !== undefined) {
-    expect(dumpGraph(options.store ?? store)).toEqual(await cleanRebuild(repo.root, oracle, WINDOW));
+    const expected = await cleanRebuildWithDiagnostics(repo.root, oracle, WINDOW);
+    expect(dumpGraph(options.store ?? store)).toEqual(expected.graph);
+    expect(persistentDiagnostics(r.diagnostics)).toEqual(expected.diagnostics);
     expect(invariantProblems(options.store ?? store, repo.root)).toEqual([]);
   }
   return r;

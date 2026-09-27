@@ -49,6 +49,12 @@ export interface ModuleResolver {
    * tsconfig.json/jsconfig.json and the files it extends (inside the repository). Empty without a config.
    */
   configFiles(fromPath: RepoPath): readonly RepoPath[];
+  /**
+   * Problems of one config file (the nearest config of some file), recorded when it was read.
+   * Undefined when it was not read in this run, unless load is set (reading a config is cheap and
+   * resolves nothing). Lets an incremental build report the same persistent diagnostics (T08.1).
+   */
+  configDiagnostics(configPath: RepoPath, options?: { readonly load?: boolean }): readonly Diagnostic[] | undefined;
   /** Problems found while reading configuration (tsconfig.json / jsconfig.json). */
   readonly diagnostics: readonly Diagnostic[];
 }

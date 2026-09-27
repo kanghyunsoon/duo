@@ -198,7 +198,9 @@ Previous state(index-state.json) + 현재 Repository
 - **Project Truth 변경**: Project Truth는 매번 읽고 관련 Node와 Edge(IMPLEMENTS, GOVERNS, TRACKED_BY, VALIDATED_BY, SUPERSEDES 등)를 다시 계산한다. source는 parse하지 않는다.
 - **rename**: 삭제 + 추가다. Symbol ID가 경로를 포함하므로 새 ID가 되고 이전 Symbol과 같다고 주장하지 않는다. Project Truth의 `implements.symbols`, `governs.symbols`가 이전 이름을 가리키면 `DECLARED_SYMBOL_UNRESOLVED`로 남고 Project Truth를 자동으로 고치지 않는다(C45).
 - **CHANGED_WITH**: 최근 500 commit window 전체로 매번 다시 계산한다. HEAD(와 shallow 여부)가 그대로면 저장된 window 요약을 쓰고, 바뀌면 window를 다시 읽는다. 새 commit만 누적하면 window에서 빠진 commit의 count가 남아 전체 재구축과 달라지기 때문이다(H-25). rolling window 최적화는 benchmark에서 비용이 확인되면 Post-MVP에서 검토한다.
-- **freshness**는 Indexer가 정하고 GraphStore는 판정하지 않는다([03 Freshness 책임](03-data-model.md#freshness-책임)). Analyzer나 resolver의 version이 바뀌면 그 결과 전체를 다시 계산한다.
+- **freshness**는 Indexer가 정하고 GraphStore는 판정하지 않는다([03 Freshness 책임](03-data-model.md#freshness-책임)). Analyzer나 resolver의 version이 바뀌면 그 결과 전체를 다시 계산한다. 쓰지 않고 판정만 보는 경로는 `inspectIndex()`이며 같은 판정 함수를 쓴다(T08.1).
+- **diagnostics**(T08.1): 같은 상태면 증분과 전체 재구축의 persistent diagnostics가 같다. 재사용한 계산의 diagnostics도 함께 재사용한다([03 Diagnostics](03-data-model.md#diagnostics)).
+- **graph_revision**은 저장된 Project Graph 내용이 바뀐 revision이다. Requirement 본문처럼 Graph payload에 없는 내용만 바뀌면 오르지 않을 수 있고 이것은 버그가 아니다. 그런 내용에 의존하는 cache(Context Packet)는 graph_revision 외의 dependency를 봐야 한다([05](05-context-compiler.md)).
 
 ## 일관성 불변식
 

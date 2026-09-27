@@ -4,7 +4,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { dumpGraph } from "../check.js";
 import type { GraphStore } from "../store/types.js";
 import { indexRepository } from "./indexer.js";
-import { baseRegistry, cleanRebuild, countingRegistry, edge, edgeCount, invariantProblems, makeRepo, memoryStore, nodeExists, type CountingRegistry, type TestRepo } from "./testing.js";
+import { persistentDiagnostics, type Diagnostic } from "@duo-director/core";
+import { baseRegistry, cleanRebuildWithDiagnostics, countingRegistry, edge, edgeCount, invariantProblems, makeRepo, memoryStore, nodeExists, type CountingRegistry, type TestRepo } from "./testing.js";
 import type { IndexResult } from "./types.js";
 
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
@@ -17,11 +18,14 @@ let counting: CountingRegistry;
 let repo: TestRepo;
 let store: GraphStore;
 const report: Record<string, unknown>[] = [];
+let lastDiagnostics: readonly Diagnostic[] = [];
 
 beforeAll(async () => {
   base = await baseRegistry();
   counting = countingRegistry(base);
   repo = makeRepo(temps);
+  // A real persistent warning that must survive cache reuse (T08.1): TypeScript rejects the unknown option.
+  repo.edit("tsconfig.json", '"compilerOptions": {', '"compilerOptions": {\n    "notAnOption": true,');
   for (const message of ["APP-10 tweak", "UTF-8 fix", "more"]) {
     for (const f of ["src/auth/login.ts", "src/app.ts"]) fs.appendFileSync(`${repo.root}/${f}`, `// ${message}\n`);
     repo.git("commit", "-q", "-am", message);
@@ -44,9 +48,12 @@ async function step(name: string, expectedMode: "full" | "incremental" = "increm
   if (r.value === undefined) throw new Error(JSON.stringify(r.diagnostics));
   expect(r.value.mode).toBe(expectedMode);
   expect(counting.parses).toBe(r.value.metrics.files.analyzed);
-  const oracle = await cleanRebuild(repo.root, base, WINDOW);
-  expect(dumpGraph(store)).toEqual(oracle);
+  const oracle = await cleanRebuildWithDiagnostics(repo.root, base, WINDOW);
+  expect(dumpGraph(store)).toEqual(oracle.graph);
+  // T08.1: the same persistent diagnostics as the clean rebuild, although analyses and resolutions were reused.
+  expect(persistentDiagnostics(r.diagnostics)).toEqual(oracle.diagnostics);
   expect(invariantProblems(store, repo.root)).toEqual([]);
+  lastDiagnostics = r.diagnostics;
   const m = r.value.metrics;
   report.push({
     step: name, mode: m.mode, analyzed: m.files.analyzed, reused: m.files.analysisReused,
@@ -74,6 +81,9 @@ describe("AC-008-01 incremental result == clean full rebuild, mutation by mutati
     expect(r.metrics.resolution.modulesRecomputed + r.metrics.resolution.callsRecomputed).toBe(0);
     expect(r.metrics.graph.written).toBe(false);
     expect(store.readMeta("graph_revision")).toBe(revision);
+    // Nothing was parsed or resolved, yet the persistent warnings are all reported again.
+    const codes = new Set(persistentDiagnostics(lastDiagnostics).map((d) => d.code));
+    for (const code of ["TSCONFIG_INVALID", "MODULE_UNRESOLVED", "ANNOTATION_TARGET_UNKNOWN"]) expect(codes).toContain(code);
   });
 
   it("source file body changed", async () => {

@@ -28,7 +28,9 @@ export { HISTORY_WINDOW, MAX_ISSUE_COMMITS, summarizeHistory } from "./build/his
 export { codeFileOf, edgeRow, edgeScope, nodeRow, nodeScope, scopeDigests, TRUTH_SCOPE } from "./build/scope.js";
 export { collectGraphFacts, type CollectOptions } from "./build/collect.js";
 export { checkGraph, dumpGraph, type GraphCheckOptions } from "./check.js";
-export { GRAPH_DB_FILE_PATH, indexRepository, isResolutionConfigFile, type IndexOptions } from "./incremental/indexer.js";
+export { GRAPH_DB_FILE_PATH, indexRepository, isResolutionConfigFile, openProjectGraphStore, type IndexOptions } from "./incremental/indexer.js";
+export { inspectIndex, type IndexInspection, type IndexStatus, type InspectOptions } from "./incremental/inspect.js";
+export type { IndexedGraph } from "./incremental/assess.js";
 export type {
   AnalysisFreshness, FileFreshness, FileFreshnessRecord, FullRebuildReason, IndexMetrics, IndexMode, IndexResult, ModuleResolutionFreshness,
 } from "./incremental/types.js";

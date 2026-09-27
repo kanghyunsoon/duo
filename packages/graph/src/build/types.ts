@@ -113,6 +113,8 @@ export interface ResolutionMemo {
   readonly changedFiles: ReadonlySet<RepoPath>;
   /** The call resolution rules changed: no stored call result is reused. */
   readonly callVersionChanged: boolean;
+  /** Stored diagnostics of config files not read again in this run (T08.1). */
+  readonly configDiagnostics: ReadonlyMap<RepoPath, readonly Diagnostic[]>;
 }
 
 export interface ResolutionWork {
@@ -138,6 +140,8 @@ export interface GraphBuildPlan {
   /** Resolution results per analyzed file, for the next incremental build. */
   readonly resolution: ReadonlyMap<RepoPath, FileResolution>;
   readonly resolutionWork: ResolutionWork;
+  /** Diagnostics of each nearest config file used by an analyzed file (fresh or reused), for the next incremental build. */
+  readonly configDiagnostics: ReadonlyMap<RepoPath, readonly Diagnostic[]>;
   /** False when validation found an error (conflicting node, invalid payload or endpoint): the plan must not be applied. */
   readonly valid: boolean;
 }

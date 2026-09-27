@@ -4,7 +4,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { dumpGraph } from "../check.js";
 import type { GraphStore } from "../store/types.js";
 import { indexRepository } from "./indexer.js";
-import { baseRegistry, cleanRebuild, invariantProblems, makeRepo, memoryStore, type TestRepo } from "./testing.js";
+import { persistentDiagnostics } from "@duo-director/core";
+import { baseRegistry, cleanRebuildWithDiagnostics, invariantProblems, makeRepo, memoryStore, type TestRepo } from "./testing.js";
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
@@ -123,7 +124,9 @@ describe("AC-008-01 random change sequences (seeded) stay equal to a clean full 
       const r = await indexRepository(repo.root, { store, registry: base, historyWindow: WINDOW });
       if (r.value === undefined) throw new Error(`step ${s} failed: ${JSON.stringify(r.diagnostics)}\n${applied.join("\n")}`);
       expect(r.value.mode, applied.join("\n")).toBe("incremental");
-      expect(dumpGraph(store), applied.join("\n")).toEqual(await cleanRebuild(repo.root, base, WINDOW));
+      const oracle = await cleanRebuildWithDiagnostics(repo.root, base, WINDOW);
+      expect(dumpGraph(store), applied.join("\n")).toEqual(oracle.graph);
+      expect(persistentDiagnostics(r.diagnostics), applied.join("\n")).toEqual(oracle.diagnostics);
       expect(invariantProblems(store, repo.root)).toEqual([]);
     }
     expect(applied.length).toBeGreaterThanOrEqual(STEPS);

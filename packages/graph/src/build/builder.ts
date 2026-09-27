@@ -96,6 +96,7 @@ class Builder {
   private readonly moduleResults = new Map<RepoPath, ReadonlyMap<ModuleReference, ModuleResolution>>();
   private readonly resolution = new Map<RepoPath, FileResolution>();
   private readonly callFreshness = new Map<RepoPath, CallResolutionFreshness>();
+  private readonly configDiagnosticsOut = new Map<RepoPath, readonly Diagnostic[]>();
   private readonly work = { filesModulesRecomputed: 0, modulesRecomputed: 0, modulesReused: 0, filesCallsRecomputed: 0, callsRecomputed: 0, callsReused: 0 };
 
   constructor(private readonly input: GraphBuildInput, private readonly memo?: ResolutionMemo) {
@@ -160,6 +161,7 @@ class Builder {
       nodes, edges, diagnostics: this.diagnostics, stats: this.stats(nodes, edges),
       moduleResolutions: this.moduleResolutions, callResolutions: this.callResolutions,
       resolution: this.resolution, resolutionWork: { ...this.work, callFreshness: this.callFreshness }, valid: this.valid,
+      configDiagnostics: this.configDiagnosticsOut,
     };
   }
 
@@ -446,6 +448,7 @@ class Builder {
 
   private modulesAndCalls(): void {
     this.resolveModules();
+    this.reportConfigDiagnostics();
     for (const [path, ctx] of [...this.contexts].sort(([a], [b]) => compareUtf8(a, b))) {
       const file = fileRef(path);
       for (const ref of ctx.analysis.moduleReferences) {
@@ -522,6 +525,22 @@ class Builder {
           (old) => json({ ...old, callSites: (typeof old.callSites === "number" ? old.callSites : 0) + 1 }));
       });
       this.validatedByCalls(path, ctx, exactTargets);
+    }
+  }
+
+  /**
+   * Diagnostics of every nearest config an analyzed file uses. A full build reads each of them; an
+   * incremental build that did not read one again reports its stored diagnostics, so both report
+   * the same persistent diagnostics (T08.1).
+   */
+  private reportConfigDiagnostics(): void {
+    const heads = new Set<RepoPath>();
+    for (const r of this.resolution.values()) if (r.configFiles[0] !== undefined) heads.add(r.configFiles[0]);
+    const resolver = this.input.moduleResolver;
+    for (const head of [...heads].sort(compareUtf8)) {
+      const list = resolver.configDiagnostics(head) ?? this.memo?.configDiagnostics.get(head) ?? resolver.configDiagnostics(head, { load: true }) ?? [];
+      this.configDiagnosticsOut.set(head, list);
+      this.diagnostics.push(...list);
     }
   }
 

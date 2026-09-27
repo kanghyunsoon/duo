@@ -282,13 +282,17 @@ collectGraphFacts(root)      ProjectTruth + TraceModel, Scan/fingerprint, Source
 | call resolution | analysis 재사용 AND module 결과 같음 AND export dependency 파일의 analysis·module 결과 변화 없음 AND `CALL_RESOLUTION_VERSION` 같음 | `files[].resolution.calls`, `exportDependencies` |
 | Git history window | HEAD OID와 shallow 여부 같음 | `history.summary` |
 
-- **state**: `generated/index-state.json`(`duo-index-state` version 1). `token`, `graphSchemaVersion`, `moduleResolutionVersion`, `callResolutionVersion`, `historyWindow`, `files[]`(fingerprint 필드, `analysis` {analyzer, version, status ok·failed}, `resolution` {modules, calls, exportDependencies, configFiles}, scope digest), `configs`(resolver가 읽은 config 파일 → contentHash), `truthScope`, `history` {headOid, shallow, summary}. 원문, SourceAnalysis, commit message는 넣지 않는다. zod strict schema로 읽고 `token`(내용의 sha256)이 맞는지 확인한다.
+- **state**: `generated/index-state.json`(`duo-index-state` version 2. 2는 T08.1: config diagnostics와 `git` {headOid, branch, detached}). `token`, `graphSchemaVersion`, `moduleResolutionVersion`, `callResolutionVersion`, `historyWindow`, `files[]`(fingerprint 필드, `analysis` {analyzer, version, status ok·failed}, `resolution` {modules, calls, exportDependencies, configFiles}, scope digest), `configs`(resolver가 읽은 config 파일 → contentHash, 가장 가까운 config에는 그 diagnostics), `truthScope`, `history` {headOid, shallow, summary}. 원문, SourceAnalysis, commit message는 넣지 않는다. zod strict schema로 읽고 `token`(내용의 sha256)이 맞는지 확인한다.
 - **analysis cache**: key는 sha256(path, contentHash, analyzer, analyzerVersion)이다. 항목은 불변이고 읽을 때 key 값을 다시 확인하며, 없거나 다르면 cache miss(analysis `missing`)로 다시 parse한다. syntax 사실과 그 diagnostics만 있고 원문은 없다. 성공한 실행 뒤 현재 파일이 쓰지 않는 항목을 지운다. 실패한 analysis는 cache하지 않고 매 실행 다시 시도한다(C58).
 - **Scope와 diff**: Node와 Edge는 scope 하나에 속한다. File·Symbol·Test는 그 파일 scope(`file:<path>`)이고, Edge는 source 쪽 code Node의 파일, 없으면 target 쪽, 둘 다 아니면 Project Truth scope다. state는 scope마다 canonical 행의 sha256을 둔다. digest가 바뀐 scope만 DB에서 읽어(`listNodes({ ownerFile })`, 인접 Edge) 행 단위로 비교하고 추가·갱신·삭제를 계산한다(`diffScopes`). 바뀌지 않은 scope는 읽지도 쓰지도 않는다.
 - **Atomicity**: Graph 변경과 `meta.index_state_token`(새 state의 token)을 한 transaction에 쓰고 commit 뒤 state 파일을 임시 파일 + rename으로 바꾼다. transaction 안에서 이전 token을 다시 확인해 다른 writer의 변경 위에 쓰지 않는다. Graph가 바뀌면 `meta.graph_revision`을 1 올린다. 그다음 `fingerprints.json`을 쓴다. 변경이 없으면 아무것도 쓰지 않는다(C59).
 - **Recovery**: state 없음(`no-state`), 손상 또는 token이 내용과 다름(`state-invalid`, `INDEX_STATE_INVALID`), 다른 format·version(`state-unsupported`), DB token과 다름(`state-mismatch`: commit과 state 쓰기 사이의 중단), graph schema나 history window가 다름(`incompatible`), 요청(`requested`)이면 전체 재구축한다. 전체 재구축은 analysis cache를 쓰지 않는다. transaction이 실패하면 Graph와 state 모두 이전 그대로이고 다음 실행이 이어서 갱신한다. graph DB의 schema version이 다르면 `onUnsupportedSchema: "recreate"`로 다시 만든다.
 - **Freshness**: 파일 `fresh | changed | added | deleted | unknown`, analysis `fresh | stale-content | stale-analyzer | missing | failed`, module `fresh | missing | stale-version | stale-source | stale-file-set | stale-config`, call `fresh | missing | stale-version | stale-source | stale-modules | stale-dependency`. 결과의 `freshness`는 실행 전 상태, 곧 무엇을 왜 다시 계산했는지다.
 - **Metrics**: mode, fullRebuildReason, files(total, unchanged, changed, added, deleted, analyzed = parse 횟수, analysisReused, analysisFailed), resolution(module·call 재계산/재사용 수와 파일 수), history(recomputed, commits), graph(scopes, scopesChanged, Node·Edge 추가/갱신/삭제, written).
+- **Diagnostics(T08.1)**: 결과 diagnostics는 canonical 순서다. persistent diagnostics는 clean full rebuild(`collectGraphFacts` + `buildGraphPlan`)와 같다. config 진단은 builder가 plan에 넣고, 이번 실행에서 config를 다시 읽지 않았으면 state에 저장된 것을 쓴다.
+- **Read-only inspection(T08.1)**: `inspectIndex(root, { graph })`는 scan, fingerprint, Project Truth, config, version, history를 비교하고 invalidation을 계획하지만 쓰지 않는다(GraphStore 쓰기, state·fingerprint 파일, analysis cache, graph_revision 모두 없음). `graph`는 schema version과 meta 읽기만 받는다. 결과는 `status`(current = 실행해도 쓸 것이 없음, stale, missing, incompatible), `fullRebuildReason`, 경로별 freshness(파일·analysis·module은 Indexer와 같은 판정, call은 상한 예측), 바뀐 Project Truth와 config, history(기록된·현재 HEAD, 재계산 여부), `wouldRebuild`(full, parse, modules, calls, history, projectTruth)다. 판정 함수는 Indexer와 공유한다(`incremental/assess.ts`). `duoctl status`, MCP `duo_get_status`, UI가 이 결과를 쓰며 UI 전용 freshness 로직은 두지 않는다.
+- **열기**: `openProjectGraphStore(root)`는 `generated/`를 만들고 graph DB를 열며 다른 schema version이면 다시 만든다.
+- **한계(node_modules)**: `node_modules`와 index 대상이 아닌 파일은 fingerprint하지 않는다. `package.json`, lockfile, tsconfig/jsconfig 변경이 resolution 무효화 신호이며, 이 파일들을 바꾸지 않고 `node_modules`만 바뀌면(예: 다른 버전 설치, workspace link 변경) 저장된 resolution이 현재 환경과 다를 수 있다. 이때는 전체 재구축(`indexRepository(root, { full: true })`, 이후 `duoctl index --full`)으로 복구한다. `node_modules` 전체 fingerprint는 하지 않는다(C61).
 
 ## SourceLocation
 
@@ -311,6 +315,12 @@ type ParseResult<T> = { value?: T; diagnostics: readonly Diagnostic[] };
 ```
 
 Parser와 loader는 예외를 던지지 않고 모든 문제를 모은다. 일부 파일이 실패해도 읽을 수 있는 Project Truth는 value로 돌려준다. 코드와 기본 심각도는 `DIAGNOSTIC_SEVERITY`에 있다.
+
+**Persistent / transient(T08.1)**: 코드마다 성격을 중앙 registry `DIAGNOSTIC_PERSISTENCE`에 둔다(`satisfies Record<DiagnosticCode, …>`라 새 코드는 분류 없이 컴파일되지 않는다).
+
+- **persistent**: 저장소 내용, Project Truth, DUO 버전의 결정적 함수다. 예: `TSCONFIG_INVALID`, `MODULE_UNRESOLVED`, `MODULE_AMBIGUOUS`, `ANNOTATION_TARGET_UNKNOWN`, `DECLARED_SYMBOL_UNRESOLVED`, `PATH_PORTABILITY_COLLISION`, `AST_PARSE_ERROR`, 스키마·추적성 진단, `DECISION_LOCK_MISMATCH`.
+- **transient**: 실행 환경이나 요청한 조작의 결과다. 예: IO(`FILE_READ_ERROR`, `FILE_WRITE_ERROR`), Git 프로세스 실패(`GIT_COMMAND_FAILED` 등), 잠금·쓰기 거부(`GRAPH_WRITE_REFUSED`, `DECISION_LOCK_BUSY`), 로컬 generated 상태(`INDEX_STATE_INVALID`, `FINGERPRINT_CACHE_INVALID`, `GRAPH_OPEN_FAILED`), parse 시간 초과, write boundary와 DecisionService 조작 결과.
+- **불변식**: 동일 Repository + 동일 Project Truth + 동일 DUO Version이면 persistent diagnostics가 같다. `persistentDiagnostics()`는 persistent만 골라 canonical 순서(위치, code, severity, message)로 정렬하고 중복을 없앤다. 증분 실행이 계산을 재사용해도 그 계산의 persistent diagnostics는 함께 재사용한다(analysis cache 항목, index-state의 config diagnostics). diagnostic을 다시 만들려고 parse나 resolution을 하지 않는다.
 
 | 영역 | 코드 |
 |---|---|

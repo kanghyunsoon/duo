@@ -91,7 +91,15 @@ OMITTED      14 nodes (names only in --json)
 
 ## 결정성
 
-같은 `meta.graph_revision`, 같은 Task, 같은 budget이면 byte 단위로 같은 Packet이 나와야 한다(REQ-NFR-005). 시각 등 가변 값은 Packet 본문에 넣지 않는다. 같은 입력의 Packet은 `cache/packets/`에 저장해 재사용할 수 있다.
+같은 입력이면 byte 단위로 같은 Packet이 나와야 한다(REQ-NFR-005). 시각 등 가변 값은 Packet 본문에 넣지 않는다.
+
+**Packet cache key(T08.1에서 예약, 구현은 TASK-010)**: `meta.graph_revision` 하나를 cache key로 쓰지 않는다. Requirement 본문이 바뀌어도 Graph 구조와 payload는 그대로일 수 있어 graph_revision이 오르지 않고, 그러면 이전 Packet을 재사용하게 된다. 전역 `index_state_token`도 기본 key로 쓰지 않는다. 관계없는 파일 하나가 바뀌어도 모든 Packet이 무효가 되기 때문이다. TASK-010은 Packet이 실제로 의존한 내용으로 **Packet Dependency Digest**를 계산한다.
+
+- task/input digest, compiler policy version, token budget·profile
+- 선택한 Graph identity(Node ID와 Edge key)
+- 선택한 Requirement·Decision의 source 내용 hash, 선택한 source file의 content hash, 선택한 evidence hash
+
+같은 digest의 Packet만 `cache/packets/`에서 재사용한다.
 
 ## Review용 소형 Packet
 

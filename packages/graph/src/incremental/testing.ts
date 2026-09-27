@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createAnalyzerRegistry, createDefaultAnalyzerRegistry, readFingerprintFile, type AnalyzerRegistry, type LanguageAnalyzer } from "@duo-director/analyzer";
-import type { EntityRef, RepoPath } from "@duo-director/core";
+import { persistentDiagnostics, type Diagnostic, type EntityRef, type RepoPath } from "@duo-director/core";
 import { applyGraphPlan } from "../build/apply.js";
 import { buildGraphPlan } from "../build/builder.js";
 import { collectGraphFacts } from "../build/collect.js";
@@ -97,8 +97,8 @@ export function memoryStore(): GraphStore {
   return opened.value;
 }
 
-/** The oracle: a clean full rebuild (T07 collect + build + apply) into a fresh database, as canonical rows. */
-export async function cleanRebuild(root: string, registry: AnalyzerRegistry, historyWindow: number): Promise<ReturnType<typeof dumpGraph>> {
+/** The oracle: a clean full rebuild (T07 collect + build + apply) into a fresh database: canonical rows and persistent diagnostics. */
+export async function cleanRebuildWithDiagnostics(root: string, registry: AnalyzerRegistry, historyWindow: number): Promise<{ graph: ReturnType<typeof dumpGraph>; diagnostics: Diagnostic[] }> {
   const facts = await collectGraphFacts(root, { registry, maxCommits: historyWindow });
   if (facts.value === undefined) throw new Error(JSON.stringify(facts.diagnostics));
   const plan = buildGraphPlan(facts.value);
@@ -106,10 +106,14 @@ export async function cleanRebuild(root: string, registry: AnalyzerRegistry, his
   try {
     const applied = applyGraphPlan(store, plan);
     if (applied.value === undefined) throw new Error(JSON.stringify(applied.diagnostics));
-    return dumpGraph(store);
+    return { graph: dumpGraph(store), diagnostics: persistentDiagnostics([...facts.diagnostics, ...plan.diagnostics]) };
   } finally {
     store.close();
   }
+}
+
+export async function cleanRebuild(root: string, registry: AnalyzerRegistry, historyWindow: number): Promise<ReturnType<typeof dumpGraph>> {
+  return (await cleanRebuildWithDiagnostics(root, registry, historyWindow)).graph;
 }
 
 export function invariantProblems(store: GraphReader, root: string): string[] {

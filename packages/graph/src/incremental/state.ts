@@ -11,7 +11,7 @@
  * mismatch and rebuilds from scratch.
  */
 import { createHash } from "node:crypto";
-import { createDiagnostic, normalizeRepoPath, STATE_DIR_NAME, type Diagnostic, type ParseResult, type RepoPath } from "@duo-director/core";
+import { createDiagnostic, DIAGNOSTIC_SEVERITY, normalizeRepoPath, STATE_DIR_NAME, type Diagnostic, type ParseResult, type RepoPath } from "@duo-director/core";
 import { z } from "zod";
 import { canonicalJson } from "../store/json.js";
 import type { JsonObject } from "../store/types.js";
@@ -20,7 +20,8 @@ import { readRegenerable, writeRegenerable } from "./files.js";
 
 export const INDEX_STATE_FILE_PATH = `${STATE_DIR_NAME}/generated/index-state.json` as RepoPath;
 export const INDEX_STATE_FORMAT = "duo-index-state";
-export const INDEX_STATE_VERSION = 1;
+/** 2 (T08.1): configs keep the diagnostics of each config file. */
+export const INDEX_STATE_VERSION = 2;
 /** Graph metadata key that holds the token of the state the graph was written with. */
 export const INDEX_STATE_TOKEN_KEY = "index_state_token";
 export const GRAPH_REVISION_KEY = "graph_revision";
@@ -50,14 +51,28 @@ export interface IndexState {
   readonly historyWindow: number;
   /** UTF-8 path order. */
   readonly files: readonly IndexedFileState[];
-  /** Config files the module resolver read (nearest configs and the files they extend) → contentHash. */
-  readonly configs: Readonly<Record<string, string>>;
+  /**
+   * Config files the module resolver read (nearest configs and the files they extend) → contentHash,
+   * and for nearest configs their diagnostics (reported again while the config is not re-read).
+   */
+  readonly configs: Readonly<Record<string, { readonly contentHash: string; readonly diagnostics?: readonly Diagnostic[] }>>;
   readonly truthScope: string;
   readonly history?: { readonly headOid: string; readonly shallow: boolean; readonly summary: HistorySummary };
+  /** Repository state the Project node was built from (T08.1: a branch switch without a new commit is visible). */
+  readonly git?: { readonly headOid?: string; readonly branch?: string; readonly detached: boolean };
 }
 
 const repoPath = z.string().refine((p) => normalizeRepoPath(p).value === p, "not a RepoPath");
 const hash = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
+const storedDiagnostic = z.strictObject({
+  code: z.string().refine((c) => Object.hasOwn(DIAGNOSTIC_SEVERITY, c), "unknown diagnostic code"),
+  severity: z.enum(["error", "warning", "info"]),
+  message: z.string(),
+  source: z.strictObject({
+    path: z.string(), startLine: z.number().int().optional(), startColumn: z.number().int().optional(),
+    endLine: z.number().int().optional(), endColumn: z.number().int().optional(),
+  }).optional(),
+});
 const moduleResolution = z.union([
   z.strictObject({
     status: z.literal("resolved"), path: repoPath, claim: z.literal("typescript-resolution"),
@@ -101,9 +116,10 @@ const indexState = z.strictObject({
   callResolutionVersion: z.number().int(),
   historyWindow: z.number().int().positive(),
   files: z.array(fileState),
-  configs: z.record(z.string(), hash),
+  configs: z.record(z.string(), z.strictObject({ contentHash: hash, diagnostics: z.array(storedDiagnostic).optional() })),
   truthScope: hash,
   history: z.strictObject({ headOid: z.string(), shallow: z.boolean(), summary: historySummary }).optional(),
+  git: z.strictObject({ headOid: z.string().optional(), branch: z.string().optional(), detached: z.boolean() }).optional(),
 });
 
 /** Token of a state: sha256 over its canonical content without the token. */

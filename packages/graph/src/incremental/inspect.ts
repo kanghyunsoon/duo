@@ -1,0 +1,172 @@
+/**
+ * Read-only index inspection (T08.1): what the Indexer would find stale and recompute, without
+ * doing it. Repository scan, fingerprint, Project Truth, config, version and history comparison
+ * and invalidation planning use the same decisions as indexRepository() (assess.ts). Nothing is
+ * written: no graph write, no state or fingerprint file, no analysis cache entry, no revision.
+ * duoctl status, MCP duo_get_status and the UI share this result; none of them has its own
+ * freshness logic.
+ */
+import path from "node:path";
+import {
+  compareFingerprints, createDefaultAnalyzerRegistry, fingerprintRepositoryFiles, openGitProvider, scanRepository, type AnalyzerRegistry, type FileFingerprint,
+} from "@duo-director/analyzer";
+import { canonicalDiagnostics, compareUtf8, failure, loadProjectTruth, success, type Diagnostic, type ParseResult, type RepoPath } from "@duo-director/core";
+import { CALL_RESOLUTION_VERSION } from "../build/builder.js";
+import { HISTORY_WINDOW } from "../build/history.js";
+import { TYPESCRIPT_MODULE_RESOLUTION_VERSION } from "../build/resolve/typescript/typescript-module-resolver.js";
+import type { CallResolutionFreshness } from "../build/types.js";
+import { readCachedAnalysis } from "./analysis-cache.js";
+import {
+  analysisFreshnessOf, FILE_FRESHNESS, loadPreviousState, moduleFreshnessOf, resolutionSignals, STATE_PREFIX, type IndexedGraph,
+} from "./assess.js";
+import { INDEX_STATE_TOKEN_KEY } from "./state.js";
+import type { AnalysisFreshness, FileFreshnessRecord, FullRebuildReason, ModuleResolutionFreshness } from "./types.js";
+
+/**
+ * current: an index run would write nothing. stale: the state is usable and some parts would be
+ * recomputed. missing: no state (or a graph without one). incompatible: the state cannot be
+ * trusted (corrupt, another version, another graph); the next run rebuilds everything.
+ */
+export type IndexStatus = "current" | "stale" | "missing" | "incompatible";
+
+export interface IndexInspection {
+  readonly status: IndexStatus;
+  readonly fullRebuildReason?: FullRebuildReason;
+  /**
+   * Per current or deleted path (UTF-8 order): file, analysis and module freshness as the Indexer
+   * decides them; calls is a prediction and an upper bound (recomputed module results that turn out
+   * equal let the Indexer reuse calls).
+   */
+  readonly freshness: readonly FileFreshnessRecord[];
+  readonly projectTruth: { readonly changed: readonly RepoPath[] };
+  readonly configs: { readonly changed: readonly string[] };
+  readonly history: { readonly recordedHead?: string; readonly currentHead?: string; readonly wouldRecompute: boolean };
+  readonly wouldRebuild: {
+    readonly full: boolean;
+    /** Files that would be parsed. */
+    readonly parse: readonly RepoPath[];
+    readonly modules: readonly RepoPath[];
+    /** Upper bound. */
+    readonly calls: readonly RepoPath[];
+    readonly history: boolean;
+    readonly projectTruth: boolean;
+  };
+}
+
+export interface InspectOptions {
+  /** Only read: the graph's schema version and metadata. */
+  readonly graph: IndexedGraph;
+  readonly registry?: AnalyzerRegistry;
+  readonly historyWindow?: number;
+}
+
+export async function inspectIndex(root: string, options: InspectOptions): Promise<ParseResult<IndexInspection>> {
+  const rootDir = path.resolve(root);
+  const window = options.historyWindow ?? HISTORY_WINDOW;
+  const diagnostics: Diagnostic[] = [];
+  const loaded = loadProjectTruth(rootDir);
+  diagnostics.push(...loaded.diagnostics);
+  if (loaded.value === undefined) return failure(diagnostics);
+  const { truth } = loaded.value;
+  const scan = await scanRepository(rootDir, { include: truth.config.index.include, exclude: truth.config.index.exclude });
+  diagnostics.push(...scan.diagnostics);
+  if (scan.diagnostics.some((d) => d.severity === "error")) return failure(diagnostics);
+  const current = (await fingerprintRepositoryFiles(rootDir, scan.files)).fingerprints;
+
+  const { previous, fullRebuildReason, diagnostics: stateDiagnostics } = loadPreviousState(rootDir, options.graph, window, false);
+  diagnostics.push(...stateDiagnostics);
+  const changes = compareFingerprints(previous?.files ?? [], current);
+  const prevFiles = new Map((previous?.files ?? []).map((f) => [f.path, f] as const));
+
+  let registry = options.registry;
+  if (registry === undefined) {
+    const created = await createDefaultAnalyzerRegistry();
+    diagnostics.push(...created.diagnostics);
+    if (created.value === undefined) return failure(diagnostics);
+    registry = created.value;
+  }
+  const analysis = new Map<RepoPath, AnalysisFreshness>();
+  const changedFiles = new Set<string>(changes.filter((c) => c.status === "DELETED").map((c) => c.path));
+  try {
+    for (const f of current) {
+      if (f.path.startsWith(STATE_PREFIX)) continue;
+      const analyzer = registry.analyzerFor(f.path);
+      if (analyzer === undefined) continue;
+      let freshness = analysisFreshnessOf(previous, prevFiles.get(f.path), f, analyzer);
+      if (freshness === "fresh" && readCachedAnalysis(rootDir, { path: f.path, contentHash: f.contentHash, analyzer: analyzer.id, analyzerVersion: analyzer.version }) === undefined) {
+        freshness = "missing";
+      }
+      analysis.set(f.path, freshness);
+      if (freshness !== "fresh") changedFiles.add(f.path);
+    }
+  } finally {
+    if (options.registry === undefined) registry.dispose();
+  }
+  for (const [p, f] of prevFiles) if (f.resolution !== undefined && !analysis.has(p)) changedFiles.add(p);
+
+  const signals = resolutionSignals(rootDir, changes, previous);
+  const modules = new Map<RepoPath, ModuleResolutionFreshness>();
+  for (const p of analysis.keys()) {
+    modules.set(p, moduleFreshnessOf(p, prevFiles.get(p)?.resolution, previous, TYPESCRIPT_MODULE_RESOLUTION_VERSION, changedFiles, signals));
+  }
+  const moduleWillChange = (p: string) => changedFiles.has(p) || (modules.get(p as RepoPath) ?? "fresh") !== "fresh";
+  const calls = new Map<RepoPath, CallResolutionFreshness>();
+  for (const p of analysis.keys()) {
+    const prev = prevFiles.get(p)?.resolution;
+    let c: CallResolutionFreshness;
+    if (previous === undefined || prev === undefined) c = "missing";
+    else if (previous.callResolutionVersion !== CALL_RESOLUTION_VERSION) c = "stale-version";
+    else if (changedFiles.has(p)) c = "stale-source";
+    else if (modules.get(p) !== "fresh") c = "stale-modules";
+    else if (prev.exportDependencies.some(moduleWillChange)) c = "stale-dependency";
+    else c = "fresh";
+    calls.set(p, c);
+  }
+
+  const git = await openGitProvider(rootDir);
+  const repo = git.value === undefined ? undefined : (await git.value.repositoryState()).value;
+  const recordedHead = previous?.history?.headOid;
+  const wouldRecomputeHistory = repo?.headOid !== undefined
+    && (previous?.history === undefined || recordedHead !== repo.headOid || previous.history.shallow !== repo.shallow);
+  const repositoryMoved = previous !== undefined && (previous.git?.headOid !== repo?.headOid || previous.git?.branch !== repo?.branch
+    || (previous.git?.detached ?? false) !== (repo?.detached ?? false));
+
+  const truthChanged = changes.filter((c) => c.path.startsWith(STATE_PREFIX) && c.status !== "UNCHANGED").map((c) => c.path);
+  // A state or blob OID change with the same content is UNCHANGED for compareFingerprints but still rewrites the File payload or the state.
+  const fingerprintsIdentical = changes.every((c) => c.status === "UNCHANGED" && sameFingerprint(c.previous, c.current));
+  const parse = [...analysis].filter(([, f]) => f !== "fresh").map(([p]) => p).sort(compareUtf8);
+  const moduleList = [...modules].filter(([, f]) => f !== "fresh").map(([p]) => p).sort(compareUtf8);
+  const callList = [...calls].filter(([, f]) => f !== "fresh").map(([p]) => p).sort(compareUtf8);
+  let status: IndexStatus;
+  if (previous === undefined) {
+    status = fullRebuildReason === "no-state" || options.graph.readMeta(INDEX_STATE_TOKEN_KEY) === undefined ? "missing" : "incompatible";
+  } else {
+    const idle = fingerprintsIdentical && parse.length === 0 && moduleList.length === 0 && callList.length === 0 && !wouldRecomputeHistory
+      && !repositoryMoved && signals.changedConfigs.size === 0;
+    status = idle ? "current" : "stale";
+  }
+  const freshness: FileFreshnessRecord[] = changes.map((c) => {
+    const a = analysis.get(c.path);
+    const m = modules.get(c.path);
+    const k = calls.get(c.path);
+    return {
+      path: c.path, file: previous === undefined ? "unknown" : FILE_FRESHNESS[c.status],
+      ...(a === undefined ? {} : { analysis: a }), ...(m === undefined ? {} : { modules: m }), ...(k === undefined ? {} : { calls: k }),
+    };
+  });
+  return success({
+    status, ...(fullRebuildReason === undefined ? {} : { fullRebuildReason }),
+    freshness,
+    projectTruth: { changed: truthChanged },
+    configs: { changed: [...signals.changedConfigs].sort(compareUtf8) },
+    history: { ...(recordedHead === undefined ? {} : { recordedHead }), ...(repo?.headOid === undefined ? {} : { currentHead: repo.headOid }), wouldRecompute: wouldRecomputeHistory },
+    wouldRebuild: {
+      full: previous === undefined, parse, modules: moduleList, calls: callList, history: wouldRecomputeHistory, projectTruth: truthChanged.length > 0,
+    },
+  }, canonicalDiagnostics(diagnostics));
+}
+
+function sameFingerprint(a: FileFingerprint | undefined, b: FileFingerprint | undefined): boolean {
+  return a !== undefined && b !== undefined && a.state === b.state && a.fingerprintMode === b.fingerprintMode && a.contentHash === b.contentHash
+    && a.size === b.size && a.gitBlobOid === b.gitBlobOid;
+}

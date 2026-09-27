@@ -16,29 +16,45 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  compareFingerprints, computeContentHash, createDefaultAnalyzerRegistry, fingerprintModeOf, fingerprintRepositoryFiles, openGitProvider,
-  scanRepository, writeFingerprintFile,
+  compareFingerprints, createDefaultAnalyzerRegistry, fingerprintRepositoryFiles, openGitProvider, scanRepository, writeFingerprintFile,
   type AnalyzerRegistry, type FileFingerprint, type GitRepositoryState,
 } from "@duo-director/analyzer";
-import { compareUtf8, createDiagnostic, failure, loadProjectTruth, STATE_DIR_NAME, success, type Diagnostic, type ParseResult, type RepoPath } from "@duo-director/core";
+import { canonicalDiagnostics, checkWriteBoundary, compareUtf8, createDiagnostic, failure, loadProjectTruth, STATE_DIR_NAME, success, type Diagnostic, type ParseResult, type RepoPath } from "@duo-director/core";
 import { replaceGraph } from "../build/apply.js";
 import { buildGraphPlan, CALL_RESOLUTION_VERSION } from "../build/builder.js";
 import { HISTORY_WINDOW, summarizeHistory } from "../build/history.js";
 import { createTypeScriptModuleResolver } from "../build/resolve/typescript/typescript-module-resolver.js";
 import { fileScope, scopeDigests, TRUTH_SCOPE } from "../build/scope.js";
 import type { AnalyzedFile, FileResolution, HistorySummary, ResolutionMemo } from "../build/types.js";
-import { GraphStoreError, type GraphStore } from "../store/types.js";
+import { openNodeSqliteGraphStore } from "../store/node-sqlite/node-sqlite-graph-store.js";
+import { GraphStoreError, type GraphOpenResult, type GraphStore } from "../store/types.js";
 import { pruneAnalysisCache, readCachedAnalysis, writeCachedAnalysis, type AnalysisCacheKey } from "./analysis-cache.js";
+import {
+  analysisFreshnessOf, FILE_FRESHNESS, hashOnDisk, loadPreviousState, moduleFreshnessOf, resolutionSignals, STATE_PREFIX,
+} from "./assess.js";
 import { applyGraphDiff, diffScopes, type GraphDiff } from "./diff.js";
 import {
-  GRAPH_REVISION_KEY, INDEX_STATE_FORMAT, INDEX_STATE_TOKEN_KEY, INDEX_STATE_VERSION, indexStateToken, readIndexState, writeIndexState,
+  GRAPH_REVISION_KEY, INDEX_STATE_FORMAT, INDEX_STATE_TOKEN_KEY, INDEX_STATE_VERSION, indexStateToken, writeIndexState,
   type IndexedFileState, type IndexState,
 } from "./state.js";
-import type {
-  AnalysisFreshness, FileFreshness, FileFreshnessRecord, FullRebuildReason, IndexMetrics, IndexResult, ModuleResolutionFreshness,
-} from "./types.js";
+import type { AnalysisFreshness, FileFreshnessRecord, IndexMetrics, IndexResult, ModuleResolutionFreshness } from "./types.js";
+
+export { isResolutionConfigFile } from "./assess.js";
 
 export const GRAPH_DB_FILE_PATH = `${STATE_DIR_NAME}/generated/graph.db`;
+
+/**
+ * Opens the project's graph database (.duo-project/generated/graph.db), creating the directory. A
+ * database of another graph_schema_version is generated data and is recreated (ADR-002).
+ */
+export function openProjectGraphStore(root: string): GraphOpenResult {
+  const rootDir = path.resolve(root);
+  const allowed = checkWriteBoundary(rootDir, GRAPH_DB_FILE_PATH, "regenerable");
+  if (allowed.value === undefined) return { diagnostics: allowed.diagnostics, regenerable: false };
+  const file = path.join(rootDir, allowed.value.path);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  return openNodeSqliteGraphStore({ path: file, onUnsupportedSchema: "recreate" });
+}
 
 export interface IndexOptions {
   readonly store: GraphStore;
@@ -50,25 +66,6 @@ export interface IndexOptions {
   readonly historyWindow?: number;
 }
 
-const STATE_PREFIX = `${STATE_DIR_NAME}/`;
-/** Files whose change can change module resolution in their directory subtree (ADR-003, TASK-008). */
-const RESOLUTION_CONFIG = /^(?:[tj]sconfig(?:\..+)?\.json|package\.json|pnpm-lock\.yaml|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|bun\.lockb?)$/u;
-
-export function isResolutionConfigFile(repoPath: string): boolean {
-  return RESOLUTION_CONFIG.test(repoPath.slice(repoPath.lastIndexOf("/") + 1));
-}
-const dirOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
-const under = (file: string, dir: string) => dir === "" || file.startsWith(`${dir}/`);
-
-function hashOnDisk(root: string, repoPath: RepoPath): string | undefined {
-  try {
-    return computeContentHash(fs.readFileSync(path.join(root, repoPath)), fingerprintModeOf(repoPath)).contentHash;
-  } catch {
-    return undefined;
-  }
-}
-
-const FILE_FRESHNESS = { UNCHANGED: "fresh", CHANGED: "changed", ADDED: "added", DELETED: "deleted" } as const satisfies Record<string, FileFreshness>;
 /** Digest of a scope without rows (the Project Truth scope always has the Project node, so this is a fallback). */
 const EMPTY_DIGEST = `sha256:${"0".repeat(64)}`;
 
@@ -91,17 +88,9 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   const current: readonly FileFingerprint[] = fingerprinted.fingerprints;
 
   // ---- previous state: any doubt means a full rebuild ----
-  let previous: IndexState | undefined;
-  let fullRebuildReason: FullRebuildReason | undefined;
-  if (options.full === true) fullRebuildReason = "requested";
-  else {
-    const read = readIndexState(rootDir);
-    diagnostics.push(...read.diagnostics);
-    if (read.state === undefined) fullRebuildReason = read.problem ?? "state-invalid";
-    else if (store.readMeta(INDEX_STATE_TOKEN_KEY) !== read.state.token) fullRebuildReason = "state-mismatch";
-    else if (read.state.graphSchemaVersion !== store.graphSchemaVersion || read.state.historyWindow !== window) fullRebuildReason = "incompatible";
-    else previous = read.state;
-  }
+  const loadedState = loadPreviousState(rootDir, store, window, options.full === true);
+  diagnostics.push(...loadedState.diagnostics);
+  const { previous, fullRebuildReason } = loadedState;
   const mode = previous === undefined ? "full" : "incremental";
   const prevFiles = new Map((previous?.files ?? []).map((f) => [f.path, f] as const));
   const changes = compareFingerprints(previous?.files ?? [], current);
@@ -131,12 +120,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
       const analyzer = registry.analyzerFor(f.path);
       if (analyzer === undefined) continue;
       const prev = prevFiles.get(f.path);
-      let freshness: AnalysisFreshness;
-      if (previous === undefined || prev?.analysis === undefined) freshness = "missing";
-      else if (prev.contentHash !== f.contentHash || prev.fingerprintMode !== f.fingerprintMode) freshness = "stale-content";
-      else if (prev.analysis.analyzer !== analyzer.id || prev.analysis.version !== analyzer.version) freshness = "stale-analyzer";
-      else if (prev.analysis.status === "failed") freshness = "failed";
-      else freshness = "fresh";
+      let freshness: AnalysisFreshness = analysisFreshnessOf(previous, prev, f, analyzer);
       const key: AnalysisCacheKey = { path: f.path, contentHash: f.contentHash, analyzer: analyzer.id, analyzerVersion: analyzer.version };
       const cached = freshness === "fresh" ? readCachedAnalysis(rootDir, key) : undefined;
       if (freshness === "fresh" && cached === undefined) freshness = "missing";
@@ -191,25 +175,14 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   // ---- module resolution reuse (config scope, file set, versions) ----
   const indexedFiles = new Set(current.map((f) => f.path).filter((p) => !p.startsWith(STATE_PREFIX)));
   const resolver = createTypeScriptModuleResolver({ root: rootDir, indexedFiles });
-  const indexedChanges = changes.filter((c) => !c.path.startsWith(STATE_PREFIX) && c.status !== "UNCHANGED");
-  const fileSetChanged = indexedChanges.some((c) => c.status === "ADDED" || c.status === "DELETED");
-  const configChanges = indexedChanges.filter((c) => isResolutionConfigFile(c.path)).map((c) => c.path);
-  const configDirs = configChanges.map(dirOf);
-  const changedConfigs = new Set<string>(configChanges);
-  for (const [p, h] of Object.entries(previous?.configs ?? {})) if (hashOnDisk(rootDir, p as RepoPath) !== h) changedConfigs.add(p);
+  const signals = resolutionSignals(rootDir, changes, previous);
   const moduleFreshness = new Map<RepoPath, ModuleResolutionFreshness>();
   const previousResolution = new Map<RepoPath, FileResolution>();
   for (const a of analyses) {
     const p = a.analysis.path;
     const prev = prevFiles.get(p)?.resolution;
     if (prev !== undefined) previousResolution.set(p, prev);
-    let freshness: ModuleResolutionFreshness;
-    if (previous === undefined || prev === undefined) freshness = "missing";
-    else if (previous.moduleResolutionVersion !== resolver.version) freshness = "stale-version";
-    else if (changedFiles.has(p)) freshness = "stale-source";
-    else if (fileSetChanged) freshness = "stale-file-set";
-    else if (configDirs.some((d) => under(p, d)) || prev.configFiles.some((c) => changedConfigs.has(c))) freshness = "stale-config";
-    else freshness = "fresh";
+    const freshness: ModuleResolutionFreshness = moduleFreshnessOf(p, prev, previous, resolver.version, changedFiles, signals);
     moduleFreshness.set(p, freshness);
   }
   for (const [p, f] of prevFiles) if (f.resolution !== undefined && !previousResolution.has(p)) changedFiles.add(p); // no longer analyzed
@@ -218,6 +191,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
     reusableModules: new Set([...moduleFreshness].filter(([, f]) => f === "fresh").map(([p]) => p)),
     changedFiles,
     callVersionChanged: previous.callResolutionVersion !== CALL_RESOLUTION_VERSION,
+    configDiagnostics: new Map(Object.entries(previous.configs).flatMap(([p, c]) => (c.diagnostics === undefined ? [] : [[p as RepoPath, c.diagnostics] as const]))),
   };
 
   // ---- plan (the full builder) ----
@@ -235,7 +209,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
     moduleResolver: resolver,
     git: { ...(gitState === undefined ? {} : { state: gitState }), ...(history === undefined ? {} : { history }) },
   }, memo);
-  diagnostics.push(...plan.diagnostics, ...resolver.diagnostics);
+  diagnostics.push(...plan.diagnostics);
   if (!plan.valid) {
     return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "The graph plan did not pass validation; nothing was written"), ...diagnostics]);
   }
@@ -243,10 +217,11 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   // ---- new state ----
   const digests = scopeDigests(plan.nodes, plan.edges);
   const configFiles = [...new Set([...plan.resolution.values()].flatMap((r) => r.configFiles))].sort(compareUtf8);
-  const configs: Record<string, string> = {};
+  const configs: Record<string, { contentHash: string; diagnostics?: readonly Diagnostic[] }> = {};
   for (const c of configFiles) {
     const h = hashOnDisk(rootDir, c);
-    if (h !== undefined) configs[c] = h;
+    const stored = plan.configDiagnostics.get(c);
+    if (h !== undefined) configs[c] = { contentHash: h, ...(stored === undefined ? {} : { diagnostics: stored }) };
   }
   const files: IndexedFileState[] = current.map((f) => {
     const analysis = analysisState.get(f.path);
@@ -269,6 +244,9 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
     files, configs,
     truthScope: digests.get(TRUTH_SCOPE) ?? EMPTY_DIGEST,
     ...(gitState?.headOid === undefined || history === undefined ? {} : { history: { headOid: gitState.headOid, shallow: gitState.shallow, summary: history } }),
+    ...(gitState === undefined ? {} : {
+      git: { ...(gitState.headOid === undefined ? {} : { headOid: gitState.headOid }), ...(gitState.branch === undefined ? {} : { branch: gitState.branch }), detached: gitState.detached },
+    }),
   };
   const state: IndexState = { ...content, token: indexStateToken(content) };
 
@@ -349,7 +327,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
       ...(a === undefined ? {} : { analysis: a }), ...(m === undefined ? {} : { modules: m }), ...(c === undefined ? {} : { calls: c }),
     };
   });
-  return success({ mode, ...(fullRebuildReason === undefined ? {} : { fullRebuildReason }), metrics, freshness, stats: plan.stats, graphRevision: revision }, diagnostics);
+  return success({ mode, ...(fullRebuildReason === undefined ? {} : { fullRebuildReason }), metrics, freshness, stats: plan.stats, graphRevision: revision }, canonicalDiagnostics(diagnostics));
 }
 
 function graphChanged(diff: GraphDiff | undefined): boolean {

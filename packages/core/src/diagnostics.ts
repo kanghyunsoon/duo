@@ -118,9 +118,72 @@ export const DIAGNOSTIC_SEVERITY = {
   GRAPH_INVARIANT_VIOLATED: "error",
   /** Incremental Indexer (T08): generated/index-state.json is missing parts, corrupt or of another version; the graph is rebuilt. */
   INDEX_STATE_INVALID: "warning",
+  /** DecisionService (T09): the actor may not perform the operation (only a human confirms or rejects). */
+  DECISION_ACTOR_FORBIDDEN: "error",
+  /** DecisionService: no proposal with this ID. */
+  PROPOSAL_NOT_FOUND: "error",
+  /** DecisionService: the proposal was already confirmed or rejected. */
+  PROPOSAL_NOT_PENDING: "error",
+  /** DecisionService: the proposal content does not pass the Project Truth schema or references. */
+  PROPOSAL_INVALID: "error",
+  /** DecisionService: Project Truth changed since the proposal was made (confirm still proceeds). */
+  PROPOSAL_STALE: "warning",
+  /** DecisionService: a confirmed Decision is not changed by DUO or an agent; supersede it instead. */
+  DECISION_LOCKED: "error",
+  /** DecisionService: the target is not a decisions/D-###.yaml file DUO writes (e.g. an ADR Markdown Decision). */
+  DECISION_TARGET_UNSUPPORTED: "error",
+  /** DecisionService: only a confirmed Decision can be superseded. */
+  DECISION_SUPERSEDE_TARGET_INVALID: "error",
+  /** DecisionService: another process holds the repository decision lock. */
+  DECISION_LOCK_BUSY: "error",
+  /** A confirmed Decision's lock.digest does not match its content fields (a detection aid, not a signature). */
+  DECISION_LOCK_MISMATCH: "warning",
 } as const satisfies Record<string, DiagnosticSeverity>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_SEVERITY;
+
+/**
+ * persistent: a deterministic function of the repository content, the Project Truth and the DUO
+ * version. The same state yields the same persistent diagnostics, whether the result was computed
+ * or reused from a cache (T08.1). transient: depends on the run (IO, locks, Git process failures,
+ * local generated state) or reports the outcome of a requested operation; it is not a property of
+ * the repository state and may differ between runs.
+ */
+export type DiagnosticPersistence = "persistent" | "transient";
+
+const P = "persistent";
+const T = "transient";
+
+export const DIAGNOSTIC_PERSISTENCE = {
+  FILE_READ_ERROR: T, FILE_WRITE_ERROR: T,
+  PROJECT_FILE_MISSING: P, UNSUPPORTED_SCHEMA_VERSION: P,
+  MARKDOWN_PARSE_ERROR: P, YAML_SYNTAX_ERROR: P, YAML_WARNING: P, YAML_ALIAS_NOT_ALLOWED: P, YAML_TAG_NOT_ALLOWED: P,
+  SCHEMA_UNKNOWN_PROPERTY: P, SCHEMA_MISSING_PROPERTY: P, SCHEMA_INVALID_VALUE: P, INVALID_ID: P,
+  INVALID_PATH: P, PATH_OUTSIDE_REPOSITORY: P, PATH_PORTABILITY_COLLISION: P,
+  WRITE_OUTSIDE_REPOSITORY: T, WRITE_NOT_ALLOWED: T,
+  METADATA_BLOCK_WITHOUT_HEADING: P, METADATA_BLOCK_MISSING: P,
+  DUPLICATE_ID: P, BROKEN_REFERENCE: P, REFERENCE_TYPE_MISMATCH: P, DECISION_SUPERSEDES_SELF: P, DECISION_SUPERSEDE_CYCLE: P,
+  TRACE_MILESTONE_MISMATCH: P, TRACE_DECISION_UNRELATED: P, TRACE_REQUIREMENT_UNTRACKED: P,
+  GRAPH_SCHEMA_UNSUPPORTED: T, GRAPH_OPEN_FAILED: T,
+  GIT_REPOSITORY_REQUIRED: P, SCAN_ROOT_INVALID: P,
+  GIT_COMMAND_FAILED: T, GIT_REVISION_NOT_FOUND: T, GIT_REQUEST_INVALID: T, GIT_OUTPUT_UNEXPECTED: T, GIT_OBJECT_NOT_FOUND: T,
+  SCAN_ENTRY_SKIPPED: P, SYMLINK_SKIPPED: P, SYMLINK_OUTSIDE_REPOSITORY: P, FILE_TYPE_CHANGED: P,
+  FINGERPRINT_CACHE_INVALID: T,
+  ANALYZER_INIT_FAILED: T, LANGUAGE_UNSUPPORTED: P, SOURCE_DECODE_ERROR: P, AST_PARSE_ERROR: P, AST_PARSE_TIMEOUT: T,
+  DUO_ANNOTATION_INVALID: P, TEST_NAME_DYNAMIC: P,
+  TSCONFIG_INVALID: P, MODULE_UNRESOLVED: P, MODULE_AMBIGUOUS: P, CALL_AMBIGUOUS: P, CALL_UNRESOLVED: P,
+  ANNOTATION_TARGET_UNKNOWN: P, ANNOTATION_TARGET_UNSUPPORTED: P,
+  EDGE_ENDPOINT_INVALID: P, GRAPH_NODE_CONFLICT: P, GRAPH_PAYLOAD_INVALID: P,
+  GRAPH_WRITE_REFUSED: T, TEST_ID_CONFLICT: P, DECLARED_SYMBOL_UNRESOLVED: P, GRAPH_INVARIANT_VIOLATED: T,
+  INDEX_STATE_INVALID: T,
+  DECISION_ACTOR_FORBIDDEN: T, PROPOSAL_NOT_FOUND: T, PROPOSAL_NOT_PENDING: T, PROPOSAL_INVALID: T, PROPOSAL_STALE: T,
+  DECISION_LOCKED: T, DECISION_TARGET_UNSUPPORTED: T, DECISION_SUPERSEDE_TARGET_INVALID: T, DECISION_LOCK_BUSY: T,
+  DECISION_LOCK_MISMATCH: P,
+} as const satisfies Record<DiagnosticCode, DiagnosticPersistence>;
+
+export function isPersistentDiagnostic(diagnostic: Diagnostic): boolean {
+  return DIAGNOSTIC_PERSISTENCE[diagnostic.code] === "persistent";
+}
 
 export interface Diagnostic {
   readonly code: DiagnosticCode;
@@ -184,4 +247,32 @@ export function compareDiagnostics(a: Diagnostic, b: Diagnostic): number {
   const cb = b.source?.startColumn ?? 0;
   if (ca !== cb) return ca - cb;
   return compareUtf8(a.code, b.code);
+}
+
+/** Full canonical order: location (path, start, end), code, severity, message. */
+function compareCanonical(a: Diagnostic, b: Diagnostic): number {
+  return compareDiagnostics(a, b)
+    || (a.source?.endLine ?? 0) - (b.source?.endLine ?? 0)
+    || (a.source?.endColumn ?? 0) - (b.source?.endColumn ?? 0)
+    || compareUtf8(a.severity, b.severity)
+    || compareUtf8(a.message, b.message);
+}
+
+/** Diagnostics in canonical order without exact duplicates. Two runs over the same state compare equal. */
+export function canonicalDiagnostics(diagnostics: readonly Diagnostic[]): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  const seen = new Set<string>();
+  for (const d of [...diagnostics].sort(compareCanonical)) {
+    const s = d.source;
+    const key = JSON.stringify([d.code, d.severity, d.message, s?.path, s?.startLine, s?.startColumn, s?.endLine, s?.endColumn]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(d);
+  }
+  return out;
+}
+
+/** The persistent diagnostics of a run, canonical (T08.1 diagnostic equivalence). */
+export function persistentDiagnostics(diagnostics: readonly Diagnostic[]): Diagnostic[] {
+  return canonicalDiagnostics(diagnostics.filter(isPersistentDiagnostic));
 }

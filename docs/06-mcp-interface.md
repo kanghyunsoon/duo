@@ -67,7 +67,7 @@ Decision confirm/reject는 Human Action이라 MCP로 노출하지 않는다([ADR
 ### duo_get_status
 
 - 입력: `{}`
-- 출력: Goal 한 줄, 현재 Milestone, Requirement status별 개수, pending proposal 수, open gap 수, 마지막 Review verdict, 인덱스 freshness, LLM Provider 상태(none, configured, unavailable).
+- 출력: Goal 한 줄, 현재 Milestone, Requirement status별 개수, pending proposal 수, open gap 수, 마지막 Review verdict, 인덱스 freshness, LLM Provider 상태(none, configured, unavailable). 인덱스 freshness는 graph 패키지의 `inspectIndex()` 결과(status, wouldRebuild)를 그대로 쓰며 별도 판정 로직을 두지 않는다(T08.1).
 
 ### duo_get_requirement / duo_get_decision
 

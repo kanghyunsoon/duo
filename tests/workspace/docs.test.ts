@@ -95,7 +95,7 @@ describe("AC-007-03 the self fixture as a Project Graph", () => {
   if (value === undefined) throw new Error(JSON.stringify(loaded.diagnostics));
   const plan = buildGraphPlan({
     truth: value.truth, trace: value.trace, files: [], analyses: [], sourceText: () => undefined,
-    moduleResolver: { version: "none", resolve: () => ({ status: "unsupported", reason: "no code" }), configFiles: () => [], diagnostics: [] },
+    moduleResolver: { version: "none", resolve: () => ({ status: "unsupported", reason: "no code" }), configFiles: () => [], configDiagnostics: () => undefined, diagnostics: [] },
   });
   const store = openNodeSqliteGraphStore({ path: ":memory:" }).value;
   if (store === undefined) throw new Error("no store");

@@ -46,6 +46,7 @@ const posix = (p: string) => p.replace(/\\/g, "/");
 export function createTypeScriptModuleResolver(options: TypeScriptModuleResolverOptions): ModuleResolver {
   const root = nodePath.resolve(options.root);
   const diagnostics: Diagnostic[] = [];
+  const diagnosticsByConfig = new Map<string, Diagnostic[]>();
   const configs = new Map<string, Config>();
   const nearest = new Map<string, Config | undefined>();
   const results = new Map<string, ModuleResolution>();
@@ -72,9 +73,13 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     // readConfigFile reports syntax errors; readJsonConfigFile + parse also records the extends chain.
     const read = ts.readConfigFile(file, (f) => ts.sys.readFile(f));
     const repoPath = toRepoPath(file);
+    const own: Diagnostic[] = [];
+    if (repoPath !== undefined) diagnosticsByConfig.set(repoPath, own);
     const report = (d: ts.Diagnostic) => {
       if (d.category !== ts.DiagnosticCategory.Error) return;
-      diagnostics.push(createDiagnostic("TSCONFIG_INVALID", `${repoPath ?? file}: ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`, repoPath === undefined ? undefined : { path: repoPath }));
+      const diagnostic = createDiagnostic("TSCONFIG_INVALID", `${repoPath ?? file}: ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`, repoPath === undefined ? undefined : { path: repoPath });
+      diagnostics.push(diagnostic);
+      own.push(diagnostic);
     };
     if (read.error !== undefined) report(read.error);
     const source = ts.readJsonConfigFile(posix(file), (f) => ts.sys.readFile(f));
@@ -147,6 +152,14 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     diagnostics,
     configFiles(fromPath) {
       return configFor(nodePath.dirname(nodePath.join(root, fromPath)))?.files ?? [];
+    },
+    configDiagnostics(configPath, opts) {
+      const known = diagnosticsByConfig.get(configPath);
+      if (known !== undefined || opts?.load !== true) return known;
+      const absolute = nodePath.join(root, configPath);
+      if (!ts.sys.fileExists(absolute)) return undefined;
+      loadConfig(absolute, configPath.endsWith("jsconfig.json"));
+      return diagnosticsByConfig.get(configPath);
     },
     resolve(request) {
       const key = `${request.fromPath}\u0000${request.kind}\u0000${request.specifier}`;
