@@ -1,3 +1,4 @@
+import { compareUtf8 } from "@duo-director/core";
 import { GraphStoreError, type JsonObject, type JsonValue } from "./types.js";
 
 function canonical(value: unknown, path: string): JsonValue {
@@ -9,13 +10,13 @@ function canonical(value: unknown, path: string): JsonValue {
   if (Array.isArray(value)) return value.map((v, i) => canonical(v, `${path}[${i}]`));
   if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
     const out: Record<string, JsonValue> = {};
-    for (const key of Object.keys(value).sort()) out[key] = canonical((value as Record<string, unknown>)[key], `${path}.${key}`);
+    for (const key of Object.keys(value).sort(compareUtf8)) out[key] = canonical((value as Record<string, unknown>)[key], `${path}.${key}`);
     return out;
   }
   throw new GraphStoreError("INVALID_INPUT", `${path}: ${typeof value} is not a JSON value`);
 }
 
-/** Canonical JSON: sorted keys, finite numbers only. Same input gives the same bytes. */
+/** Canonical JSON: keys in UTF-8 byte order (core compareUtf8), finite numbers only. Same input gives the same bytes. */
 export function canonicalJson(value: JsonObject | undefined, path: string): string {
   return JSON.stringify(canonical(value ?? {}, path));
 }

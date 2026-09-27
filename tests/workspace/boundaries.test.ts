@@ -4,11 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ESLint } from "eslint";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const RULE = "@typescript-eslint/no-restricted-imports";
 const eslint = new ESLint({ cwd: root });
+
+// The first lintText loads the flat config and plugins (seconds on a busy Windows runner).
+// Pay that once here so each case measures only its own lint.
+beforeAll(async () => {
+  await eslint.lintText("export {};\n", { filePath: join(root, "packages/core/src/probe.ts") });
+}, 60_000);
 
 async function violations(filePath: string, code: string): Promise<number> {
   const [result] = await eslint.lintText(code, { filePath: join(root, filePath) });

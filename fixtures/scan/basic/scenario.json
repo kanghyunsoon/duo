@@ -1,0 +1,105 @@
+{
+  "$comment": "TASK-004 AC-004-01/02 scan scenario. The test builds a temporary Git repository from this list (core.autocrlf=false), scans it and compares with expected.json. Files are defined here, not checked in, so this repository's own .gitignore/.gitattributes cannot change them.",
+  "options": {
+    "exclude": [
+      "docs/drafts/**"
+    ]
+  },
+  "files": [
+    {
+      "path": ".gitignore",
+      "tracked": true,
+      "text": "node_modules/\n*.log\n"
+    },
+    {
+      "path": "README.md",
+      "tracked": true,
+      "text": "# Demo\r\nSmall app.\r\n"
+    },
+    {
+      "path": "src/index.ts",
+      "tracked": true,
+      "text": "export const answer = 42;\n"
+    },
+    {
+      "path": "src/util/str.ts",
+      "tracked": true,
+      "text": "\uFEFFexport const trim = (s: string) => s.trim();\n"
+    },
+    {
+      "path": "src/new-feature.ts",
+      "tracked": false,
+      "text": "export {};\n"
+    },
+    {
+      "path": "src/한글.ts",
+      "tracked": false,
+      "text": "export const name = \"한글\";\n"
+    },
+    {
+      "path": "assets/logo.png",
+      "tracked": true,
+      "base64": "iVBORw0KGgoAAAANSUhEUg=="
+    },
+    {
+      "path": "docs/guide.md",
+      "tracked": true,
+      "text": "Guide\n"
+    },
+    {
+      "path": "docs/drafts/wip.md",
+      "tracked": true,
+      "text": "WIP\n"
+    },
+    {
+      "path": ".duo-project/project.yaml",
+      "tracked": true,
+      "text": "schema_version: 1\n"
+    },
+    {
+      "path": ".duo-project/generated/graph.db",
+      "tracked": false,
+      "base64": "U1FMaXRl"
+    },
+    {
+      "path": "tracked.log",
+      "tracked": true,
+      "text": "tracked although *.log is ignored\n"
+    },
+    {
+      "path": "debug.log",
+      "tracked": false,
+      "text": "ignored\n"
+    },
+    {
+      "path": "node_modules/pkg/index.js",
+      "tracked": false,
+      "text": "ignored\n"
+    },
+    {
+      "path": ".env",
+      "tracked": true,
+      "text": "TOKEN=not-a-real-secret\n"
+    },
+    {
+      "path": ".env.example",
+      "tracked": false,
+      "text": "TOKEN=\n"
+    },
+    {
+      "path": "config/credentials.json",
+      "tracked": false,
+      "text": "{}\n"
+    },
+    {
+      "path": "keys/server.PEM",
+      "tracked": false,
+      "text": "-----BEGIN-----\n"
+    },
+    {
+      "path": "deploy/id_rsa",
+      "tracked": true,
+      "text": "not a key\n"
+    }
+  ]
+}

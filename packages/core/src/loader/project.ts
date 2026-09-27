@@ -8,6 +8,7 @@ import {
   parseConstraintsFile, parseDecisionFile, parseMilestoneFile, parseProjectConfig, parseProposalFile, parseVisionFile,
 } from "../domain/files.js";
 import { emptyDefinitionSet, type DefinitionSet, type ProjectTruth, type Vision } from "../domain/model.js";
+import { compareUtf8 } from "../order.js";
 import { toRepoPath, type RepoPath } from "../paths.js";
 import { analyzeTrace, type TraceModel, type TracePolicy } from "../trace/trace.js";
 
@@ -35,7 +36,7 @@ function listFiles(root: string, dir: string, extensions: readonly string[], dia
     diagnostics.push(...repo.diagnostics);
     if (repo.value !== undefined) files.push({ absolute, path: repo.value });
   }
-  return files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return files.sort((a, b) => compareUtf8(a.path, b.path));
 }
 
 function readText(file: SourceFile, diagnostics: Diagnostic[]): string | undefined {
@@ -142,6 +143,6 @@ export function loadProjectTruth(root: string, options: LoadProjectOptions = {})
 
   const trace = analyzeTrace({ ...defs, references: config.value.references }, options.tracePolicy);
   diagnostics.push(...trace.diagnostics);
-  const truth: ProjectTruth = { ...defs, config: config.value, vision, files: files.sort() };
+  const truth: ProjectTruth = { ...defs, config: config.value, vision, files: files.sort(compareUtf8) };
   return { value: { truth, trace: trace.model }, diagnostics: diagnostics.sort(compareDiagnostics) };
 }

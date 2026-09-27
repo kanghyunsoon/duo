@@ -1,5 +1,6 @@
 import path from "node:path";
 import { createDiagnostic, failure, success, type Diagnostic, type ParseResult } from "./diagnostics.js";
+import { compareUtf8 } from "./order.js";
 
 declare const repoPathBrand: unique symbol;
 
@@ -83,6 +84,41 @@ export function toRepoPath(root: string, file: string): ParseResult<RepoPath> {
   return normalizeRepoPath(path.relative(root, file));
 }
 
+const REGEX_SYNTAX = /[\\^$.*+?()[\]{}|/]/g;
+
+function segmentSource(segment: string): string {
+  let out = "";
+  for (const ch of segment) out += ch === "*" ? "[^/]*" : ch === "?" ? "[^/]" : ch.replace(REGEX_SYNTAX, "\\$&");
+  return out;
+}
+
+/**
+ * Compiles a repository glob to a matcher. Patterns are anchored at the repository root and
+ * case-sensitive on every OS (Node's path.matchesGlob ignores case on Windows and macOS, which
+ * would make results OS-dependent). Supported: "*" and "?" within a segment, "**" as a whole
+ * segment (zero or more directories), and a trailing "/" for "everything below". No braces,
+ * classes or negation. Returns undefined for an invalid pattern.
+ */
+export function compileRepoPattern(pattern: string): ((path: RepoPath) => boolean) | undefined {
+  const normalized = normalizeRepoPattern(pattern).value;
+  if (normalized === undefined) return undefined;
+  const withTail = normalized.endsWith("/") ? `${normalized}**` : normalized;
+  const segments = withTail.split("/");
+  let source = "^";
+  segments.forEach((segment, i) => {
+    const last = i === segments.length - 1;
+    if (segment === "**") source += last ? ".*" : "(?:[^/]+/)*";
+    else source += segmentSource(segment) + (last ? "" : "/");
+  });
+  const regex = new RegExp(`${source}$`, "u");
+  return (p) => regex.test(p);
+}
+
+/** True when path matches the repository glob pattern (see compileRepoPattern). */
+export function matchesRepoPattern(path: RepoPath, pattern: string): boolean {
+  return compileRepoPattern(pattern)?.(path) ?? false;
+}
+
 /**
  * Key under which two paths refer to the same file on a case-insensitive, Unicode-normalizing
  * file system (default Windows and macOS volumes). Used only for collision detection, never stored.
@@ -106,7 +142,7 @@ export function findPathPortabilityCollisions(paths: readonly RepoPath[]): Diagn
   const diagnostics: Diagnostic[] = [];
   for (const group of groups.values()) {
     if (group.size < 2) continue;
-    const spellings = [...group].sort();
+    const spellings = [...group].sort(compareUtf8);
     const reason = new Set(spellings.map((s) => s.normalize("NFC"))).size === 1
       ? "Unicode normalization"
       : new Set(spellings.map((s) => s.toLowerCase())).size === 1
@@ -118,5 +154,5 @@ export function findPathPortabilityCollisions(paths: readonly RepoPath[]): Diagn
       { path: spellings[0] ?? "" },
     ));
   }
-  return diagnostics.sort((a, b) => (a.source?.path ?? "").localeCompare(b.source?.path ?? ""));
+  return diagnostics.sort((a, b) => compareUtf8(a.source?.path ?? "", b.source?.path ?? ""));
 }

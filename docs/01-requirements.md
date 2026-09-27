@@ -138,7 +138,7 @@ source: [D§5, P§10]
 
 최초 init 이후에는 fingerprint와 Git 변경 정보로 바뀐 파일만 다시 분석한다. 변경되지 않은 파일은 parse하지 않는다.
 
-상세: [04-project-graph](04-project-graph.md) · ADR: [ADR-002](adr/ADR-002-graph-storage.md) · Task: [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정), [TASK-008](tasks/TASKS.md#task-008-증분-인덱싱-trace-impact)
+상세: [04-project-graph](04-project-graph.md) · ADR: [ADR-002](adr/ADR-002-graph-storage.md) · Task: [TASK-004](tasks/TASKS.md#task-004-파일-스캔과-fingerprint), [TASK-008](tasks/TASKS.md#task-008-증분-인덱싱-trace-impact)
 
 ### REQ-INDEX-003 Git diff에서 변경 Symbol 도출
 
@@ -460,7 +460,7 @@ source: [D§1]
 
 DUO는 프로젝트 Source Code를 수정하지 않는다. 모든 파일 쓰기는 허용 경로(`.duo-project/` 하위와 `duoctl install`이 설정하는 Agent 파일)로 제한된다.
 
-상세: [10-security](10-security.md) · ADR: [ADR-010](adr/ADR-010-package-structure.md) · Task: [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정)
+상세: [10-security](10-security.md) · ADR: [ADR-010](adr/ADR-010-package-structure.md) · Task: [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-004](tasks/TASKS.md#task-004-파일-스캔과-fingerprint)
 
 ## Interfaces
 
@@ -541,14 +541,14 @@ UI가 허용하는 쓰기는 Decision Confirm과 Reject 두 가지뿐이다. 결
 ```duo
 type: requirement
 status: planned
-milestone: M1
+milestone: M2
 priority: must
 source: [D§21, H-5]
 ```
 
 공식 측정은 tokenizer 기반(o200k_base)으로 하고 모든 결과에 측정 방식을 기록한다. `chars/4`는 UI의 대략 추정 fallback으로만 쓴다. 정확한 tokenizer를 적용할 수 없는 Provider의 값은 estimated로 표시한다.
 
-상세: [09-token-strategy](09-token-strategy.md) · ADR: [ADR-005](adr/ADR-005-token-measurement.md) · Task: [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정)
+상세: [09-token-strategy](09-token-strategy.md) · ADR: [ADR-005](adr/ADR-005-token-measurement.md) · Task: [TASK-010](tasks/TASKS.md#task-010-context-compiler)
 
 ### REQ-TOKEN-002 재현 가능한 Benchmark
 
@@ -578,7 +578,7 @@ source: [D§17]
 
 Windows, macOS, Linux에서 동일하게 동작한다. 내부 경로는 Repository 기준 POSIX 상대경로다.
 
-상세: [02-system-architecture](02-system-architecture.md) · ADR: [ADR-001](adr/ADR-001-language-runtime.md) · Task: [TASK-001](tasks/TASKS.md#task-001-저장소-골격), [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정), [TASK-020](tasks/TASKS.md#task-020-e2e와-문서-구현-대조)
+상세: [02-system-architecture](02-system-architecture.md) · ADR: [ADR-001](adr/ADR-001-language-runtime.md) · Task: [TASK-001](tasks/TASKS.md#task-001-저장소-골격), [TASK-004](tasks/TASKS.md#task-004-파일-스캔과-fingerprint), [TASK-020](tasks/TASKS.md#task-020-e2e와-문서-구현-대조)
 
 ### REQ-NFR-002 Local-first
 
@@ -782,14 +782,14 @@ Node SEA 등으로 단일 실행 파일을 만든다.
 | [REQ-INIT-002](#req-init-002-intent-초안-구현-상태-추론-knowledge-gap-생성) | M2 | - | [TASK-014](tasks/TASKS.md#task-014-init-파이프라인) | 5 |
 | [REQ-INIT-003](#req-init-003-human-intent-확인) | M2 | - | [TASK-014](tasks/TASKS.md#task-014-init-파이프라인) | 5 |
 | [REQ-INDEX-001](#req-index-001-언어-비종속-languageanalyzer) | M1 | [ADR-003](adr/ADR-003-language-analysis.md) | [TASK-005](tasks/TASKS.md#task-005-languageanalyzer와-tsjs-analyzer) | 4 |
-| [REQ-INDEX-002](#req-index-002-fingerprint-기반-증분-인덱싱) | M1 | [ADR-002](adr/ADR-002-graph-storage.md) | [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정), [TASK-008](tasks/TASKS.md#task-008-증분-인덱싱-trace-impact) | 8 |
+| [REQ-INDEX-002](#req-index-002-fingerprint-기반-증분-인덱싱) | M1 | [ADR-002](adr/ADR-002-graph-storage.md) | [TASK-004](tasks/TASKS.md#task-004-파일-스캔과-fingerprint), [TASK-008](tasks/TASKS.md#task-008-증분-인덱싱-trace-impact) | 8 |
 | [REQ-INDEX-003](#req-index-003-git-diff에서-변경-symbol-도출) | M1 | [ADR-003](adr/ADR-003-language-analysis.md) | [TASK-006](tasks/TASKS.md#task-006-git-evidence-provider) | 4 |
 | [REQ-GRAPH-001](#req-graph-001-node-8종과-edge-10종의-embedded-저장) | M1 | [ADR-002](adr/ADR-002-graph-storage.md), [ADR-003](adr/ADR-003-language-analysis.md) | [TASK-003](tasks/TASKS.md#task-003-graphstore), [TASK-007](tasks/TASKS.md#task-007-graph-builder와-일관성-검사) | 8 |
 | [REQ-GRAPH-002](#req-graph-002-결정적-bounded-traversal-trace-impact) | M1 | - | [TASK-003](tasks/TASKS.md#task-003-graphstore), [TASK-008](tasks/TASKS.md#task-008-증분-인덱싱-trace-impact) | 8 |
 | [REQ-GRAPH-003](#req-graph-003-graph-일관성-불변식) | M1 | - | [TASK-007](tasks/TASKS.md#task-007-graph-builder와-일관성-검사), [TASK-008](tasks/TASKS.md#task-008-증분-인덱싱-trace-impact) | 8 |
-| [REQ-CONTEXT-001](#req-context-001-director-context-packet-생성) | M2 | [ADR-004](adr/ADR-004-mcp-context-gateway.md), [ADR-005](adr/ADR-005-token-measurement.md), [ADR-008](adr/ADR-008-deterministic-first.md) | [TASK-010](tasks/TASKS.md#task-010-context-compiler) | 5 |
-| [REQ-CONTEXT-002](#req-context-002-token-budget-상한) | M2 | [ADR-005](adr/ADR-005-token-measurement.md) | [TASK-010](tasks/TASKS.md#task-010-context-compiler) | 5 |
-| [REQ-CONTEXT-003](#req-context-003-context-지표-기록) | M2 | [ADR-005](adr/ADR-005-token-measurement.md) | [TASK-010](tasks/TASKS.md#task-010-context-compiler) | 5 |
+| [REQ-CONTEXT-001](#req-context-001-director-context-packet-생성) | M2 | [ADR-004](adr/ADR-004-mcp-context-gateway.md), [ADR-005](adr/ADR-005-token-measurement.md), [ADR-008](adr/ADR-008-deterministic-first.md) | [TASK-010](tasks/TASKS.md#task-010-context-compiler) | 6 |
+| [REQ-CONTEXT-002](#req-context-002-token-budget-상한) | M2 | [ADR-005](adr/ADR-005-token-measurement.md) | [TASK-010](tasks/TASKS.md#task-010-context-compiler) | 6 |
+| [REQ-CONTEXT-003](#req-context-003-context-지표-기록) | M2 | [ADR-005](adr/ADR-005-token-measurement.md) | [TASK-010](tasks/TASKS.md#task-010-context-compiler) | 6 |
 | [REQ-REVIEW-001](#req-review-001-diff-review-파이프라인) | M2 | [ADR-007](adr/ADR-007-verdict-model.md) | [TASK-013](tasks/TASKS.md#task-013-review-엔진) | 5 |
 | [REQ-REVIEW-002](#req-review-002-두-수준-verdict-모델) | M2 | [ADR-007](adr/ADR-007-verdict-model.md) | [TASK-013](tasks/TASKS.md#task-013-review-엔진) | 5 |
 | [REQ-REVIEW-003](#req-review-003-scope-drift와-spec-conflict-감지) | M2 | [ADR-007](adr/ADR-007-verdict-model.md), [ADR-008](adr/ADR-008-deterministic-first.md) | [TASK-013](tasks/TASKS.md#task-013-review-엔진) | 5 |
@@ -804,19 +804,19 @@ Node SEA 등으로 단일 실행 파일을 만든다.
 | [REQ-LLM-003](#req-llm-003-llm-없이도-동작) | M2 | [ADR-008](adr/ADR-008-deterministic-first.md) | [TASK-012A](tasks/TASKS.md#task-012a-llmprovider-계약과-no-op) | 3 |
 | [REQ-LLM-004](#req-llm-004-llm-사용량-기록) | M2 | [ADR-012](adr/ADR-012-llm-provider.md) | [TASK-012A](tasks/TASKS.md#task-012a-llmprovider-계약과-no-op) | 3 |
 | [REQ-PROVIDER-001](#req-provider-001-evidenceprovider와-git-provider) | M1 | - | [TASK-006](tasks/TASKS.md#task-006-git-evidence-provider) | 4 |
-| [REQ-SAFETY-001](#req-safety-001-source-code-비수정과-쓰기-경로-제한) | M1 | [ADR-010](adr/ADR-010-package-structure.md) | [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정) | 9 |
+| [REQ-SAFETY-001](#req-safety-001-source-code-비수정과-쓰기-경로-제한) | M1 | [ADR-010](adr/ADR-010-package-structure.md) | [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-004](tasks/TASKS.md#task-004-파일-스캔과-fingerprint) | 9 |
 | [REQ-MCP-001](#req-mcp-001-mcp-context-gateway) | M3 | [ADR-004](adr/ADR-004-mcp-context-gateway.md), [ADR-011](adr/ADR-011-agent-integration.md) | [TASK-016](tasks/TASKS.md#task-016-mcp-서버) | 5 |
 | [REQ-AGENT-001](#req-agent-001-duoctl-install-codexclaude) | M3 | [ADR-011](adr/ADR-011-agent-integration.md) | [TASK-017](tasks/TASKS.md#task-017-agent-adapter와-duoctl-install) | 5 |
 | [REQ-CLI-001](#req-cli-001-얇은-cli) | M3 | [ADR-001](adr/ADR-001-language-runtime.md), [ADR-010](adr/ADR-010-package-structure.md) | [TASK-001](tasks/TASKS.md#task-001-저장소-골격), [TASK-015](tasks/TASKS.md#task-015-cli) | 9 |
 | [REQ-UI-001](#req-ui-001-읽기-중심-web-ui-5개-화면) | M3 | [ADR-009](adr/ADR-009-ui-stack.md) | [TASK-018](tasks/TASKS.md#task-018-local-http-api와-web-ui) | 5 |
 | [REQ-UI-002](#req-ui-002-ui의-decision-confirmreject) | M3 | [ADR-009](adr/ADR-009-ui-stack.md), [ADR-013](adr/ADR-013-decision-lifecycle.md) | [TASK-018](tasks/TASKS.md#task-018-local-http-api와-web-ui) | 5 |
-| [REQ-TOKEN-001](#req-token-001-토큰-측정-방식과-표기) | M1 | [ADR-005](adr/ADR-005-token-measurement.md) | [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정) | 4 |
+| [REQ-TOKEN-001](#req-token-001-토큰-측정-방식과-표기) | M2 | [ADR-005](adr/ADR-005-token-measurement.md) | [TASK-010](tasks/TASKS.md#task-010-context-compiler) | 6 |
 | [REQ-TOKEN-002](#req-token-002-재현-가능한-benchmark) | M4 | [ADR-005](adr/ADR-005-token-measurement.md) | [TASK-019](tasks/TASKS.md#task-019-benchmark) | 4 |
-| [REQ-NFR-001](#req-nfr-001-cross-platform) | M1 | [ADR-001](adr/ADR-001-language-runtime.md) | [TASK-001](tasks/TASKS.md#task-001-저장소-골격), [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정), [TASK-020](tasks/TASKS.md#task-020-e2e와-문서-구현-대조) | 11 |
+| [REQ-NFR-001](#req-nfr-001-cross-platform) | M1 | [ADR-001](adr/ADR-001-language-runtime.md) | [TASK-001](tasks/TASKS.md#task-001-저장소-골격), [TASK-004](tasks/TASKS.md#task-004-파일-스캔과-fingerprint), [TASK-020](tasks/TASKS.md#task-020-e2e와-문서-구현-대조) | 11 |
 | [REQ-NFR-002](#req-nfr-002-local-first) | M1 | [ADR-012](adr/ADR-012-llm-provider.md) | [TASK-012B](tasks/TASKS.md#task-012b-openai-responses-provider) | 2 |
 | [REQ-NFR-003](#req-nfr-003-네이티브-빌드-없는-설치) | M1 | [ADR-001](adr/ADR-001-language-runtime.md), [ADR-010](adr/ADR-010-package-structure.md) | [TASK-001](tasks/TASKS.md#task-001-저장소-골격) | 4 |
 | [REQ-NFR-004](#req-nfr-004-성능-목표) | M4 | - | [TASK-019](tasks/TASKS.md#task-019-benchmark) | 4 |
-| [REQ-NFR-005](#req-nfr-005-결정적-출력) | M2 | - | [TASK-010](tasks/TASKS.md#task-010-context-compiler) | 5 |
+| [REQ-NFR-005](#req-nfr-005-결정적-출력) | M2 | - | [TASK-010](tasks/TASKS.md#task-010-context-compiler) | 6 |
 | [REQ-NFR-006](#req-nfr-006-간결한-기본-출력) | M3 | - | [TASK-015](tasks/TASKS.md#task-015-cli) | 5 |
 | [REQ-NFR-007](#req-nfr-007-mcp-stdout-순수성) | M3 | [ADR-004](adr/ADR-004-mcp-context-gateway.md) | [TASK-016](tasks/TASKS.md#task-016-mcp-서버) | 5 |
 

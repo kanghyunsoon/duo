@@ -1,0 +1,35 @@
+{
+  "$comment": "UTF-8 byte order (= Unicode code point order = SQLite BINARY collation). Used by core compareUtf8 and graph ordering tests (T04). Default JS sort() puts the emoji and U+10000 before U+E000..U+FFFF.",
+  "input": [
+    "src/\uD83D\uDE00.ts",
+    "src/\uFF5E.ts",
+    "src/\uE000.ts",
+    "src/a.ts",
+    "src/B.ts",
+    "src/\u00E9.ts",
+    "src/e\u0301.ts",
+    "src/\uD800\uDC00.ts",
+    "src/a/b.ts",
+    "src/a-b.ts",
+    "src/a%23b.ts",
+    "src/\u00FF.ts",
+    "src/\uD7FF.ts",
+    "src/\uFFFD.ts"
+  ],
+  "expected": [
+    "src/B.ts",
+    "src/a%23b.ts",
+    "src/a-b.ts",
+    "src/a.ts",
+    "src/a/b.ts",
+    "src/e\u0301.ts",
+    "src/\u00E9.ts",
+    "src/\u00FF.ts",
+    "src/\uD7FF.ts",
+    "src/\uE000.ts",
+    "src/\uFF5E.ts",
+    "src/\uFFFD.ts",
+    "src/\uD800\uDC00.ts",
+    "src/\uD83D\uDE00.ts"
+  ]
+}

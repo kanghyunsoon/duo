@@ -91,7 +91,7 @@ Human: duoctl decision confirm|reject <id>  또는  UI Confirm/Reject ─▶ cor
 
 ## Freshness
 
-CLI 명령과 MCP Tool은 실행 전 증분 인덱싱을 한 번 한다. 변경 탐지는 `git status --porcelain`, 마지막 인덱싱 commit 이후 `git diff --name-status`, 파일 stat(size, mtime), 필요할 때만 hash 비교 순서로 한다. 변경이 없으면 parse하지 않는다(REQ-INDEX-002).
+CLI 명령과 MCP Tool은 실행 전 증분 인덱싱을 한 번 한다. 변경 탐지는 Scanner의 현재 파일 목록과 `contentHash`를 이전 `generated/fingerprints.json`과 비교해서 한다(TASK-004 `compareFingerprints`). stat(size, mtime)은 이후 hash 계산을 줄이는 hint로만 쓸 수 있고, 내용이 같은지는 `contentHash`로만 판단한다(C33). 변경이 없으면 parse하지 않는다(REQ-INDEX-002).
 
 ## 실행 형태와 동시성
 
@@ -101,7 +101,7 @@ CLI 명령과 MCP Tool은 실행 전 증분 인덱싱을 한 번 한다. 변경 
 | MCP 서버 | Agent 세션 동안 | generated/, cache/, runtime/, decisions/proposals/(새 파일) |
 | UI 서버 | 사용자가 종료할 때까지 | decisions/(Confirm/Reject만) |
 
-SQLite는 WAL 모드로 연다. Graph 쓰기는 `generated/.lock` 파일 잠금으로 한 프로세스만 하고, 잠금을 얻지 못한 프로세스는 마지막 인덱스를 읽기만 하며 출력에 `stale`을 표시한다. Decision 파일 쓰기는 임시 파일에 쓴 뒤 rename하는 원자적 교체로 한다.
+SQLite는 WAL 모드로 연다. Graph 쓰기는 `generated/.lock` 파일 잠금으로 한 프로세스만 하고, 잠금을 얻지 못한 프로세스는 마지막 commit 상태를 읽기만 한다(snapshot visibility). 이때 갱신하지 못한 Node의 freshness는 `unknown`으로 표시한다. freshness는 GraphStore가 아니라 Indexer의 비교 결과다(C31). Decision 파일 쓰기는 임시 파일에 쓴 뒤 rename하는 원자적 교체로 한다.
 
 ## 오류 처리
 

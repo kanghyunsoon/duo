@@ -33,7 +33,7 @@ flowchart LR
     TASK001["TASK-001<br/>저장소 골격"]
     TASK002["TASK-002<br/>core 스키마, loader, 추적성 파서"]
     TASK003["TASK-003<br/>GraphStore"]
-    TASK004["TASK-004<br/>파일 스캔, fingerprint, 토큰 측정"]
+    TASK004["TASK-004<br/>파일 스캔과 fingerprint"]
     TASK005["TASK-005<br/>LanguageAnalyzer와 TS/JS Analyzer"]
     TASK006["TASK-006<br/>Git Evidence Provider"]
     TASK007["TASK-007<br/>Graph builder와 일관성 검사"]
@@ -149,7 +149,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-001](#task-001-저장소-골격) | 저장소 골격 | 공통 | M1 | TASK-000 | done |
 | [TASK-002](#task-002-core-스키마-loader-추적성-파서) | core 스키마, loader, 추적성 파서 | core | M1 | TASK-001 | done |
 | [TASK-003](#task-003-graphstore) | GraphStore | graph | M1 | TASK-002 | done |
-| [TASK-004](#task-004-파일-스캔-fingerprint-토큰-측정) | 파일 스캔, fingerprint, 토큰 측정 | analyzer | M1 | TASK-002 | todo |
+| [TASK-004](#task-004-파일-스캔과-fingerprint) | 파일 스캔과 fingerprint | analyzer | M1 | TASK-002 | done |
 | [TASK-005](#task-005-languageanalyzer와-tsjs-analyzer) | LanguageAnalyzer와 TS/JS Analyzer | analyzer | M1 | TASK-004 | todo |
 | [TASK-006](#task-006-git-evidence-provider) | Git Evidence Provider | analyzer | M1 | TASK-002 | todo |
 | [TASK-007](#task-007-graph-builder와-일관성-검사) | Graph builder와 일관성 검사 | graph | M1 | TASK-003, TASK-005, TASK-006 | todo |
@@ -272,7 +272,7 @@ depends_on: [TASK-002]
 - **Output**: GraphStore 인터페이스, NodeSqliteGraphStore, graph_schema_version, 인접 조회, BFS, 쓰기 잠금
 - **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
 - **Files expected to change**: `packages/graph/src/store/**`, `packages/graph/src/store/node-sqlite/**`, `packages/graph/src/traverse.ts`
-- **Status**: done (T03; AC-003-03은 conflicts.md C31의 해석)
+- **Status**: done (T03; AC-003-03 문구는 conflicts.md C31로 정정)
 - **검증 대상 Requirement**: [REQ-GRAPH-001](../01-requirements.md#req-graph-001-node-8종과-edge-10종의-embedded-저장), [REQ-GRAPH-002](../01-requirements.md#req-graph-002-결정적-bounded-traversal-trace-impact)
 - **관련 ADR**: [ADR-002](../adr/ADR-002-graph-storage.md)
 
@@ -280,36 +280,36 @@ Acceptance Criteria
 
 - **AC-003-01** 메모리와 파일 DB에서 같은 테스트가 통과한다
 - **AC-003-02** traverse가 maxDepth, nodeLimit, edgeTypes를 지키고 방문 순서가 결정적이다
-- **AC-003-03** 쓰기 잠금을 얻지 못한 두 번째 프로세스는 stale 표시와 함께 읽기만 한다
+- **AC-003-03** 쓰기 잠금을 얻지 못한 두 번째 프로세스는 `busy` 결과를 받고 마지막 commit 상태를 읽는다(snapshot visibility). GraphStore는 `contentHash`와 `source`를 손실 없이 저장만 하고 freshness(stale)를 판정하지 않는다. 판정은 TASK-004의 비교 primitive와 TASK-008 Indexer가 한다(C31)
 - **AC-003-04** node:sqlite import는 NodeSqliteGraphStore 안에만 있고 GraphStore 인터페이스에 SQL이나 storage 전용 타입이 노출되지 않는다. graph_schema_version이 다르면 재생성한다
 
-### TASK-004 파일 스캔, fingerprint, 토큰 측정
+### TASK-004 파일 스캔과 fingerprint
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M1
 package: analyzer
-requirements: [REQ-INDEX-002, REQ-TOKEN-001, REQ-SAFETY-001, REQ-NFR-001]
-decisions: [ADR-005]
+requirements: [REQ-INDEX-002, REQ-SAFETY-001, REQ-NFR-001]
+decisions: [ADR-002]
 depends_on: [TASK-002]
 ```
 
-- **Goal**: 인덱싱 대상 파일을 찾고 fingerprint와 토큰 수를 계산한다.
-- **Input**: 03 project.yaml index 설정, 09 측정 방식, 10 제외 규칙
-- **Output**: 스캐너, fingerprint, TokenEstimator(o200k_base, chars4 fallback)
+- **Goal**: 인덱싱 대상 파일을 찾고, OS와 checkout EOL에 관계없는 content fingerprint와 파일 단위 변경 비교를 제공한다. 토큰 측정은 TASK-010으로 옮겼다(H-21).
+- **Input**: 03 project.yaml index 설정과 [Repository scan](../03-data-model.md#repository-scan과-fingerprint) 절, 10 제외 규칙
+- **Output**: `scanRepository`(Git index/untracked 기준, symlink 비추적), 확장자 기반 text/binary 분류, `contentHash`, `generated/fingerprints.json`, `compareFingerprints`(UNCHANGED/CHANGED/ADDED/DELETED), 공통 정렬 `compareUtf8`
 - **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
-- **Files expected to change**: `packages/analyzer/src/scan/**`, `packages/analyzer/src/fingerprint/**`, `packages/core/src/tokens/**`
-- **Status**: todo
-- **검증 대상 Requirement**: [REQ-INDEX-002](../01-requirements.md#req-index-002-fingerprint-기반-증분-인덱싱), [REQ-TOKEN-001](../01-requirements.md#req-token-001-토큰-측정-방식과-표기), [REQ-SAFETY-001](../01-requirements.md#req-safety-001-source-code-비수정과-쓰기-경로-제한), [REQ-NFR-001](../01-requirements.md#req-nfr-001-cross-platform)
-- **관련 ADR**: [ADR-005](../adr/ADR-005-token-measurement.md)
+- **Files expected to change**: `packages/analyzer/src/scan/**`, `packages/analyzer/src/fingerprint/**`. 정렬 통일(H-21)로 `packages/core/src/order.ts`, `packages/core/src/paths.ts`(glob), `packages/graph/src/traverse.ts`, `packages/graph/src/store/json.ts`
+- **Status**: done (T04)
+- **검증 대상 Requirement**: [REQ-INDEX-002](../01-requirements.md#req-index-002-fingerprint-기반-증분-인덱싱), [REQ-SAFETY-001](../01-requirements.md#req-safety-001-source-code-비수정과-쓰기-경로-제한), [REQ-NFR-001](../01-requirements.md#req-nfr-001-cross-platform)
+- **관련 ADR**: [ADR-002](../adr/ADR-002-graph-storage.md)
 
 Acceptance Criteria
 
-- **AC-004-01** fixture의 포함/제외 파일 목록이 golden과 같다
-- **AC-004-02** 비밀 파일 패턴과 .gitignore 대상이 제외된다
-- **AC-004-03** stat이 같으면 재실행 시 hash 계산이 0회다(계측 카운터)
-- **AC-004-04** 모든 토큰 값에 estimator 이름이 붙고 bytes/chars도 함께 저장된다
+- **AC-004-01** fixture의 포함/제외 파일 목록과 fingerprint가 golden과 같다(3개 OS에서 같은 golden)
+- **AC-004-02** 비밀 파일 패턴, .gitignore 대상, `.git/`, DUO regenerable 영역, symlink가 제외되고 symlink 대상은 읽지 않는다
+- **AC-004-03** 변경 판정은 `contentHash`로 한다. mtime만 바뀐 파일은 UNCHANGED, 크기가 같아도 내용이 바뀐 파일은 CHANGED다(C33)
+- **AC-004-04** text는 CRLF → LF만 정규화한 SHA-256, binary는 원본 bytes의 SHA-256이다. BOM, Unicode 정규화, 공백, lone CR은 보존된다(C34)
 
 ### TASK-005 LanguageAnalyzer와 TS/JS Analyzer
 
@@ -326,7 +326,7 @@ depends_on: [TASK-004]
 - **Goal**: 언어 비종속 인터페이스와 TypeScript/JavaScript 구현을 만든다.
 - **Input**: ADR-003, 04 AnalysisResult
 - **Output**: LanguageAnalyzer, TypeScriptAnalyzer, JavaScriptAnalyzer, grammar wasm
-- **Dependencies**: [TASK-004](#task-004-파일-스캔-fingerprint-토큰-측정)
+- **Dependencies**: [TASK-004](#task-004-파일-스캔과-fingerprint)
 - **Files expected to change**: `packages/analyzer/src/language/**`, `packages/analyzer/grammars/*.wasm`
 - **Status**: todo
 - **검증 대상 Requirement**: [REQ-INDEX-001](../01-requirements.md#req-index-001-언어-비종속-languageanalyzer)
@@ -409,7 +409,7 @@ depends_on: [TASK-007]
 
 - **Goal**: 변경 파일만 다시 분석하고 trace/impact를 제공한다.
 - **Input**: 04 증분 갱신 절차
-- **Output**: incremental updater, trace(), impact()
+- **Output**: incremental updater(TASK-004 `compareFingerprints` 결과로 Node freshness fresh/changed/deleted/unknown 판정), trace(), impact()
 - **Dependencies**: [TASK-007](#task-007-graph-builder와-일관성-검사)
 - **Files expected to change**: `packages/graph/src/incremental/**`, `packages/graph/src/query/**`
 - **Status**: todo
@@ -459,18 +459,18 @@ type: issue
 status: todo
 milestone: M2
 package: director
-requirements: [REQ-CONTEXT-001, REQ-CONTEXT-002, REQ-CONTEXT-003, REQ-NFR-005]
+requirements: [REQ-CONTEXT-001, REQ-CONTEXT-002, REQ-CONTEXT-003, REQ-NFR-005, REQ-TOKEN-001]
 decisions: [ADR-005, ADR-008, ADR-004]
 depends_on: [TASK-008, TASK-009]
 ```
 
 - **Goal**: Task에서 budget 이하의 Director Context Packet을 만든다.
 - **Input**: 05 알고리즘, 09 지표
-- **Output**: Seed 해석, 확장, L1~L3 표현, packing, text/json 출력, metrics
+- **Output**: Seed 해석, 확장, L1~L3 표현, packing, text/json 출력, metrics, TokenEstimator(o200k_base, chars/4 fallback. 라이브러리는 착수 전에 고른다, H-21)
 - **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact), [TASK-009](#task-009-decision-생명주기)
-- **Files expected to change**: `packages/director/src/context/**`
+- **Files expected to change**: `packages/director/src/context/**`, `packages/core/src/tokens/**`
 - **Status**: todo
-- **검증 대상 Requirement**: [REQ-CONTEXT-001](../01-requirements.md#req-context-001-director-context-packet-생성), [REQ-CONTEXT-002](../01-requirements.md#req-context-002-token-budget-상한), [REQ-CONTEXT-003](../01-requirements.md#req-context-003-context-지표-기록), [REQ-NFR-005](../01-requirements.md#req-nfr-005-결정적-출력)
+- **검증 대상 Requirement**: [REQ-CONTEXT-001](../01-requirements.md#req-context-001-director-context-packet-생성), [REQ-CONTEXT-002](../01-requirements.md#req-context-002-token-budget-상한), [REQ-CONTEXT-003](../01-requirements.md#req-context-003-context-지표-기록), [REQ-NFR-005](../01-requirements.md#req-nfr-005-결정적-출력), [REQ-TOKEN-001](../01-requirements.md#req-token-001-토큰-측정-방식과-표기)
 - **관련 ADR**: [ADR-005](../adr/ADR-005-token-measurement.md), [ADR-008](../adr/ADR-008-deterministic-first.md), [ADR-004](../adr/ADR-004-mcp-context-gateway.md)
 
 Acceptance Criteria
@@ -480,6 +480,7 @@ Acceptance Criteria
 - **AC-010-03** 같은 입력은 byte 단위로 같은 Packet을 만든다
 - **AC-010-04** Context 생성 중 LLM 호출이 0회다
 - **AC-010-05** 비밀 패턴이 [REDACTED]로 치환된다
+- **AC-010-06** 모든 토큰 값에 estimator 이름이 붙고 bytes/chars도 함께 기록된다(TASK-004의 이전 AC-004-04를 옮김, H-21)
 
 ### TASK-011 Knowledge Gap
 

@@ -95,7 +95,7 @@ Node 순위 값 = seed 값 × Π(경로의 edge weight). 경로가 여럿이면 
 ## 증분 갱신
 
 ```text
-변경 탐지 ─▶ 변경 파일 집합 F
+변경 탐지(compareFingerprints: CHANGED, ADDED, DELETED) ─▶ 변경 파일 집합 F
   ─▶ owner_file ∈ F 인 Node/Edge/unresolved_refs 삭제
   ─▶ F 재분석 ─▶ Node/Edge 추가
   ─▶ 재연결: F를 import하던 파일과 F의 Symbol 이름을 가진 unresolved_refs 재해석
@@ -105,7 +105,7 @@ Node 순위 값 = seed 값 × Π(경로의 edge weight). 경로가 여럿이면 
   ─▶ meta.graph_revision 증가
 ```
 
-삭제된 파일은 삭제 단계만 수행하고, rename은 삭제와 추가로 처리한다. Analyzer의 `version`이 바뀌면 그 Analyzer가 담당하는 파일 전체를 다시 분석한다.
+Node의 freshness(fresh, changed, deleted, unknown)는 이 비교 결과로 Indexer가 정한다. GraphStore는 판정하지 않는다([03 Freshness 책임](03-data-model.md#freshness-책임)). 삭제된 파일은 삭제 단계만 수행하고, rename은 삭제와 추가로 처리한다. Analyzer의 `version`이 바뀌면 그 Analyzer가 담당하는 파일 전체를 다시 분석한다.
 
 ## 일관성 불변식
 
@@ -113,7 +113,7 @@ Node 순위 값 = seed 값 × Π(경로의 edge weight). 경로가 여럿이면 
 
 1. 모든 Edge의 src와 dst Node가 존재한다.
 2. Edge type별 src/dst Node type이 위 표와 일치한다.
-3. 모든 File Node는 fingerprints에 행이 있고, 그 역도 성립한다.
+3. 모든 File Node는 `generated/fingerprints.json`에 항목이 있고, 그 역도 성립한다.
 4. Symbol과 Test Node는 자신을 CONTAINS하는 File이 정확히 하나다.
 5. **증분 결과와 전체 재구축 결과가 같다**(Node/Edge 집합 비교).
 6. 정의 ID(Requirement, Decision, Issue, Milestone)는 전역에서 유일하다. 중복이면 두 정의를 모두 Knowledge Gap으로 보고한다.

@@ -95,8 +95,8 @@ CREATE INDEX graph_edges_to ON graph_edges (to_id, type, from_id);
 | CHECK | Node type은 core `ENTITY_TYPES`, Edge type은 `GRAPH_EDGE_TYPES`(10종)만 허용한다 |
 | Idempotency | Node는 id로, Edge는 `(from_id, type, to_id)`로 upsert한다. 같은 Edge를 여러 번 넣어도 한 행이다 |
 | Index | node.id는 primary key, node.type은 `(type, id)`, edge.from과 edge(from, type)은 primary key `(from_id, type, to_id)`의 앞부분, edge.to와 edge(to, type)은 `graph_edges_to(to_id, type, from_id)`가 맡는다. edge.type 단독 조회는 없어서 index를 두지 않는다 |
-| 정렬 | Node는 id, Edge는 `(from, type, to)` 순서다. 비교는 SQLite BINARY(UTF-8 바이트 순)다 |
-| 동시성 | 파일 DB는 WAL 모드다. 다른 연결이 쓰는 동안에도 읽기는 마지막 commit 상태를 본다 |
+| 정렬 | Node는 id, Edge는 `(from, type, to)` 순서다. 비교는 SQLite BINARY(UTF-8 바이트 순)다. JS 쪽(traverse, canonical JSON 키)은 core `compareUtf8`로 같은 순서를 쓴다(`fixtures/core/ordering.json`) |
+| 동시성 | 파일 DB는 WAL 모드다. 다른 연결이 쓰는 동안에도 읽기는 마지막 commit 상태를 본다(snapshot visibility). 이것은 freshness 판정이 아니다. GraphStore는 Node의 `contentHash`와 `source`를 저장만 하고 stale을 만들지 않는다([03 Freshness 책임](../03-data-model.md#freshness-책임), C31) |
 | Endpoint 타입 규칙 | Edge 종류별 허용 endpoint(04의 표)는 저장 계층이 아니라 Graph builder와 `graph.check()`(TASK-007)가 검사한다 |
 
 ## Graph Schema Version과 수명 주기
@@ -106,7 +106,8 @@ CREATE INDEX graph_edges_to ON graph_edges (to_id, type, from_id);
 - 다른 버전인 DUO graph DB는 `GRAPH_SCHEMA_UNSUPPORTED`와 `regenerable: true`를 돌려준다(generated 데이터라 지우고 다시 만들 수 있음). `onUnsupportedSchema: "recreate"`를 주면 DB 파일(`-wal`, `-shm` 포함)을 지우고 빈 graph를 만든다. `graph_meta`가 없는 외부 SQLite 파일은 `regenerable: false`이고 지우지 않는다.
 - 손상된 파일은 `GRAPH_OPEN_FAILED`이며, 연결을 닫아 파일 잠금을 남기지 않는다.
 - 범용 migration framework는 만들지 않는다. 스키마를 바꾸면 버전을 올리고 재생성한다.
-- 이후 Task가 추가할 것: 파일 fingerprint(TASK-004), 증분 삭제용 소유 파일(`owner_file`)과 미해결 참조(TASK-007/008). 추가할 때 `graph_schema_version`을 올린다.
+- 파일 fingerprint는 graph.db에 넣지 않는다. Repository scan cache는 `generated/fingerprints.json`에 따로 두어 Graph 스키마와 수명 주기를 분리한다(TASK-004, H-21).
+- 이후 Task가 추가할 것: 증분 삭제용 소유 파일(`owner_file`)과 미해결 참조(TASK-007/008). 추가할 때 `graph_schema_version`을 올린다.
 
 ## 결과
 

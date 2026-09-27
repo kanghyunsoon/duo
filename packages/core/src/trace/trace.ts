@@ -5,6 +5,7 @@
 import { createDiagnostic, formatLocation, withSeverity, type Diagnostic, type SourceLocation } from "../diagnostics.js";
 import type { DefinitionRef, DefinitionType } from "../ids.js";
 import type { DeclaredReference, Definition, DefinitionSet, TraceRelation } from "../domain/model.js";
+import { compareUtf8 } from "../order.js";
 
 export interface TraceLink {
   readonly relation: TraceRelation;
@@ -115,10 +116,10 @@ export function analyzeTrace(input: TraceInput, policy: TracePolicy = {}): { mod
         const start = stack.findIndex((l) => l.from.id === target);
         const cycle = [...stack.slice(start === -1 ? stack.length : start), link];
         const ids = cycle.map((l) => l.from.id);
-        const key = [...ids].sort().join(" ");
+        const key = [...ids].sort(compareUtf8).join(" ");
         if (!reported.has(key)) {
           reported.add(key);
-          const first = [...cycle].sort((a, b) => a.from.id.localeCompare(b.from.id))[0] ?? link;
+          const first = [...cycle].sort((a, b) => compareUtf8(a.from.id, b.from.id))[0] ?? link;
           diagnostics.push(createDiagnostic(
             "DECISION_SUPERSEDE_CYCLE",
             `Supersede cycle: ${[...ids, target].join(" → ")}`,
@@ -133,7 +134,7 @@ export function analyzeTrace(input: TraceInput, policy: TracePolicy = {}): { mod
     }
     state.set(id, "done");
   };
-  for (const id of [...next.keys()].sort()) if (state.get(id) === undefined) visit(id);
+  for (const id of [...next.keys()].sort(compareUtf8)) if (state.get(id) === undefined) visit(id);
   const validLinks = links.filter((l) => !(l.relation === "SUPERSEDES" && l.from.id === l.to.id));
   links.length = 0;
   links.push(...validLinks);
@@ -182,6 +183,6 @@ export function analyzeTrace(input: TraceInput, policy: TracePolicy = {}): { mod
     diagnostics.push(policy.requireTrackedRequirements ? withSeverity(d, "error") : d);
   }
 
-  links.sort((a, b) => (a.relation + a.from.id + "\u0000" + a.to.id).localeCompare(b.relation + b.from.id + "\u0000" + b.to.id));
+  links.sort((a, b) => compareUtf8(a.relation, b.relation) || compareUtf8(a.from.id, b.from.id) || compareUtf8(a.to.id, b.to.id));
   return { model: { entities, acceptance, links }, diagnostics };
 }

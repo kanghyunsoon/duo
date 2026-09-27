@@ -96,7 +96,7 @@ Decision confirm/reject는 Human Action이라 MCP로 노출하지 않는다([ADR
 
 ## 오류 코드
 
-`structuredContent.error.code`: `NOT_INITIALIZED`, `NOT_FOUND`, `AMBIGUOUS`, `INVALID_INPUT`, `INDEX_BUSY`(잠금 대기 초과. stale 결과를 반환할 때는 오류가 아님), `GIT_ERROR`, `INTERNAL`. LLM 오류는 오류 코드로 내지 않고 `skipped_checks`에 남긴다.
+`structuredContent.error.code`: `NOT_INITIALIZED`, `NOT_FOUND`, `AMBIGUOUS`, `INVALID_INPUT`, `INDEX_BUSY`(잠금 대기 초과. 마지막 commit 상태를 freshness `unknown`으로 반환할 때는 오류가 아님), `GIT_ERROR`, `INTERNAL`. LLM 오류는 오류 코드로 내지 않고 `skipped_checks`에 남긴다.
 
 ## 계약 테스트
 

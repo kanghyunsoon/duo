@@ -37,7 +37,7 @@ MCP Tool 이름(`duo_get_context` 등, [06](06-mcp-interface.md))은 서버 이�
 │  └─ *.md                   Project Truth · tracked · Issue와 Milestone의 Markdown 정의
 ├─ integrations/             Project Truth · tracked · (Post-MVP) jira.yaml
 ├─ reviews/*.json            Human-approved History · tracked · Human이 보존·승인한 Review만
-├─ generated/                Regenerable · ignored · graph.db, gaps.json, inferred.json, index.json
+├─ generated/                Regenerable · ignored · graph.db, fingerprints.json, gaps.json, inferred.json, index.json
 ├─ cache/                    Regenerable · ignored · tokenizer, Packet, llm/
 └─ runtime/                  Runtime · ignored · reviews/(매 실행), metrics.jsonl, backup/
 ```
@@ -183,9 +183,41 @@ Constraint는 Decision entity(`dec:CON-001`)다([conflicts.md C14](conflicts.md)
 2. 구분자를 POSIX `/`로 바꾼다(Windows `src\auth\a.ts` → `src/auth/a.ts`).
 3. `.`과 `..` 세그먼트를 정리한다.
 
-대소문자 변환, Unicode NFC/NFD 재작성, 앞뒤 공백 제거는 하지 않는다. Git과 파일 시스템의 실제 철자를 보존한다. 대신 case-insensitive이거나 Unicode를 정규화하는 파일 시스템에서 충돌할 경로(`Auth.ts`와 `auth.ts`, NFC와 NFD `café.ts`)는 `findPathPortabilityCollisions()`가 `PATH_PORTABILITY_COLLISION`(warning)으로 보고한다. 충돌 판정 키(`portablePathKey`: NFC + 소문자)는 비교에만 쓰고 저장하지 않는다. 실제 저장소 스캔은 TASK-004에서 한다.
+대소문자 변환, Unicode NFC/NFD 재작성, 앞뒤 공백 제거는 하지 않는다. Git과 파일 시스템의 실제 철자를 보존한다. 대신 case-insensitive이거나 Unicode를 정규화하는 파일 시스템에서 충돌할 경로(`Auth.ts`와 `auth.ts`, NFC와 NFD `café.ts`)는 `findPathPortabilityCollisions()`가 `PATH_PORTABILITY_COLLISION`(warning)으로 보고한다. 충돌 판정 키(`portablePathKey`: NFC + 소문자)는 비교에만 쓰고 저장하지 않는다. 저장소 스캔([Repository scan과 fingerprint](#repository-scan과-fingerprint))은 tracked 경로에 Git index 철자를 쓰고, 충돌 검사는 tracked와 untracked 경로 모두에 한다.
 
-glob 패턴(`implements.paths` 등)은 구분자만 바꾸고 `**` 같은 세그먼트는 유지한다. 절대경로와 `..` 패턴은 거부한다.
+glob 패턴(`implements.paths`, `index.include/exclude` 등)은 구분자만 바꾸고 `**` 같은 세그먼트는 유지한다. 절대경로와 `..` 패턴은 거부한다. 매칭(`matchesRepoPattern`)은 저장소 root 기준이고 모든 OS에서 대소문자를 구분한다. 지원 문법은 세그먼트 안의 `*`와 `?`, 세그먼트 전체 `**`(0개 이상 디렉터리), 끝의 `/`(그 아래 전부)뿐이다. Node의 `path.matchesGlob`은 Windows와 macOS에서 대소문자를 무시해 OS마다 결과가 달라지므로 쓰지 않는다.
+
+## 결정적 정렬
+
+결정적 순서가 필요한 모든 곳(GraphStore, traverse, scanner, fingerprint 파일, diagnostic, trace link, canonical JSON 키)은 UTF-8 byte 사전순을 쓴다. 이 순서는 Unicode code point 순서, SQLite BINARY collation과 같다. JS 구현은 core `compareUtf8`다. JS 기본 비교(`<`, `sort()`)는 UTF-16 code unit 순서라 emoji 같은 보충 문자를 U+E000~U+FFFF보다 앞에 두고, `localeCompare`는 실행 환경의 locale에 따라 달라지므로 쓰지 않는다. 사례는 `fixtures/core/ordering.json`에 있고 core(`compareUtf8` = byte 비교)와 graph(SQLite 결과 = traverse 결과 = fixture) 테스트가 같은 fixture를 쓴다.
+
+## Repository scan과 fingerprint
+
+`@duo-director/analyzer`의 Scanner 계약이다(TASK-004). Graph Node payload(TASK-007)와는 별개다.
+
+- **경로 출처**: scan root는 Git work tree의 최상위여야 한다(아니면 `SCAN_ROOT_INVALID`). tracked 파일은 Git index 철자, untracked 파일은 Git이 파일 시스템에서 읽은 철자를 RepoPath로 쓴다. 파일 시스템 `readdir()` 철자는 tracked 파일의 ID에 쓰지 않는다. Git 호출은 `rev-parse --show-prefix`, `ls-files -z --stage`, `ls-files -z --others --exclude-standard` 세 번이고 파일마다 호출하지 않는다. Git CLI 세부는 analyzer 밖으로 export하지 않는다.
+- **상태**: `RepositoryFileState = "tracked" | "untracked"`. ignored 파일과 `.git/`은 목록에 없다.
+- **제외**(`ExclusionReason`): `.duo-project/generated|cache|runtime/`(duo-regenerable), 비밀 파일 패턴(secret, include보다 우선하고 대소문자 무시), `index.exclude`, `index.include` 불일치, symlink, working tree에 없는 tracked 파일(missing), submodule과 중첩 저장소, 일반 파일이 아닌 항목과 RepoPath로 표현할 수 없는 이름(unsupported-entry). tracked 파일은 .gitignore 패턴에 맞아도 포함한다.
+- **Symlink**: 따라가지 않는다. index mode가 symlink(120000)면 checkout 형태(Windows `core.symlinks=false`의 일반 파일 포함)와 관계없이 symlink로 본다. 상위 디렉터리가 symlink인 파일도 제외한다. link 문자열만 읽어 대상이 저장소 밖이면 `SYMLINK_OUTSIDE_REPOSITORY`(warning), 안이면 `SYMLINK_SKIPPED`(info)를 낸다. 대상 파일은 읽지 않는다.
+- **충돌 검사**: 포함된 tracked와 untracked 경로 전체에 `PATH_PORTABILITY_COLLISION`을 적용한다.
+- **text/binary**: 확장자와 파일 이름 목록(`TEXT_FILE_EXTENSIONS`, `TEXT_FILE_NAMES`, 소문자 비교)으로만 정한다. 목록에 없으면 binary다. 내용으로 추측하지 않는다.
+- **`contentHash`** = `sha256:` + 64자리 hex. text는 CRLF(0x0D 0x0A)를 LF로 바꾼 bytes, binary는 원본 bytes를 hash한다. Unicode 정규화, trim, BOM 제거, 대소문자·공백·formatting 정규화는 하지 않고 lone CR도 그대로 둔다. bytes 단위로 처리하므로 decode/encode가 없다. `size`는 이 canonical bytes의 길이다.
+- **`gitBlobOid`**: tracked 파일의 index blob OID(provenance)다. working tree 내용과 다를 수 있고 fingerprint로 쓰지 않으며 비교하지 않는다. untracked와 merge 충돌 파일에는 없다.
+- **저장**: `.duo-project/generated/fingerprints.json`(graph.db와 분리). `{ format: "duo-fingerprints", version: 1, files: FileFingerprint[] }`이고 `FileFingerprint = { path, state, kind, contentHash, size, gitBlobOid? }`다. 경로는 UTF-8 순, 키 순서 고정, timestamp 없음. 쓰기는 `checkWriteBoundary(..., "regenerable")` 뒤 경로에 symlink가 없는지 확인하고 임시 파일 + rename으로 한다. 파일이 없으면 빈 cache, 읽을 수 없거나 형식·version이 다르면 `FINGERPRINT_CACHE_INVALID`(warning)와 빈 cache다. hash 규칙이나 text 목록을 바꾸면 version을 올린다.
+- **mtime**: fingerprint에 없다. 이후 fast path hint로 쓰더라도 내용 동일성은 `contentHash`로만 판단한다.
+- **비교**: `compareFingerprints(previous, current)`는 경로마다 `UNCHANGED | CHANGED | ADDED | DELETED`를 UTF-8 경로 순으로 돌려준다. CHANGED는 `contentHash`나 `kind`가 다를 때다. state만 바뀌면 UNCHANGED, rename은 DELETED + ADDED다. Graph는 갱신하지 않는다.
+
+### Freshness 책임
+
+| 계층 | 책임 |
+|---|---|
+| GraphStore (TASK-003) | Node의 `contentHash`와 `source`를 손실 없이 저장하고 돌려준다. freshness를 판정하지 않는다 |
+| Scanner (TASK-004) | 현재 파일 목록과 fingerprint를 계산하고 파일 단위 비교 primitive를 제공한다 |
+| Indexer (TASK-008) | 저장된 fingerprint와 현재 fingerprint를 비교해 바뀐 파일만 다시 분석한다 |
+| Freshness (TASK-008, 표시는 TASK-015/016) | Node마다 fresh / changed / deleted / unknown을 정한다. 인덱싱하지 못한 경우는 unknown |
+
+WAL에서 다른 연결이 쓰는 동안 마지막 commit 상태를 읽는 것은 snapshot visibility이며 freshness 판정과 다르다(C31).
+
 
 ## SourceLocation
 

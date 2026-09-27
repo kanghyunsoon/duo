@@ -36,7 +36,7 @@ LLM을 호출하지 않는 작업과 LLM을 쓸 수 있는 의미 판단 목록�
 | 지표 | 정의 |
 |---|---|
 | Repository Files | 인덱싱 대상 파일 수(제외 규칙 적용 후) |
-| Repository Estimated Tokens | 인덱싱 대상 파일 전체 내용의 토큰 합. fingerprint 단계에서 파일별로 저장 |
+| Repository Estimated Tokens | 인덱싱 대상 파일 전체 내용의 토큰 합. 파일별 값은 TASK-010이 계산한다(fingerprint에는 bytes만 있음, H-21) |
 | Repository Bytes / Chars | 같은 파일 집합의 UTF-8 bytes, chars |
 | Files Considered | 후보 Subgraph의 Node가 속한 서로 다른 파일 수(정의 파일 포함) |
 | Candidate (Raw) Context Tokens | Files Considered 파일 전체 내용의 토큰 합. "관련 파일을 통째로 읽는 Agent"의 비용 근사 |

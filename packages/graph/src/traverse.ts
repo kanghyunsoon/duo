@@ -1,8 +1,9 @@
 /**
  * Bounded, deterministic BFS over a GraphStore (AC-003-02). Uses only the adjacency primitive.
- * Order: depth, then node id. Weighted ranking for Context is the Context Compiler's job (TASK-010).
+ * Order: depth, then node id in UTF-8 byte order (core compareUtf8, the same order as SQLite BINARY).
+ * Weighted ranking for Context is the Context Compiler's job (TASK-010).
  */
-import { parseNodeId, type EntityRef } from "@duo-director/core";
+import { compareUtf8, parseNodeId, type EntityRef } from "@duo-director/core";
 import { GraphStoreError, type EdgeDirection, type GraphEdge, type GraphEdgeType, type GraphNode, type GraphReader } from "./store/types.js";
 
 export interface TraverseOptions {
@@ -23,7 +24,7 @@ export interface TraversalResult {
   readonly truncated: boolean;
 }
 
-const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const byId = compareUtf8;
 
 function refOf(id: string): EntityRef {
   const ref = parseNodeId(id);

@@ -30,8 +30,8 @@ confirmed_at: 2026-09-27
 - 모든 결과에 측정 방식을 기록한다. 예: `Token Estimator o200k_base · Repository Tokens 184,312 · Compiled Context 4,921 · Reduction 97.33%`
 - `chars/4` 값은 공식 benchmark와 budget 판정에 쓰지 않는다.
 - Reduction은 소수 둘째 자리까지 표시한다.
-- 파일별 토큰, bytes, chars는 fingerprint 단계에서 한 번 계산해 저장한다(TASK-004).
-- JS tokenizer 라이브러리는 TASK-004에서 크기, 속도, 정확도(참조 구현과의 일치)를 비교해 고르고 이 ADR에 기록한다.
+- o200k_base를 공식 지표의 기준으로 삼는 결정은 유지한다. 구현 라이브러리는 TASK-010(Context Compiler) 착수 전에 크기, 속도, 정확도(참조 구현과의 일치)를 비교해 고르고 이 ADR에 기록한다. TASK-004에는 tokenizer 의존성을 두지 않는다(H-21).
+- 파일별 토큰 값의 계산 시점과 캐시 위치도 TASK-010에서 정한다. TASK-004의 fingerprint에는 canonical bytes 길이(`size`)만 있다.
 
 ## 결과
 

@@ -1,8 +1,43 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { findPathPortabilityCollisions, normalizeRepoPath, normalizeRepoPattern, portablePathKey, toRepoPath, type RepoPath } from "./paths.js";
+import {
+  compileRepoPattern, findPathPortabilityCollisions, matchesRepoPattern, normalizeRepoPath, normalizeRepoPattern, portablePathKey, toRepoPath,
+  type RepoPath,
+} from "./paths.js";
 
 const codes = (r: { diagnostics: readonly { code: string }[] }) => r.diagnostics.map((d) => d.code);
+
+describe("matchesRepoPattern", () => {
+  const p = (s: string) => s as RepoPath;
+  it.each([
+    ["src/**", "src/a.ts", true],
+    ["src/**", "src/a/b/c.ts", true],
+    ["src/**", "src", false],
+    ["src/", "src/a/b.ts", true],
+    ["src\\auth\\**", "src/auth/x.ts", true],
+    ["**/*.test.ts", "a.test.ts", true],
+    ["**/*.test.ts", "src/deep/a.test.ts", true],
+    ["src/*.ts", "src/a.ts", true],
+    ["src/*.ts", "src/a/b.ts", false],
+    ["src/**/b.ts", "src/b.ts", true],
+    ["src/**/b.ts", "src/x/y/b.ts", true],
+    ["a?.ts", "ab.ts", true],
+    ["a?.ts", "a/.ts", false],
+    ["a?.ts", "a\u{1F600}.ts", true],
+    ["docs/(x).md", "docs/(x).md", true],
+    ["docs/a+b.md", "docs/aab.md", false],
+    ["Src/**", "src/a.ts", false],
+    ["*.log", "logs/a.log", false],
+  ])("%s matches %s: %s", (pattern, path, expected) => {
+    expect(matchesRepoPattern(p(path), pattern)).toBe(expected);
+  });
+
+  it("rejects patterns that leave the repository", () => {
+    expect(compileRepoPattern("../x/**")).toBeUndefined();
+    expect(compileRepoPattern("/abs/**")).toBeUndefined();
+    expect(matchesRepoPattern(p("x/a.ts"), "../x/**")).toBe(false);
+  });
+});
 
 describe("normalizeRepoPath", () => {
   it.each([
