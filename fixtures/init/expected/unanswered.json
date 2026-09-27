@@ -1,0 +1,6 @@
+{
+  ".duo-project/.gitignore": "generated/\ncache/\nruntime/\n",
+  ".duo-project/intent/constraints.yaml": "constraints: []\n",
+  ".duo-project/intent/vision.md": "---\nstatus: draft\nowner: human\n---\n\n# Vision\n\n## Open questions\n\nUNKNOWN(project_goal): The project goal is not confirmed by a human yet.\n\nUNKNOWN(current_milestone): The current milestone or MVP scope is not confirmed by a human yet.\n\nUNKNOWN(critical_constraints): The critical constraints are not confirmed by a human yet.\n",
+  ".duo-project/project.yaml": "schema_version: 1\nname: pocket-ledger\ncurrent_milestone: null\n"
+}

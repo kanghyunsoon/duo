@@ -46,6 +46,24 @@ function truthEvidenceOf(store: EvidenceStore, item: TruthItem, text: string, si
   }, text);
 }
 
+/**
+ * A document: the confirmed Vision (project-truth) or an External Source slice (repository, T13.1).
+ * Identity: path, section and the hash of the exact text; the pointer keeps path, lines and hash.
+ */
+export function documentEvidence(
+  store: EvidenceStore,
+  d: { readonly basis: "project-truth" | "repository"; readonly path: string; readonly text: string; readonly location?: SourceLocation; readonly commit?: string; readonly section?: string },
+): string {
+  const contentHash = sha256Text(d.text);
+  const range = d.location === undefined ? undefined : lines(d.location);
+  return store.add({
+    id: evidenceId(d.basis, "document", `${d.path}\n${d.section ?? ""}\n${contentHash}`), basis: d.basis, kind: "document",
+    source: d.location ?? { path: d.path }, contentHash, summary: d.section === undefined ? d.path : `${d.path} § ${d.section}`,
+    pointer: { kind: "document", path: d.path as RepoPath, ...(range === undefined ? {} : { lines: range }), ...(d.commit === undefined ? {} : { commit: d.commit }), contentHash },
+    ...(d.section === undefined ? {} : { metadata: { section: d.section } }),
+  }, d.text);
+}
+
 /** A symbol, test or file of the current repository state (a file is referenced, not copied). */
 export function repositoryEvidence(store: EvidenceStore, reader: SourceReader, node: GraphNode, commit: string): string | undefined {
   const ref = node.ref;

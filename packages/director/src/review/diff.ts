@@ -13,7 +13,8 @@ import { changeEvidence, hunkEvidence } from "../evidence/sources.js";
 import type { EvidenceStore } from "../evidence/store.js";
 import type { ChangedFile, ChangedHunk } from "./types.js";
 
-const EXCLUDED = ["generated/", "cache/", "runtime/"].map((d) => `${STATE_DIR_NAME}/${d}`);
+/** Regenerable data and Review Records (T13.1: recording a Review must not change the next Review's diff). */
+const EXCLUDED = ["generated/", "cache/", "runtime/", "reviews/"].map((d) => `${STATE_DIR_NAME}/${d}`);
 
 export function endLabel(end: GitDiffEnd, headOid: string | undefined): string {
   if (end === "HEAD") return headOid ?? "HEAD";

@@ -47,13 +47,15 @@ confirmed as D-005 · lock sha256:9b2e… · .duo-project/decisions/D-005.yaml
 
 ## duoctl init 대화
 
-TTY이고 `--yes`가 아니면 세 가지만 묻는다. 각 질문은 추론한 기본값을 보여 주며 Enter로 받아들일 수 있다.
+InitService(TASK-014, director `planInit` / `applyInitPlan`)는 질문을 직접 띄우지 않고 `InitQuestion { id, kind, promptKey, required, suggestedValue?, evidence? }`으로 돌려준다. 질문 렌더링과 TTY 대화는 TASK-015다. TTY이고 `--yes`가 아니면 세 가지만 묻는다. 저장소 이름, 언어, manifest, build·test script처럼 관찰로 알 수 있는 것은 묻지 않는다([03 Init](03-data-model.md#init-task-014)).
 
-1. 프로젝트 Goal 한 문장(기본값: package.json description 또는 README 첫 문단)
-2. 이번 MVP에서 하지 않을 것(쉼표로 구분, Constraint 초안 `state: draft`로 저장)
-3. 현재 Milestone 이름(기본값: M1)
+1. 프로젝트 Goal(`project_goal`, required). 제안값은 README 첫 문단, 없으면 package.json description이다. 제안값은 Human이 받아들이기 전에는 Truth가 아니고, README 제안을 받아들이면 vision.md에 `source: {path, hash}`가 남는다.
+2. 현재 Milestone 또는 MVP 범위(`current_milestone`). Human은 제목을 주고 ID(M1 등)는 plan이 배정한다. 답이 없으면 Milestone을 만들지 않는다(기본값 M1 없음, C122).
+3. Critical Constraint(`critical_constraints`, 한 줄씩). Human이 준 것만 `state: confirmed`, `enforcement: warn`으로 저장한다. `engines.node` 같은 기술 사실은 Constraint로 만들지 않는다. 빈 목록은 "없음"으로 확정한 답이다.
 
-비대화형이면 같은 질문을 ASK 목록으로 출력하고 초안 파일에 `UNKNOWN:` 줄로 남긴다. Agent는 이 목록을 사용자에게 전달한다.
+답하지 않은 질문은 `intent/vision.md`에 `UNKNOWN(<question id>): …` 줄로 남아 Declared Knowledge Gap이 되고, Goal이 없으면 vision은 `status: draft`다. 비대화형이면 같은 질문을 ASK 목록으로 출력한다(AC-014-04). Agent는 이 목록을 사용자에게 전달한다.
+
+이미 초기화된 저장소는 거부하고(`INIT_ALREADY_INITIALIZED`, 파일 불변), `.duo-project`가 일부만 있으면(partial) repair를 명시해야 없는 파일만 만든다. init은 Indexing을 하지 않고 `indexRequired: true`를 돌려주므로 CLI가 이어서 Indexer를 실행하고 진행과 오류를 보여 준다. `--reindex`는 Indexer 실행이며 Human-owned 파일을 바꾸지 않는다(TASK-015).
 
 ## duoctl stats
 

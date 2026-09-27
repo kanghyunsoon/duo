@@ -8,20 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { createDiagnostic, failure, success, type ParseResult, type SourceLocation } from "./diagnostics.js";
 import { canonicalSourceText, sliceSource } from "./location.js";
+import { symlinkOnPath } from "./fs-guard.js";
 import { normalizeRepoPath } from "./paths.js";
-
-function symlinkOnPath(root: string, repoPath: string): string | undefined {
-  const segments = repoPath.split("/");
-  for (let i = 1; i <= segments.length; i++) {
-    const partial = segments.slice(0, i).join("/");
-    try {
-      if (fs.lstatSync(path.join(root, partial)).isSymbolicLink()) return partial;
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
-}
 
 /** Canonical source text of a repository file. */
 export function readSourceFile(root: string, repoPath: string): ParseResult<string> {

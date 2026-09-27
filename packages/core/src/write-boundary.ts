@@ -12,7 +12,7 @@ export type WriteKind = "project-truth" | "human-history" | "regenerable";
 
 /** Areas relative to the state directory. A trailing "/" means "anything below this directory". */
 export const WRITE_AREAS: Readonly<Record<WriteKind, readonly string[]>> = {
-  "project-truth": ["project.yaml", "intent/", "specs/", "decisions/", "milestones/", "integrations/"],
+  "project-truth": ["project.yaml", ".gitignore", "intent/", "specs/", "decisions/", "milestones/", "integrations/"],
   "human-history": ["reviews/"],
   regenerable: ["generated/", "cache/", "runtime/"],
 };

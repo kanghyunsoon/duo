@@ -54,14 +54,14 @@ LLM을 쓸 수 없으면 의미 판단은 UNKNOWN이나 ASK로 남고 나머지 
 ### duoctl init (REQ-INIT-001~003)
 
 ```text
-Git root 확인 ─▶ 스캔(.gitignore, 기본 제외, 비밀 파일 제외) ─▶ manifest / README / docs / 기획 문서 탐지
-  ─▶ Git metadata(branch, HEAD, 최근 커밋) ─▶ LanguageAnalyzer로 Symbol·Import·Call·Test 추출
-  ─▶ 초안: project.yaml, intent/vision.md(status: draft), intent/constraints.yaml, .duo-project/.gitignore
-  ─▶ 구현 상태 추론(generated/inferred.json) · Knowledge Gap(Truth의 `UNKNOWN:` 줄, 요청마다 평가하고 저장하지 않음)
-  ─▶ Human 확인(TTY 대화형 또는 ASK 목록) ─▶ Graph 구축(generated/graph.db) ─▶ 요약 출력
+Git root 확인(work tree 최상위만, nested Truth 금지) ─▶ .duo-project 상태(not-initialized · initialized · partial · incompatible)
+  ─▶ 스캔(.gitignore, 기본 제외, 비밀 파일 제외) ─▶ 관찰: manifest, workspace, 언어, source·test root, script 이름, Git branch·HEAD
+  ─▶ 후보 문서(경로 순위, 상한) · 기존 DUO 정의의 import 후보 ─▶ InitPlan(질문, willCreate, conflicts; 쓰기 0)
+  ─▶ Human 답(TTY 대화형 또는 ASK 목록) ─▶ applyInitPlan: runtime/ staging → core loader 검증 → 배치(project.yaml 마지막), 실패 시 rollback
+  ─▶ 호출자(CLI)가 Indexer 실행(generated/graph.db) ─▶ 요약 출력
 ```
 
-LLM을 호출하지 않는다. 기존 기획 문서에 Requirement ID 형식이 있으면 가져오고, 없으면 Requirement를 만들지 않고 Knowledge Gap("Requirement 없음")으로 기록한다.
+LLM을 호출하지 않는다(TASK-014). 관찰한 사실은 observed, 그로부터 만든 값은 suggestion이고, Human이 답한 것만 confirmed Truth가 된다. 기존 문서의 DUO 정의는 import 후보로만 보이며 Human 확인 없이 Truth가 되지 않는다. Requirement를 지어내지 않고, 답하지 않은 질문은 Truth의 `UNKNOWN(<id>):` 줄(Declared Gap)로 남는다(C123).
 
 ### Context 요청 (REQ-CONTEXT-001, REQ-MCP-001)
 
@@ -77,7 +77,7 @@ Agent ─duo_get_context(task)─▶ freshness(증분 인덱싱) ─▶ Seed 해
 ```text
 diff(기본: working tree + index vs HEAD) ─▶ 변경 파일 증분 인덱싱 ─▶ 변경 Symbol ─▶ 영향 Subgraph(depth 2)
   ─▶ 결정적 규칙 ─▶ 의미 판정 escalation(Provider 있을 때만) ─▶ Claim[] ─▶ Verdict
-  ─▶ runtime/reviews/<id>.json (항상) · reviews/<id>.json (--record 시)
+  ─▶ runtime/reviews/<id>.json (호출자, 항상) · reviews/review-<hash>.json (Human이 recordReview를 호출할 때만, T13.1)
 ```
 
 규칙과 집계는 [ADR-007](adr/ADR-007-verdict-model.md).

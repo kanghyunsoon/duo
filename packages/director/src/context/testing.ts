@@ -16,6 +16,8 @@ import type { ContextRequest, ContextResult } from "./types.js";
 export const CONTEXT_FIXTURE = fileURLToPath(new URL("../../../../fixtures/context/app/", import.meta.url));
 export const GAP_FIXTURE = fileURLToPath(new URL("../../../../fixtures/gap/app/", import.meta.url));
 export const REVIEW_FIXTURE = fileURLToPath(new URL("../../../../fixtures/review/app/", import.meta.url));
+export const INIT_FIXTURE = fileURLToPath(new URL("../../../../fixtures/init/app/", import.meta.url));
+export const INIT_GOLDEN = fileURLToPath(new URL("../../../../fixtures/init/expected/", import.meta.url));
 export const HISTORY = 20;
 
 const env = {

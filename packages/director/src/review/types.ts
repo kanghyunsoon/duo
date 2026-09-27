@@ -32,7 +32,24 @@ export interface ReviewRequest {
 
 export type ReviewRule =
   | "decision-integrity" | "supersede-integrity" | "decision-forbids" | "decision-governance" | "declared-reference"
-  | "requirement-implementation" | "constraint-compliance" | "scope-relevance" | "test-coverage" | "test-result";
+  | "requirement-implementation" | "constraint-compliance" | "scope-relevance" | "test-coverage" | "test-result"
+  | "unlinked-addition" | "external-source-drift";
+
+/**
+ * What was asked, as recorded (T13.1). identity = sha256 of the semantic input that shapes the
+ * deterministic result: task, diff endpoints and file filter, budget, caller test results.
+ * includeSemanticAssist is not part of it (semantic assistance never changes the deterministic result).
+ */
+export interface ReviewRequestIdentity {
+  readonly identity: string;
+  readonly task: string;
+  readonly from: string;
+  readonly to: string;
+  readonly files?: readonly RepoPath[];
+  readonly budget?: number;
+  /** sha256 of the caller-supplied test results. */
+  readonly testRun?: string;
+}
 
 export type Alignment = "ALIGNED" | "PARTIAL" | "CONFLICT" | "UNKNOWN";
 export type Verdict = "PASS" | "WARN" | "BLOCK" | "ASK";
@@ -110,6 +127,8 @@ export interface SemanticClaim {
 export interface SemanticAssist {
   readonly status: "not-requested" | "no-candidates" | "disabled" | "unavailable" | "failed" | "call-cap" | "success";
   readonly failure?: LLMFailureCategory;
+  /** The provider that answered or failed: id, reported model, cache identity. Never a secret. */
+  readonly provider?: { readonly id: string; readonly model?: string; readonly cacheIdentity?: string };
   readonly candidates: readonly string[];
   /** Semantic candidates that stay UNKNOWN because no semantic check ran (AC-013-03). */
   readonly skippedChecks: readonly { readonly claimId: string; readonly rule: ReviewRule; readonly reason: string }[];
@@ -137,6 +156,7 @@ export interface ReviewMetrics {
 export interface ReviewResult {
   readonly format: "duo.review/1";
   readonly status: "ready" | "index-required";
+  readonly request: ReviewRequestIdentity;
   readonly freshness: { readonly status: IndexStatus; readonly fullRebuildRequired: boolean };
   readonly diff?: { readonly identity: string; readonly from: string; readonly to: string; readonly files: readonly ChangedFile[] };
   readonly seeds: readonly DiffSeed[];

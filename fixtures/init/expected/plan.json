@@ -1,0 +1,263 @@
+{
+  "format": "duo.init-plan/1",
+  "state": "not-initialized",
+  "applicable": true,
+  "requiresRepair": false,
+  "blockers": [],
+  "observed": {
+    "provenance": "observed",
+    "name": {
+      "value": "pocket-ledger",
+      "source": {
+        "path": "package.json",
+        "field": "name",
+        "kind": "manifest"
+      }
+    },
+    "description": {
+      "value": "Shared household expense tracker",
+      "source": {
+        "path": "package.json",
+        "field": "description",
+        "kind": "manifest"
+      }
+    },
+    "git": {
+      "branch": "main",
+      "headOid": "32fb31d012fc0968342a7d533daca956ec5f9454",
+      "detached": false,
+      "unborn": false,
+      "shallow": false
+    },
+    "files": {
+      "indexable": 13,
+      "excluded": {}
+    },
+    "languages": [
+      {
+        "language": "typescript",
+        "files": 4,
+        "analyzed": true
+      }
+    ],
+    "manifests": [
+      {
+        "path": "package.json",
+        "kind": "npm"
+      },
+      {
+        "path": "tsconfig.json",
+        "kind": "tsconfig"
+      }
+    ],
+    "packages": [
+      {
+        "manifest": "package.json",
+        "name": "pocket-ledger"
+      }
+    ],
+    "workspaces": [],
+    "packageManager": {
+      "value": "pnpm",
+      "source": {
+        "path": "package.json",
+        "field": "packageManager",
+        "kind": "manifest"
+      }
+    },
+    "scripts": [
+      {
+        "manifest": "package.json",
+        "name": "build",
+        "run": "pnpm run build"
+      },
+      {
+        "manifest": "package.json",
+        "name": "lint",
+        "run": "pnpm run lint"
+      },
+      {
+        "manifest": "package.json",
+        "name": "test",
+        "run": "pnpm run test"
+      }
+    ],
+    "technical": [
+      {
+        "manifest": "package.json",
+        "field": "engines.node",
+        "value": ">=24.15.0"
+      },
+      {
+        "manifest": "package.json",
+        "field": "packageManager",
+        "value": "pnpm@11.25.0"
+      }
+    ],
+    "sourceRoots": [
+      {
+        "path": "src",
+        "files": 3
+      }
+    ],
+    "testRoots": [
+      {
+        "path": "tests",
+        "files": 1
+      }
+    ],
+    "colocatedTests": 0
+  },
+  "documents": [
+    {
+      "path": "README.md",
+      "kind": "readme",
+      "score": 100,
+      "reasons": [
+        "root-readme"
+      ],
+      "hash": "sha256:fe1a2ca33cdf13b2fbfc9751610708e7bc9838f908280781012ef303847a9022",
+      "definitions": 0
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "kind": "contributing",
+      "score": 80,
+      "reasons": [
+        "root-contributing"
+      ],
+      "hash": "sha256:011304229e8185b007933b1f6daff404bc2520309a3a050485b9d6e9a91447a7",
+      "definitions": 0
+    },
+    {
+      "path": "docs/architecture.md",
+      "kind": "design",
+      "score": 80,
+      "reasons": [
+        "docs",
+        "keyword:architecture"
+      ],
+      "hash": "sha256:3c32dbc8abedd9da0495ba3775d993782a2dc976935441db7cb0be5e6f9d6741",
+      "definitions": 0
+    },
+    {
+      "path": "docs/legacy-spec.md",
+      "kind": "design",
+      "score": 80,
+      "reasons": [
+        "docs",
+        "keyword:spec"
+      ],
+      "hash": "sha256:1b5ce7140476296a07beff54b1e493904960a96c0d90a54e7efa2d8ce8b3303b",
+      "definitions": 1
+    },
+    {
+      "path": "docs/notes/meeting-2026-09.md",
+      "kind": "docs",
+      "score": 55,
+      "reasons": [
+        "docs-nested"
+      ],
+      "hash": "sha256:c0c08ff59ec53028201b3ec6d4d43602faec7a43620fb70bf52ae2700fa6063b",
+      "definitions": 0
+    }
+  ],
+  "importCandidates": [
+    {
+      "status": "candidate",
+      "path": "docs/legacy-spec.md",
+      "hash": "sha256:1b5ce7140476296a07beff54b1e493904960a96c0d90a54e7efa2d8ce8b3303b",
+      "definitions": [
+        {
+          "kind": "requirement",
+          "id": "LEDGER-01",
+          "title": "Split expenses evenly"
+        }
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "project_goal",
+      "kind": "text",
+      "promptKey": "init.question.project_goal",
+      "required": true,
+      "suggestedValue": "Pocket Ledger tracks shared household expenses and settles who owes whom at the end of the month.",
+      "evidence": [
+        {
+          "path": "README.md",
+          "hash": "sha256:fe1a2ca33cdf13b2fbfc9751610708e7bc9838f908280781012ef303847a9022"
+        }
+      ]
+    },
+    {
+      "id": "current_milestone",
+      "kind": "milestone",
+      "promptKey": "init.question.current_milestone",
+      "required": false
+    },
+    {
+      "id": "critical_constraints",
+      "kind": "list",
+      "promptKey": "init.question.critical_constraints",
+      "required": false
+    }
+  ],
+  "willCreate": [
+    {
+      "path": ".duo-project/project.yaml",
+      "kind": "project-truth",
+      "when": "always"
+    },
+    {
+      "path": ".duo-project/.gitignore",
+      "kind": "project-truth",
+      "when": "always"
+    },
+    {
+      "path": ".duo-project/intent/vision.md",
+      "kind": "project-truth",
+      "when": "always"
+    },
+    {
+      "path": ".duo-project/intent/constraints.yaml",
+      "kind": "project-truth",
+      "when": "always"
+    },
+    {
+      "path": ".duo-project/milestones/M1.yaml",
+      "kind": "project-truth",
+      "when": "answered",
+      "question": "current_milestone"
+    }
+  ],
+  "directories": [
+    ".duo-project",
+    ".duo-project/intent",
+    ".duo-project/specs",
+    ".duo-project/decisions",
+    ".duo-project/decisions/proposals",
+    ".duo-project/milestones",
+    ".duo-project/integrations",
+    ".duo-project/reviews",
+    ".duo-project/generated",
+    ".duo-project/cache",
+    ".duo-project/runtime"
+  ],
+  "existing": [],
+  "missing": [
+    ".duo-project/project.yaml",
+    ".duo-project/.gitignore",
+    ".duo-project/intent/vision.md",
+    ".duo-project/intent/constraints.yaml",
+    ".duo-project/milestones/M1.yaml"
+  ],
+  "conflicts": [],
+  "allocations": {
+    "milestone": "M1"
+  },
+  "warnings": [],
+  "indexRequired": true,
+  "basis": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "digest": "sha256:97e8894ab3ab7d812387ace82336891116221537a03391e3d6ff5355e65d120e"
+}

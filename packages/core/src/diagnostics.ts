@@ -142,6 +142,30 @@ export const DIAGNOSTIC_SEVERITY = {
   SOURCE_LOCATION_INVALID: "error",
   /** Context Compiler: the request cannot be compiled (empty task, budget out of range or below the packet frame, unknown profile). */
   CONTEXT_REQUEST_INVALID: "error",
+  /** Review Record (T13.1): only a human records a Review (an explicit action, never an agent or the Review itself). */
+  REVIEW_RECORD_FORBIDDEN: "error",
+  /** Review Record: the Review is not recordable (index-required, no diff). */
+  REVIEW_NOT_RECORDABLE: "error",
+  /** Review Record: a record with this ID exists with other content, or its ID does not match its content; nothing is overwritten. */
+  REVIEW_RECORD_INTEGRITY: "error",
+  /** Init (T14): the repository already has a DUO project (.duo-project/project.yaml); nothing is changed. */
+  INIT_ALREADY_INITIALIZED: "error",
+  /** Init: .duo-project exists without project.yaml; applying needs an explicit repair. */
+  INIT_REPAIR_REQUIRED: "error",
+  /** Init: .duo-project/project.yaml exists but this build cannot read it (schema version, syntax, schema). */
+  INIT_INCOMPATIBLE: "error",
+  /** Init: an existing entry is in the way of a planned file (a directory, a symlink, an invalid file). */
+  INIT_CONFLICT: "error",
+  /** Init: the plan passed to applyInitPlan() is not one planInit() produced (digest mismatch, unknown path). */
+  INIT_PLAN_INVALID: "error",
+  /** Init: .duo-project changed after the plan was made; plan again. */
+  INIT_PLAN_STALE: "error",
+  /** Init: a human answer does not fit its question. */
+  INIT_ANSWER_INVALID: "error",
+  /** Init: the staged Project Truth does not load cleanly with the core loader; nothing was written to .duo-project. */
+  INIT_VALIDATION_FAILED: "error",
+  /** Init: writing failed; every file and directory the apply created was removed again. */
+  INIT_APPLY_FAILED: "error",
 } as const satisfies Record<string, DiagnosticSeverity>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_SEVERITY;
@@ -185,6 +209,9 @@ export const DIAGNOSTIC_PERSISTENCE = {
   DECISION_LOCK_MISMATCH: P,
   SOURCE_LOCATION_INVALID: P,
   CONTEXT_REQUEST_INVALID: T,
+  REVIEW_RECORD_FORBIDDEN: T, REVIEW_NOT_RECORDABLE: T, REVIEW_RECORD_INTEGRITY: T,
+  INIT_ALREADY_INITIALIZED: T, INIT_REPAIR_REQUIRED: T, INIT_INCOMPATIBLE: T, INIT_CONFLICT: T, INIT_PLAN_INVALID: T, INIT_PLAN_STALE: T,
+  INIT_ANSWER_INVALID: T, INIT_VALIDATION_FAILED: T, INIT_APPLY_FAILED: T,
 } as const satisfies Record<DiagnosticCode, DiagnosticPersistence>;
 
 export function isPersistentDiagnostic(diagnostic: Diagnostic): boolean {

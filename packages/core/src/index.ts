@@ -11,6 +11,8 @@ export { readSourceFile, readSourceSlice } from "./source-file.js";
 export * from "./order.js";
 export * from "./paths.js";
 export * from "./write-boundary.js";
+export * from "./fs-guard.js";
+export * from "./provenance.js";
 export * from "./source/index.js";
 export * from "./schema/schemas.js";
 export { validateData } from "./schema/validate.js";

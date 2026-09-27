@@ -50,7 +50,7 @@ DUO가 어디에 쓸 수 있는지는 core의 순수 정책 함수 `checkWriteBo
 
 | writeKind | 허용 영역(`.duo-project/` 기준) |
 |---|---|
-| `project-truth` | `project.yaml`, `intent/`, `specs/`, `decisions/`, `milestones/`, `integrations/` |
+| `project-truth` | `project.yaml`, `.gitignore`(init, AC-014-05), `intent/`, `specs/`, `decisions/`, `milestones/`, `integrations/` |
 | `human-history` | `reviews/` |
 | `regenerable` | `generated/`, `cache/`, `runtime/` |
 
@@ -58,6 +58,7 @@ DUO가 어디에 쓸 수 있는지는 core의 순수 정책 함수 `checkWriteBo
 - `.duo-project/` 밖(프로젝트 Source Code), 영역에 없는 경로(`.duo-project/unknown.txt`), 영역과 writeKind가 다른 쓰기는 `WRITE_NOT_ALLOWED`다.
 - `options.restrictTo`로 호출 주체별 허용 경로를 더 좁힐 수 있다. 예: Agent는 `.duo-project/decisions/proposals/`만. 기본 영역을 넓힐 수는 없다.
 - `duoctl install`이 설정하는 Agent 파일(AGENTS.md 등)은 TASK-017에서 별도 writeKind로 추가한다.
+- 실제 writer는 core `guardWrite(root, path, kind, options?)`(boundary + 경로의 어떤 segment도 symlink가 아님)와 `guardDirectory`, `writeFileAtomic`(temp + rename), `createFileExclusive`(temp + hard link)를 쓴다(T13.1, DecisionService·Review Record·Init 공통).
 
 ## 소유권
 
@@ -198,7 +199,7 @@ glob 패턴(`implements.paths`, `index.include/exclude` 등)은 구분자만 바
 - **Git 필수**: DUO MVP는 Git 저장소를 전제로 한다(C36). Git이 아닌 디렉터리 fallback은 없다. scan root가 Git work tree가 아니면 `GIT_REPOSITORY_REQUIRED`, 최상위가 아니면 `SCAN_ROOT_INVALID`다. `duoctl init`(TASK-014)도 Git이 아닌 디렉터리에 같은 진단을 쓴다.
 - **경로 출처**: tracked 파일은 Git index 철자, untracked 파일은 Git이 파일 시스템에서 읽은 철자를 RepoPath로 쓴다. 파일 시스템 `readdir()` 철자는 tracked 파일의 ID에 쓰지 않는다. Git 호출은 `rev-parse --show-prefix`, `ls-files -z --stage`, `ls-files -z --others --exclude-standard`, `diff-files -z --name-only --diff-filter=T` 네 번이고 파일마다 호출하지 않는다. Git CLI 세부는 analyzer 밖으로 export하지 않는다.
 - **상태**: `RepositoryFileState = "tracked" | "untracked"`. ignored 파일과 `.git/`은 목록에 없다.
-- **제외**(`ExclusionReason`): `.duo-project/generated|cache|runtime/`(duo-regenerable), 비밀 파일 패턴(secret, include보다 우선하고 대소문자 무시), `index.exclude`, `index.include` 불일치, symlink, working tree에 없는 tracked 파일(missing), submodule과 중첩 저장소, 일반 파일이 아닌 항목과 RepoPath로 표현할 수 없는 이름(unsupported-entry). tracked 파일은 .gitignore 패턴에 맞아도 포함한다.
+- **제외**(`ExclusionReason`): `.duo-project/generated|cache|runtime/`(duo-regenerable), `.duo-project/reviews/`(duo-history, T13.1: Review Record는 프로젝트 내용이 아니며 기록 때문에 index가 stale해지거나 다음 Review의 diff가 바뀌면 안 된다), 비밀 파일 패턴(secret, include보다 우선하고 대소문자 무시), `index.exclude`, `index.include` 불일치, symlink, working tree에 없는 tracked 파일(missing), submodule과 중첩 저장소, 일반 파일이 아닌 항목과 RepoPath로 표현할 수 없는 이름(unsupported-entry). tracked 파일은 .gitignore 패턴에 맞아도 포함한다.
 - **Symlink**: 따라가지 않는다. index mode가 symlink(120000)면 checkout 형태(Windows `core.symlinks=false`의 일반 파일 포함)와 관계없이 symlink로 본다. 상위 디렉터리가 symlink인 파일도 제외한다. link 문자열만 읽어 대상이 저장소 밖이면 `SYMLINK_OUTSIDE_REPOSITORY`(warning), 안이면 `SYMLINK_SKIPPED`(info)를 낸다. 대상 파일은 읽지 않는다.
 - **파일 타입 변경**(T04.1): index와 working tree의 symlink/일반 파일이 다르면 `FILE_TYPE_CHANGED`(info)와 `RepositoryScan.typeChanges`(`{ path, index, workingTree }`)에 사실만 남긴다. freshness 판정은 Indexer가 한다. index 일반 파일이 symlink가 되면 계속 symlink로 제외하고 대상을 읽지 않는다. index symlink가 일반 파일이 된 것은 Git이 typechange로 보고할 때만이다(Git이 `core.symlinks`를 반영하므로 Windows 기본 checkout은 해당하지 않음). 이 경우 일반 파일로 인덱싱하고 `gitBlobOid`는 붙이지 않는다(index blob은 이전 link 문자열).
 - **충돌 검사**: 포함된 tracked와 untracked 경로 전체에 `PATH_PORTABILITY_COLLISION`을 적용한다.
@@ -517,12 +518,13 @@ based_on:                  # stale 탐지용 provenance
 
 ## Review 결과 (runtime/reviews/, reviews/)
 
-TASK-013. `reviewChanges(root, request, options)`의 결과는 `ReviewResult`(`duo.review/1`)이고, 실행 시간(`ReviewPerformance`)은 결과 밖에 따로 둔다. LLM이 꺼져 있으면 같은 Project Truth, Graph, Git 상태, diff, 요청에 대해 결과가 byte 단위로 같다. 저장은 호출자가 한다: `runtime/reviews/`에는 모든 실행, `reviews/`에는 Human이 `duoctl review --record`로 보존한 Review만(TASK-015, C115). Record는 원본을 복사하지 않고 Evidence Pointer만 담는다([ADR-006](adr/ADR-006-duo-layout-git-policy.md)).
+TASK-013. `reviewChanges(root, request, options)`의 결과는 `ReviewResult`(`duo.review/1`)이고, 실행 시간(`ReviewPerformance`)은 결과 밖에 따로 둔다. LLM이 꺼져 있으면 같은 Project Truth, Graph, Git 상태, diff, 요청에 대해 결과가 byte 단위로 같다. Review 실행은 아무것도 쓰지 않는다. `runtime/reviews/`(모든 실행)는 호출자(TASK-015, 016)가 쓰고, `reviews/`에는 Human이 명시적으로 `recordReview()`를 호출한 Review만 남는다([Review Record](#review-record-reviews), T13.1). Record는 원본을 복사하지 않고 Evidence Pointer만 담는다([ADR-006](adr/ADR-006-duo-layout-git-policy.md)).
 
 ```ts
 ReviewRequest { task?, diff: { from, to, files? }, budget?, includeSemanticAssist?, testResults? }   // endpoint 기본값 없음(caller가 정함)
 ReviewResult {
   format: "duo.review/1"; status: "ready" | "index-required"; freshness
+  request: { identity, task, from, to, files?, budget?, testRun? }   // T13.1: 결정적 결과를 정하는 요청 입력과 그 sha256. includeSemanticAssist는 제외
   diff?: { identity, from, to, files: ChangedFile[] }          // identity: endpoint(HEAD는 commit), 경로별 kind·blob·hunk hash
   seeds: DiffSeed[]                                            // hunk-overlap | file-changed | truth-changed
   verdict?: "PASS" | "WARN" | "BLOCK" | "ASK"; verdictBasis: { blocking, ask, warn }
@@ -535,6 +537,47 @@ ReviewClaim { id, rule, subject, expected, observed, alignment, evidenceIds(≥1
 
 - Claim ID는 `claim-` + hash(rule, subject, 구분 key, diff identity)이며 실행 시각이나 발견 순서를 쓰지 않는다.
 - PASS는 "DUO가 현재 Evidence 범위에서 방향 위반을 찾지 못했다"는 뜻이지 버그가 없다는 뜻이 아니다.
+- T13.1 규칙: `unlinked-addition`(R-SCOPE, task가 있을 때 task 맥락 밖이고 IMPLEMENTS가 없는 추가 application 파일 → UNKNOWN drift, 의미 후보, BLOCK 불가), `external-source-drift`(R-DRIFT, 명시적 `{path, hash, section?}`의 hash 불일치 → PARTIAL). limitation `external-source-unavailable`(원격·저장소 밖·secret·없는 파일), `external-source-hash-invalid`.
+- `semanticAssist.provider`: 호출한 Provider의 `id`, 보고된 `model`, `cacheIdentity`(secret 없음).
+
+### Review Record (reviews/)
+
+T13.1. director `recordReview(result, { root, actor, clock? })`만 `reviews/`에 쓴다. CLI `--record`, Web UI 같은 Human 승인 화면이 같은 service를 쓰며 MCP·Agent는 쓸 수 없다(`REVIEW_RECORD_FORBIDDEN`). write kind `human-history`, `restrictTo: reviews/`, 경로의 symlink 거부, 새 파일은 exclusive create.
+
+```ts
+// .duo-project/reviews/review-<16 hex>.json
+{ id, recorded: { by, at },                       // recorded는 identity 밖(injectable clock)
+  format: "duo.review-record/1",
+  review: { format, verdict, verdictBasis }, request,                    // ReviewResult.request
+  diff: { identity, from, to, files: [{ path, oldPath?, kind, similarity?, binary, oldBlob?, newBlob?, hunks: [{ oldStart, oldLines, newStart, newLines, evidenceId }], evidenceIds }] },
+  claims: [{ id, rule, subject, alignment, reason, evidenceIds, basis, enforced, blockEligible, drift, semanticCandidate }],
+  evidence: [{ id, basis, kind, contentHash?, pointer, metadata? }],     // summary·본문 없음
+  gaps: { requiresHumanInput, primary?, gaps: [{ id, source, kind, action, relevance, key?, location?, resolution? }] } | null,
+  context: { review?, task?, profile, seeds } | null, limitations: string[] }
+```
+
+- ID는 `review-` + sha256(record body, `id`·`recorded` 제외)의 16 hex. 같은 결정적 Review를 다시 기록하면 같은 파일이므로 no-op(`unchanged`)이고, 같은 ID인데 내용이 다르거나 ID가 내용과 맞지 않으면 `REVIEW_RECORD_INTEGRITY`로 거부하며 덮어쓰지 않는다. `verifyReviewRecord(text)`로 검사한다.
+- Claim 문장(expected, observed)과 Evidence summary는 저장하지 않는다(언어 중립, renderer는 TASK-015·018).
+- 의미 보조가 성공했으면 별도 supplement `reviews/<review-id>.assist-<16 hex>.json`(`duo.review-assist/1`: provider, claims, llm evidence pointer, verdict, skippedChecks)을 쓴다. 결정적 record는 LLM 사용 여부와 상관없이 같은 ID다.
+- index-required Review는 기록하지 않는다(`REVIEW_NOT_RECORDABLE`).
+
+## Init (TASK-014)
+
+director `planInit(root, options?)`는 읽기 전용으로 `InitPlan`(`duo.init-plan/1`)을 만들고, `applyInitPlan(root, plan, answers, { repair?, fs? })`가 계획된 파일만 쓴다. Indexing은 하지 않고 `indexRequired: true`를 돌려준다. LLM 호출 0회.
+
+| 상태 | 조건 | apply |
+|---|---|---|
+| not-initialized | `.duo-project` 없음, 또는 Truth·history 파일이 없음 | 가능 |
+| initialized | `project.yaml`을 이 build가 읽음 | 거부 `INIT_ALREADY_INITIALIZED`(아무것도 바꾸지 않음) |
+| partial | `project.yaml` 없이 파일이 있음 | `repair: true`일 때만 없는 파일 생성, 기존 파일 유지 |
+| incompatible | `project.yaml`을 읽을 수 없음(schema version, 문법, schema) | 거부 `INIT_INCOMPATIBLE` |
+
+- Git 필수: Git이 아니면 `GIT_REPOSITORY_REQUIRED`, work tree의 하위 디렉터리면 `SCAN_ROOT_INVALID`(nested Truth Layer 금지).
+- `observed`(`provenance: observed`): 이름(package.json name 또는 디렉터리), Git branch·HEAD, 파일 수와 제외 사유별 수, 언어(확장자), manifest, package, workspace, packageManager, script 이름과 실행 방법(명령 원문은 복사하지 않음), 기술 metadata(engines 등, Constraint가 아님), source·test root.
+- `documents`: Scanner 목록에서 경로만으로 순위를 매긴 후보(root README 100, CONTRIBUTING·ARCHITECTURE 80, docs/ 60에서 깊이마다 -5, 하위 README 40, keyword +20, 기본 상한 20개, 256 KiB). 비밀 파일은 Scanner가 이미 제외한다. `importCandidates`: 후보 문서의 DUO metadata block 정의(쓰지 않음).
+- `questions`: `project_goal`(required, 제안값: README 첫 문단 또는 package.json description), `current_milestone`, `critical_constraints`. `InitAnswer`로 답한다. 제안값은 Human이 `acceptSuggestion`으로 받아들일 때만 confirmed이고, README 제안은 `source: {path, hash}`를 남긴다.
+- 생성: `project.yaml`(schema_version, name, current_milestone), `.gitignore`, `intent/vision.md`(goal이 있으면 confirmed, 없으면 draft), `intent/constraints.yaml`(Human이 준 것만 confirmed, enforcement warn), 답이 있을 때 `milestones/<M#>.yaml`(ID는 plan이 배정). 답하지 않은 질문은 vision.md의 `UNKNOWN(<id>): …` 줄(Declared Gap). 빈 디렉터리(specs, decisions/proposals, milestones, integrations, reviews, generated, cache, runtime)는 로컬에만 만들고 `.gitkeep`은 두지 않는다. `generated/gaps.json`은 없다(C94).
+- apply: plan digest와 알려진 경로 검사(`INIT_PLAN_INVALID`) → basis(regenerable 영역을 뺀 `.duo-project` 내용 digest) 비교(`INIT_PLAN_STALE`) → 답 검사(`INIT_ANSWER_INVALID`) → 모든 경로 `guardWrite` → `runtime/init-*`에 staging → core loader로 검증(`INIT_VALIDATION_FAILED`) → 파일 배치(exclusive, project.yaml 마지막) → staging 삭제. 실패하면 만든 파일과 디렉터리를 모두 지운다(`INIT_APPLY_FAILED`).
 
 ### Evidence
 
@@ -556,7 +599,7 @@ EvidencePointer 필드: `kind`(requirement, decision, constraint, issue, milesto
 |---|---|---|
 | `generated/graph.db` | Project Graph(ADR-002, [04](04-project-graph.md)) | TASK-003, 007 |
 | `generated/index-state.json` | 증분 인덱싱 state([증분 인덱싱](#증분-인덱싱)) | TASK-008 |
-| `generated/inferred.json` | 구현 상태 추론 | TASK-014 |
+| `generated/inferred.json` | (예약) 구현 상태 추론. T14 Init은 만들지 않는다(C123) | - |
 | `cache/analysis/*.json` | SourceAnalysis cache(content-addressed) | TASK-008 |
 | `cache/packets/<digest>.json` | Context Packet cache. key는 Packet Dependency Digest([05](05-context-compiler.md#packet-dependency-digest와-cache)) | TASK-010 |
 | `cache/llm/<key>.json` | 검증된 성공 LLM 답변. key = hash(provider cacheIdentity, purpose, instructions, input, output spec, maxOutputTokens). identity가 없으면 쓰지 않음(C113) | TASK-013 |

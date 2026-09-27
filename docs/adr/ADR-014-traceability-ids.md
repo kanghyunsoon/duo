@@ -84,6 +84,8 @@ Observed:        README describes 16 players.
 
 Truth 항목의 `source` 목록에는 인용 라벨(문자열, 예: `D§3`)과 외부 출처 객체 `{path, hash, section?}`를 둘 수 있다. `hash`는 `section`(Heading)이 있으면 그 섹션 텍스트, 없으면 파일 전체의 sha256이다. hash가 바뀌면 R-DRIFT가 결정적으로 PARTIAL Claim을 내고, 충돌 여부는 의미 판정(LLM이 없으면 UNKNOWN)에 맡긴다. 이 이상의 provenance 시스템은 만들지 않는다.
 
+구현(T13.1, core `externalSourceSlice`, `compareSourceHash`, `isRemoteSourcePath`): hash는 canonical source text(맨 앞 BOM 하나 제거, CRLF → LF)의 `sha256:`이다. section은 그 텍스트와 정확히 같은 첫 heading부터 같거나 높은 수준의 다음 heading 직전까지다(Markdown만). 기록 값은 `sha256:` 접두사를 생략하거나 7자 이상 hex로 줄여 쓸 수 있다. section을 찾지 못하면 PARTIAL(`external-section-missing`), hash 형식이 아니면 `external-source-hash-invalid` limitation이다. URL·Jira·GitHub·Linear 같은 원격 출처와 저장소 밖·비밀·없는 파일은 읽지 않고 `external-source-unavailable`로 남긴다. init이 받아들인 README 제안은 이 형식의 provenance를 vision.md에 남긴다(T14).
+
 ### Self fixture
 
 이 저장소의 `docs/01-requirements.md`, `docs/adr/*.md`, `docs/tasks/TASKS.md`, `docs/12-roadmap.md`는 [03-data-model.md](../03-data-model.md#markdown-정의-형식)의 Markdown 정의 형식을 따른다. 테스트는 이 파일들을 임시 저장소의 `.duo-project/`(specs/, decisions/, milestones/)로 **복사**해 Truth로 만든 뒤 사용한다. DUO 저장소 자체에서 docs/는 여전히 External Source다.

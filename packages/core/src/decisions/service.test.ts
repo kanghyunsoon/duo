@@ -250,7 +250,8 @@ describe("TASK-009 DecisionService: AI may propose, a human confirms", () => {
       }
     };
     for (const top of ["packages", "apps"]) walk(path.join(repo, top));
-    expect(offenders).toEqual(["packages/core/src/decisions/service.ts"]);
+    // init/render.ts writes the critical Constraints a human gave during init as confirmed (T14): Constraints, not Decisions.
+    expect(offenders).toEqual(["packages/core/src/decisions/service.ts", "packages/director/src/init/render.ts"]);
   });
 });
 

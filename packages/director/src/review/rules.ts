@@ -15,6 +15,7 @@ import { matchConstraint, wildcard, type ScopeEntry } from "../relevance/policy.
 import {
   decisionEvidence, isActive, makeClaim, nodeEvidence, requirementEvidence, seedEvidence, type RuleContext,
 } from "./claims.js";
+import { nonApplicationReason } from "./scope.js";
 import type { ChangedFile, DiffSeed, ReviewClaim } from "./types.js";
 
 const DECISIONS = `${STATE_DIR_NAME}/decisions/`;
@@ -28,7 +29,7 @@ function blobSource(end: GitDiffEnd): GitBlobSource | undefined {
 }
 
 /** File text on one side of the diff; undefined when absent there. */
-async function sideText(ctx: RuleContext, side: GitDiffEnd, file: RepoPath): Promise<string | undefined> {
+export async function sideText(ctx: RuleContext, side: GitDiffEnd, file: RepoPath): Promise<string | undefined> {
   if (side === "WORKTREE") return readSourceFile(ctx.root, file).value;
   const source = blobSource(side);
   if (source === undefined) return undefined;
@@ -345,12 +346,14 @@ export function declaredReferences(ctx: RuleContext): ReviewClaim[] {
   return out;
 }
 
-export function scopeRelevance(ctx: RuleContext): ReviewClaim[] {
+/** covered: added files that unlinked-addition already reports (one drift claim per file). */
+export function scopeRelevance(ctx: RuleContext, covered: ReadonlySet<string> = new Set()): ReviewClaim[] {
   const scope = ctx.taskScope;
   if (scope === undefined) return [];
   const out: ReviewClaim[] = [];
   for (const f of ctx.files) {
-    if (f.kind === "deleted" || f.path.startsWith(`${STATE_DIR_NAME}/`) || TEST_FILE.test(f.path)) continue;
+    // The same application-source policy as unlinked-addition: tests, configuration, tooling, generated and docs are not scope findings.
+    if (f.kind === "deleted" || covered.has(f.path) || f.path.startsWith(`${STATE_DIR_NAME}/`) || TEST_FILE.test(f.path) || nonApplicationReason(f.path) !== undefined) continue;
     const node = ctx.graph.getNode(fileRef(f.path));
     if (node === undefined || typeof node.payload.language !== "string") continue; // config, docs, data: not application code
     const seeds = ctx.seeds.filter((s) => s.path === f.path);

@@ -11,7 +11,8 @@
  */
 import { performance } from "node:perf_hooks";
 import { openGitProvider, type AnalyzerRegistry } from "@duo-director/analyzer";
-import { canonicalDiagnostics, compareUtf8, loadProjectTruth, success, type Diagnostic, type EvidenceBasis, type ParseResult } from "@duo-director/core";
+import { canonicalDiagnostics, compareUtf8, loadProjectTruth, sha256Text, stableJson, success, type Diagnostic, type EvidenceBasis, type ParseResult } from "@duo-director/core";
+import type { GitDiffEnd } from "@duo-director/analyzer";
 import { inspectIndex, readIndexState, type GraphReader, type IndexedGraph } from "@duo-director/graph";
 import { compileContext } from "../context/compile.js";
 import { SourceReader } from "../context/retrieve.js";
@@ -22,13 +23,15 @@ import type { LLMProvider } from "../llm/contract/types.js";
 import { reviewVerdict } from "./aggregate.js";
 import type { RuleContext } from "./claims.js";
 import { collectDiff } from "./diff.js";
+import { externalSourceDrift } from "./drift.js";
 import {
   constraintCompliance, decisionForbids, decisionGovernance, decisionIntegrity, declaredReferences, requirementImplementation, scopeRelevance,
   supersedeIntegrity, testCoverage, testResults,
 } from "./rules.js";
+import { unlinkedAdditions } from "./scope.js";
 import { diffSeeds } from "./seeds.js";
 import { semanticAssist } from "./semantic.js";
-import type { Alignment, ReviewClaim, ReviewLimitation, ReviewPerformance, ReviewRequest, ReviewResult } from "./types.js";
+import type { Alignment, ReviewClaim, ReviewLimitation, ReviewPerformance, ReviewRequest, ReviewRequestIdentity, ReviewResult } from "./types.js";
 
 export interface ReviewOptions {
   readonly graph: GraphReader & IndexedGraph;
@@ -61,12 +64,26 @@ const zeroMetrics = {
   evidence: { "project-truth": 0, repository: 0, git: 0, test: 0, llm: 0 }, contextTokens: 0, taskContextTokens: 0, semanticCandidates: 0, llmCalls: 0, llmCacheHits: 0,
 };
 
+const endLabel = (end: GitDiffEnd) => (typeof end === "string" ? end : `commit:${end.commit}`);
+
+/** The request's semantic input and its identity (T13.1). includeSemanticAssist is left out on purpose. */
+export function reviewRequestIdentity(request: ReviewRequest): ReviewRequestIdentity {
+  const files = request.diff.files === undefined ? undefined : [...new Set(request.diff.files)].sort(compareUtf8);
+  const testRun = request.testResults === undefined ? undefined : sha256Text(stableJson(request.testResults));
+  const body = {
+    task: (request.task ?? "").trim(), from: endLabel(request.diff.from), to: endLabel(request.diff.to),
+    ...(files === undefined ? {} : { files }), ...(request.budget === undefined ? {} : { budget: request.budget }), ...(testRun === undefined ? {} : { testRun }),
+  };
+  return { identity: sha256Text(stableJson(body)), ...body };
+}
+
 export async function reviewChanges(root: string, request: ReviewRequest, options: ReviewOptions): Promise<ParseResult<{ readonly result: ReviewResult; readonly performance: ReviewPerformance }>> {
   const t0 = performance.now();
   const time = { diffMs: 0, contextMs: 0, rulesMs: 0, semanticMs: 0 };
   const diagnostics: Diagnostic[] = [];
   const perf = (): ReviewPerformance => ({ totalMs: Math.round(performance.now() - t0), diffMs: Math.round(time.diffMs), contextMs: Math.round(time.contextMs), rulesMs: Math.round(time.rulesMs), semanticMs: Math.round(time.semanticMs) });
   const shared = { graph: options.graph, ...(options.registry === undefined ? {} : { registry: options.registry }), ...(options.historyWindow === undefined ? {} : { historyWindow: options.historyWindow }) };
+  const requestIdentity = reviewRequestIdentity(request);
 
   // 1. Freshness: a Review never uses a stale graph and never indexes.
   const inspected = await inspectIndex(root, shared);
@@ -74,7 +91,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   const freshness = { status: inspected.value.status, fullRebuildRequired: inspected.value.status === "missing" || inspected.value.status === "incompatible" };
   const noAssist = { status: "not-requested" as const, candidates: [], skippedChecks: [], claims: [], evidence: [], calls: 0, cacheHits: 0 };
   if (inspected.value.status !== "current") {
-    return success({ result: { format: "duo.review/1", status: "index-required", freshness, seeds: [], verdictBasis: { blocking: [], ask: [], warn: [] }, claims: [], evidence: [], limitations: [], semanticAssist: noAssist, metrics: zeroMetrics, diagnostics: [] }, performance: perf() });
+    return success({ result: { format: "duo.review/1", status: "index-required", request: requestIdentity, freshness, seeds: [], verdictBasis: { blocking: [], ask: [], warn: [] }, claims: [], evidence: [], limitations: [], semanticAssist: noAssist, metrics: zeroMetrics, diagnostics: [] }, performance: perf() });
   }
   const loaded = loadProjectTruth(root);
   if (loaded.value === undefined) return { diagnostics: loaded.diagnostics };
@@ -126,10 +143,13 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   };
   const integrity = await decisionIntegrity(ctx);
   const forbids = await decisionForbids(ctx);
+  const drift = await externalSourceDrift(ctx);
+  const additions = unlinkedAdditions(ctx);
   const conflicted = new Set(forbids.map((c) => c.subject.id));
   const claims: ReviewClaim[] = [
     ...integrity, ...supersedeIntegrity(ctx), ...forbids, ...decisionGovernance(ctx, conflicted), ...declaredReferences(ctx),
-    ...requirementImplementation(ctx), ...testCoverage(ctx), ...testResults(ctx), ...constraintCompliance(ctx), ...scopeRelevance(ctx),
+    ...requirementImplementation(ctx), ...testCoverage(ctx), ...testResults(ctx), ...constraintCompliance(ctx), ...scopeRelevance(ctx, additions.covered),
+    ...additions.claims, ...drift.claims,
   ].sort((a, b) => compareUtf8(a.rule, b.rule) || compareUtf8(a.id, b.id));
   time.rulesMs = performance.now() - t;
   const verdict = reviewVerdict(claims, gaps);
@@ -145,7 +165,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   const evidence = store.list();
   const count = <K extends string>(keys: readonly K[], values: readonly K[]) => Object.fromEntries(keys.map((k) => [k, values.filter((v) => v === k).length])) as Record<K, number>;
   const result: ReviewResult = {
-    format: "duo.review/1", status: "ready", freshness,
+    format: "duo.review/1", status: "ready", request: requestIdentity, freshness,
     diff: { identity: diff.value.identity, from: diff.value.from, to: diff.value.to, files: diff.value.files },
     seeds, verdict: verdict.verdict, verdictBasis: verdict.basis, claims, evidence,
     ...(gaps === undefined ? {} : { gaps }),
@@ -154,7 +174,10 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
       ...(reviewPacket === undefined ? {} : { review: reviewPacket.dependencyDigest }),
       ...(taskContext?.packet === undefined ? {} : { task: taskContext.packet.dependencyDigest }),
     },
-    limitations: limitationsOf({ identity: diff.value.identity, from: diff.value.from, to: diff.value.to, files: diff.value.files }, reviewPacket, task !== "", taskContext?.status === "ready"),
+    limitations: [
+      ...limitationsOf({ identity: diff.value.identity, from: diff.value.from, to: diff.value.to, files: diff.value.files }, reviewPacket, task !== "", taskContext?.status === "ready"),
+      ...drift.limitations,
+    ],
     semanticAssist: semantic.assist,
     metrics: {
       changedFiles: diff.value.files.length, changedHunks: diff.value.files.reduce((n, f) => n + f.hunks.length, 0), diffSeeds: seeds.length,

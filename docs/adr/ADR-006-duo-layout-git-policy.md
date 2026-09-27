@@ -40,6 +40,7 @@ Derived / Runtime       → ignored
 
 - 모든 Review 실행 결과는 `runtime/reviews/`에 저장되고 Git에 올라가지 않는다.
 - Human이 `duoctl review --record`를 실행했을 때만 그 Review가 `reviews/<id>.json`으로 저장된다. MCP와 Agent는 Record를 만들 수 없다.
+- 구현(T13.1): director `recordReview()`가 유일한 writer다. ID는 내용 기반(`review-<hash>`)이라 같은 Review를 다시 기록하면 같은 파일이고, 같은 ID의 다른 내용은 덮어쓰지 않는다. Scanner는 `reviews/`를 index하지 않고(duo-history) Review diff에서도 제외한다: 기록 때문에 index가 stale해지거나 다음 Review가 달라지지 않는다.
 - Record는 원본 내용을 복사하지 않고 **Evidence Pointer**만 남긴다.
 
 ```yaml
@@ -67,7 +68,7 @@ evidence:
 | `cache/` | analysis/(SourceAnalysis cache, content-addressed, TASK-008), tokenizer 결과, Packet cache, LLM 응답 cache. 성능 목적이며 언제 지워도 된다 |
 | `runtime/` | reviews/(매 실행), metrics.jsonl, backup/(install). 로컬 기록이며 공유하지 않는다 |
 
-`.duo-project/.gitignore`는 init이 만들며 `generated/`, `cache/`, `runtime/` 세 줄을 담는다.
+`.duo-project/.gitignore`는 init이 만들며 `generated/`, `cache/`, `runtime/` 세 줄을 담는다(TASK-014, write boundary `project-truth`). init은 빈 디렉터리를 로컬에만 만들고 `.gitkeep`을 두지 않는다. 모든 writer가 디렉터리를 필요할 때 만들므로 새 clone에 빈 디렉터리가 없어도 같다.
 
 ## 결과
 

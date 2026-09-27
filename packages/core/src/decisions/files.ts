@@ -4,12 +4,11 @@
  * symlink on the path. Replacements are atomic (temp file + rename); new Decision files are created
  * exclusively (temp file + hard link), so two writers never get the same ID.
  */
-import { randomBytes } from "node:crypto";
-import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { STATE_DIR_NAME } from "../constants.js";
 import { createDiagnostic, failure, success, type ParseResult } from "../diagnostics.js";
+import { createFileExclusive, symlinkOnPath, writeFileAtomic } from "../fs-guard.js";
 import { PROPOSAL_ID_PATTERN } from "../ids.js";
 import type { RepoPath } from "../paths.js";
 import type { ACTOR_KINDS } from "../schema/schemas.js";
@@ -38,19 +37,6 @@ export function proposalPath(id: string): RepoPath {
 }
 
 export type DecisionWriteTarget = "proposal" | "decision" | "lock";
-
-function symlinkOnPath(root: string, repoPath: string): string | undefined {
-  const segments = repoPath.split("/");
-  for (let i = 1; i <= segments.length; i++) {
-    const partial = segments.slice(0, i).join("/");
-    try {
-      if (fs.lstatSync(path.join(root, partial)).isSymbolicLink()) return partial;
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
-}
 
 /**
  * May this actor write this path as this target? proposal: decisions/proposals/P-*.yaml, any actor.
@@ -90,8 +76,6 @@ export interface DecisionFileSystem {
   remove(absolute: string): Promise<void>;
 }
 
-const tempName = (absolute: string) => `${absolute}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-
 export const nodeDecisionFileSystem: DecisionFileSystem = {
   async readText(absolute) {
     try {
@@ -109,41 +93,8 @@ export const nodeDecisionFileSystem: DecisionFileSystem = {
       throw error;
     }
   },
-  async writeAtomic(absolute, text) {
-    await fsp.mkdir(path.dirname(absolute), { recursive: true });
-    const temp = tempName(absolute);
-    try {
-      await fsp.writeFile(temp, text, "utf8");
-      await fsp.rename(temp, absolute);
-    } finally {
-      await fsp.rm(temp, { force: true });
-    }
-  },
-  async createExclusive(absolute, text) {
-    await fsp.mkdir(path.dirname(absolute), { recursive: true });
-    const temp = tempName(absolute);
-    try {
-      await fsp.writeFile(temp, text, "utf8");
-      try {
-        await fsp.link(temp, absolute); // atomic, fails when the target exists
-        return true;
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === "EEXIST") return false;
-        if (code !== "EPERM" && code !== "ENOTSUP" && code !== "ENOSYS" && code !== "EXDEV") throw error;
-        // File systems without hard links: exclusive create (the content is written right after).
-        try {
-          await fsp.writeFile(absolute, text, { encoding: "utf8", flag: "wx" });
-          return true;
-        } catch (inner) {
-          if ((inner as NodeJS.ErrnoException).code === "EEXIST") return false;
-          throw inner;
-        }
-      }
-    } finally {
-      await fsp.rm(temp, { force: true });
-    }
-  },
+  writeAtomic: writeFileAtomic,
+  createExclusive: createFileExclusive,
   async remove(absolute) {
     await fsp.rm(absolute, { force: true });
   },

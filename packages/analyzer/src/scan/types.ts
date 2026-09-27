@@ -29,6 +29,8 @@ export type ExclusionReason =
   | "git-internal"
   /** .duo-project/generated|cache|runtime: DUO's own regenerable data. */
   | "duo-regenerable"
+  /** .duo-project/reviews: Human-approved Review Records (tracked history, not project content; T13.1). */
+  | "duo-history"
   /** Matches SECRET_FILE_PATTERNS (docs/10-security.md). Checked before include/exclude. */
   | "secret"
   /** Matches project.yaml index.exclude. */

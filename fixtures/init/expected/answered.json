@@ -1,0 +1,7 @@
+{
+  ".duo-project/.gitignore": "generated/\ncache/\nruntime/\n",
+  ".duo-project/intent/constraints.yaml": "constraints:\n  - id: CON-001\n    statement: No bank account integration in the MVP\n    state: confirmed\n    enforcement: warn\n  - id: CON-002\n    statement: All amounts are integer cents\n    state: confirmed\n    enforcement: warn\n",
+  ".duo-project/intent/vision.md": "---\nstatus: confirmed\nowner: human\n---\n\n# Vision\n\nSettle shared household expenses fairly, with a clear record of who paid what.\n",
+  ".duo-project/milestones/M1.yaml": "id: M1\ntitle: \"MVP: record expenses and settle a month\"\nstate: active\n",
+  ".duo-project/project.yaml": "schema_version: 1\nname: pocket-ledger\ncurrent_milestone: M1\n"
+}

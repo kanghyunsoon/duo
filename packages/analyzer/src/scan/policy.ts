@@ -10,6 +10,8 @@ export const SECRET_FILE_PATTERNS: readonly string[] = [".env*", "*.pem", "*.key
 
 /** DUO's own regenerable areas (ADR-006), e.g. ".duo-project/generated/". */
 const DUO_REGENERABLE_PREFIXES = WRITE_AREAS.regenerable.map((area) => `${STATE_DIR_NAME}/${area}`);
+/** Review Records (ADR-006 human-history). Recording a Review must not make the index stale or change the next diff. */
+const DUO_HISTORY_PREFIXES = WRITE_AREAS["human-history"].map((area) => `${STATE_DIR_NAME}/${area}`);
 
 type Matcher = (path: RepoPath) => boolean;
 
@@ -34,7 +36,7 @@ export interface PathPolicy {
   readonly invalidPatterns: readonly string[];
 }
 
-/** Precedence: git-internal, duo-regenerable, secret, index-exclude, not-included. */
+/** Precedence: git-internal, duo-regenerable, duo-history, secret, index-exclude, not-included. */
 export function createPathPolicy(include: readonly string[] = [], exclude: readonly string[] = []): PathPolicy {
   const includeMatchers = compileAll(include);
   const excludeMatchers = compileAll(exclude);
@@ -44,6 +46,7 @@ export function createPathPolicy(include: readonly string[] = [], exclude: reado
     exclusionOf(path) {
       if (path.split("/").some((segment) => segment.toLowerCase() === ".git")) return "git-internal";
       if (DUO_REGENERABLE_PREFIXES.some((prefix) => path.startsWith(prefix))) return "duo-regenerable";
+      if (DUO_HISTORY_PREFIXES.some((prefix) => path.startsWith(prefix))) return "duo-history";
       if (isSecretFileName(path)) return "secret";
       if (excludeMatchers.some((m) => m(path))) return "index-exclude";
       if (include.length > 0 && !includeMatchers.some((m) => m(path))) return "not-included";

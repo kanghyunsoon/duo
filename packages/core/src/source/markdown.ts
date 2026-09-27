@@ -33,6 +33,8 @@ export interface MarkdownCodeBlock extends MarkdownSpan {
 
 export interface MarkdownOtherBlock extends MarkdownSpan {
   readonly kind: "other";
+  /** Top-level paragraphs only: plain text, whitespace collapsed (images and HTML contribute nothing; T14). */
+  readonly paragraph?: string;
 }
 
 /** Top-level block in document order. */
@@ -202,6 +204,8 @@ export function parseMarkdown(path: string, text: string): ParseResult<MarkdownD
         value: child.value,
         contentStartLine: (span.location.startLine ?? 1) + (fenced ? 1 : 0),
       });
+    } else if (child.type === "paragraph") {
+      blocks.push({ ...span, kind: "other", paragraph: plainText(child).replace(/\s+/gu, " ").trim() });
     } else {
       blocks.push({ ...span, kind: "other" });
     }

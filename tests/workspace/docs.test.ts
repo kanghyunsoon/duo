@@ -4,8 +4,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadProjectTruth, STATE_DIR_NAME } from "@duo-director/core";
 import { applyGraphPlan, buildGraphPlan, checkGraph, openNodeSqliteGraphStore, traverse } from "@duo-director/graph";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { validateDocs } from "../../scripts/validate-docs.mjs";
+
+// Each case copies docs/ and validates it; under a full parallel run with the Git-heavy e2e suites this exceeds 5 s.
+vi.setConfig({ testTimeout: 60_000 });
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const temps: string[] = [];

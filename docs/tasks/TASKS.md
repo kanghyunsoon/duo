@@ -580,10 +580,10 @@ depends_on: [TASK-008, TASK-009, TASK-010, TASK-011, TASK-012A]
 
 - **Goal**: 변경을 규칙과 의미 판정으로 검수하고 Verdict를 낸다.
 - **Input**: ADR-007 규칙 표
-- **Output**: `reviewChanges`(freshness → diff → diff seed → review 맥락 → Gap 평가 → 결정적 규칙 → Evidence → 선택적 의미 보조 → 집계), core `Evidence`, director `EvidenceStore`·`EvidenceProvider` 경계, 규칙 10종(ADR-007 구현 표), structured 의미 batch(호출 1회, timeout, cache), Context `explicitSeeds`·profile `review`, index state v3 diagnostics. Review Record 쓰기와 External Source Drift는 C115, C117
+- **Output**: `reviewChanges`(freshness → diff → diff seed → review 맥락 → Gap 평가 → 결정적 규칙 → Evidence → 선택적 의미 보조 → 집계), core `Evidence`, director `EvidenceStore`·`EvidenceProvider` 경계, 규칙 10종(ADR-007 구현 표), structured 의미 batch(호출 1회, timeout, cache), Context `explicitSeeds`·profile `review`, index state v3 diagnostics. T13.1: `recordReview`(content-addressed Review Record, C118), `unlinked-addition`(R-SCOPE, C121), `external-source-drift`(R-DRIFT, C120), `ReviewResult.request`, core `fs-guard`·`provenance`
 - **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact), [TASK-009](#task-009-decision-생명주기), [TASK-010](#task-010-context-compiler), [TASK-011](#task-011-knowledge-gap), [TASK-012A](#task-012a-llmprovider-계약과-no-op)
-- **Files expected to change**: `packages/director/src/review/**`, `packages/director/src/evidence/**`, `packages/core/src/evidence.ts`, `packages/director/src/llm/contract/**`(timeout, cache), `packages/director/src/context/**`(explicitSeeds, review profile), `packages/graph/src/incremental/state.ts`(v3 diagnostics), `fixtures/review/app/**`
-- **Status**: done (T13)
+- **Files expected to change**: `packages/director/src/review/**`, `packages/director/src/evidence/**`, `packages/core/src/evidence.ts`, `packages/director/src/llm/contract/**`(timeout, cache), `packages/director/src/context/**`(explicitSeeds, review profile), `packages/graph/src/incremental/state.ts`(v3 diagnostics), `fixtures/review/app/**`, T13.1: `packages/director/src/review/{record,scope,drift}.ts`, `packages/core/src/{fs-guard,provenance}.ts`, `packages/analyzer/src/scan/policy.ts`(duo-history)
+- **Status**: done (T13, T13.1)
 - **검증 대상 Requirement**: [REQ-REVIEW-001](../01-requirements.md#req-review-001-diff-review-파이프라인), [REQ-REVIEW-002](../01-requirements.md#req-review-002-두-수준-verdict-모델), [REQ-REVIEW-003](../01-requirements.md#req-review-003-scope-drift와-spec-conflict-감지), [REQ-REVIEW-004](../01-requirements.md#req-review-004-specdecisionissue와-code-사이의-drift), [REQ-EVIDENCE-001](../01-requirements.md#req-evidence-001-claim-evidence-verdict와-근거-보존), [REQ-LLM-001](../01-requirements.md#req-llm-001-deterministic-first-판단-순서), [REQ-DECISION-003](../01-requirements.md#req-decision-003-decision-lock)
 - **관련 ADR**: [ADR-007](../adr/ADR-007-verdict-model.md), [ADR-008](../adr/ADR-008-deterministic-first.md), [ADR-013](../adr/ADR-013-decision-lifecycle.md)
 
@@ -599,7 +599,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M2
 package: director
 requirements: [REQ-INIT-001, REQ-INIT-002, REQ-INIT-003, REQ-TRUTH-001, REQ-TRUTH-002]
@@ -609,10 +609,10 @@ depends_on: [TASK-008, TASK-011]
 
 - **Goal**: 최초 분석, 초안, Human 확인 질문을 만든다.
 - **Input**: 02 init 흐름, 07 init 대화
-- **Output**: InitService(analyze, draft, questions, write)
+- **Output**: InitService: `planInit`(읽기 전용 InitPlan: 상태, 관찰, 후보 문서, import 후보, 질문, willCreate, conflicts, basis, digest), `applyInitPlan`(runtime/ staging, core loader 검증, 배치, rollback, repair), `InitQuestion`·`InitAnswer`. TTY 대화, `--yes`, `--reindex`, init 뒤 Indexer 호출은 TASK-015(C123)
 - **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact), [TASK-011](#task-011-knowledge-gap)
-- **Files expected to change**: `packages/director/src/init/**`
-- **Status**: todo
+- **Files expected to change**: `packages/director/src/init/**`, `packages/core/src/source/markdown.ts`(paragraph), `fixtures/init/**`
+- **Status**: done (T14)
 - **검증 대상 Requirement**: [REQ-INIT-001](../01-requirements.md#req-init-001-결정적-repository-분석), [REQ-INIT-002](../01-requirements.md#req-init-002-intent-초안-구현-상태-추론-knowledge-gap-생성), [REQ-INIT-003](../01-requirements.md#req-init-003-human-intent-확인), [REQ-TRUTH-001](../01-requirements.md#req-truth-001-duo-project-project-truth-layer와-소유권), [REQ-TRUTH-002](../01-requirements.md#req-truth-002-git-관리-정책)
 - **관련 ADR**: [ADR-006](../adr/ADR-006-duo-layout-git-policy.md), [ADR-008](../adr/ADR-008-deterministic-first.md)
 

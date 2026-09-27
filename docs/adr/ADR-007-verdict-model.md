@@ -95,16 +95,21 @@ interface Claim {
 | test-coverage | R-TEST | Requirement와 이어진 변경 코드에 VALIDATED_BY Test가 없음 | PARTIAL(있으면 ALIGNED) | - |
 | test-result | R-TEST | 호출자가 준 결과에서 관련 Test 실패(통과는 ALIGNED, skip은 UNKNOWN) | CONFLICT | 그 Test가 검증하는 Requirement를 block Decision이 governs할 때만 |
 | constraint-compliance | R-CONSTRAINT | 공통 `matchConstraint`로 변경 코드와 관련된 confirmed Constraint | UNKNOWN(의미 후보) | - |
-| scope-relevance | R-SCOPE | task가 있을 때, 변경된 application 코드(테스트·설정·Truth 제외)가 task 맥락에 없음 | UNKNOWN(drift), 있으면 ALIGNED | - |
+| scope-relevance | R-SCOPE | task가 있을 때, 변경된 application 코드(테스트·설정·도구·생성물·문서·Truth 제외)가 task 맥락에 없음 | UNKNOWN(drift), 있으면 ALIGNED | - |
+| unlinked-addition | R-SCOPE | task가 있을 때, 추가된 application 파일이 task 맥락에 없고 파일·그 Symbol에서 Requirement로 가는 IMPLEMENTS도 없음(T13.1) | UNKNOWN(drift, 의미 후보). `review.warn_on_unlinked_addition: false`면 drift 아님 | 아니오(BLOCK 불가) |
+| external-source-drift | R-DRIFT | confirmed Truth 항목의 `{path, hash, section?}`: 기록한 hash와 검토 쪽 문서(파일 전체 또는 heading section)의 canonical text hash가 다름, 또는 section이 없어짐(T13.1) | PARTIAL, 같으면(문서가 diff에 있을 때만) ALIGNED | - |
 
-- **R-CONSTRAINT 해석 변경**(C107): Constraint의 `match`는 T10.1부터 관련성 범위다("src/auth/**는 이 제약이 다루는 곳"). 그래서 `match` 일치를 위반으로 보지 않고 의미 판정 후보(UNKNOWN)로 둔다. 파일 이름에 단어가 나왔다는 이유로 BLOCK하지 않는다. 결정적 위반은 Decision의 명시적 `forbids`로만 판정한다.
+- **R-CONSTRAINT 해석 변경**(C107, H-33 확정): Constraint의 `match`는 T10.1부터 관련성 범위다("src/auth/**는 이 제약이 다루는 곳"). 그래서 `match` 일치를 위반으로 보지 않고 의미 판정 후보(UNKNOWN)로 둔다. 파일 이름에 단어가 나왔다는 이유로 BLOCK하지 않는다. MVP에서 Constraint는 Context, relevance, 의미 판정의 입력이고, 결정적 차단은 confirmed Decision의 명시적 `forbids` + `enforcement: block`으로만 한다. Constraint schema에 forbids나 enforcement DSL을 두지 않으며, 실제 사용에서 필요가 확인되면 별도 ADR로 확장한다.
 - **BLOCK**: `alignment == CONFLICT` AND 규칙이 enforced AND `blockEligible(basis)`(Project Truth + repository·git·test 근거). LLM basis는 관찰 근거를 대신하지 않는다.
 - **ASK**: Knowledge Gap 평가의 `requiresHumanInput`만이 근거다(C100). Packet의 `requiresHumanDecision`과 LLM의 제안은 ASK를 만들지 않는다. Claim 수준 `ask` 필드는 두지 않았다(수동 confirm은 UNKNOWN drift, C108).
 - **WARN**: PARTIAL, blockEligible이 아닌 CONFLICT, drift인 UNKNOWN, surface gap(C110). 의미 후보 UNKNOWN과 알려진 분석 한계(unresolved call, 삭제된 Symbol)는 WARN을 만들지 않고 limitation으로 남는다.
 - **PASS**: 위가 모두 없음. "DUO가 현재 Evidence 범위에서 방향 위반을 찾지 못했다"이며 버그가 없다는 뜻이 아니다.
 - **의미 보조**: 결정적 Review가 끝난 뒤에만, 요청이 허용하고 Provider가 configured일 때 한 번의 structured batch로 한다(ADR-008). 결과는 `semanticAssist`에 따로 두며 결정적 claim과 verdict를 바꾸지 않는다. `semanticAssist.verdict`는 PASS를 WARN까지만 올린다(C114). 실행하지 않은 의미 판정은 `skippedChecks`에 남는다(AC-013-03).
 - **diff 처리**: 추가 파일은 현재 repository 근거와 추가 hunk, 삭제 파일은 이전 경로·이전 blob·삭제 줄의 Git 근거(`deleted-unresolved` limitation), rename은 oldPath·newPath·similarity 기록이며 이전과 새 Symbol을 같다고 보지 않는다(`rename-heuristic`). `.duo-project/generated|cache|runtime/`은 검토하지 않고, proposal 파일은 Truth 근거가 아니다.
-- 아직 없는 것: ADR 표의 R-SCOPE "Requirement와 이어지지 않은 새 파일·exported Symbol", R-DRIFT(External Source provenance), Review Record 쓰기(C115, C117).
+- **R-SCOPE 대상**(T13.1, C121): Analyzer가 언어를 아는 파일 중 test·spec, 설정(`*.config.*`, `.*rc.*`), 도구(scripts/, tools/, .github/ 등), 생성물(dist/, build/, coverage/ 등), 문서(docs/, examples/), 선언(`*.d.ts`), Truth를 뺀 것만 application source로 본다. Requirement와 이어지지 않았다는 이유만으로 이 파일들에 claim을 만들지 않는다.
+- **R-DRIFT 범위**(T13.1, C120): Review 맥락의 정의, Truth 파일이 바뀐 정의, 출처 문서가 바뀐 정의만 검사한다. 원격(URL, Jira, GitHub, Linear), 저장소 밖, 비밀 파일, 없는 파일은 추측하지 않고 `external-source-unavailable` limitation으로 남긴다. Truth는 고치지 않는다.
+- **Review Record**(T13.1, C118): `recordReview()`(director)가 Human의 명시적 호출일 때만 `reviews/`에 content-addressed record를 쓴다([03](../03-data-model.md#review-record-reviews)).
+- 아직 없는 것: R-SCOPE의 exported Symbol, heuristic R-DRIFT(연결이 애매한 done Requirement), 수정 파일 안에서 삭제된 Symbol의 이전 AST(benchmark에서 실제 miss가 확인될 때 검토).
 
 ## 결과
 
