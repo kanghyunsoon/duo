@@ -33,11 +33,11 @@ export interface IndexInspection {
   readonly status: IndexStatus;
   readonly fullRebuildReason?: FullRebuildReason;
   /**
-   * Per current or deleted path (UTF-8 order): file, analysis and module freshness as the Indexer
-   * decides them; calls is a prediction and an upper bound (recomputed module results that turn out
-   * equal let the Indexer reuse calls).
+   * Per current or deleted path (UTF-8 order): file, analysis and module freshness exactly as the
+   * Indexer decides them. predictedCalls is a prediction and an upper bound: call results that may be
+   * recomputed (recomputed module results that turn out equal let the Indexer reuse them).
    */
-  readonly freshness: readonly FileFreshnessRecord[];
+  readonly freshness: readonly InspectFreshnessRecord[];
   readonly projectTruth: { readonly changed: readonly RepoPath[] };
   readonly configs: { readonly changed: readonly string[] };
   readonly history: { readonly recordedHead?: string; readonly currentHead?: string; readonly wouldRecompute: boolean };
@@ -46,12 +46,17 @@ export interface IndexInspection {
     /** Files that would be parsed. */
     readonly parse: readonly RepoPath[];
     readonly modules: readonly RepoPath[];
-    /** Upper bound. */
-    readonly calls: readonly RepoPath[];
+    /** Files whose call results may be recomputed (upper bound, not a promise). */
+    readonly predictedCalls: readonly RepoPath[];
     readonly history: boolean;
     readonly projectTruth: boolean;
   };
 }
+
+export type InspectFreshnessRecord = Omit<FileFreshnessRecord, "calls"> & {
+  /** Predicted call freshness (upper bound). */
+  readonly predictedCalls?: CallResolutionFreshness;
+};
 
 export interface InspectOptions {
   /** Only read: the graph's schema version and metadata. */
@@ -145,13 +150,13 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
       && !repositoryMoved && signals.changedConfigs.size === 0;
     status = idle ? "current" : "stale";
   }
-  const freshness: FileFreshnessRecord[] = changes.map((c) => {
+  const freshness: InspectFreshnessRecord[] = changes.map((c) => {
     const a = analysis.get(c.path);
     const m = modules.get(c.path);
     const k = calls.get(c.path);
     return {
       path: c.path, file: previous === undefined ? "unknown" : FILE_FRESHNESS[c.status],
-      ...(a === undefined ? {} : { analysis: a }), ...(m === undefined ? {} : { modules: m }), ...(k === undefined ? {} : { calls: k }),
+      ...(a === undefined ? {} : { analysis: a }), ...(m === undefined ? {} : { modules: m }), ...(k === undefined ? {} : { predictedCalls: k }),
     };
   });
   return success({
@@ -161,7 +166,7 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
     configs: { changed: [...signals.changedConfigs].sort(compareUtf8) },
     history: { ...(recordedHead === undefined ? {} : { recordedHead }), ...(repo?.headOid === undefined ? {} : { currentHead: repo.headOid }), wouldRecompute: wouldRecomputeHistory },
     wouldRebuild: {
-      full: previous === undefined, parse, modules: moduleList, calls: callList, history: wouldRecomputeHistory, projectTruth: truthChanged.length > 0,
+      full: previous === undefined, parse, modules: moduleList, predictedCalls: callList, history: wouldRecomputeHistory, projectTruth: truthChanged.length > 0,
     },
   }, canonicalDiagnostics(diagnostics));
 }

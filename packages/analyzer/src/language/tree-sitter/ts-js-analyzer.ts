@@ -22,7 +22,7 @@ export const JAVASCRIPT_EXTENSIONS: Readonly<Record<string, GrammarId>> = { js: 
  * Bump when extraction output changes (04: a new version re-analyzes that analyzer's files).
  * 2: T05.1 static member identity, import bindings, tests. 3: T07 local exports and call structure.
  */
-export const TS_JS_ANALYZER_VERSION = "3";
+export const TS_JS_ANALYZER_VERSION = "4";
 /** Per-file parse limit (docs/10-security.md). */
 export const DEFAULT_PARSE_TIMEOUT_MS = 2000;
 
@@ -72,7 +72,10 @@ class TreeSitterAnalyzer implements LanguageAnalyzer {
     const { contentHash } = computeContentHash(input.content, mode);
     let text: string;
     try {
+      // Canonical source text (T09.1): CRLF is already LF in the canonical bytes; a leading BOM is removed so
+      // every location addresses the same text as sliceSource().
       text = decoder.decode(canonicalContent(input.content, mode));
+      if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
     } catch {
       return failure([createDiagnostic("SOURCE_DECODE_ERROR", `"${path}" is not valid UTF-8`, { path })]);
     }

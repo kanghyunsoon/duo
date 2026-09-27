@@ -99,6 +99,6 @@ export function parseVisionFile(path: string, text: string): ParseResult<Vision>
   diagnostics.push(...valid.diagnostics);
   if (valid.value === undefined) return failure(diagnostics);
   const body = doc.slice(doc.frontmatter.end, doc.length).trim();
-  const location: SourceLocation = { path, startLine: 1, endLine: doc.lineCount };
+  const location: SourceLocation = doc.locationOf(0, doc.length);
   return { value: mapVision(valid.value, body, location, new MapContext(parsed.value, doc.frontmatter.location, diagnostics)), diagnostics };
 }

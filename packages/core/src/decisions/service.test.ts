@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { loadProjectTruth } from "../loader/project.js";
 import { DECISION_LOCK_PATH, guardDecisionWrite, nodeDecisionFileSystem, type DecisionActor, type DecisionFileSystem } from "./files.js";
+import { listDecisionProposals, pendingDecisionProposals, repairDecisionState } from "./read-model.js";
 import { createDecisionService, type DecisionService } from "./service.js";
 
 const temps: string[] = [];
@@ -250,6 +251,38 @@ describe("TASK-009 DecisionService: AI may propose, a human confirms", () => {
     };
     for (const top of ["packages", "apps"]) walk(path.join(repo, top));
     expect(offenders).toEqual(["packages/core/src/decisions/service.ts"]);
+  });
+});
+
+
+describe("T09.1 proposal read model: pending is a logical state, reading never writes", () => {
+  const snapshot = () => fs.readdirSync(abs(".duo-project"), { recursive: true }).map(String).sort()
+    .map((f) => [f, fs.statSync(abs(`.duo-project/${f}`)).isFile() ? read(`.duo-project/${f}`) : "<dir>"]);
+
+  it("pending, rejected and committed; a committed proposal file left behind is not pending; only explicit repair writes", async () => {
+    await service().propose(agent, input);                                          // P-001 stays pending
+    await service().propose(agent, { ...input, title: "Magic links", answer: "m" }); // P-002 is rejected
+    await service().propose(agent, { ...input, title: "OTP", answer: "otp" });       // P-003 is committed, cleanup fails
+    await service().reject(human, "P-002", "no");
+    const failingRemove: DecisionFileSystem = { ...nodeDecisionFileSystem, async remove(file) {
+      if (file.includes("proposals")) throw new Error("file locked by an editor");
+      return nodeDecisionFileSystem.remove(file);
+    } };
+    expect((await service({ fs: failingRemove }).confirm(human, "P-003")).value?.decisionId).toBe("D-002");
+    expect(exists(".duo-project/decisions/proposals/P-003.yaml")).toBe(true);
+
+    const before = snapshot();
+    const entries = listDecisionProposals(truth().truth);
+    expect(entries.map((e) => [e.id, e.status, e.decisionId ?? null])).toEqual([
+      ["P-001", "pending", null], ["P-002", "rejected", null], ["P-003", "committed", "D-002"],
+    ]);
+    expect(entries.find((e) => e.id === "P-003")?.cleanupPending).toBe(true);
+    expect(pendingDecisionProposals(truth().truth).map((p) => p.id)).toEqual(["P-001"]);
+    expect(snapshot()).toEqual(before); // reading wrote nothing and did not repair
+    expect(exists(".duo-project/decisions/proposals/P-003.yaml")).toBe(true);
+
+    expect((await repairDecisionState({ root, clock })).value?.repaired).toEqual(["removed .duo-project/decisions/proposals/P-003.yaml (confirmed as D-002)"]);
+    expect(listDecisionProposals(truth().truth).map((e) => [e.id, e.status])).toEqual([["P-001", "pending"], ["P-002", "rejected"]]);
   });
 });
 

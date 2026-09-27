@@ -86,7 +86,7 @@ describe("inspectIndex(): read-only freshness (T08.1)", () => {
     await index();
     const r = await inspectWithoutWrites();
     expect(r.status).toBe("current");
-    expect(r.wouldRebuild).toEqual({ full: false, parse: [], modules: [], calls: [], history: false, projectTruth: false });
+    expect(r.wouldRebuild).toEqual({ full: false, parse: [], modules: [], predictedCalls: [], history: false, projectTruth: false });
     const again = await index();
     expect(again.metrics.graph.written).toBe(false);
   });
@@ -104,7 +104,7 @@ describe("inspectIndex(): read-only freshness (T08.1)", () => {
     const strip = (records: typeof r.freshness) => records.map((f) => ({ path: f.path, file: f.file, analysis: f.analysis, modules: f.modules }));
     expect(strip(r.freshness)).toEqual(strip(run.freshness));
     const recomputed = run.freshness.filter((f) => f.calls !== undefined && f.calls !== "fresh").map((f) => f.path);
-    for (const p of recomputed) expect(r.wouldRebuild.calls).toContain(p);
+    for (const p of recomputed) expect(r.wouldRebuild.predictedCalls).toContain(p);
     expect(run.metrics.files.analyzed).toBe(r.wouldRebuild.parse.length);
   });
 

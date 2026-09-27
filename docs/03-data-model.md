@@ -226,11 +226,11 @@ WAL에서 다른 연결이 쓰는 동안 마지막 commit 상태를 읽는 것�
 `LanguageAnalyzer`의 결과 계약이다(TASK-005, T05.1, [ADR-003](adr/ADR-003-language-analysis.md), 형식은 [04 SourceAnalysis](04-project-graph.md#sourceanalysis)). Graph를 만들지 않고 syntax 사실만 낸다.
 
 - **대상**: 지원 확장자만 parse한다(.ts .mts .cts → TypeScript, .tsx → TSX, .js .mjs .cjs .jsx → JavaScript grammar). Scanner는 `.duo-project/`의 Truth 파일도 찾지만 Markdown/YAML은 LanguageAnalyzer가 `supports() == false`이며 parse하지 않는다. Project Truth parsing은 core가 맡는다. `.d.ts`도 TypeScript 파일로 분석하고 특별 취급하지 않는다.
-- **입력과 hash**: 입력은 파일 bytes다. fingerprint와 같은 canonical bytes(normalized-text)를 UTF-8로 decode해 parse하므로 `SourceAnalysis.contentHash`는 `FileFingerprint.contentHash`와 같다. UTF-8이 아니면 `SOURCE_DECODE_ERROR`. BOM은 그대로 두고 칸 수에 포함한다.
+- **입력과 hash**: 입력은 파일 bytes다. fingerprint와 같은 canonical bytes(normalized-text)를 UTF-8로 decode해 parse하므로 `SourceAnalysis.contentHash`는 `FileFingerprint.contentHash`와 같다. UTF-8이 아니면 `SOURCE_DECODE_ERROR`. contentHash는 BOM을 포함한 bytes로 계산하지만, parse하는 텍스트는 canonical source text(맨 앞 BOM 하나 제거)라서 BOM은 칸 수에 들어가지 않는다(T09.1, [SourceLocation](#sourcelocation)).
 - **Symbol identity**: core `symbolRef(path, symbol)`와 `nodeId()`만 쓴다. `symbol`은 top-level과 instance member가 qualifiedName(`User.load`), static member가 `User.static.load`다. identifier가 아닌 member 이름은 JSON 문자열로 감싼다(`User["a.b"]`, `User.static["a.b"]`). 그래서 `static User.load` ≠ `instance User.load`이고 문자열 이름 안의 `.`이 static 접두사와 충돌하지 않는다. `qualifiedName`은 표시용이며 scope 간에 겹칠 수 있다. 위치나 byte offset은 ID에 넣지 않는다.
 - **정렬**: 모든 목록은 `compareSourceLocations` 순서, 같으면 symbol identity / specifier, kind / calleeText / ids / fullName(`compareUtf8`) 순서다. AST 순회 순서에 기대지 않는다.
 - **partial**: 트리에 ERROR나 MISSING 노드가 있으면 `parseStatus: "partial"`과 `AST_PARSE_ERROR`(warning, 파일당 20개 + 요약 1개). ERROR 노드 안은 읽지 않고 나머지는 계속 추출한다. parse가 파일당 제한 시간(기본 2초)을 넘으면 `AST_PARSE_TIMEOUT`이고 결과가 없다.
-- **버전**: `TS_JS_ANALYZER_VERSION` 3(T05.1: static identity, binding, test. T07: `exports`, CallSite `calleePath` / `rootLocal` / `thisBinding`). 버전이 바뀌면 그 Analyzer의 파일을 다시 분석한다(04).
+- **버전**: `TS_JS_ANALYZER_VERSION` 4(T05.1: static identity, binding, test. T07: `exports`, CallSite `calleePath` / `rootLocal` / `thisBinding`. T09.1: BOM 없는 canonical text). 버전이 바뀌면 그 Analyzer의 파일을 다시 분석한다(04).
 
 ## Git Provider
 
@@ -290,7 +290,7 @@ collectGraphFacts(root)      ProjectTruth + TraceModel, Scan/fingerprint, Source
 - **Freshness**: 파일 `fresh | changed | added | deleted | unknown`, analysis `fresh | stale-content | stale-analyzer | missing | failed`, module `fresh | missing | stale-version | stale-source | stale-file-set | stale-config`, call `fresh | missing | stale-version | stale-source | stale-modules | stale-dependency`. 결과의 `freshness`는 실행 전 상태, 곧 무엇을 왜 다시 계산했는지다.
 - **Metrics**: mode, fullRebuildReason, files(total, unchanged, changed, added, deleted, analyzed = parse 횟수, analysisReused, analysisFailed), resolution(module·call 재계산/재사용 수와 파일 수), history(recomputed, commits), graph(scopes, scopesChanged, Node·Edge 추가/갱신/삭제, written).
 - **Diagnostics(T08.1)**: 결과 diagnostics는 canonical 순서다. persistent diagnostics는 clean full rebuild(`collectGraphFacts` + `buildGraphPlan`)와 같다. config 진단은 builder가 plan에 넣고, 이번 실행에서 config를 다시 읽지 않았으면 state에 저장된 것을 쓴다.
-- **Read-only inspection(T08.1)**: `inspectIndex(root, { graph })`는 scan, fingerprint, Project Truth, config, version, history를 비교하고 invalidation을 계획하지만 쓰지 않는다(GraphStore 쓰기, state·fingerprint 파일, analysis cache, graph_revision 모두 없음). `graph`는 schema version과 meta 읽기만 받는다. 결과는 `status`(current = 실행해도 쓸 것이 없음, stale, missing, incompatible), `fullRebuildReason`, 경로별 freshness(파일·analysis·module은 Indexer와 같은 판정, call은 상한 예측), 바뀐 Project Truth와 config, history(기록된·현재 HEAD, 재계산 여부), `wouldRebuild`(full, parse, modules, calls, history, projectTruth)다. 판정 함수는 Indexer와 공유한다(`incremental/assess.ts`). `duoctl status`, MCP `duo_get_status`, UI가 이 결과를 쓰며 UI 전용 freshness 로직은 두지 않는다.
+- **Read-only inspection(T08.1)**: `inspectIndex(root, { graph })`는 scan, fingerprint, Project Truth, config, version, history를 비교하고 invalidation을 계획하지만 쓰지 않는다(GraphStore 쓰기, state·fingerprint 파일, analysis cache, graph_revision 모두 없음). `graph`는 schema version과 meta 읽기만 받는다. 결과는 `status`(current = 실행해도 쓸 것이 없음, stale, missing, incompatible), `fullRebuildReason`, 경로별 freshness(파일·analysis·module은 Indexer와 같은 판정, call은 `predictedCalls`라는 상한 예측), 바뀐 Project Truth와 config, history(기록된·현재 HEAD, 재계산 여부), `wouldRebuild`(full, parse, modules, predictedCalls, history, projectTruth)다. call 쪽은 "다시 계산할 수 있음"이며 사용자에게 "다시 계산한다"로 표시하지 않는다. 판정 함수는 Indexer와 공유한다(`incremental/assess.ts`). `duoctl status`, MCP `duo_get_status`, UI가 이 결과를 쓰며 UI 전용 freshness 로직은 두지 않는다.
 - **열기**: `openProjectGraphStore(root)`는 `generated/`를 만들고 graph DB를 열며 다른 schema version이면 다시 만든다.
 - **한계(node_modules)**: `node_modules`와 index 대상이 아닌 파일은 fingerprint하지 않는다. `package.json`, lockfile, tsconfig/jsconfig 변경이 resolution 무효화 신호이며, 이 파일들을 바꾸지 않고 `node_modules`만 바뀌면(예: 다른 버전 설치, workspace link 변경) 저장된 resolution이 현재 환경과 다를 수 있다. 이때는 전체 재구축(`indexRepository(root, { full: true })`, 이후 `duoctl index --full`)으로 복구한다. `node_modules` 전체 fingerprint는 하지 않는다(C61).
 
@@ -302,10 +302,13 @@ type SourceLocation = { path: string; startLine?: number; startColumn?: number; 
 
 - `path`는 RepoPath, 줄과 칸은 1부터 센다. `endColumn`은 exclusive(마지막 문자 다음 칸)다.
 - Markdown 정의와 YAML 정의가 같은 계약을 쓴다. Markdown 정의는 Heading부터 섹션 끝까지, YAML 파일 전체가 정의인 경우(Decision, Milestone)는 문서 내용의 범위, 목록 항목(Constraint)은 그 항목의 범위다.
-- 범위 끝을 알 수 없는 예외(파일 누락 등)에서만 end 필드를 생략한다.
+- **canonical source text(T09.1)**: 모든 위치는 파일을 UTF-8로 읽고 맨 앞 BOM 하나를 지우고 CRLF를 LF로 바꾼 텍스트(`canonicalSourceText`)를 가리킨다. loader(Markdown, YAML)와 LanguageAnalyzer가 이 텍스트를 parse하므로, 만든 위치는 모두 정확히 잘린다.
+- **범위는 [start, end)**: 줄바꿈 바로 뒤에서 끝나는 범위의 끝은 다음 줄 1열이다. 파일 끝까지 가는 정의(마지막 Markdown section, ADR 형식 Decision, vision)의 끝은 마지막 문자 다음 위치(offset `source.length`)이고, 존재하지 않는 줄이나 칸을 만들지 않는다. YAML 정의는 문서 내용의 범위이며 끝의 줄바꿈을 포함하지 않는다.
+- **완전한 범위**: 정의와 분석 사실의 위치는 네 값을 모두 가진다. 경로만 있는 위치는 파일 전체를 뜻한다(진단용). 범위 끝을 알 수 없는 예외(파일 누락 등)에서만 end 필드를 생략하며, 그런 위치는 slice할 수 없다.
+- **offset을 두지 않는 이유**: UTF-16 offset은 LF와 CRLF checkout에서 값이 달라진다. 줄·칸만 쓰면 같은 위치가 두 checkout에서 같은 텍스트를 가리킨다.
 - Evidence Pointer와 diagnostic이 이 위치를 그대로 쓴다.
 - **단위**: 줄은 LF로 센다. 칸은 UTF-16 code unit(JS 문자열 index + 1)이다. YAML(`LineCounter`), Markdown, Tree-sitter(web-tree-sitter는 JS 문자열을 UTF-16으로 넘긴다) 모두 같은 단위이며 UTF-8 byte나 code point가 아니다. 예: `/* 😀😀 */ 표시()`의 `표시`는 12번째 칸이다(UTF-8 byte로는 16, code point로는 10). LF 앞의 CR은 그 줄 끝에 속하므로 LF와 CRLF checkout에서 같은 위치가 같은 텍스트를 가리킨다.
-- core `sliceSourceLocation(text, location)`이 위치의 원문을 돌려주고(Evidence 재탐색), `compareSourceLocations`가 path(UTF-8), 시작, 끝 순으로 정렬한다.
+- core `sliceSource(canonicalText, location)`이 위치의 정확한 원문을 돌려준다. 불완전한 범위나 원문 밖을 가리키는 위치는 잘라 맞추지 않고 `SOURCE_LOCATION_INVALID`(error, persistent)다. 잘못된 위치는 producer의 버그이며 Evidence로 쓰지 않는다. `readSourceFile` / `readSourceSlice(root, location)`는 저장소 경계와 symlink를 확인한 뒤 canonical text를 읽는다. Decision digest, Packet Dependency Digest, Evidence, UI source 이동이 모두 이 경로를 쓴다. 저수준 `sliceSourceLocation`은 같은 규칙으로 `undefined`를 돌려준다. `compareSourceLocations`가 path(UTF-8), 시작, 끝 순으로 정렬한다.
 
 ## Diagnostics
 
@@ -469,6 +472,7 @@ based_on:                  # stale 탐지용 provenance
 - **confirm**(human만): 다음 `D-###`으로 새 `decisions/D-###.yaml`을 exclusive하게 만들고 `proposal`, proposer, `confirmed_by/at`, `lock.digest`를 기록한다. 이 파일 생성이 commit 지점이다. 이어서 supersede 대상의 `state`와 `superseded_by`만 바꾸고 proposal 파일을 지운다. 이 두 단계가 실패하면 다음 DecisionService 조작이 먼저 마무리한다(repair). Project Truth가 proposal 이후 바뀌었으면 `PROPOSAL_STALE`(warning)와 바뀐 참조 목록을 돌려주고 확정은 진행한다.
 - **reject**(human만): 파일을 지우지 않고 `state: rejected`, `rejected_at`, `rejected_by`, `reason`을 기록한다. 다른 필드와 주석은 그대로다.
 - Proposal의 `supersedes`는 SUPERSEDES 링크를 만들지 않고 존재만 확인한다.
+- **조회(T09.1)**: 어느 proposal이 pending인지는 core `listDecisionProposals(truth)` 하나가 정한다. pending = `state: proposed` AND 그 proposal ID를 `proposal`로 가진 Decision이 없음이다. Decision이 있으면 파일이 남아 있어도 `committed`(`cleanupPending`)이고, `state: rejected`면 `rejected`다. 파일이 있다고 pending은 아니다. 조회는 읽기만 하고 repair하지 않는다. 남은 파일 정리는 명시적 mutation `repairDecisionState()`이며, DecisionService의 쓰기 조작(propose, confirm, reject)도 lock 안에서 먼저 repair한다. `duoctl status`, MCP `duo_get_status`, UI, Context Compiler는 `pendingDecisionProposals()`를 쓴다.
 - 시각은 주입 가능한 clock으로 기록하며 ID나 identity로 쓰지 않는다.
 
 ## Review 결과 (runtime/reviews/, reviews/)

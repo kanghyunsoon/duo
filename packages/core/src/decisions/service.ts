@@ -27,6 +27,7 @@ import {
   type DecisionActor, type DecisionFileSystem, type DecisionWriteTarget,
 } from "./files.js";
 import { nextDecisionId, nextProposalId } from "./ids.js";
+import { listDecisionProposals } from "./read-model.js";
 
 /** The only confirmed-state value written by DUO; used by confirm alone (AC-009-05). */
 const CONFIRMED = "confirmed";
@@ -215,19 +216,22 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
     return success({ truth: loaded.value, repaired: fixed.repaired }, fixed.diagnostics);
   }
 
-  function refDigests(truth: ProjectTruth, ids: readonly string[]): { id: string; digest: string }[] {
+  /** Digests of referenced definitions' exact source slices. A location that does not slice is a producer bug and fails. */
+  function refDigests(truth: ProjectTruth, ids: readonly string[]): ParseResult<{ id: string; digest: string }[]> {
     const out: { id: string; digest: string }[] = [];
     for (const id of [...new Set(ids)].sort()) {
       const def = [...truth.requirements, ...truth.decisions].find((d) => d.id === id);
-      const digest = def === undefined ? undefined : definitionDigest(root, def.location);
-      if (digest !== undefined) out.push({ id, digest });
+      if (def === undefined) continue;
+      const digest = definitionDigest(root, def.location);
+      if (digest.value === undefined) return failure(digest.diagnostics);
+      out.push({ id, digest: digest.value });
     }
-    return out;
+    return success(out);
   }
 
   function staleness(truth: ProjectTruth, proposal: Proposal): StaleInfo | undefined {
     if (proposal.basedOn === undefined) return undefined;
-    const current = new Map(refDigests(truth, proposal.basedOn.refs.map((r) => r.id)).map((r) => [r.id, r.digest]));
+    const current = new Map((refDigests(truth, proposal.basedOn.refs.map((r) => r.id)).value ?? []).map((r) => [r.id, r.digest]));
     const changedRefs = proposal.basedOn.refs.filter((r) => current.get(r.id) !== r.digest).map((r) => r.id);
     const truthChanged = truthDigest(root, truth) !== proposal.basedOn.truthDigest;
     return truthChanged || changedRefs.length > 0 ? { truthChanged, changedRefs } : undefined;
@@ -269,7 +273,9 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
         const prepared = await prepare();
         if (prepared.value === undefined) return failure(prepared.diagnostics);
         const { truth, repaired } = prepared.value;
-        const refs = refDigests(truth, [...(input.governs?.requirements ?? []), ...(input.supersedes ? [input.supersedes] : [])]);
+        const digests = refDigests(truth, [...(input.governs?.requirements ?? []), ...(input.supersedes ? [input.supersedes] : [])]);
+        if (digests.value === undefined) return failure(digests.diagnostics);
+        const refs = digests.value;
         const render = (id: string) => yaml(defined({
           id, title: input.title, kind: input.kind, state: "proposed", question: input.question, answer: input.answer, rationale: input.rationale,
           governs: input.governs, forbids: input.forbids, enforcement: input.enforcement, supersedes: input.supersedes, evidence: input.evidence,
@@ -318,11 +324,12 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
         const prepared = await prepare();
         if (prepared.value === undefined) return failure(prepared.diagnostics);
         const { truth, repaired } = prepared.value;
-        const done = truth.decisions.find((d) => d.proposalId === proposalId);
-        if (done !== undefined) return failure([createDiagnostic("PROPOSAL_NOT_PENDING", `${proposalId} was confirmed as ${done.id}`)]);
-        const proposal = truth.proposals.find((p) => p.id === proposalId);
-        if (proposal === undefined) return failure([createDiagnostic("PROPOSAL_NOT_FOUND", `No proposal ${proposalId}`)]);
-        if (proposal.state !== "proposed") return failure([createDiagnostic("PROPOSAL_NOT_PENDING", `${proposalId} is ${proposal.state}`, proposal.location)]);
+        const entry = listDecisionProposals(truth).find((p) => p.id === proposalId);
+        if (entry === undefined) return failure([createDiagnostic("PROPOSAL_NOT_FOUND", `No proposal ${proposalId}`)]);
+        if (entry.status !== "pending") {
+          return failure([createDiagnostic("PROPOSAL_NOT_PENDING", entry.decisionId === undefined ? `${proposalId} is ${entry.status}` : `${proposalId} was confirmed as ${entry.decisionId}`, entry.proposal.location)]);
+        }
+        const proposal = entry.proposal;
         const errors = await updateInPlace(actor, proposal.location.path, "proposal", new Set(["state", "rejected_at", "rejected_by", "reason"]),
           { state: "rejected", rejected_at: now(), rejected_by: actor.name, reason: reason === undefined || reason.trim() === "" ? undefined : reason });
         if (errors.length > 0) return failure(errors);
@@ -350,9 +357,10 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
   async function confirmProposal(actor: DecisionActor, id: string, truth: ProjectTruth, repaired: string[], warnings: Diagnostic[]): Promise<ParseResult<ConfirmResult>> {
     const done = truth.decisions.find((d) => d.proposalId === id);
     if (done !== undefined) return failure([createDiagnostic("PROPOSAL_NOT_PENDING", `${id} was already confirmed as ${done.id}`)]);
-    const proposal = truth.proposals.find((p) => p.id === id);
-    if (proposal === undefined) return failure([createDiagnostic("PROPOSAL_NOT_FOUND", `No proposal ${id}`)]);
-    if (proposal.state !== "proposed") return failure([createDiagnostic("PROPOSAL_NOT_PENDING", `${id} is ${proposal.state}`, proposal.location)]);
+    const entry = listDecisionProposals(truth).find((p) => p.id === id);
+    if (entry === undefined) return failure([createDiagnostic("PROPOSAL_NOT_FOUND", `No proposal ${id}`)]);
+    if (entry.status !== "pending") return failure([createDiagnostic("PROPOSAL_NOT_PENDING", `${id} is ${entry.status}`, entry.proposal.location)]);
+    const proposal = entry.proposal;
     const stale = staleness(truth, proposal);
     if (stale !== undefined) {
       warnings.push(createDiagnostic("PROPOSAL_STALE",

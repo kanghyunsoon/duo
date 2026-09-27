@@ -138,6 +138,8 @@ export const DIAGNOSTIC_SEVERITY = {
   DECISION_LOCK_BUSY: "error",
   /** A confirmed Decision's lock.digest does not match its content fields (a detection aid, not a signature). */
   DECISION_LOCK_MISMATCH: "warning",
+  /** A SourceLocation that does not address its canonical source text (a producer bug, T09.1). */
+  SOURCE_LOCATION_INVALID: "error",
 } as const satisfies Record<string, DiagnosticSeverity>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_SEVERITY;
@@ -179,6 +181,7 @@ export const DIAGNOSTIC_PERSISTENCE = {
   DECISION_ACTOR_FORBIDDEN: T, PROPOSAL_NOT_FOUND: T, PROPOSAL_NOT_PENDING: T, PROPOSAL_INVALID: T, PROPOSAL_STALE: T,
   DECISION_LOCKED: T, DECISION_TARGET_UNSUPPORTED: T, DECISION_SUPERSEDE_TARGET_INVALID: T, DECISION_LOCK_BUSY: T,
   DECISION_LOCK_MISMATCH: P,
+  SOURCE_LOCATION_INVALID: P,
 } as const satisfies Record<DiagnosticCode, DiagnosticPersistence>;
 
 export function isPersistentDiagnostic(diagnostic: Diagnostic): boolean {

@@ -28,7 +28,8 @@ function headingId(heading: MarkdownHeading): { id: string; title: string } {
 export function parseDefinitionDocument(doc: MarkdownDocument): ParseResult<DefinitionSet> {
   const out = emptyDefinitionSet();
   const diagnostics: Diagnostic[] = [];
-  const wholeFile: SourceLocation = { path: doc.path, startLine: 1, endLine: doc.lineCount };
+  // An ADR-style Decision is the whole file: [start of text, end of text).
+  const wholeFile: SourceLocation = doc.locationOf(0, doc.length);
 
   if (doc.frontmatter !== undefined) {
     const parsed = parseYaml({ path: doc.path, text: doc.frontmatter.value, startLine: doc.frontmatter.contentStartLine });

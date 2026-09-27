@@ -6,6 +6,7 @@ export * from "./constants.js";
 export * from "./diagnostics.js";
 export * from "./ids.js";
 export * from "./location.js";
+export { readSourceFile, readSourceSlice } from "./source-file.js";
 export * from "./order.js";
 export * from "./paths.js";
 export * from "./write-boundary.js";
@@ -34,6 +35,9 @@ export {
 } from "./decisions/files.js";
 export { decisionLockDigest, definitionDigest, stableJson, truthDigest, verifyDecisionLock, type LockStatus, type LockVerification } from "./decisions/digest.js";
 export { nextDecisionId, nextProposalId } from "./decisions/ids.js";
+export {
+  listDecisionProposals, pendingDecisionProposals, repairDecisionState, type DecisionProposalEntry, type ProposalStatus,
+} from "./decisions/read-model.js";
 
 /** Identity of a workspace package and the workspace packages it depends on at runtime. */
 export interface PackageInfo {

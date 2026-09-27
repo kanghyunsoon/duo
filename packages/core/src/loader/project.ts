@@ -8,6 +8,7 @@ import {
   parseConstraintsFile, parseDecisionFile, parseMilestoneFile, parseProjectConfig, parseProposalFile, parseVisionFile,
 } from "../domain/files.js";
 import { emptyDefinitionSet, type DefinitionSet, type ProjectTruth, type Vision } from "../domain/model.js";
+import { canonicalSourceText } from "../location.js";
 import { compareUtf8 } from "../order.js";
 import { toRepoPath, type RepoPath } from "../paths.js";
 import { analyzeTrace, type TraceModel, type TracePolicy } from "../trace/trace.js";
@@ -41,7 +42,8 @@ function listFiles(root: string, dir: string, extensions: readonly string[], dia
 
 function readText(file: SourceFile, diagnostics: Diagnostic[]): string | undefined {
   try {
-    return fs.readFileSync(file.absolute, "utf8").replace(/^\uFEFF/, "");
+    // Parse the canonical source text so every location addresses exactly what sliceSource() reads (T09.1).
+    return canonicalSourceText(fs.readFileSync(file.absolute, "utf8"));
   } catch (error) {
     diagnostics.push(createDiagnostic("FILE_READ_ERROR", String(error), { path: file.path }));
     return undefined;

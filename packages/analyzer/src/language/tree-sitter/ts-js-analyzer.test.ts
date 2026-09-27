@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { compareUtf8, nodeId, sliceSourceLocation, symbolRef, type RepoPath } from "@duo-director/core";
+import { canonicalSourceText, compareUtf8, nodeId, sliceSource, sliceSourceLocation, symbolRef, type RepoPath } from "@duo-director/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { computeContentHash } from "../../fingerprint/content-hash.js";
 import type { AnalyzerRegistry } from "../registry.js";
@@ -256,11 +256,12 @@ describe("SourceLocation (UTF-16 columns, CRLF)", () => {
     }
   });
 
-  it("keeps a BOM without shifting columns", () => {
+  it("addresses the canonical text: a leading BOM is not a column (T09.1)", () => {
     const text = "\uFEFFexport function a() { b(); }\n";
     const a = analyzeText("bom.ts", text).value;
     expect(a?.parseStatus).toBe("complete");
-    expect(sliceSourceLocation(text, a?.symbols[0]?.location ?? { path: "" })).toBe("function a() { b(); }");
+    expect(a?.symbols[0]?.location).toMatchObject({ startLine: 1, startColumn: 8 });
+    expect(sliceSource(canonicalSourceText(text), a?.symbols[0]?.location ?? { path: "" }).value).toBe("function a() { b(); }");
   });
 });
 

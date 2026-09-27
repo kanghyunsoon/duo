@@ -104,13 +104,16 @@ export function parseMarkdown(path: string, text: string): ParseResult<MarkdownD
   };
   const locationOf = (start: number, end: number): SourceLocation => {
     const sl = lineAt(start);
-    const el = lineAt(Math.max(start, end - 1));
+    // [start, end): the end is the position of offset end itself. A range that ends right after a
+    // line break ends at column 1 of the next line; the end of the text is offset text.length.
+    const stop = Math.max(start, end);
+    const el = lineAt(stop);
     return {
       path,
       startLine: sl,
       startColumn: start - (lineStarts[sl - 1] ?? 0) + 1,
       endLine: el,
-      endColumn: Math.max(start, end - 1) - (lineStarts[el - 1] ?? 0) + 2,
+      endColumn: stop - (lineStarts[el - 1] ?? 0) + 1,
     };
   };
   const spanOf = (node: Nodes): MarkdownSpan | undefined => {

@@ -6,9 +6,10 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { STATE_DIR_NAME } from "../constants.js";
-import { createDiagnostic, type Diagnostic, type SourceLocation } from "../diagnostics.js";
+import { createDiagnostic, failure, success, type Diagnostic, type ParseResult, type SourceLocation } from "../diagnostics.js";
 import type { Decision, ProjectTruth } from "../domain/model.js";
-import { sliceSourceLocation } from "../location.js";
+import { canonicalSourceText } from "../location.js";
+import { readSourceSlice } from "../source-file.js";
 import { compareUtf8 } from "../order.js";
 
 const sha256 = (text: string) => `sha256:${createHash("sha256").update(text).digest("hex")}`;
@@ -73,7 +74,7 @@ export function truthDigest(root: string, truth: ProjectTruth): string {
     if (file.startsWith(PROPOSALS_PREFIX)) continue;
     let text: string;
     try {
-      text = fs.readFileSync(path.join(root, file), "utf8").replace(/\r\n/g, "\n");
+      text = canonicalSourceText(fs.readFileSync(path.join(root, file), "utf8"));
     } catch {
       text = "\u0000missing";
     }
@@ -82,20 +83,8 @@ export function truthDigest(root: string, truth: ProjectTruth): string {
   return sha256(parts.join("\n"));
 }
 
-/**
- * sha256 of a definition's source text: its exact SourceLocation slice, else the lines it spans
- * (clamped to the file), else the whole file. Undefined only when the file cannot be read.
- */
-export function definitionDigest(root: string, location: SourceLocation): string | undefined {
-  let text: string;
-  try {
-    text = fs.readFileSync(path.join(root, location.path), "utf8").replace(/\r\n/g, "\n");
-  } catch {
-    return undefined;
-  }
-  const exact = sliceSourceLocation(text, location);
-  if (exact !== undefined) return sha256(exact);
-  if (location.startLine === undefined) return sha256(text);
-  const lines = text.split("\n");
-  return sha256(lines.slice(location.startLine - 1, location.endLine ?? lines.length).join("\n"));
+/** sha256 of a definition's exact source slice (canonical source text, T09.1). A bad location is an error, never approximated. */
+export function definitionDigest(root: string, location: SourceLocation): ParseResult<string> {
+  const slice = readSourceSlice(root, location);
+  return slice.value === undefined ? failure(slice.diagnostics) : success(sha256(slice.value));
 }

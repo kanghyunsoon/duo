@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { sliceSource } from "../location.js";
+import { readSourceFile, readSourceSlice } from "../source-file.js";
 import { loadProjectTruth } from "./project.js";
 
 const repo = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -50,7 +52,13 @@ describe("loadProjectTruth — valid project (fixtures/auth-app)", () => {
     expect(truth?.decisions[0]?.location).toEqual({ path: ".duo-project/decisions/D-004.yaml", startLine: 1, startColumn: 1, endLine: 19, endColumn: 26 });
     expect(truth?.constraints[0]?.location).toMatchObject({ path: ".duo-project/intent/constraints.yaml", startLine: 2, endLine: 12 });
     expect(truth?.milestones[0]?.location).toMatchObject({ startLine: 1, endLine: 4 });
-    expect(truth?.requirements[0]?.location).toMatchObject({ startLine: 3, startColumn: 1, endLine: 16 });
+    expect(truth?.requirements[0]?.location).toMatchObject({ startLine: 3, startColumn: 1, endLine: 17, endColumn: 1 });
+    // Every definition location slices its canonical source exactly (T09.1).
+    const root = fixture("auth-app");
+    for (const d of [...(truth?.requirements ?? []), ...(truth?.decisions ?? []), ...(truth?.issues ?? []), ...(truth?.milestones ?? []), ...(truth?.constraints ?? [])]) {
+      expect(readSourceSlice(root, d.location).diagnostics, d.id).toEqual([]);
+    }
+    expect(readSourceSlice(root, truth?.requirements[0]?.location ?? { path: "" }).value).toMatch(/^## AUTH-01 [^\n]*\n[\s\S]*\n$/u);
   });
 
   it("derives trace links", () => {
@@ -79,7 +87,10 @@ describe("loadProjectTruth — Windows-style paths and CRLF (fixtures/core/windo
     expect(truth?.decisions[0]?.governs.paths).toEqual(["src/auth/"]);
     expect(truth?.decisions[0]?.evidence[0]?.path).toBe("src/auth/AuthService.ts");
     expect(truth?.files.every((f) => !f.includes("\\"))).toBe(true);
-    expect(truth?.requirements[0]?.location).toMatchObject({ path: ".duo-project/specs/auth.md", startLine: 1, endLine: 11 });
+    // The last section runs to the end of the file: 11 lines and a final CRLF, so the end is line 12, column 1.
+    expect(truth?.requirements[0]?.location).toMatchObject({ path: ".duo-project/specs/auth.md", startLine: 1, startColumn: 1, endLine: 12, endColumn: 1 });
+    const text = readSourceFile(fixture("core", "windows-paths"), ".duo-project/specs/auth.md").value ?? "";
+    expect(sliceSource(text, truth?.requirements[0]?.location ?? { path: "" }).value).toBe(text);
   });
 });
 

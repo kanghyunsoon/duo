@@ -17,7 +17,8 @@ describe("parseDefinitionMarkdown", () => {
     const [first, second] = r.value?.requirements ?? [];
     expect(first).toMatchObject({
       id: "AUTH-01", title: "Login", status: "done", milestone: "M1", dependsOn: ["AUTH-00"],
-      location: { path: ".duo-project/specs/x.md", startLine: 3, endLine: 16 },
+      // [start, end): the section ends where the next level-2 heading starts (line 17, column 1).
+      location: { path: ".duo-project/specs/x.md", startLine: 3, startColumn: 1, endLine: 17, endColumn: 1 },
     });
     expect(first?.description).toContain("Users log in.");
     expect(first?.description).toContain("More.");
