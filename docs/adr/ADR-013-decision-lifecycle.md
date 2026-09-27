@@ -26,12 +26,12 @@ DUO가 결정 필요를 감지 또는 Agent가 duo_propose_decision
         ↓
 proposed (decisions/proposals/P-YYYYMMDD-xxxxxx.yaml)
         ↓
-Human: duo decision confirm <id> | duo decision reject <id> | UI Confirm/Reject
+Human: duoctl decision confirm <id> | duoctl decision reject <id> | UI Confirm/Reject
         ↓
 confirmed (decisions/D-###.yaml, lock 기록)   또는   rejected (proposal에 기록)
 ```
 
-- `.duo/decisions/*.yaml`을 직접 수정하는 것도 허용하지만 fallback/manual interface다.
+- `.duo-project/decisions/*.yaml`을 직접 수정하는 것도 허용하지만 fallback/manual interface다.
 - Confirmed Decision의 내용을 DUO나 Coding Agent가 자동으로 바꾸는 기능은 없다. 바꾸려면 `supersedes`를 가진 새 proposal을 만들고 Human이 confirm한다.
 - confirm/reject는 MCP Tool로 노출하지 않는다.
 
@@ -52,7 +52,7 @@ proposal 파일에 `state: rejected`, `rejected_at`, `rejected_by`, `reason`(선
 - `lock.digest` = `sha256`(내용 필드를 정규화한 JSON). 내용 필드는 title, kind, question, answer, rationale, governs, forbids, match, enforcement, supersedes다.
 - Review의 R-LOCK은 digest 불일치와 HEAD 기준 내용 변경을 모두 검사한다(ADR-007).
 - digest는 **실수 탐지용 무결성 표시이며 보안 서명이 아니다**. 악의적인 Agent는 digest를 다시 계산할 수 있다. 이 한계는 [10-security.md](../10-security.md)에 적는다.
-- `.duo/decisions/` 안의 Markdown Decision(ADR 형식)은 DecisionService가 쓰지 않으며 HEAD 기준 검사만 받는다. `.duo` 밖 문서의 결정 서술은 Decision이 아니라 External Evidence다(ADR-014).
+- `.duo-project/decisions/` 안의 Markdown Decision(ADR 형식)은 DecisionService가 쓰지 않으며 HEAD 기준 검사만 받는다. `.duo-project` 밖 문서의 결정 서술은 Decision이 아니라 External Evidence다(ADR-014).
 
 ## 결과
 

@@ -1,59 +1,59 @@
 {
   "$comment": "ADR-010 의존 방향의 단일 원본. eslint.config.js와 scripts/check-boundaries.mjs가 읽는다.",
   "packages": {
-    "@duo/core": {
+    "@duo-director/core": {
       "dir": "packages/core",
       "allow": [],
       "typeOnly": []
     },
-    "@duo/analyzer": {
+    "@duo-director/analyzer": {
       "dir": "packages/analyzer",
       "allow": [
-        "@duo/core"
+        "@duo-director/core"
       ],
       "typeOnly": []
     },
-    "@duo/graph": {
+    "@duo-director/graph": {
       "dir": "packages/graph",
       "allow": [
-        "@duo/analyzer",
-        "@duo/core"
+        "@duo-director/analyzer",
+        "@duo-director/core"
       ],
       "typeOnly": []
     },
-    "@duo/director": {
+    "@duo-director/director": {
       "dir": "packages/director",
       "allow": [
-        "@duo/graph",
-        "@duo/analyzer",
-        "@duo/core"
+        "@duo-director/graph",
+        "@duo-director/analyzer",
+        "@duo-director/core"
       ],
       "typeOnly": []
     },
-    "@duo/integration": {
+    "@duo-director/integration": {
       "dir": "packages/integration",
       "allow": [
-        "@duo/director",
-        "@duo/graph",
-        "@duo/core"
+        "@duo-director/director",
+        "@duo-director/graph",
+        "@duo-director/core"
       ],
       "typeOnly": []
     },
-    "@duo/ui": {
+    "@duo-director/ui": {
       "dir": "packages/ui",
       "allow": [],
       "typeOnly": [
-        "@duo/core"
+        "@duo-director/core"
       ]
     },
-    "@duo/cli": {
+    "@duo-director/cli": {
       "dir": "apps/cli",
       "allow": [
-        "@duo/integration",
-        "@duo/director",
-        "@duo/graph",
-        "@duo/analyzer",
-        "@duo/core"
+        "@duo-director/integration",
+        "@duo-director/director",
+        "@duo-director/graph",
+        "@duo-director/analyzer",
+        "@duo-director/core"
       ],
       "typeOnly": []
     }

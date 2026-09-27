@@ -1,7 +1,7 @@
 ---
 id: ADR-006
 type: decision
-title: .duo 디렉터리 구조와 Git 정책
+title: .duo-project 디렉터리 구조와 Git 정책
 state: confirmed
 owner: human
 question: duo_layout
@@ -13,7 +13,7 @@ confirmed_by: human (H-7, H-14)
 confirmed_at: 2026-09-27
 ---
 
-# ADR-006: .duo 디렉터리 구조와 Git 정책
+# ADR-006: .duo-project 디렉터리 구조와 Git 정책
 
 상태: **Accepted** (Human 결정 H-7, H-14)
 
@@ -39,7 +39,7 @@ Derived / Runtime       → ignored
 ### Review 저장
 
 - 모든 Review 실행 결과는 `runtime/reviews/`에 저장되고 Git에 올라가지 않는다.
-- Human이 `duo review --record`를 실행했을 때만 그 Review가 `reviews/<id>.json`으로 저장된다. MCP와 Agent는 Record를 만들 수 없다.
+- Human이 `duoctl review --record`를 실행했을 때만 그 Review가 `reviews/<id>.json`으로 저장된다. MCP와 Agent는 Record를 만들 수 없다.
 - Record는 원본 내용을 복사하지 않고 **Evidence Pointer**만 남긴다.
 
 ```yaml
@@ -63,11 +63,11 @@ evidence:
 
 | 경로 | 내용 |
 |---|---|
-| `generated/` | graph.db(fingerprints 포함), gaps.json, inferred.json, index.json. 삭제 후 `duo init --reindex`로 같은 결과가 나와야 한다 |
+| `generated/` | graph.db(fingerprints 포함), gaps.json, inferred.json, index.json. 삭제 후 `duoctl init --reindex`로 같은 결과가 나와야 한다 |
 | `cache/` | tokenizer 결과, Packet cache, LLM 응답 cache. 성능 목적이며 언제 지워도 된다 |
 | `runtime/` | reviews/(매 실행), metrics.jsonl, backup/(install). 로컬 기록이며 공유하지 않는다 |
 
-`.duo/.gitignore`는 init이 만들며 `generated/`, `cache/`, `runtime/` 세 줄을 담는다.
+`.duo-project/.gitignore`는 init이 만들며 `generated/`, `cache/`, `runtime/` 세 줄을 담는다.
 
 ## 결과
 

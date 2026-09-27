@@ -4,7 +4,7 @@
 
 ## 역할: Context Gateway
 
-MCP 서버는 Agent가 `.duo` 전체를 읽지 않도록 만드는 **Context Gateway**다. 핵심 흐름은 하나다.
+MCP 서버는 Agent가 `.duo-project` 전체를 읽지 않도록 만드는 **Context Gateway**다. 핵심 흐름은 하나다.
 
 ```text
 Codex / Claude
@@ -24,9 +24,10 @@ minimal context
 
 ## 서버
 
-- 실행: `duo mcp`(stdio). Agent 설정이 이 명령을 실행한다.
+- 실행: `duoctl mcp`(stdio). Agent 설정이 이 명령을 실행한다.
+- 서버 이름: `duo-director`(`MCP_SERVER_NAME`, H-20). Tool 이름의 `duo_` 접두사는 서버 이름 아래에 있으므로 유지한다.
 - SDK: MCP TypeScript SDK v2 서버 패키지. **TASK-016 착수 직전에 공식 문서를 다시 확인한다**(AC-016-01).
-- Root: cwd에서 위로 올라가며 `.duo/`를 찾는다. `--root <path>`로 지정할 수 있다.
+- Root: cwd에서 위로 올라가며 `.duo-project/`를 찾는다. `--root <path>`로 지정할 수 있다.
 - stdout에는 JSON-RPC 메시지만 쓰고 로그는 stderr로 보낸다.
 - 모든 Tool은 실행 전 증분 인덱싱으로 freshness를 보장한다.
 - 응답은 compact text(`content`)와 `structuredContent`를 함께 준다. Agent는 대부분 text만 읽으면 된다.
@@ -91,7 +92,7 @@ Decision confirm/reject는 Human Action이라 MCP로 노출하지 않는다([ADR
 
 - 입력: `{ title, question, answer, rationale: string, supersedes?: string, governs?: { requirements?, paths?, symbols? }, forbids?: {...}, evidence?: string[] }`
 - 동작: `decisions/proposals/P-YYYYMMDD-xxxxxx.yaml`을 새로 만든다. 기존 파일은 수정하지 않는다. `supersedes`가 confirmed Decision이 아니면 거부한다.
-- 출력: proposal ID와 "Human 승인 필요: duo decision confirm <id> 또는 UI" 한 줄.
+- 출력: proposal ID와 "Human 승인 필요: duoctl decision confirm <id> 또는 UI" 한 줄.
 
 ## 오류 코드
 

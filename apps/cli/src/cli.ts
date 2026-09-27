@@ -1,12 +1,12 @@
 /**
- * duo CLI — thin entry point (ADR-010, REQ-CLI-001).
+ * CLI — thin entry point (ADR-010, REQ-CLI-001).
  * Parses arguments and formats output only. Commands are implemented in packages (TASK-015).
  */
-import { packageInfo as analyzer } from "@duo/analyzer";
-import { CLI_NAME, packageInfo as core, PRODUCT_NAME, type PackageInfo } from "@duo/core";
-import { packageInfo as director } from "@duo/director";
-import { packageInfo as graph } from "@duo/graph";
-import { packageInfo as integration } from "@duo/integration";
+import { packageInfo as analyzer } from "@duo-director/analyzer";
+import { CLI_NAME, packageInfo as core, PRODUCT_NAME, type PackageInfo } from "@duo-director/core";
+import { packageInfo as director } from "@duo-director/director";
+import { packageInfo as graph } from "@duo-director/graph";
+import { packageInfo as integration } from "@duo-director/integration";
 import { VERSION } from "./version.js";
 
 export interface Io {

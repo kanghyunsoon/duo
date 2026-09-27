@@ -10,7 +10,7 @@ Requirement마다 Heading과 `duo` block을 둔다. 이 형식은 [03-data-model
 
 ## Truth Layer와 추적성
 
-### REQ-TRUTH-001 .duo Project Truth Layer와 소유권
+### REQ-TRUTH-001 .duo-project Project Truth Layer와 소유권
 
 ```duo
 type: requirement
@@ -20,7 +20,7 @@ priority: must
 source: [D§2, P§6]
 ```
 
-`duo init`은 `.duo/`를 만든다. 경로별 소유자(Human, DUO, Agent)와 쓰기 권한은 03 문서의 소유권 표를 따른다. UI나 DB는 Source of Truth가 아니다.
+`duoctl init`은 `.duo-project/`를 만든다. 경로별 소유자(Human, DUO, Agent)와 쓰기 권한은 03 문서의 소유권 표를 따른다. UI나 DB는 Source of Truth가 아니다.
 
 상세: [03-data-model](03-data-model.md) · ADR: [ADR-006](adr/ADR-006-duo-layout-git-policy.md) · Task: [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-014](tasks/TASKS.md#task-014-init-파이프라인)
 
@@ -34,7 +34,7 @@ priority: must
 source: [D§2, H-7, H-14]
 ```
 
-Project Truth(project.yaml, intent, specs, decisions, milestones, integrations)와 Human이 보존하거나 승인한 Review(`.duo/reviews/`)만 Git 추적한다. 재생성 가능하거나 실행 중 생기는 데이터(`generated/`, `cache/`, `runtime/`)는 ignore한다.
+Project Truth(project.yaml, intent, specs, decisions, milestones, integrations)와 Human이 보존하거나 승인한 Review(`.duo-project/reviews/`)만 Git 추적한다. 재생성 가능하거나 실행 중 생기는 데이터(`generated/`, `cache/`, `runtime/`)는 ignore한다.
 
 상세: [03-data-model](03-data-model.md) · ADR: [ADR-006](adr/ADR-006-duo-layout-git-policy.md) · Task: [TASK-014](tasks/TASKS.md#task-014-init-파이프라인)
 
@@ -48,7 +48,7 @@ priority: must
 source: [P§7, H-11, H-16]
 ```
 
-Project Truth는 Markdown/YAML이며 스키마로 검증하고 오류를 파일:줄로 보고한다. `sources.markdown`으로 지정한 `.duo` 밖 문서는 Truth가 아니라 External Evidence/Input Source다. init 초안, Review 근거, Drift 탐지에만 쓰며, 외부 문서가 바뀌어도 `.duo`를 자동으로 바꾸지 않는다.
+Project Truth는 Markdown/YAML이며 스키마로 검증하고 오류를 파일:줄로 보고한다. `sources.markdown`으로 지정한 `.duo-project` 밖 문서는 Truth가 아니라 External Evidence/Input Source다. init 초안, Review 근거, Drift 탐지에만 쓰며, 외부 문서가 바뀌어도 `.duo-project`를 자동으로 바꾸지 않는다.
 
 상세: [03-data-model](03-data-model.md) · ADR: [ADR-014](adr/ADR-014-traceability-ids.md) · Task: [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서)
 
@@ -62,11 +62,11 @@ priority: must
 source: [H-11]
 ```
 
-Requirement, Decision(ADR 포함), Issue(Task 포함), Milestone은 전역에서 유일한 ID를 가지고 ID 참조로 연결된다. 이 저장소의 `docs/`도 같은 형식을 따르므로, 테스트에서 임시 `.duo/`로 복사해 DUO 자체의 Project Graph fixture로 쓴다.
+Requirement, Decision(ADR 포함), Issue(Task 포함), Milestone은 전역에서 유일한 ID를 가지고 ID 참조로 연결된다. 이 저장소의 `docs/`도 같은 형식을 따르므로, 테스트에서 임시 `.duo-project/`로 복사해 DUO 자체의 Project Graph fixture로 쓴다.
 
 상세: [03-data-model](03-data-model.md) · ADR: [ADR-014](adr/ADR-014-traceability-ids.md) · Task: [TASK-000](tasks/TASKS.md#task-000-sdd-문서-작성), [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-007](tasks/TASKS.md#task-007-graph-builder와-일관성-검사), [TASK-020](tasks/TASKS.md#task-020-e2e와-문서-구현-대조)
 
-## duo init
+## duoctl init
 
 ### REQ-INIT-001 결정적 Repository 분석
 
@@ -78,7 +78,7 @@ priority: must
 source: [D§3]
 ```
 
-`duo init`은 구조, README/docs, manifest, Git metadata, source file, AST symbol, dependency, 기존 기획 문서를 일반 코드로 분석한다. Repository 전체를 LLM에 전달하지 않는다.
+`duoctl init`은 구조, README/docs, manifest, Git metadata, source file, AST symbol, dependency, 기존 기획 문서를 일반 코드로 분석한다. Repository 전체를 LLM에 전달하지 않는다.
 
 상세: [02-system-architecture](02-system-architecture.md) · ADR: [ADR-008](adr/ADR-008-deterministic-first.md) · Task: [TASK-014](tasks/TASKS.md#task-014-init-파이프라인)
 
@@ -92,7 +92,7 @@ priority: must
 source: [D§3]
 ```
 
-`duo init`은 Project Intent 초안, 현재 구현 상태 추론, Knowledge Gap을 만든다. 근거 없는 Requirement를 지어내지 않는다.
+`duoctl init`은 Project Intent 초안, 현재 구현 상태 추론, Knowledge Gap을 만든다. 근거 없는 Requirement를 지어내지 않는다.
 
 상세: [02-system-architecture](02-system-architecture.md) · Task: [TASK-014](tasks/TASKS.md#task-014-init-파이프라인)
 
@@ -156,7 +156,7 @@ Git diff → 변경 파일 → 변경 Symbol(added, modified, removed) → 영�
 
 ## Project Graph
 
-### REQ-GRAPH-001 Node 8종과 Edge 9종의 embedded 저장
+### REQ-GRAPH-001 Node 8종과 Edge 10종의 embedded 저장
 
 ```duo
 type: requirement
@@ -166,7 +166,7 @@ priority: must
 source: [D§4, P§8]
 ```
 
-Project Graph는 Node 8종과 Edge 9종을 embedded SQLite에 저장한다. 외부 Graph DB를 요구하지 않는다.
+Project Graph는 Node 8종과 Edge 10종(지시문 D§4의 9종 + Decision lifecycle의 SUPERSEDES, H-20)을 embedded SQLite에 저장한다. 외부 Graph DB를 요구하지 않는다.
 
 상세: [04-project-graph](04-project-graph.md) · ADR: [ADR-002](adr/ADR-002-graph-storage.md), [ADR-003](adr/ADR-003-language-analysis.md) · Task: [TASK-003](tasks/TASKS.md#task-003-graphstore), [TASK-007](tasks/TASKS.md#task-007-graph-builder와-일관성-검사)
 
@@ -254,7 +254,7 @@ priority: must
 source: [D§5, P§12]
 ```
 
-`duo review`는 변경 Symbol과 영향 Subgraph에 규칙을 적용해 Claim을 만들고 Review Verdict를 낸다.
+`duoctl review`는 변경 Symbol과 영향 Subgraph에 규칙을 적용해 Claim을 만들고 Review Verdict를 낸다.
 
 상세: [ADR-007](adr/ADR-007-verdict-model.md) · ADR: [ADR-007](adr/ADR-007-verdict-model.md) · Task: [TASK-013](tasks/TASKS.md#task-013-review-엔진)
 
@@ -310,7 +310,7 @@ priority: must
 source: [D§6, P§13, H-7, H-14]
 ```
 
-모든 Claim은 Evidence Pointer를 하나 이상 가진다. 실행마다 생기는 runtime evidence는 ignore하고, Human이 보존하거나 승인한 Review만 `.duo/reviews/`에 Pointer 형식(commit SHA, 경로, Symbol, 줄 범위, content hash, ID)으로 남긴다.
+모든 Claim은 Evidence Pointer를 하나 이상 가진다. 실행마다 생기는 runtime evidence는 ignore하고, Human이 보존하거나 승인한 Review만 `.duo-project/reviews/`에 Pointer 형식(commit SHA, 경로, Symbol, 줄 범위, content hash, ID)으로 남긴다.
 
 상세: [03-data-model](03-data-model.md) · ADR: [ADR-006](adr/ADR-006-duo-layout-git-policy.md), [ADR-007](adr/ADR-007-verdict-model.md) · Task: [TASK-013](tasks/TASKS.md#task-013-review-엔진)
 
@@ -340,7 +340,7 @@ priority: must
 source: [H-1]
 ```
 
-Human은 `duo decision confirm <id>`, `duo decision reject <id>`, 또는 UI Decisions 화면의 Confirm/Reject로 결정한다. `.duo/decisions/*.yaml` 직접 수정은 fallback이다.
+Human은 `duoctl decision confirm <id>`, `duoctl decision reject <id>`, 또는 UI Decisions 화면의 Confirm/Reject로 결정한다. `.duo-project/decisions/*.yaml` 직접 수정은 fallback이다.
 
 상세: [ADR-013](adr/ADR-013-decision-lifecycle.md) · ADR: [ADR-013](adr/ADR-013-decision-lifecycle.md) · Task: [TASK-009](tasks/TASKS.md#task-009-decision-생명주기), [TASK-015](tasks/TASKS.md#task-015-cli)
 
@@ -428,7 +428,7 @@ priority: must
 source: [H-3]
 ```
 
-LLM 호출 수와 입력/출력 토큰을 기록하고 `duo stats`에 보여 준다.
+LLM 호출 수와 입력/출력 토큰을 기록하고 `duoctl stats`에 보여 준다.
 
 상세: [09-token-strategy](09-token-strategy.md) · ADR: [ADR-012](adr/ADR-012-llm-provider.md) · Task: [TASK-012A](tasks/TASKS.md#task-012a-llmprovider-계약과-no-op)
 
@@ -458,7 +458,7 @@ priority: must
 source: [D§1]
 ```
 
-DUO는 프로젝트 Source Code를 수정하지 않는다. 모든 파일 쓰기는 허용 경로(`.duo/` 하위와 `duo install`이 설정하는 Agent 파일)로 제한된다.
+DUO는 프로젝트 Source Code를 수정하지 않는다. 모든 파일 쓰기는 허용 경로(`.duo-project/` 하위와 `duoctl install`이 설정하는 Agent 파일)로 제한된다.
 
 상세: [10-security](10-security.md) · ADR: [ADR-010](adr/ADR-010-package-structure.md) · Task: [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정)
 
@@ -474,11 +474,11 @@ priority: must
 source: [D§9, H-10]
 ```
 
-MCP 서버는 Agent가 `.duo`를 직접 읽지 않고 필요한 Context만 얻도록 하는 Context Gateway다. Tool은 9개로 제한한다.
+MCP 서버는 Agent가 `.duo-project`를 직접 읽지 않고 필요한 Context만 얻도록 하는 Context Gateway다. Tool은 9개로 제한한다.
 
 상세: [06-mcp-interface](06-mcp-interface.md) · ADR: [ADR-004](adr/ADR-004-mcp-context-gateway.md), [ADR-011](adr/ADR-011-agent-integration.md) · Task: [TASK-016](tasks/TASKS.md#task-016-mcp-서버)
 
-### REQ-AGENT-001 duo install codex/claude
+### REQ-AGENT-001 duoctl install codex/claude
 
 ```duo
 type: requirement
@@ -490,7 +490,7 @@ source: [D§10, P§22]
 
 Codex와 Claude Code용 Adapter가 MCP 설정과 10줄 이하의 instruction 블록을 설치한다. Repository Context를 startup prompt에 넣지 않는다.
 
-상세: [ADR-011](adr/ADR-011-agent-integration.md) · ADR: [ADR-011](adr/ADR-011-agent-integration.md) · Task: [TASK-017](tasks/TASKS.md#task-017-agent-adapter와-duo-install)
+상세: [ADR-011](adr/ADR-011-agent-integration.md) · ADR: [ADR-011](adr/ADR-011-agent-integration.md) · Task: [TASK-017](tasks/TASKS.md#task-017-agent-adapter와-duoctl-install)
 
 ### REQ-CLI-001 얇은 CLI
 
@@ -516,7 +516,7 @@ priority: must
 source: [D§12, P§18, H-4]
 ```
 
-`duo ui`는 127.0.0.1:7346에 Overview, Graph, Decisions, Drift, Context 화면을 띄운다.
+`duoctl ui`는 127.0.0.1:7346에 Overview, Graph, Decisions, Drift, Context 화면을 띄운다.
 
 상세: [08-ui-spec](08-ui-spec.md) · ADR: [ADR-009](adr/ADR-009-ui-stack.md) · Task: [TASK-018](tasks/TASKS.md#task-018-local-http-api와-web-ui)
 
@@ -530,7 +530,7 @@ priority: must
 source: [H-1, H-4]
 ```
 
-UI가 허용하는 쓰기는 Decision Confirm과 Reject 두 가지뿐이다. 결과는 `.duo/decisions/`에 직접 반영되며 UI 전용 상태를 만들지 않는다.
+UI가 허용하는 쓰기는 Decision Confirm과 Reject 두 가지뿐이다. 결과는 `.duo-project/decisions/`에 직접 반영되며 UI 전용 상태를 만들지 않는다.
 
 상세: [08-ui-spec](08-ui-spec.md) · ADR: [ADR-009](adr/ADR-009-ui-stack.md), [ADR-013](adr/ADR-013-decision-lifecycle.md) · Task: [TASK-018](tasks/TASKS.md#task-018-local-http-api와-web-ui)
 
@@ -618,7 +618,7 @@ priority: should
 source: [D§17]
 ```
 
-초기 목표(benchmark로 검증 후 확정): 소스 1만 파일 init 60초 이내, 변경 20파일 이하 증분 인덱싱 2초 이내, `duo context` 1초 이내.
+초기 목표(benchmark로 검증 후 확정): 소스 1만 파일 init 60초 이내, 변경 20파일 이하 증분 인덱싱 2초 이내, `duoctl context` 1초 이내.
 
 상세: [09-token-strategy](09-token-strategy.md) · Task: [TASK-019](tasks/TASKS.md#task-019-benchmark)
 
@@ -682,7 +682,7 @@ priority: could
 source: [D§13]
 ```
 
-JQL은 `.duo/integrations/jira.yaml`에서 관리한다. Core E2E가 안정된 뒤 착수한다.
+JQL은 `.duo-project/integrations/jira.yaml`에서 관리한다. Core E2E가 안정된 뒤 착수한다.
 
 상세: [12-roadmap](12-roadmap.md)
 
@@ -774,7 +774,7 @@ Node SEA 등으로 단일 실행 파일을 만든다.
 
 | Requirement | Milestone | ADR | Task | AC |
 |---|---|---|---|---|
-| [REQ-TRUTH-001](#req-truth-001-duo-project-truth-layer와-소유권) | M1 | [ADR-006](adr/ADR-006-duo-layout-git-policy.md) | [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-014](tasks/TASKS.md#task-014-init-파이프라인) | 10 |
+| [REQ-TRUTH-001](#req-truth-001-duo-project-project-truth-layer와-소유권) | M1 | [ADR-006](adr/ADR-006-duo-layout-git-policy.md) | [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-014](tasks/TASKS.md#task-014-init-파이프라인) | 10 |
 | [REQ-TRUTH-002](#req-truth-002-git-관리-정책) | M1 | [ADR-006](adr/ADR-006-duo-layout-git-policy.md) | [TASK-014](tasks/TASKS.md#task-014-init-파이프라인) | 5 |
 | [REQ-TRUTH-003](#req-truth-003-human-readable-형식과-스키마-검증) | M1 | [ADR-014](adr/ADR-014-traceability-ids.md) | [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서) | 5 |
 | [REQ-TRACE-001](#req-trace-001-id-기반-추적성) | M1 | [ADR-014](adr/ADR-014-traceability-ids.md) | [TASK-000](tasks/TASKS.md#task-000-sdd-문서-작성), [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-007](tasks/TASKS.md#task-007-graph-builder와-일관성-검사), [TASK-020](tasks/TASKS.md#task-020-e2e와-문서-구현-대조) | 16 |
@@ -784,7 +784,7 @@ Node SEA 등으로 단일 실행 파일을 만든다.
 | [REQ-INDEX-001](#req-index-001-언어-비종속-languageanalyzer) | M1 | [ADR-003](adr/ADR-003-language-analysis.md) | [TASK-005](tasks/TASKS.md#task-005-languageanalyzer와-tsjs-analyzer) | 4 |
 | [REQ-INDEX-002](#req-index-002-fingerprint-기반-증분-인덱싱) | M1 | [ADR-002](adr/ADR-002-graph-storage.md) | [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정), [TASK-008](tasks/TASKS.md#task-008-증분-인덱싱-trace-impact) | 8 |
 | [REQ-INDEX-003](#req-index-003-git-diff에서-변경-symbol-도출) | M1 | [ADR-003](adr/ADR-003-language-analysis.md) | [TASK-006](tasks/TASKS.md#task-006-git-evidence-provider) | 4 |
-| [REQ-GRAPH-001](#req-graph-001-node-8종과-edge-9종의-embedded-저장) | M1 | [ADR-002](adr/ADR-002-graph-storage.md), [ADR-003](adr/ADR-003-language-analysis.md) | [TASK-003](tasks/TASKS.md#task-003-graphstore), [TASK-007](tasks/TASKS.md#task-007-graph-builder와-일관성-검사) | 8 |
+| [REQ-GRAPH-001](#req-graph-001-node-8종과-edge-10종의-embedded-저장) | M1 | [ADR-002](adr/ADR-002-graph-storage.md), [ADR-003](adr/ADR-003-language-analysis.md) | [TASK-003](tasks/TASKS.md#task-003-graphstore), [TASK-007](tasks/TASKS.md#task-007-graph-builder와-일관성-검사) | 8 |
 | [REQ-GRAPH-002](#req-graph-002-결정적-bounded-traversal-trace-impact) | M1 | - | [TASK-003](tasks/TASKS.md#task-003-graphstore), [TASK-008](tasks/TASKS.md#task-008-증분-인덱싱-trace-impact) | 8 |
 | [REQ-GRAPH-003](#req-graph-003-graph-일관성-불변식) | M1 | - | [TASK-007](tasks/TASKS.md#task-007-graph-builder와-일관성-검사), [TASK-008](tasks/TASKS.md#task-008-증분-인덱싱-trace-impact) | 8 |
 | [REQ-CONTEXT-001](#req-context-001-director-context-packet-생성) | M2 | [ADR-004](adr/ADR-004-mcp-context-gateway.md), [ADR-005](adr/ADR-005-token-measurement.md), [ADR-008](adr/ADR-008-deterministic-first.md) | [TASK-010](tasks/TASKS.md#task-010-context-compiler) | 5 |
@@ -806,7 +806,7 @@ Node SEA 등으로 단일 실행 파일을 만든다.
 | [REQ-PROVIDER-001](#req-provider-001-evidenceprovider와-git-provider) | M1 | - | [TASK-006](tasks/TASKS.md#task-006-git-evidence-provider) | 4 |
 | [REQ-SAFETY-001](#req-safety-001-source-code-비수정과-쓰기-경로-제한) | M1 | [ADR-010](adr/ADR-010-package-structure.md) | [TASK-002](tasks/TASKS.md#task-002-core-스키마-loader-추적성-파서), [TASK-004](tasks/TASKS.md#task-004-파일-스캔-fingerprint-토큰-측정) | 9 |
 | [REQ-MCP-001](#req-mcp-001-mcp-context-gateway) | M3 | [ADR-004](adr/ADR-004-mcp-context-gateway.md), [ADR-011](adr/ADR-011-agent-integration.md) | [TASK-016](tasks/TASKS.md#task-016-mcp-서버) | 5 |
-| [REQ-AGENT-001](#req-agent-001-duo-install-codexclaude) | M3 | [ADR-011](adr/ADR-011-agent-integration.md) | [TASK-017](tasks/TASKS.md#task-017-agent-adapter와-duo-install) | 5 |
+| [REQ-AGENT-001](#req-agent-001-duoctl-install-codexclaude) | M3 | [ADR-011](adr/ADR-011-agent-integration.md) | [TASK-017](tasks/TASKS.md#task-017-agent-adapter와-duoctl-install) | 5 |
 | [REQ-CLI-001](#req-cli-001-얇은-cli) | M3 | [ADR-001](adr/ADR-001-language-runtime.md), [ADR-010](adr/ADR-010-package-structure.md) | [TASK-001](tasks/TASKS.md#task-001-저장소-골격), [TASK-015](tasks/TASKS.md#task-015-cli) | 9 |
 | [REQ-UI-001](#req-ui-001-읽기-중심-web-ui-5개-화면) | M3 | [ADR-009](adr/ADR-009-ui-stack.md) | [TASK-018](tasks/TASKS.md#task-018-local-http-api와-web-ui) | 5 |
 | [REQ-UI-002](#req-ui-002-ui의-decision-confirmreject) | M3 | [ADR-009](adr/ADR-009-ui-stack.md), [ADR-013](adr/ADR-013-decision-lifecycle.md) | [TASK-018](tasks/TASKS.md#task-018-local-http-api와-web-ui) | 5 |

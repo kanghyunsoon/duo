@@ -5,7 +5,7 @@ title: ID 체계와 추적성
 state: confirmed
 owner: human
 question: traceability
-answer: "global unique IDs; .duo is the only Project Truth; sources.markdown is External Evidence/Input Source"
+answer: "global unique IDs; .duo-project is the only Project Truth; sources.markdown is External Evidence/Input Source"
 governs:
   requirements: [REQ-TRACE-001, REQ-TRUTH-003]
 supersedes: null
@@ -19,7 +19,7 @@ confirmed_at: 2026-09-27
 
 ## 배경
 
-H-11은 Requirement, ADR, Task ID를 추적 가능하게 연결하고 DUO 자체의 Project Graph fixture로 쓰라고 했다. H-16은 `.duo`가 유일한 Project Truth Layer라는 원칙을 유지하고 외부 문서를 External Evidence로 정의했다.
+H-11은 Requirement, ADR, Task ID를 추적 가능하게 연결하고 DUO 자체의 Project Graph fixture로 쓰라고 했다. H-16은 `.duo-project`가 유일한 Project Truth Layer라는 원칙을 유지하고 외부 문서를 External Evidence로 정의했다.
 
 ## 결정
 
@@ -58,20 +58,20 @@ REQ-CONTEXT-001 ◀─GOVERNS─ ADR-005 ─GOVERNS─▶ TASK-010 ─attrs─�
 
 ### Project Truth와 External Source
 
-- **`.duo`만 Project Truth다.**
-- `project.yaml`의 `sources.markdown`으로 지정한 `.duo` 밖 문서(README.md, docs/*.md, legacy spec)와 향후 Jira, GitHub Issue는 **External Evidence / Input Source**다. Graph에서 정의 Node가 되지 않고, 일반 File Node와 Evidence(`kind: document`)로만 쓰인다.
-- 용도는 네 가지다: `duo init`의 프로젝트 이해, draft 생성 후 Human 확인, Review 근거, Drift 탐지.
-- Human이 확인한 결과만 `.duo` Truth가 된다. 외부 문서가 바뀌어도 `.duo`를 자동으로 바꾸지 않는다.
+- **`.duo-project`만 Project Truth다.**
+- `project.yaml`의 `sources.markdown`으로 지정한 `.duo-project` 밖 문서(README.md, docs/*.md, legacy spec)와 향후 Jira, GitHub Issue는 **External Evidence / Input Source**다. Graph에서 정의 Node가 되지 않고, 일반 File Node와 Evidence(`kind: document`)로만 쓰인다.
+- 용도는 네 가지다: `duoctl init`의 프로젝트 이해, draft 생성 후 Human 확인, Review 근거, Drift 탐지.
+- Human이 확인한 결과만 `.duo-project` Truth가 된다. 외부 문서가 바뀌어도 `.duo-project`를 자동으로 바꾸지 않는다.
 
 ```text
 README.md "최대 8인 multiplayer"
-    ↓ import / inference (duo init)
+    ↓ import / inference (duoctl init)
 DUO draft
     ↓ Human confirm
-.duo/intent/constraints.yaml   max_players: 8   source: {path: README.md, hash: abc123}
+.duo-project/intent/constraints.yaml   max_players: 8   source: {path: README.md, hash: abc123}
 ```
 
-README가 나중에 "최대 16인"으로 바뀌면 DUO는 `.duo`를 바꾸지 않고 다음처럼 보고한다. 변경이 필요하면 Human이 새 Decision으로 바꾼다.
+README가 나중에 "최대 16인"으로 바뀌면 DUO는 `.duo-project`를 바꾸지 않고 다음처럼 보고한다. 변경이 필요하면 Human이 새 Decision으로 바꾼다.
 
 ```text
 DRIFT DETECTED
@@ -86,13 +86,13 @@ Truth 항목의 `source` 목록에는 인용 라벨(문자열, 예: `D§3`)과 �
 
 ### Self fixture
 
-이 저장소의 `docs/01-requirements.md`, `docs/adr/*.md`, `docs/tasks/TASKS.md`, `docs/12-roadmap.md`는 [03-data-model.md](../03-data-model.md#markdown-정의-형식)의 Markdown 정의 형식을 따른다. 테스트는 이 파일들을 임시 저장소의 `.duo/`(specs/, decisions/, milestones/)로 **복사**해 Truth로 만든 뒤 사용한다. DUO 저장소 자체에서 docs/는 여전히 External Source다.
+이 저장소의 `docs/01-requirements.md`, `docs/adr/*.md`, `docs/tasks/TASKS.md`, `docs/12-roadmap.md`는 [03-data-model.md](../03-data-model.md#markdown-정의-형식)의 Markdown 정의 형식을 따른다. 테스트는 이 파일들을 임시 저장소의 `.duo-project/`(specs/, decisions/, milestones/)로 **복사**해 Truth로 만든 뒤 사용한다. DUO 저장소 자체에서 docs/는 여전히 External Source다.
 
 - TASK-002: 파싱과 참조 해석(AC-002-03)
 - TASK-007: Graph 경로(AC-007-03)
-- TASK-020: `duo trace REQ-CONTEXT-001` E2E(AC-020-02)
+- TASK-020: `duoctl trace REQ-CONTEXT-001` E2E(AC-020-02)
 
 ## 결과
 
 - 기획서 예시 ID(AUTH-03, D-004, GAME-42)도 같은 정규식으로 처리된다.
-- "Source of Truth는 .duo" 원칙과 외부 문서 사이의 긴장(conflicts.md C21)은 H-16으로 해소되었다.
+- "Source of Truth는 .duo-project" 원칙과 외부 문서 사이의 긴장(conflicts.md C21)은 H-16으로 해소되었다.

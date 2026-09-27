@@ -62,7 +62,7 @@ interface SemanticJudgmentResult {
 ```
 
 ```yaml
-# .duo/project.yaml
+# .duo-project/project.yaml
 llm:
   provider: none                 # none | openai-responses
   model: null                    # 사용자가 지정, 기본값 없음

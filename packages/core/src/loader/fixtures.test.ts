@@ -17,13 +17,14 @@ describe("loadProjectTruth — valid project (fixtures/auth-app)", () => {
   it("AC-002-01 loads every Project Truth file without diagnostics", () => {
     expect(r.diagnostics).toEqual([]);
     expect(truth?.files).toEqual([
-      ".duo/decisions/D-004.yaml",
-      ".duo/decisions/proposals/P-20260927-k3f9qa.yaml",
-      ".duo/intent/constraints.yaml",
-      ".duo/intent/vision.md",
-      ".duo/milestones/M1.yaml",
-      ".duo/project.yaml",
-      ".duo/specs/auth.md",
+      ".duo-project/decisions/D-004.yaml",
+      ".duo-project/decisions/proposals/P-20260927-k3f9qa.yaml",
+      ".duo-project/intent/constraints.yaml",
+      ".duo-project/intent/vision.md",
+      ".duo-project/milestones/M1-issues.md",
+      ".duo-project/milestones/M1.yaml",
+      ".duo-project/project.yaml",
+      ".duo-project/specs/auth.md",
     ]);
   });
 
@@ -37,7 +38,19 @@ describe("loadProjectTruth — valid project (fixtures/auth-app)", () => {
       sources: [{ kind: "external", path: "README.md", hash: "sha256:5b1e0c", section: "Scope" }],
     });
     expect(truth?.proposals[0]).toMatchObject({ id: "P-20260927-k3f9qa", state: "proposed", proposedBy: "claude-code" });
-    expect(truth?.issues.map((i) => [i.id, i.milestone])).toEqual([["GAME-41", "M1"], ["GAME-42", "M1"]]);
+    expect(truth?.issues.map((i) => [i.id, i.milestone, i.acceptance.map((a) => a.id)])).toEqual([
+      ["GAME-41", "M1", ["AC-041-01"]],
+      ["GAME-42", "M1", ["AC-042-01"]],
+    ]);
+    expect(truth?.milestones[0]).toMatchObject({ id: "M1", issues: ["GAME-41", "GAME-42"] });
+  });
+
+  it("gives YAML and Markdown definitions the same SourceLocation contract (start and end)", () => {
+    // Line 19 is '  digest: "sha256:3f1c9a"' (25 characters): the exclusive end column is 26.
+    expect(truth?.decisions[0]?.location).toEqual({ path: ".duo-project/decisions/D-004.yaml", startLine: 1, startColumn: 1, endLine: 19, endColumn: 26 });
+    expect(truth?.constraints[0]?.location).toMatchObject({ path: ".duo-project/intent/constraints.yaml", startLine: 2, endLine: 12 });
+    expect(truth?.milestones[0]?.location).toMatchObject({ startLine: 1, endLine: 4 });
+    expect(truth?.requirements[0]?.location).toMatchObject({ startLine: 3, startColumn: 1, endLine: 16 });
   });
 
   it("derives trace links", () => {
@@ -66,22 +79,22 @@ describe("loadProjectTruth — Windows-style paths and CRLF (fixtures/core/windo
     expect(truth?.decisions[0]?.governs.paths).toEqual(["src/auth/"]);
     expect(truth?.decisions[0]?.evidence[0]?.path).toBe("src/auth/AuthService.ts");
     expect(truth?.files.every((f) => !f.includes("\\"))).toBe(true);
-    expect(truth?.requirements[0]?.location).toMatchObject({ path: ".duo/specs/auth.md", startLine: 1, endLine: 11 });
+    expect(truth?.requirements[0]?.location).toMatchObject({ path: ".duo-project/specs/auth.md", startLine: 1, endLine: 11 });
   });
 });
 
 describe("loadProjectTruth — invalid fixtures (fixtures/core/invalid)", () => {
   const cases: [string, [string, string, number][]][] = [
-    ["malformed-yaml", [["YAML_SYNTAX_ERROR", ".duo/decisions/D-001.yaml", 8]]],
-    ["malformed-metadata-block", [["YAML_SYNTAX_ERROR", ".duo/specs/auth.md", 7]]],
-    ["duplicate-id", [["DUPLICATE_ID", ".duo/specs/b.md", 1]]],
-    ["broken-reference", [["BROKEN_REFERENCE", ".duo/milestones/M1.yaml", 8]]],
-    ["unsupported-schema-version", [["UNSUPPORTED_SCHEMA_VERSION", ".duo/project.yaml", 1]]],
-    ["unknown-property", [["SCHEMA_UNKNOWN_PROPERTY", ".duo/specs/auth.md", 5]]],
-    ["missing-required-property", [["SCHEMA_MISSING_PROPERTY", ".duo/decisions/D-001.yaml", 1]]],
-    ["invalid-id", [["INVALID_ID", ".duo/decisions/D-001.yaml", 1]]],
-    ["yaml-alias", [["YAML_ALIAS_NOT_ALLOWED", ".duo/decisions/D-001.yaml", 4], ["YAML_ALIAS_NOT_ALLOWED", ".duo/decisions/D-001.yaml", 5]]],
-    ["path-outside-repository", [["PATH_OUTSIDE_REPOSITORY", ".duo/specs/auth.md", 6]]],
+    ["malformed-yaml", [["YAML_SYNTAX_ERROR", ".duo-project/decisions/D-001.yaml", 8]]],
+    ["malformed-metadata-block", [["YAML_SYNTAX_ERROR", ".duo-project/specs/auth.md", 7]]],
+    ["duplicate-id", [["DUPLICATE_ID", ".duo-project/specs/b.md", 1]]],
+    ["broken-reference", [["BROKEN_REFERENCE", ".duo-project/milestones/M1.yaml", 4]]],
+    ["unsupported-schema-version", [["UNSUPPORTED_SCHEMA_VERSION", ".duo-project/project.yaml", 1]]],
+    ["unknown-property", [["SCHEMA_UNKNOWN_PROPERTY", ".duo-project/specs/auth.md", 5]]],
+    ["missing-required-property", [["SCHEMA_MISSING_PROPERTY", ".duo-project/decisions/D-001.yaml", 1]]],
+    ["invalid-id", [["INVALID_ID", ".duo-project/decisions/D-001.yaml", 1]]],
+    ["yaml-alias", [["YAML_ALIAS_NOT_ALLOWED", ".duo-project/decisions/D-001.yaml", 4], ["YAML_ALIAS_NOT_ALLOWED", ".duo-project/decisions/D-001.yaml", 5]]],
+    ["path-outside-repository", [["PATH_OUTSIDE_REPOSITORY", ".duo-project/specs/auth.md", 6]]],
   ];
 
   it("covers every fixture directory", () => {
@@ -99,7 +112,7 @@ describe("loadProjectTruth — invalid fixtures (fixtures/core/invalid)", () => 
   it("reports a missing project.yaml without throwing", () => {
     const empty = fs.mkdtempSync(path.join(os.tmpdir(), "duo-empty-"));
     try {
-      expect(problems(loadProjectTruth(empty))).toEqual([["PROJECT_FILE_MISSING", ".duo/project.yaml", undefined]]);
+      expect(problems(loadProjectTruth(empty))).toEqual([["PROJECT_FILE_MISSING", ".duo-project/project.yaml", undefined]]);
     } finally {
       fs.rmSync(empty, { recursive: true, force: true });
     }

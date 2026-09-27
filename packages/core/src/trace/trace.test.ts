@@ -11,7 +11,7 @@ const adr = [
 
 function analyze(specLines: string[], policy?: TracePolicy) {
   const defs = emptyDefinitionSet();
-  for (const [path, text] of [[".duo/specs/s.md", specLines.join("\n")], [".duo/decisions/ADR-001.md", adr]] as const) {
+  for (const [path, text] of [[".duo-project/specs/s.md", specLines.join("\n")], [".duo-project/decisions/ADR-001.md", adr]] as const) {
     const r = parseDefinitionMarkdown(path, text);
     expect(r.diagnostics).toEqual([]);
     for (const key of Object.keys(defs) as (keyof typeof defs)[]) (defs[key] as unknown[]).push(...(r.value?.[key] ?? []));
@@ -81,5 +81,64 @@ describe("analyzeTrace", () => {
       "## TASK-002 B", "", ...block("type: issue", "status: todo"), "- **AC-001-01** two", "",
     ]);
     expect(codes(r)).toEqual([["DUPLICATE_ID", 23]]);
+  });
+
+});
+
+describe("analyzeTrace — SUPERSEDES", () => {
+  const decision = (id: string, supersedes?: string) => [
+    "---", `id: ${id}`, "type: decision", "title: T", "state: confirmed", "question: q", "answer: a",
+    ...(supersedes ? [`supersedes: ${supersedes}`] : []), "---", `# ${id}`,
+  ].join("\n");
+  function run(...decisions: string[]) {
+    const defs = emptyDefinitionSet();
+    decisions.forEach((text, i) => {
+      const r = parseDefinitionMarkdown(`.duo-project/decisions/D${i}.md`, text);
+      defs.decisions.push(...(r.value?.decisions ?? []));
+    });
+    return analyzeTrace(defs);
+  }
+
+  it("links new → old", () => {
+    const r = run(decision("D-015", "D-004"), decision("D-004"));
+    expect(r.diagnostics).toEqual([]);
+    expect(r.model.links.map((l) => `${l.from.id} ${l.relation} ${l.to.id}`)).toEqual(["D-015 SUPERSEDES D-004"]);
+  });
+
+  it("requires the target decision to exist", () => {
+    expect(run(decision("D-015", "D-004")).diagnostics.map((d) => [d.code, d.source?.startLine])).toEqual([["BROKEN_REFERENCE", 8]]);
+  });
+
+  it("rejects a decision that supersedes itself", () => {
+    const r = run(decision("D-004", "D-004"));
+    expect(r.diagnostics.map((d) => d.code)).toEqual(["DECISION_SUPERSEDES_SELF"]);
+    expect(r.model.links).toEqual([]);
+  });
+
+  it("detects a direct cycle", () => {
+    const r = run(decision("D-001", "D-002"), decision("D-002", "D-001"));
+    expect(r.diagnostics.map((d) => [d.code, d.message])).toEqual([["DECISION_SUPERSEDE_CYCLE", "Supersede cycle: D-001 → D-002 → D-001"]]);
+  });
+
+  it("detects a multi-hop cycle once", () => {
+    const r = run(decision("D-001", "D-003"), decision("D-002", "D-001"), decision("D-003", "D-002"));
+    expect(r.diagnostics.map((d) => d.code)).toEqual(["DECISION_SUPERSEDE_CYCLE"]);
+    expect(r.diagnostics[0]?.message).toBe("Supersede cycle: D-001 → D-003 → D-002 → D-001");
+  });
+
+  it("accepts a supersede chain without a cycle", () => {
+    expect(run(decision("D-003", "D-002"), decision("D-002", "D-001"), decision("D-001")).diagnostics).toEqual([]);
+  });
+});
+
+describe("analyzeTrace — milestone membership", () => {
+  it("resolves milestone issue references and flags a mismatching issue milestone", () => {
+    const r = analyze([
+      ...base,
+      "## M1 One", "", ...block("type: milestone", "title: One", "state: active", "issues: [TASK-001, TASK-404]"),
+      "## M2 Two", "", ...block("type: milestone", "title: Two", "state: planned"),
+      "## TASK-001 Build", "", ...block("type: issue", "status: todo", "milestone: M2"),
+    ]);
+    expect(r.diagnostics.map((d) => d.code).sort()).toEqual(["BROKEN_REFERENCE", "TRACE_MILESTONE_MISMATCH"]);
   });
 });

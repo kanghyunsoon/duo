@@ -8,9 +8,9 @@ import { validateData } from "../schema/validate.js";
 import { parseMarkdown } from "../source/markdown.js";
 import { parseYaml, type ParsedYaml } from "../source/yaml.js";
 import {
-  MapContext, mapConstraint, mapDecision, mapIssue, mapMilestone, mapProjectConfig, mapProposal, mapVision,
+  MapContext, mapConstraint, mapDecision, mapMilestone, mapProjectConfig, mapProposal, mapVision,
 } from "./map.js";
-import type { Constraint, Decision, Issue, Milestone, ProjectConfig, Proposal, Vision } from "./model.js";
+import type { Constraint, Decision, Milestone, ProjectConfig, Proposal, Vision } from "./model.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -19,8 +19,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parseFile(path: string, text: string): { yaml?: ParsedYaml; diagnostics: Diagnostic[]; whole: SourceLocation } {
   const parsed = parseYaml({ path, text });
   const diagnostics = [...parsed.diagnostics];
-  const whole: SourceLocation = { path, startLine: 1 };
-  return parsed.value === undefined ? { diagnostics, whole } : { yaml: parsed.value, diagnostics, whole };
+  if (parsed.value === undefined) return { diagnostics, whole: { path, startLine: 1 } };
+  // Whole-file definitions use the range of the YAML document contents (start and end).
+  const whole: SourceLocation = parsed.value.locate([]) ?? { path, startLine: 1 };
+  return { yaml: parsed.value, diagnostics, whole };
 }
 
 export function parseProjectConfig(path: string, text: string): ParseResult<ProjectConfig> {
@@ -71,20 +73,14 @@ export function parseConstraintsFile(path: string, text: string): ParseResult<Co
   return { value: constraints, diagnostics };
 }
 
-export function parseMilestoneFile(path: string, text: string): ParseResult<{ milestone: Milestone; issues: Issue[] }> {
+export function parseMilestoneFile(path: string, text: string): ParseResult<Milestone> {
   const { yaml, diagnostics, whole } = parseFile(path, text);
   if (yaml === undefined) return failure(diagnostics);
   const valid = validateData(MilestoneFileSchema, yaml, whole);
   diagnostics.push(...valid.diagnostics);
   if (valid.value === undefined) return failure(diagnostics);
   const d = valid.value;
-  const root = new MapContext(yaml, whole, diagnostics);
-  const milestone = mapMilestone(d.id, d.title, d.state, whole, d.extensions, root);
-  const issues = (d.issues ?? []).map((issue, i) => {
-    const ctx = root.child(["issues", i]);
-    return mapIssue(issue.id, issue.title, "", ctx.fallback, issue, [], ctx, d.id);
-  });
-  return { value: { milestone, issues }, diagnostics };
+  return { value: mapMilestone(d.id, d.title, d.state, d.issues, whole, d.extensions, new MapContext(yaml, whole, diagnostics)), diagnostics };
 }
 
 export function parseVisionFile(path: string, text: string): ParseResult<Vision> {

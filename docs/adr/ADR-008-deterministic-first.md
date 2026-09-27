@@ -27,7 +27,7 @@ Rule → Static Analysis → Git → Test → Project Graph → Evidence Retriev
 
 ### LLM을 호출하지 않는 작업
 
-파일 변경 탐지, fingerprint, Git diff, Symbol 추출, import/call 관계, Graph traversal, Test 결과, Decision Lock 위반, 명백한 Constraint 위반, Context Packet 생성, `duo init` 분석과 초안.
+파일 변경 탐지, fingerprint, Git diff, Symbol 추출, import/call 관계, Graph traversal, Test 결과, Decision Lock 위반, 명백한 Constraint 위반, Context Packet 생성, `duoctl init` 분석과 초안.
 
 ### LLM을 쓸 수 있는 의미 판단
 
@@ -46,7 +46,7 @@ Rule → Static Analysis → Git → Test → Project Graph → Evidence Retriev
 3. Provider는 JSON 스키마(`alignment`, `reason`, `evidence_ids`)로 답한다. Packet에 없는 ID를 인용하거나 스키마가 맞지 않으면 결과를 버리고 UNKNOWN을 유지한다.
 4. LLM 결과로 만든 Claim의 `basis`는 `llm`이며 blocking이 될 수 없다. LLM이 확정 Constraint와의 충돌을 근거와 함께 제시하면 `ask`로 올린다.
 5. Review 하나당 호출 수는 `llm.max_calls_per_review`(기본 3)로 제한한다. 초과분은 `skipped_checks`에 남긴다.
-6. 결과는 입력 hash 기준으로 `.duo/cache/llm/`에 저장해 같은 입력이면 다시 호출하지 않는다(REQ-NFR-005).
+6. 결과는 입력 hash 기준으로 `.duo-project/cache/llm/`에 저장해 같은 입력이면 다시 호출하지 않는다(REQ-NFR-005).
 
 ### LLM unavailable ≠ DUO unavailable
 
@@ -54,6 +54,6 @@ Provider가 설정되지 않았거나, API Key가 없거나, 네트워크나 응
 
 ## 결과
 
-- 모든 지표에 `llm_calls`, `llm_input_tokens`, `llm_output_tokens`, `llm_token_source`를 기록하고 `duo stats`에 보여 준다(REQ-LLM-004).
+- 모든 지표에 `llm_calls`, `llm_input_tokens`, `llm_output_tokens`, `llm_token_source`를 기록하고 `duoctl stats`에 보여 준다(REQ-LLM-004).
 - Provider 선택은 [ADR-012](ADR-012-llm-provider.md)에서 한다.
 - Intent 초안을 LLM으로 만드는 기능은 의미 판단 목록에 없으므로 MVP에서 하지 않는다(conflicts.md C17).

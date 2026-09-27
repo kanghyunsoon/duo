@@ -3,10 +3,10 @@
  * every reference with its source location.
  */
 import { createDiagnostic, withSource, type Diagnostic, type SourceLocation } from "../diagnostics.js";
-import type { EntityType } from "../ids.js";
+import type { DefinitionType } from "../ids.js";
 import { normalizeRepoPath, normalizeRepoPattern } from "../paths.js";
 import type {
-  ConstraintData, DecisionData, EvidencePointerData, IssueBlockData, MilestoneIssueData,
+  ConstraintData, DecisionData, EvidencePointerData, IssueBlockData,
   ProjectConfigData, ProposalData, RequirementBlockData, SourceRefData, VisionFrontmatterData,
 } from "../schema/schemas.js";
 import type { DataPath, ParsedYaml } from "../source/yaml.js";
@@ -32,11 +32,11 @@ export class MapContext {
     return new MapContext(this.yaml, this.at(base), this.diagnostics, [...this.base, ...base]);
   }
 
-  ref(field: string, path: DataPath, target: string, expected: EntityType, relation?: { type: TraceRelation; direction: "outgoing" | "incoming" }): void {
+  ref(field: string, path: DataPath, target: string, expected: DefinitionType, relation?: { type: TraceRelation; direction: "outgoing" | "incoming" }): void {
     this.references.push({ field, target, expected, relation, location: this.at(path) });
   }
 
-  refs(field: string, path: DataPath, targets: readonly string[] | undefined, expected: EntityType, relation?: { type: TraceRelation; direction: "outgoing" | "incoming" }): readonly string[] {
+  refs(field: string, path: DataPath, targets: readonly string[] | undefined, expected: DefinitionType, relation?: { type: TraceRelation; direction: "outgoing" | "incoming" }): readonly string[] {
     const list = targets ?? [];
     list.forEach((t, i) => this.ref(field, [...path, i], t, expected, relation));
     return list;
@@ -140,9 +140,9 @@ export function mapRequirement(id: string, title: string, description: string, l
 
 export function mapIssue(
   id: string, title: string, description: string, location: SourceLocation,
-  d: IssueBlockData | MilestoneIssueData, acceptance: readonly AcceptanceCriterion[], ctx: MapContext, milestone?: string,
+  d: IssueBlockData, acceptance: readonly AcceptanceCriterion[], ctx: MapContext,
 ): Issue {
-  const ms = d.milestone ?? milestone ?? null;
+  const ms = d.milestone ?? null;
   if (d.milestone) ctx.ref("milestone", ["milestone"], d.milestone, "milestone");
   return {
     kind: "issue", id, title, location, description, acceptance,
@@ -157,14 +157,20 @@ export function mapIssue(
   };
 }
 
-export function mapMilestone(id: string, title: string, state: MilestoneState, location: SourceLocation, extensions: Record<string, unknown> | undefined, ctx: MapContext): Milestone {
-  return { kind: "milestone", id, title, state, location, references: ctx.references, extensions: extensions ?? {} };
+export function mapMilestone(
+  id: string, title: string, state: MilestoneState, issues: readonly string[] | undefined, location: SourceLocation,
+  extensions: Record<string, unknown> | undefined, ctx: MapContext,
+): Milestone {
+  const issueIds = ctx.refs("issues", ["issues"], issues, "issue");
+  return { kind: "milestone", id, title, state, issues: issueIds, location, references: ctx.references, extensions: extensions ?? {} };
 }
 
 function mapDecisionContent(d: DecisionData | ProposalData, ctx: MapContext, governsRelation: boolean): DecisionContent {
   const governs = ctx.refs("governs.requirements", ["governs", "requirements"], d.governs?.requirements, "requirement",
     governsRelation ? { type: "GOVERNS", direction: "outgoing" } : undefined);
-  if (d.supersedes) ctx.ref("supersedes", ["supersedes"], d.supersedes, "decision");
+  if (d.supersedes) {
+    ctx.ref("supersedes", ["supersedes"], d.supersedes, "decision", governsRelation ? { type: "SUPERSEDES", direction: "outgoing" } : undefined);
+  }
   return {
     title: d.title,
     question: d.question,

@@ -66,14 +66,14 @@ export default defineConfig(
   {
     files: [`apps/cli/src/${TS}`],
     ignores: ["**/*.test.ts"],
-    rules: { [RULE]: restrictions("@duo/cli", { cliNode: true }) },
+    rules: { [RULE]: restrictions("@duo-director/cli", { cliNode: true }) },
   },
   {
     files: [`${boundaries.sourceParsing.dir}/${TS}`],
-    rules: { [RULE]: restrictions("@duo/core", { sourceParsingAllowed: true }) },
+    rules: { [RULE]: restrictions("@duo-director/core", { sourceParsingAllowed: true }) },
   },
   {
     files: [`${boundaries.nodeSqliteAllowed}/${TS}`],
-    rules: { [RULE]: restrictions("@duo/graph", { sqliteAllowed: true }) },
+    rules: { [RULE]: restrictions("@duo-director/graph", { sqliteAllowed: true }) },
   },
 );

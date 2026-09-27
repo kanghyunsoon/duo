@@ -32,18 +32,18 @@ for (const [name, spec] of Object.entries(boundaries.packages)) {
   if (pkg.name !== name) errors.push(`${spec.dir}: name is ${pkg.name}, expected ${name}`);
   if (pkg.type !== "module") errors.push(`${name}: "type" must be "module" (ADR-001)`);
 
-  // 2. @duo/* 의존은 허용 목록 안에 있어야 하고, typeOnly 대상은 devDependencies에만 둔다.
+  // 2. @duo-director/* 의존은 허용 목록 안에 있어야 하고, typeOnly 대상은 devDependencies에만 둔다.
   const declared = new Set();
   for (const field of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
     for (const dep of Object.keys(pkg[field] ?? {})) {
-      if (!dep.startsWith("@duo/")) continue;
+      if (!dep.startsWith("@duo-director/")) continue;
       declared.add(dep);
       const ok = spec.allow.includes(dep) || (field === "devDependencies" && spec.typeOnly.includes(dep));
       if (!ok) errors.push(`${name}: ${field} -> ${dep} violates ADR-010 dependency direction`);
     }
   }
 
-  // 3. tsconfig references는 선언된 @duo/* 의존과 정확히 같아야 한다(빌드 순서 = 의존 그래프).
+  // 3. tsconfig references는 선언된 @duo-director/* 의존과 정확히 같아야 한다(빌드 순서 = 의존 그래프).
   const tsPath = path.join(dir, "tsconfig.json");
   if (!fs.existsSync(tsPath)) { errors.push(`${spec.dir}: tsconfig.json missing`); continue; }
   const refs = new Set((readJson(tsPath).references ?? []).map((r) => {

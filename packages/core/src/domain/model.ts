@@ -3,18 +3,21 @@
  * reference YAML or Markdown AST types.
  */
 import type { SourceLocation } from "../diagnostics.js";
-import type { EntityType } from "../ids.js";
+import type { DefinitionType } from "../ids.js";
 import type { RepoPath } from "../paths.js";
 
-/** Edge types implied by definition references (canonical direction, docs/04-project-graph.md). */
-export type TraceRelation = "GOVERNS" | "TRACKED_BY" | "REQUIRES";
+/**
+ * Edge types implied by definition references (canonical direction, docs/04-project-graph.md).
+ * SUPERSEDES points from the new decision to the old one.
+ */
+export type TraceRelation = "GOVERNS" | "TRACKED_BY" | "REQUIRES" | "SUPERSEDES";
 
 /** A reference written in a definition, kept with its exact source position. */
 export interface DeclaredReference {
   /** Field that holds the reference, e.g. "requirements" or "governs.requirements". */
   readonly field: string;
   readonly target: string;
-  readonly expected: EntityType;
+  readonly expected: DefinitionType;
   /**
    * Edge implied by the reference. "outgoing": owner → target, "incoming": target → owner.
    * Undefined means the reference is only checked for existence.
@@ -92,6 +95,8 @@ export interface Milestone extends DefinitionBase {
   readonly kind: "milestone";
   readonly title: string;
   readonly state: MilestoneState;
+  /** Issue IDs. The issues themselves are defined once, in Markdown issue definitions. */
+  readonly issues: readonly string[];
 }
 
 export interface DecisionContent {

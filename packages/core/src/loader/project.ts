@@ -1,4 +1,4 @@
-/** Loads the Project Truth Layer (.duo/) of a repository. Collects diagnostics; never throws for bad content. */
+/** Loads the Project Truth Layer (.duo-project/) of a repository. Collects diagnostics; never throws for bad content. */
 import fs from "node:fs";
 import path from "node:path";
 import { PROJECT_FILE_NAME, STATE_DIR_NAME } from "../constants.js";
@@ -57,7 +57,7 @@ function merge(target: ReturnType<typeof emptyDefinitionSet>, source: Definition
 }
 
 /**
- * Reads .duo/ under root. Returns the Project Truth it could read plus every diagnostic.
+ * Reads .duo-project/ under root. Returns the Project Truth it could read plus every diagnostic.
  * The value is undefined only when project.yaml is missing, unreadable or unsupported.
  */
 export function loadProjectTruth(root: string, options: LoadProjectOptions = {}): ParseResult<LoadedProject> {
@@ -137,10 +137,7 @@ export function loadProjectTruth(root: string, options: LoadProjectOptions = {})
     if (text === undefined) continue;
     const r = parseMilestoneFile(file.path, text);
     diagnostics.push(...r.diagnostics);
-    if (r.value !== undefined) {
-      defs.milestones.push(r.value.milestone);
-      defs.issues.push(...r.value.issues);
-    }
+    if (r.value !== undefined) defs.milestones.push(r.value);
   }
 
   const trace = analyzeTrace({ ...defs, references: config.value.references }, options.tracePolicy);

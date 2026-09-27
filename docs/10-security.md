@@ -5,8 +5,8 @@
 ## 신뢰 모델
 
 - DUO는 사용자 로컬 머신에서 사용자 권한으로 실행된다.
-- Coding Agent는 **악의적이지 않지만 실수할 수 있는** 주체로 가정한다. DUO는 Agent가 파일 시스템에 직접 쓰는 것을 막을 수 없다. 따라서 `.duo` 보호와 Decision Lock은 **강제가 아니라 탐지**다. 탐지는 lock digest, Git HEAD 기준선, Review의 R-LOCK 규칙으로 한다.
-- `duo decision`의 TTY 요구와 UI의 ID 재입력은 Agent의 실수를 막는 장치이며 보안 경계가 아니다. lock digest도 무결성 표시일 뿐 서명이 아니다.
+- Coding Agent는 **악의적이지 않지만 실수할 수 있는** 주체로 가정한다. DUO는 Agent가 파일 시스템에 직접 쓰는 것을 막을 수 없다. 따라서 `.duo-project` 보호와 Decision Lock은 **강제가 아니라 탐지**다. 탐지는 lock digest, Git HEAD 기준선, Review의 R-LOCK 규칙으로 한다.
+- `duoctl decision`의 TTY 요구와 UI의 ID 재입력은 Agent의 실수를 막는 장치이며 보안 경계가 아니다. lock digest도 무결성 표시일 뿐 서명이 아니다.
 - 탐지를 의도적으로 우회하는 적대적 Agent는 v0.1 범위 밖이다.
 
 ## 위협과 대응
@@ -18,8 +18,8 @@
 | API Key 노출 | Key는 `api_key_env`가 가리키는 환경 변수에서만 읽고 파일, 로그, metrics, 오류 메시지에 쓰지 않는다 |
 | Repository 코드 실행 | DUO는 소스를 parse만 한다. 예외는 사용자가 project.yaml에 설정한 `test_command`를 `--run-tests`로 명시했을 때뿐 |
 | 경로 조작(Tool, API 입력) | 모든 경로를 Repository root 기준으로 정규화하고 root 밖이면 거부. `/api/source`는 인덱싱 대상 파일만 허용 |
-| Source Code 변경 | 모든 파일 쓰기는 core의 `fs-guard`를 통한다. 허용 경로(.duo/ 하위, `duo install` 대상 파일)가 아니면 예외를 던진다. 테스트로 검증(AC-002-04) |
-| Agent 설정 파일 손상 | `duo install`은 `--dry-run`, 수정 전 백업(`runtime/backup/`), `<!-- duo:begin -->` 블록 안만 교체, 반복 실행 시 같은 결과 |
+| Source Code 변경 | 모든 파일 쓰기는 먼저 core의 순수 정책 `checkWriteBoundary`로 판정한다. 허용 영역은 `.duo-project/` 아래의 Project Truth, Human-approved History, Regenerable 영역뿐이고 Repository 밖은 항상 거부한다([03 Write Boundary](03-data-model.md#write-boundary)). 실제 writer는 symlink를 풀어 다시 확인한다. `duoctl install` 대상 파일은 TASK-017에서 별도 writeKind로 추가. 테스트로 검증(AC-002-04) |
+| Agent 설정 파일 손상 | `duoctl install`은 `--dry-run`, 수정 전 백업(`runtime/backup/`), `<!-- duo-director:begin -->` 블록 안만 교체, 반복 실행 시 같은 결과 |
 | 대형·악성 파일로 인한 자원 고갈 | max_file_bytes, 바이너리 탐지, 파일당 parse timeout 2초, nodeLimit |
 | LLM 응답 조작(프롬프트 주입된 코드 주석 등) | 응답은 스키마 검증, Packet 밖 ID 인용 시 폐기, `basis: llm` Claim은 BLOCK 불가 |
 | Supply chain | 의존성 최소화, lockfile 커밋, CI에서 `pnpm audit`(경고만) |

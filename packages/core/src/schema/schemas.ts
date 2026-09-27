@@ -121,10 +121,12 @@ const issueShape = {
 
 export const IssueBlockSchema = z.strictObject({ type: z.literal("issue"), ...issueShape });
 
+/** Milestones reference issues by ID only; the issue definition owns its content and AC. */
 export const MilestoneBlockSchema = z.strictObject({
   type: z.literal("milestone"),
   title: text(),
   state: z.enum(["planned", "active", "done"]),
+  issues: ids().optional(),
   extensions,
 });
 
@@ -169,14 +171,15 @@ export const ProposalSchema = z.strictObject({
   reason: text().optional(),
 });
 
-export const MilestoneIssueSchema = z.strictObject({ id: id(), title: text(), ...issueShape });
-
-/** milestones/*.yaml: a milestone with local issues. */
+/**
+ * milestones/*.yaml: a milestone and the IDs of its issues. Issues are defined once, in a
+ * Markdown definition ("type: issue"); they are never redefined here.
+ */
 export const MilestoneFileSchema = z.strictObject({
   id: id(),
   title: text(),
   state: z.enum(["planned", "active", "done"]),
-  issues: z.array(MilestoneIssueSchema).optional(),
+  issues: ids().optional(),
   extensions,
 });
 
@@ -189,7 +192,6 @@ export type IssueBlockData = z.output<typeof IssueBlockSchema>;
 export type MilestoneBlockData = z.output<typeof MilestoneBlockSchema>;
 export type DecisionData = z.output<typeof DecisionSchema>;
 export type ProposalData = z.output<typeof ProposalSchema>;
-export type MilestoneIssueData = z.output<typeof MilestoneIssueSchema>;
 export type MilestoneFileData = z.output<typeof MilestoneFileSchema>;
 export type SourceRefData = z.output<typeof SourceRefSchema>;
 export type EvidencePointerData = z.output<typeof EvidencePointerSchema>;

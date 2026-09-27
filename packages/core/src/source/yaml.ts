@@ -45,8 +45,10 @@ export function parseYaml(input: YamlInput): ParseResult<ParsedYaml> {
     const s = lineCounter.linePos(start);
     const location = { path: input.path, startLine: s.line + lineBase, startColumn: s.col };
     if (end === undefined || end <= start) return location;
-    const e = lineCounter.linePos(end);
-    return { ...location, endLine: e.line + lineBase, endColumn: e.col };
+    let last = end;
+    while (last > start && (input.text[last - 1] === "\n" || input.text[last - 1] === "\r")) last--; // ranges may include the line break
+    const e = lineCounter.linePos(last - 1); // last character; endColumn is exclusive
+    return { ...location, endLine: e.line + lineBase, endColumn: e.col + 1 };
   };
   const rangeOf = (node: YamlNode): SourceLocation | undefined =>
     node.range ? at(node.range[0], node.range[1]) : undefined;

@@ -1,20 +1,20 @@
 /**
  * Traceability over definitions: global ID uniqueness, reference resolution, and the
- * links (GOVERNS, TRACKED_BY, REQUIRES) that the Project Graph will store in TASK-007.
+ * links (GOVERNS, TRACKED_BY, REQUIRES, SUPERSEDES) that the Project Graph will store in TASK-007.
  */
 import { createDiagnostic, formatLocation, withSeverity, type Diagnostic, type SourceLocation } from "../diagnostics.js";
-import type { EntityRef, EntityType } from "../ids.js";
+import type { DefinitionRef, DefinitionType } from "../ids.js";
 import type { DeclaredReference, Definition, DefinitionSet, TraceRelation } from "../domain/model.js";
 
 export interface TraceLink {
   readonly relation: TraceRelation;
-  readonly from: EntityRef;
-  readonly to: EntityRef;
+  readonly from: DefinitionRef;
+  readonly to: DefinitionRef;
   readonly declaredAt: SourceLocation;
 }
 
 export interface TraceEntity {
-  readonly ref: EntityRef;
+  readonly ref: DefinitionRef;
   readonly location: SourceLocation;
 }
 
@@ -36,7 +36,7 @@ export interface TraceInput extends DefinitionSet {
   readonly references?: readonly DeclaredReference[];
 }
 
-const ENTITY_TYPE: Record<Definition["kind"], EntityType> = {
+const ENTITY_TYPE: Record<Definition["kind"], DefinitionType> = {
   requirement: "requirement",
   decision: "decision",
   constraint: "decision",
@@ -74,7 +74,7 @@ export function analyzeTrace(input: TraceInput, policy: TracePolicy = {}): { mod
   }
 
   const links: TraceLink[] = [];
-  const check = (owner: EntityRef | undefined, refs: readonly DeclaredReference[]): void => {
+  const check = (owner: DefinitionRef | undefined, refs: readonly DeclaredReference[]): void => {
     for (const r of refs) {
       const target = entities.get(r.target);
       if (target === undefined) {
@@ -94,6 +94,70 @@ export function analyzeTrace(input: TraceInput, policy: TracePolicy = {}): { mod
   for (const def of definitions) check({ type: ENTITY_TYPE[def.kind], id: def.id }, def.references);
   for (const proposal of input.proposals) check(undefined, proposal.references);
   check(undefined, input.references ?? []);
+
+  // SUPERSEDES: no self-supersede, no cycles (direct or multi-hop). New decision → old decision.
+  const supersedes = links.filter((l) => l.relation === "SUPERSEDES");
+  for (const link of supersedes) {
+    if (link.from.id === link.to.id) {
+      diagnostics.push(createDiagnostic("DECISION_SUPERSEDES_SELF", `${link.from.id} supersedes itself`, link.declaredAt));
+    }
+  }
+  const next = new Map<string, TraceLink[]>();
+  for (const link of supersedes) if (link.from.id !== link.to.id) next.set(link.from.id, [...(next.get(link.from.id) ?? []), link]);
+  const reported = new Set<string>();
+  const state = new Map<string, "visiting" | "done">();
+  const stack: TraceLink[] = [];
+  const visit = (id: string): void => {
+    state.set(id, "visiting");
+    for (const link of next.get(id) ?? []) {
+      const target = link.to.id;
+      if (state.get(target) === "visiting") {
+        const start = stack.findIndex((l) => l.from.id === target);
+        const cycle = [...stack.slice(start === -1 ? stack.length : start), link];
+        const ids = cycle.map((l) => l.from.id);
+        const key = [...ids].sort().join(" ");
+        if (!reported.has(key)) {
+          reported.add(key);
+          const first = [...cycle].sort((a, b) => a.from.id.localeCompare(b.from.id))[0] ?? link;
+          diagnostics.push(createDiagnostic(
+            "DECISION_SUPERSEDE_CYCLE",
+            `Supersede cycle: ${[...ids, target].join(" → ")}`,
+            first.declaredAt,
+          ));
+        }
+      } else if (state.get(target) === undefined) {
+        stack.push(link);
+        visit(target);
+        stack.pop();
+      }
+    }
+    state.set(id, "done");
+  };
+  for (const id of [...next.keys()].sort()) if (state.get(id) === undefined) visit(id);
+  const validLinks = links.filter((l) => !(l.relation === "SUPERSEDES" && l.from.id === l.to.id));
+  links.length = 0;
+  links.push(...validLinks);
+
+  // Milestone membership: a milestone lists issue IDs; an issue may also name its milestone.
+  const issuesById = new Map(input.issues.map((i) => [i.id, i]));
+  const listedBy = new Map<string, string>();
+  for (const milestone of input.milestones) {
+    for (const ref of milestone.references) {
+      if (ref.field !== "issues") continue;
+      const issue = issuesById.get(ref.target);
+      const previous = listedBy.get(ref.target);
+      if (previous !== undefined && previous !== milestone.id) {
+        diagnostics.push(createDiagnostic("TRACE_MILESTONE_MISMATCH", `${ref.target} is listed by both ${previous} and ${milestone.id}`, ref.location));
+      } else if (issue?.milestone && issue.milestone !== milestone.id) {
+        diagnostics.push(createDiagnostic(
+          "TRACE_MILESTONE_MISMATCH",
+          `${milestone.id} lists ${ref.target}, but ${ref.target} declares milestone ${issue.milestone}`,
+          ref.location,
+        ));
+      }
+      listedBy.set(ref.target, milestone.id);
+    }
+  }
 
   const decisions = new Map(input.decisions.map((d) => [d.id, d]));
   for (const issue of input.issues) {

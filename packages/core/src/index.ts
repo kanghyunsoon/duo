@@ -1,11 +1,12 @@
 /**
- * @duo/core — Core Data Contract: .duo schema, domain model, YAML/Markdown source parsing,
+ * @duo-director/core — Core Data Contract: .duo-project schema, domain model, YAML/Markdown source parsing,
  * traceability, diagnostics and repository paths (TASK-002).
  */
 export * from "./constants.js";
 export * from "./diagnostics.js";
 export * from "./ids.js";
 export * from "./paths.js";
+export * from "./write-boundary.js";
 export * from "./source/index.js";
 export * from "./schema/schemas.js";
 export { validateData } from "./schema/validate.js";
@@ -28,4 +29,4 @@ export interface PackageInfo {
   readonly dependsOn: readonly string[];
 }
 
-export const packageInfo: PackageInfo = { name: "@duo/core", dependsOn: [] };
+export const packageInfo: PackageInfo = { name: "@duo-director/core", dependsOn: [] };

@@ -31,14 +31,14 @@ proposed_at: 2026-09-27
 Instruction 블록은 10줄 이하이며 Repository Context를 담지 않는다.
 
 ```markdown
-<!-- duo:begin -->
+<!-- duo-director:begin -->
 ## DUO
-This repo uses DUO for project direction. Do not read or edit files under .duo/ directly.
+This repo uses DUO for project direction. Do not read or edit files under .duo-project/ directly.
 - Before a task: call duo_get_context with the task description.
 - Before reporting completion: call duo_review_changes and report the verdict.
-- To change a decision: call duo_propose_decision. Never run duo decision confirm/reject.
+- To change a decision: call duo_propose_decision. Never run duoctl decision confirm/reject.
 - If the verdict is ASK or BLOCK, stop and show it to the user.
-<!-- duo:end -->
+<!-- duo-director:end -->
 ```
 
 ## 결과

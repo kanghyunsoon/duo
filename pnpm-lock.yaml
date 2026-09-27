@@ -8,7 +8,7 @@ importers:
 
   .:
     devDependencies:
-      '@duo/core':
+      '@duo-director/core':
         specifier: workspace:*
         version: link:packages/core
       '@eslint/js':
@@ -35,25 +35,25 @@ importers:
 
   apps/cli:
     dependencies:
-      '@duo/analyzer':
+      '@duo-director/analyzer':
         specifier: workspace:*
         version: link:../../packages/analyzer
-      '@duo/core':
+      '@duo-director/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@duo/director':
+      '@duo-director/director':
         specifier: workspace:*
         version: link:../../packages/director
-      '@duo/graph':
+      '@duo-director/graph':
         specifier: workspace:*
         version: link:../../packages/graph
-      '@duo/integration':
+      '@duo-director/integration':
         specifier: workspace:*
         version: link:../../packages/integration
 
   packages/analyzer:
     dependencies:
-      '@duo/core':
+      '@duo-director/core':
         specifier: workspace:*
         version: link:../core
 
@@ -81,40 +81,40 @@ importers:
 
   packages/director:
     dependencies:
-      '@duo/analyzer':
+      '@duo-director/analyzer':
         specifier: workspace:*
         version: link:../analyzer
-      '@duo/core':
+      '@duo-director/core':
         specifier: workspace:*
         version: link:../core
-      '@duo/graph':
+      '@duo-director/graph':
         specifier: workspace:*
         version: link:../graph
 
   packages/graph:
     dependencies:
-      '@duo/analyzer':
+      '@duo-director/analyzer':
         specifier: workspace:*
         version: link:../analyzer
-      '@duo/core':
+      '@duo-director/core':
         specifier: workspace:*
         version: link:../core
 
   packages/integration:
     dependencies:
-      '@duo/core':
+      '@duo-director/core':
         specifier: workspace:*
         version: link:../core
-      '@duo/director':
+      '@duo-director/director':
         specifier: workspace:*
         version: link:../director
-      '@duo/graph':
+      '@duo-director/graph':
         specifier: workspace:*
         version: link:../graph
 
   packages/ui:
     devDependencies:
-      '@duo/core':
+      '@duo-director/core':
         specifier: workspace:*
         version: link:../core
 

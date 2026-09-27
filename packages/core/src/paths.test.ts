@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { normalizeRepoPath, normalizeRepoPattern, toRepoPath } from "./paths.js";
+import { findPathPortabilityCollisions, normalizeRepoPath, normalizeRepoPattern, portablePathKey, toRepoPath, type RepoPath } from "./paths.js";
 
 const codes = (r: { diagnostics: readonly { code: string }[] }) => r.diagnostics.map((d) => d.code);
 
@@ -38,8 +38,14 @@ describe("normalizeRepoPath", () => {
     expect(codes(normalizeRepoPath(input, options))).toEqual(["PATH_OUTSIDE_REPOSITORY"]);
   });
 
-  it.each(["", "   ", ".", "./"])("rejects %j as a file path", (input) => {
+  it.each(["", ".", "./"])("rejects %j as a file path", (input) => {
     expect(codes(normalizeRepoPath(input))).toEqual(["INVALID_PATH"]);
+  });
+
+  it("preserves spelling: letter case, Unicode normalization and spaces are not rewritten", () => {
+    for (const p of ["src/Auth.ts", "src/cafe\u0301.ts", "src/caf\u00e9.ts", " spaced name .ts"]) {
+      expect(normalizeRepoPath(p).value).toBe(p);
+    }
   });
 });
 
@@ -60,5 +66,26 @@ describe("toRepoPath", () => {
     const root = path.resolve("repo-root");
     expect(toRepoPath(root, path.join(root, "src", "auth", "a.ts")).value).toBe("src/auth/a.ts");
     expect(codes(toRepoPath(root, path.resolve("elsewhere", "a.ts")))).toEqual(["PATH_OUTSIDE_REPOSITORY"]);
+  });
+});
+
+describe("path portability collisions (contract for the T04 scanner)", () => {
+  const rp = (...p: string[]) => p as RepoPath[];
+
+  it("reports paths that differ only by letter case", () => {
+    const [d] = findPathPortabilityCollisions(rp("src/Auth.ts", "src/auth.ts", "src/other.ts"));
+    expect(d).toMatchObject({ code: "PATH_PORTABILITY_COLLISION", severity: "warning", source: { path: "src/Auth.ts" } });
+    expect(d?.message).toContain("letter case");
+    expect(d?.message).toContain("src/Auth.ts, src/auth.ts");
+  });
+
+  it("reports NFC and NFD spellings of the same name", () => {
+    const [d] = findPathPortabilityCollisions(rp("src/caf\u00e9.ts", "src/cafe\u0301.ts"));
+    expect(d?.message).toContain("Unicode normalization");
+  });
+
+  it("reports nothing for distinct paths and uses a key that is never stored", () => {
+    expect(findPathPortabilityCollisions(rp("src/a.ts", "src/b.ts", "src/a.ts"))).toEqual([]);
+    expect(portablePathKey("src/Caf\u00c9.ts" as RepoPath)).toBe(portablePathKey("src/cafe\u0301.ts" as RepoPath));
   });
 });

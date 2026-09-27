@@ -1,11 +1,11 @@
 /**
- * Namespace constants. The final product name, npm package, executable, state directory and MCP
- * server name are still open (docs/conflicts.md Q-NAMESPACE). Change them here only.
+ * Namespace constants (docs/conflicts.md H-20). The display name stays "DUO"; technical
+ * identifiers avoid collisions with other AI coding tools. Change them here only.
  */
 export const PRODUCT_NAME = "DUO";
-export const CLI_NAME = "duo";
-export const STATE_DIR_NAME = ".duo";
-export const MCP_SERVER_NAME = "duo";
+export const CLI_NAME = "duoctl";
+export const STATE_DIR_NAME = ".duo-project";
+export const MCP_SERVER_NAME = "duo-director";
 
 /** Info string of fenced metadata blocks in Markdown definitions (docs/03-data-model.md). */
 export const METADATA_BLOCK_LANG = "duo";

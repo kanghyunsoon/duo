@@ -11,7 +11,7 @@ flowchart TD
   director["director<br/>context · review · gap · llm · init"] --> graph & analyzer & core
   graph["graph<br/>store · build · traverse · incremental"] --> analyzer & core
   analyzer["analyzer<br/>scan · fingerprint · language · git"] --> core
-  core["core<br/>schema · decisions · verdict · tokens · fs-guard"]
+  core["core<br/>schema · decisions · verdict · tokens · write boundary"]
   ui["ui<br/>React"] -. "type-only" .-> core
   ui -. "HTTP API" .-> integration
 ```
@@ -20,13 +20,13 @@ flowchart TD
 
 | 패키지 | 책임 | Lane Task |
 |---|---|---|
-| core | .duo 스키마, loader, Markdown 정의 파서, ID와 추적성 검사, DecisionService, state 경로, Claim/Evidence/Verdict 타입, TokenEstimator, fs-guard | TASK-002, 009 |
+| core | .duo-project 스키마, loader, Markdown 정의 파서, ID와 추적성 검사, DecisionService, state 경로, Claim/Evidence/Verdict 타입, TokenEstimator, write boundary 정책 | TASK-002, 009 |
 | analyzer | 파일 스캔, fingerprint, LanguageAnalyzer(TS/JS), GitEvidenceProvider | TASK-004, 005, 006 |
 | graph | GraphStore(node:sqlite), builder, traversal, incremental, trace, impact, check | TASK-003, 007, 008 |
 | director | Context Compiler, Evidence, Review, Knowledge Gap, token budget, LLMProvider, InitService | TASK-010~014 |
 | integration | MCP 서버, Codex/Claude Adapter, 로컬 HTTP API, (향후) 외부 EvidenceProvider | TASK-016, 017, 018 |
 | ui | React 앱(5개 화면) | TASK-018 |
-| apps/cli | `duo` 명령 | TASK-015 |
+| apps/cli | `duoctl` 명령 | TASK-015 |
 
 ## 확장 지점
 
@@ -49,12 +49,12 @@ LLM을 쓸 수 없으면 의미 판단은 UNKNOWN이나 ASK로 남고 나머지 
 
 ## 주요 흐름
 
-### duo init (REQ-INIT-001~003)
+### duoctl init (REQ-INIT-001~003)
 
 ```text
 Git root 확인 ─▶ 스캔(.gitignore, 기본 제외, 비밀 파일 제외) ─▶ manifest / README / docs / 기획 문서 탐지
   ─▶ Git metadata(branch, HEAD, 최근 커밋) ─▶ LanguageAnalyzer로 Symbol·Import·Call·Test 추출
-  ─▶ 초안: project.yaml, intent/vision.md(status: draft), intent/constraints.yaml, .duo/.gitignore
+  ─▶ 초안: project.yaml, intent/vision.md(status: draft), intent/constraints.yaml, .duo-project/.gitignore
   ─▶ 구현 상태 추론(generated/inferred.json) · Knowledge Gap(generated/gaps.json)
   ─▶ Human 확인(TTY 대화형 또는 ASK 목록) ─▶ Graph 구축(generated/graph.db) ─▶ 요약 출력
 ```
@@ -84,7 +84,7 @@ diff(기본: working tree + index vs HEAD) ─▶ 변경 파일 증분 인덱싱
 
 ```text
 duo_propose_decision ─▶ decisions/proposals/P-*.yaml
-Human: duo decision confirm|reject <id>  또는  UI Confirm/Reject ─▶ core DecisionService ─▶ .duo/decisions/
+Human: duoctl decision confirm|reject <id>  또는  UI Confirm/Reject ─▶ core DecisionService ─▶ .duo-project/decisions/
 ```
 
 상세는 [ADR-013](adr/ADR-013-decision-lifecycle.md).
@@ -105,7 +105,7 @@ SQLite는 WAL 모드로 연다. Graph 쓰기는 `generated/.lock` 파일 잠금�
 
 ## 오류 처리
 
-- `.duo` 파일 파싱 오류는 파일 경로와 줄 번호를 보고하고, 해당 파일만 제외한 채 계속 동작한다. 제외 사실은 Knowledge Gap으로 기록한다.
+- `.duo-project` 파일 파싱 오류는 파일 경로와 줄 번호를 보고하고, 해당 파일만 제외한 채 계속 동작한다. 제외 사실은 Knowledge Gap으로 기록한다.
 - 파싱할 수 없는 소스 파일은 File Node와 diagnostics만 남긴다.
 - v0.1은 Git Repository만 지원한다. Git이 없으면 init을 거부한다.
 - LLM 오류는 NoneProvider와 같은 결과(UNKNOWN)로 처리하고 Review를 실패시키지 않는다.

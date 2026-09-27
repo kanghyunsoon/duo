@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadProjectTruth, STATE_DIR_NAME } from "@duo/core";
+import { loadProjectTruth, STATE_DIR_NAME } from "@duo-director/core";
 import { afterAll, describe, expect, it } from "vitest";
 import { validateDocs } from "../../scripts/validate-docs.mjs";
 
@@ -15,7 +15,7 @@ const tempDir = (prefix: string) => {
   return dir;
 };
 
-/** Copies this repository's SDD definition files into a temporary .duo/ (ADR-014 self fixture). */
+/** Copies this repository's SDD definition files into a temporary .duo-project/ (ADR-014 self fixture). */
 function selfFixture(): string {
   const repo = tempDir("duo-self-");
   const duo = path.join(repo, STATE_DIR_NAME);
@@ -63,7 +63,7 @@ describe("AC-002-03 DUO reads its own SDD documents", () => {
   });
 });
 
-describe("validate-docs reports problems found by @duo/core", () => {
+describe("validate-docs reports problems found by @duo-director/core", () => {
   function docsCopy(edit: (file: string, text: string) => string): string {
     const dir = tempDir("duo-docs-");
     fs.cpSync(path.join(root, "docs"), path.join(dir, "docs"), { recursive: true });

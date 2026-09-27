@@ -1,12 +1,12 @@
 {
-  "name": "@duo/graph",
+  "name": "@duo-director/graph",
   "version": "0.0.0",
   "private": true,
   "description": "GraphStore, builder, traversal, incremental, trace, impact",
   "type": "module",
   "exports": {
     ".": {
-      "@duo/source": "./src/index.ts",
+      "@duo-director/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
@@ -15,7 +15,7 @@
     "dist"
   ],
   "dependencies": {
-    "@duo/analyzer": "workspace:*",
-    "@duo/core": "workspace:*"
+    "@duo-director/analyzer": "workspace:*",
+    "@duo-director/core": "workspace:*"
   }
 }

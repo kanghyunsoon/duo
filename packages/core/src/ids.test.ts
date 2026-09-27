@@ -1,8 +1,13 @@
+import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import {
-  ACCEPTANCE_ID_PATTERN, ENTITY_TYPES, fileRef, isDefinitionId, nodeId, parseNodeId, PROJECT_REF, symbolRef, testRef,
-} from "./ids.js";
-import { normalizeRepoPath, type RepoPath } from "./paths.js";
+import { ACCEPTANCE_ID_PATTERN, isDefinitionId, nodeId, parseNodeId, type EntityRef } from "./ids.js";
+import { normalizeRepoPath } from "./paths.js";
+
+interface NodeIdFixture {
+  cases: { name: string; input?: string; ref: EntityRef; nodeId: string }[];
+  invalid: string[];
+}
+const fixture = JSON.parse(fs.readFileSync(new URL("../../../fixtures/core/node-ids.json", import.meta.url), "utf8")) as NodeIdFixture;
 
 describe("definition IDs", () => {
   it.each(["AUTH-03", "REQ-CONTEXT-001", "D-004", "ADR-005", "TASK-012A", "GAME-42", "CON-001", "M1"])("accepts %s", (id) => {
@@ -19,23 +24,20 @@ describe("definition IDs", () => {
   });
 });
 
-describe("node ID contract", () => {
-  const src = normalizeRepoPath("src\\auth\\AuthService.ts").value as RepoPath;
-
-  it("builds the same node ID for a file on every OS", () => {
-    expect(nodeId(fileRef(src))).toBe("file:src/auth/AuthService.ts");
-    expect(nodeId(symbolRef(src, "AuthService.refresh"))).toBe("sym:src/auth/AuthService.ts#AuthService.refresh");
-    expect(nodeId(testRef(src, "AuthService > refresh"))).toBe("test:src/auth/AuthService.ts#AuthService > refresh");
-    expect(nodeId({ type: "requirement", id: "AUTH-03" })).toBe("req:AUTH-03");
-    expect(nodeId(PROJECT_REF)).toBe("project:root");
+describe("node ID contract (fixtures/core/node-ids.json)", () => {
+  it.each(fixture.cases.map((c) => [c.name, c] as const))("%s: nodeId and parseNodeId round-trip", (_name, c) => {
+    if (c.input !== undefined && "path" in c.ref) expect(normalizeRepoPath(c.input).value).toBe(c.ref.path);
+    expect(nodeId(c.ref)).toBe(c.nodeId);
+    expect(parseNodeId(c.nodeId)).toEqual(c.ref);
+    expect(nodeId(parseNodeId(nodeId(c.ref)) as EntityRef)).toBe(c.nodeId);
   });
 
-  it("round-trips every entity type", () => {
-    for (const type of ENTITY_TYPES) {
-      const ref = { type, id: type === "file" ? "src/a.ts" : "X-1" };
-      expect(parseNodeId(nodeId(ref))).toEqual(ref);
-    }
-    expect(parseNodeId("nope:1")).toBeUndefined();
-    expect(parseNodeId("req:")).toBeUndefined();
+  it("keeps NFC and NFD spellings as different IDs", () => {
+    const ids = fixture.cases.filter((c) => c.name.startsWith("Unicode N")).map((c) => c.nodeId);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it.each(fixture.invalid)("rejects %j", (value) => {
+    expect(parseNodeId(value)).toBeUndefined();
   });
 });

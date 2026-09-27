@@ -6,6 +6,8 @@ Project Graph의 1차 목적은 **Context Localisation**이다. Task나 변경 S
 
 ## Node
 
+Node ID는 core의 `nodeId(EntityRef)`만 만든다. 경로와 Symbol 구성 요소는 가역 escaping(`%` → `%25`, `#` → `%23`, 제어 문자 → `%XX`)을 거치며 Unicode와 대소문자는 그대로다. 규칙과 사례는 [03 ID와 EntityRef](03-data-model.md#id와-entityref)와 `fixtures/core/node-ids.json`에 있다.
+
 | Type | ID 형식 | 출처 | 주요 attrs |
 |---|---|---|---|
 | Project | `project:root` | project.yaml, vision.md | goal, status |
@@ -34,6 +36,7 @@ Proposal(P-*)은 Graph Node로 만들지 않는다. `duo_search_evidence`와 UI�
 | TRACKED_BY | Requirement → Issue | declared(Issue의 requirements) |
 | VALIDATED_BY | Symbol → Test, Requirement → Test | static(테스트가 Symbol을 import·호출), declared(tests 패턴, 테스트 이름의 ID) |
 | CHANGED_WITH | File → File(양방향 두 개 저장) | git(최근 500 커밋 중 3회 이상 함께 변경, 50파일 초과 커밋 제외) |
+| SUPERSEDES | Decision → Decision (new → old) | declared(`supersedes`). 대상이 존재해야 하고, 자기 대체와 순환은 금지(`DECISION_SUPERSEDES_SELF`, `DECISION_SUPERSEDE_CYCLE`). H-20으로 추가된 10번째 Edge Type |
 
 개발 지시문 예시의 `GAME-42 --TRACKED_BY--> AUTH-03`는 이 표와 방향이 반대다. 정규 방향은 "Requirement가 Issue로 추적된다"이다([conflicts.md C15](conflicts.md)).
 
@@ -96,7 +99,7 @@ Node 순위 값 = seed 값 × Π(경로의 edge weight). 경로가 여럿이면 
   ─▶ owner_file ∈ F 인 Node/Edge/unresolved_refs 삭제
   ─▶ F 재분석 ─▶ Node/Edge 추가
   ─▶ 재연결: F를 import하던 파일과 F의 Symbol 이름을 가진 unresolved_refs 재해석
-  ─▶ 정의 파일(.duo, sources.markdown)이 바뀌었으면 그 파일의 declared Node/Edge 재생성
+  ─▶ 정의 파일(.duo-project, sources.markdown)이 바뀌었으면 그 파일의 declared Node/Edge 재생성
   ─▶ 경로 패턴 기반 Edge(GOVERNS, IMPLEMENTS paths)는 패턴이 바뀌었거나 F가 새로 매칭될 때 재계산
   ─▶ CHANGED_WITH는 새 커밋분만 누적
   ─▶ meta.graph_revision 증가
@@ -114,3 +117,4 @@ Node 순위 값 = seed 값 × Π(경로의 edge weight). 경로가 여럿이면 
 4. Symbol과 Test Node는 자신을 CONTAINS하는 File이 정확히 하나다.
 5. **증분 결과와 전체 재구축 결과가 같다**(Node/Edge 집합 비교).
 6. 정의 ID(Requirement, Decision, Issue, Milestone)는 전역에서 유일하다. 중복이면 두 정의를 모두 Knowledge Gap으로 보고한다.
+7. SUPERSEDES Edge에는 자기 자신을 가리키는 Edge와 순환(직접, 여러 단계)이 없다.

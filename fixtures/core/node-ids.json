@@ -1,0 +1,121 @@
+{
+  "$comment": "Node ID round-trip cases (T02.1). nodeId(ref) must equal nodeId, and parseNodeId(nodeId) must equal ref. 'input' is the raw path before normalizeRepoPath().",
+  "cases": [
+    {
+      "name": "hash and percent in path, JS private field",
+      "ref": {
+        "type": "symbol",
+        "path": "src/weird #1/100% done.ts",
+        "symbol": "Counter.#value"
+      },
+      "nodeId": "sym:src/weird %231/100%25 done.ts#Counter.%23value"
+    },
+    {
+      "name": "Windows-style source input",
+      "input": "src\\auth\\AuthService.ts",
+      "ref": {
+        "type": "symbol",
+        "path": "src/auth/AuthService.ts",
+        "symbol": "AuthService.#secret"
+      },
+      "nodeId": "sym:src/auth/AuthService.ts#AuthService.%23secret"
+    },
+    {
+      "name": "Unicode and spaces in path and test name",
+      "ref": {
+        "type": "test",
+        "path": "src/한글 폴더/인증.test.ts",
+        "name": "AuthService > refresh #2 (100%)"
+      },
+      "nodeId": "test:src/한글 폴더/인증.test.ts#AuthService > refresh %232 (100%25)"
+    },
+    {
+      "name": "file with hash and percent",
+      "ref": {
+        "type": "file",
+        "path": "docs/50% off #2.md"
+      },
+      "nodeId": "file:docs/50%25 off %232.md"
+    },
+    {
+      "name": "Unicode NFC spelling",
+      "ref": {
+        "type": "file",
+        "path": "src/café.ts"
+      },
+      "nodeId": "file:src/café.ts"
+    },
+    {
+      "name": "Unicode NFD spelling (kept, not rewritten)",
+      "ref": {
+        "type": "file",
+        "path": "src/café.ts"
+      },
+      "nodeId": "file:src/café.ts"
+    },
+    {
+      "name": "control character in symbol",
+      "ref": {
+        "type": "symbol",
+        "path": "src/tab.ts",
+        "symbol": "weird\tname"
+      },
+      "nodeId": "sym:src/tab.ts#weird%09name"
+    },
+    {
+      "name": "requirement",
+      "ref": {
+        "type": "requirement",
+        "id": "REQ-CONTEXT-001"
+      },
+      "nodeId": "req:REQ-CONTEXT-001"
+    },
+    {
+      "name": "decision",
+      "ref": {
+        "type": "decision",
+        "id": "D-004"
+      },
+      "nodeId": "dec:D-004"
+    },
+    {
+      "name": "issue with suffix",
+      "ref": {
+        "type": "issue",
+        "id": "TASK-012A"
+      },
+      "nodeId": "issue:TASK-012A"
+    },
+    {
+      "name": "milestone",
+      "ref": {
+        "type": "milestone",
+        "id": "M1"
+      },
+      "nodeId": "ms:M1"
+    },
+    {
+      "name": "project",
+      "ref": {
+        "type": "project"
+      },
+      "nodeId": "project:root"
+    }
+  ],
+  "invalid": [
+    "sym:src/a.ts#b#c",
+    "sym:src/a.ts",
+    "sym:src/a.ts#",
+    "file:src/%41.ts",
+    "file:src/a%2.ts",
+    "file:src/a%2f.ts",
+    "file:../x.ts",
+    "file:src\\a.ts",
+    "file:src/a#b.ts",
+    "req:auth-03",
+    "project:other",
+    "unknown:x",
+    ":x",
+    "req"
+  ]
+}

@@ -1,12 +1,12 @@
 {
-  "name": "@duo/core",
+  "name": "@duo-director/core",
   "version": "0.0.0",
   "private": true,
-  "description": ".duo schema, loader, decisions, verdict, shared models, tokens, fs-guard",
+  "description": ".duo-project schema, loader, decisions, verdict, shared models, write boundary",
   "type": "module",
   "exports": {
     ".": {
-      "@duo/source": "./src/index.ts",
+      "@duo-director/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }

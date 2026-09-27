@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { CLI_NAME } from "@duo/core";
+import { CLI_NAME } from "@duo-director/core";
 import { describe, expect, it } from "vitest";
 import { run, PLANNED_COMMANDS } from "./cli.js";
 import { VERSION } from "./version.js";
@@ -11,7 +11,7 @@ function capture(argv: string[]) {
   return { code, out, err };
 }
 
-describe("duo CLI skeleton", () => {
+describe("CLI skeleton", () => {
   it("AC-001-03 --version prints the package version", () => {
     const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
     expect(VERSION).toBe(pkg.version);
@@ -24,7 +24,7 @@ describe("duo CLI skeleton", () => {
     expect(JSON.parse(out[0] ?? "")).toEqual({
       name: CLI_NAME,
       version: VERSION,
-      packages: ["@duo/core", "@duo/analyzer", "@duo/graph", "@duo/director", "@duo/integration"],
+      packages: ["@duo-director/core", "@duo-director/analyzer", "@duo-director/graph", "@duo-director/director", "@duo-director/integration"],
     });
   });
 

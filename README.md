@@ -17,7 +17,7 @@ Node.js 24(`>=24.15.0`)와 pnpm 11이 필요합니다.
 ```bash
 pnpm install
 pnpm verify        # check:boundaries → lint → typecheck → build → test → docs:validate
-pnpm duo --version
+pnpm duoctl --version
 ```
 
 | 명령 | 내용 |

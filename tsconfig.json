@@ -4,7 +4,7 @@
     "noEmit": true,
     "rootDir": ".",
     "customConditions": [
-      "@duo/source"
+      "@duo-director/source"
     ],
     "allowJs": true
   },

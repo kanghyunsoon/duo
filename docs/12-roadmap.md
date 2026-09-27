@@ -72,7 +72,7 @@ M4가 끝나기 전에는 새 기능을 추가하지 않는다.
 
 | 후보 | 내용 | Requirement | 착수 조건 |
 |---|---|---|---|
-| v0.2 | Jira Read-only Provider(`.duo/integrations/jira.yaml`, JQL), GitHub Issues Provider | REQ-POST-001, REQ-POST-002 | v0.1 E2E를 실제 프로젝트 2개 이상에서 사용 |
+| v0.2 | Jira Read-only Provider(`.duo-project/integrations/jira.yaml`, JQL), GitHub Issues Provider | REQ-POST-001, REQ-POST-002 | v0.1 E2E를 실제 프로젝트 2개 이상에서 사용 |
 | v0.3 | 추가 LLM Provider(OpenAICompatibleChat, Anthropic, Local), 테스트 결과 보고서 수집 | REQ-POST-004, REQ-POST-006 | MVP Provider와 escalation이 benchmark에서 안정 |
 | v0.4 | PythonAnalyzer(Stretch) 등 언어 추가 | REQ-POST-003 | 사용자 요청 기준 |
 | 이후 | 단일 binary, UI 편집 확장 | REQ-POST-007, REQ-POST-005 | 각각 Spec 필요 |

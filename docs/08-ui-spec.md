@@ -4,9 +4,9 @@
 
 ## 원칙
 
-- `duo ui`가 `127.0.0.1:7346`에 HTTP 서버(integration/http)를 띄우고 React 앱을 서빙한다. 외부 인터페이스에는 bind하지 않는다.
+- `duoctl ui`가 `127.0.0.1:7346`에 HTTP 서버(integration/http)를 띄우고 React 앱을 서빙한다. 외부 인터페이스에는 bind하지 않는다.
 - **읽기 중심**이다. 허용되는 쓰기는 Decisions 화면의 **Confirm**과 **Reject** 두 동작뿐이다(H-4).
-- Confirm/Reject는 core의 `DecisionService`를 호출해 Source of Truth인 `.duo/decisions/`를 직접 바꾼다. UI 전용 상태, DB, 로컬 저장소를 만들지 않는다.
+- Confirm/Reject는 core의 `DecisionService`를 호출해 Source of Truth인 `.duo-project/decisions/`를 직접 바꾼다. UI 전용 상태, DB, 로컬 저장소를 만들지 않는다.
 - Intent 대규모 수정, Spec Editor, Milestone Editor, Jira 수정, Source 수정은 구현하지 않는다.
 - 화면은 5개다. 각 화면은 데이터의 원본 파일 경로를 보여 준다.
 
@@ -52,7 +52,7 @@ Pending 항목에만 버튼 두 개가 있다.
 | Spec ↔ Code | status done인데 IMPLEMENTS 없음 / IMPLEMENTS가 있는데 planned / Requirement에 연결되지 않은 exported Symbol 수 | R-SCOPE, R-TEST, R-REQ, R-INTENT, R-DRIFT |
 | Decision ↔ Code | forbids 패턴과 일치하는 기존 코드나 dependency / lock digest 불일치 | R-DECISION, R-CONSTRAINT, R-LOCK |
 | Issue ↔ Code | Issue done인데 연결 Requirement에 IMPLEMENTS 없음 / Issue todo인데 해당 키를 언급한 커밋 있음 | - |
-| External Source ↔ .duo | Truth 항목의 `source` hash 변경 / 외부 문서가 같은 ID를 다르게 서술 | R-DRIFT |
+| External Source ↔ .duo-project | Truth 항목의 `source` hash 변경 / 외부 문서가 같은 ID를 다르게 서술 | R-DRIFT |
 
 각 항목은 Claim / Expected / Observed / Evidence 형식으로 보여 주고, Evidence는 파일:줄, 커밋, ID 링크를 가진다. Claim의 `basis`(rule, static, git, test, graph, heuristic, llm)를 배지로 표시한다.
 

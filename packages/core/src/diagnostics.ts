@@ -4,7 +4,10 @@
  */
 export type DiagnosticSeverity = "error" | "warning" | "info";
 
-/** Repository-relative POSIX path with an optional 1-based line/column range. */
+/**
+ * Repository-relative POSIX path with an optional 1-based range. Lines and columns are 1-based;
+ * endColumn is exclusive (the column after the last character). Markdown and YAML use the same contract.
+ */
 export interface SourceLocation {
   readonly path: string;
   readonly startLine?: number;
@@ -29,13 +32,22 @@ export const DIAGNOSTIC_SEVERITY = {
   INVALID_ID: "error",
   INVALID_PATH: "error",
   PATH_OUTSIDE_REPOSITORY: "error",
+  /** Two paths that collide on case-insensitive or Unicode-normalizing file systems (scanner, T04). */
+  PATH_PORTABILITY_COLLISION: "warning",
+  WRITE_OUTSIDE_REPOSITORY: "error",
+  WRITE_NOT_ALLOWED: "error",
   METADATA_BLOCK_WITHOUT_HEADING: "error",
   METADATA_BLOCK_MISSING: "warning",
   DUPLICATE_ID: "error",
   BROKEN_REFERENCE: "error",
   REFERENCE_TYPE_MISMATCH: "error",
+  DECISION_SUPERSEDES_SELF: "error",
+  DECISION_SUPERSEDE_CYCLE: "error",
+  TRACE_MILESTONE_MISMATCH: "warning",
   TRACE_DECISION_UNRELATED: "warning",
   TRACE_REQUIREMENT_UNTRACKED: "info",
+  GRAPH_SCHEMA_UNSUPPORTED: "error",
+  GRAPH_OPEN_FAILED: "error",
 } as const satisfies Record<string, DiagnosticSeverity>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_SEVERITY;

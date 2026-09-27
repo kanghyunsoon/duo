@@ -17,18 +17,18 @@ async function violations(filePath: string, code: string): Promise<number> {
 
 describe("AC-001-02 lint enforces the ADR-010 dependency direction", () => {
   const cases: [string, string, string, boolean][] = [
-    ["core cannot import graph", "packages/core/src/probe.ts", 'import { packageInfo } from "@duo/graph";', false],
-    ["analyzer may import core", "packages/analyzer/src/probe.ts", 'import { packageInfo } from "@duo/core";', true],
-    ["director cannot import integration", "packages/director/src/probe.ts", 'import { packageInfo } from "@duo/integration";', false],
-    ["integration cannot import analyzer", "packages/integration/src/probe.ts", 'import { packageInfo } from "@duo/analyzer";', false],
-    ["ui may import core types", "packages/ui/src/probe.ts", 'import type { PackageInfo } from "@duo/core";', true],
-    ["ui cannot import core values", "packages/ui/src/probe.ts", 'import { packageInfo } from "@duo/core";', false],
+    ["core cannot import graph", "packages/core/src/probe.ts", 'import { packageInfo } from "@duo-director/graph";', false],
+    ["analyzer may import core", "packages/analyzer/src/probe.ts", 'import { packageInfo } from "@duo-director/core";', true],
+    ["director cannot import integration", "packages/director/src/probe.ts", 'import { packageInfo } from "@duo-director/integration";', false],
+    ["integration cannot import analyzer", "packages/integration/src/probe.ts", 'import { packageInfo } from "@duo-director/analyzer";', false],
+    ["ui may import core types", "packages/ui/src/probe.ts", 'import type { PackageInfo } from "@duo-director/core";', true],
+    ["ui cannot import core values", "packages/ui/src/probe.ts", 'import { packageInfo } from "@duo-director/core";', false],
     ["no relative import into another package", "packages/core/src/probe.ts", 'import { packageInfo } from "../../graph/src/index.js";', false],
     ["graph cannot import node:sqlite outside the store", "packages/graph/src/probe.ts", 'import { DatabaseSync } from "node:sqlite";', false],
     ["NodeSqliteGraphStore may import node:sqlite", "packages/graph/src/store/node-sqlite/probe.ts", 'import { DatabaseSync } from "node:sqlite";', true],
     ["director cannot import node:sqlite", "packages/director/src/probe.ts", 'import { DatabaseSync } from "node:sqlite";', false],
     ["cli cannot do file I/O directly", "apps/cli/src/probe.ts", 'import { readFileSync } from "node:fs";', false],
-    ["cli may import packages", "apps/cli/src/probe.ts", 'import { packageInfo } from "@duo/integration";', true],
+    ["cli may import packages", "apps/cli/src/probe.ts", 'import { packageInfo } from "@duo-director/integration";', true],
     ["core domain cannot import the YAML library", "packages/core/src/domain/probe.ts", 'import { parseDocument } from "yaml";', false],
     ["core domain cannot import mdast types", "packages/core/src/domain/probe.ts", 'import type { Root } from "mdast";', false],
     ["core source layer may import the YAML library", "packages/core/src/source/probe.ts", 'import { parseDocument } from "yaml";', true],
@@ -69,9 +69,9 @@ describe("AC-001-02 check-boundaries validates package manifests", () => {
     }
     const pkgPath = join(temp, "packages", "core", "package.json");
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as Record<string, unknown>;
-    writeFileSync(pkgPath, JSON.stringify({ ...pkg, dependencies: { "@duo/graph": "workspace:*" } }));
+    writeFileSync(pkgPath, JSON.stringify({ ...pkg, dependencies: { "@duo-director/graph": "workspace:*" } }));
     const result = runCheck(temp);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("@duo/core: dependencies -> @duo/graph");
+    expect(result.stderr).toContain("@duo-director/core: dependencies -> @duo-director/graph");
   });
 });

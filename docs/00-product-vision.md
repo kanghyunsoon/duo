@@ -35,7 +35,7 @@ Human ──Intent / Decision(confirm, reject)──▶ DUO ──Context / Revi
 |---|---|---|
 | Human | Goal, Product Intent, Requirement, Constraint, Decision의 confirm/reject | 없음(최종 결정권) |
 | DUO | 관찰, Git 변경 감지, Project Graph, Context 추출, 연결, Drift·Conflict·Knowledge Gap 감지, Evidence 수집, Decision 제안 | Source Code 수정, Human-owned 정보 자동 변경, Decision 확정 |
-| Coding Agent | 코드 작성, 테스트, 리팩터링, 버그 수정, Decision 제안 | `.duo` 직접 수정, Decision 확정 |
+| Coding Agent | 코드 작성, 테스트, 리팩터링, 버그 수정, Decision 제안 | `.duo-project` 직접 수정, Decision 확정 |
 
 ## 핵심 가치
 
@@ -53,8 +53,8 @@ DUO는 IDE, Jira, Coding Agent, 문서 생성기가 아니다. Agent가 구현�
 기능 수가 아니라 다음 End-to-End 흐름이 안정적으로 동작하는 것이 v0.1의 성공 기준이다. 각 단계와 Task의 매핑은 [TASKS.md](tasks/TASKS.md#mvp-end-to-end-흐름과-task)에 있다.
 
 ```text
-Repository → DUO 설치 → duo init → 자동 분석 → 필요한 Human Intent 확인 → .duo 생성
-→ Project Graph 생성 → Agent가 MCP로 Context 요청 → 코딩 → Git Diff → duo review
+Repository → DUO 설치 → duoctl init → 자동 분석 → 필요한 Human Intent 확인 → .duo-project 생성
+→ Project Graph 생성 → Agent가 MCP로 Context 요청 → 코딩 → Git Diff → duoctl review
 → PASS / WARN / BLOCK / ASK → UI에서 Evidence와 Drift 확인(필요하면 Decision Confirm/Reject)
 ```
 

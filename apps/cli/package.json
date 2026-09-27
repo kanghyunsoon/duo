@@ -1,5 +1,5 @@
 {
-  "name": "@duo/cli",
+  "name": "@duo-director/cli",
   "version": "0.0.0",
   "private": true,
   "description": "thin entry point: argument parsing, prompts, output, exit codes",
@@ -8,13 +8,13 @@
     "dist"
   ],
   "bin": {
-    "duo": "./dist/main.js"
+    "duoctl": "./dist/main.js"
   },
   "dependencies": {
-    "@duo/integration": "workspace:*",
-    "@duo/director": "workspace:*",
-    "@duo/graph": "workspace:*",
-    "@duo/analyzer": "workspace:*",
-    "@duo/core": "workspace:*"
+    "@duo-director/integration": "workspace:*",
+    "@duo-director/director": "workspace:*",
+    "@duo-director/graph": "workspace:*",
+    "@duo-director/analyzer": "workspace:*",
+    "@duo-director/core": "workspace:*"
   }
 }

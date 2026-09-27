@@ -1,12 +1,12 @@
 {
-  "name": "@duo/analyzer",
+  "name": "@duo-director/analyzer",
   "version": "0.0.0",
   "private": true,
   "description": "filesystem scan, fingerprint, LanguageAnalyzer, git",
   "type": "module",
   "exports": {
     ".": {
-      "@duo/source": "./src/index.ts",
+      "@duo-director/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
@@ -15,6 +15,6 @@
     "dist"
   ],
   "dependencies": {
-    "@duo/core": "workspace:*"
+    "@duo-director/core": "workspace:*"
   }
 }

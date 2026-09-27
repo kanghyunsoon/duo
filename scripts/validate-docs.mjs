@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // SDD traceability validator for this repository.
-// Parsing, schemas and trace rules come from @duo/core: the same parser DUO uses for .duo/.
+// Parsing, schemas and trace rules come from @duo-director/core: the same parser DUO uses for .duo-project/.
 // This script adds only repository documentation policy: which files define REQ/ADR/TASK/Milestone,
 // link and anchor checks, and the REQ-/ADR-/TASK-/AC- mention convention.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { analyzeTrace, formatDiagnostic, parseDefinitionDocument, parseMarkdown } from "@duo/core";
+import { analyzeTrace, formatDiagnostic, parseDefinitionDocument, parseMarkdown } from "@duo-director/core";
 
 const SKIP = new Set([".git", "node_modules", "dist", "coverage", "tmp", ".worklog", "fixtures"]);
 const MENTION = /\b(?:REQ-[A-Z]+-\d{3}|ADR-\d{3}|TASK-\d{3}[A-Z]?|AC-\d{3}[A-Z]?-\d{2})\b/g;

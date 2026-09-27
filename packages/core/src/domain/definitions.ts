@@ -104,7 +104,7 @@ export function parseDefinitionDocument(doc: MarkdownDocument): ParseResult<Defi
       const valid = validateData(MilestoneBlockSchema, yaml, block.location);
       diagnostics.push(...valid.diagnostics);
       if (valid.value !== undefined) {
-        out.milestones.push(mapMilestone(id, valid.value.title, valid.value.state, location, valid.value.extensions, ctx));
+        out.milestones.push(mapMilestone(id, valid.value.title, valid.value.state, valid.value.issues, location, valid.value.extensions, ctx));
       }
     } else {
       diagnostics.push(unknownTypeDiagnostic(type, yaml.locate(["type"]) ?? block.location));

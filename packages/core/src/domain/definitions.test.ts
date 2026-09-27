@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseDefinitionMarkdown } from "./definitions.js";
 
-const parse = (...lines: string[]) => parseDefinitionMarkdown(".duo/specs/x.md", lines.join("\n"));
+const parse = (...lines: string[]) => parseDefinitionMarkdown(".duo-project/specs/x.md", lines.join("\n"));
 const codes = (r: ReturnType<typeof parse>) => r.diagnostics.map((d) => [d.code, d.source?.startLine]);
 const block = (...yaml: string[]) => ["```duo", ...yaml, "```"];
 
@@ -17,7 +17,7 @@ describe("parseDefinitionMarkdown", () => {
     const [first, second] = r.value?.requirements ?? [];
     expect(first).toMatchObject({
       id: "AUTH-01", title: "Login", status: "done", milestone: "M1", dependsOn: ["AUTH-00"],
-      location: { path: ".duo/specs/x.md", startLine: 3, endLine: 16 },
+      location: { path: ".duo-project/specs/x.md", startLine: 3, endLine: 16 },
     });
     expect(first?.description).toContain("Users log in.");
     expect(first?.description).toContain("More.");

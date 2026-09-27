@@ -19,7 +19,7 @@ confirmed_at: 2026-09-27
 
 ## 결정
 
-- MCP 서버의 역할은 **Context Gateway**다. Agent는 `.duo`를 직접 읽지 않고 이 서버로 필요한 정보만 얻는다(H-10).
+- MCP 서버의 역할은 **Context Gateway**다. Agent는 `.duo-project`를 직접 읽지 않고 이 서버로 필요한 정보만 얻는다(H-10).
 
 ```text
 Codex / Claude → duo_get_context(task) → Project Graph traversal → Context Compiler → Token Budget → minimal context

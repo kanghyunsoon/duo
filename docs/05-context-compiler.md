@@ -11,7 +11,7 @@ Context Compiler는 Task 하나에 대해 token budget 이하의 **Director Cont
 | task | 자유 텍스트 또는 ID(예: `"GAME-42 refresh token 만료 처리"`) | 예 |
 | budget_tokens | 인자, 없으면 `context.default_budget_tokens`(기본 6000) | 아니오 |
 | include_diff | 현재 working tree diff를 seed에 포함할지 | 아니오(기본 true) |
-| Graph, .duo, Git | 자동 | - |
+| Graph, .duo-project, Git | 자동 | - |
 
 ## 단계
 

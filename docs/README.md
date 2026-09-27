@@ -9,7 +9,7 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [00-product-vision.md](00-product-vision.md) | 문제, 역할 분리, 포지셔닝, 성공 기준 |
 | [01-requirements.md](01-requirements.md) | Requirement(REQ-*), MVP 경계, 추적 표 |
 | [02-system-architecture.md](02-system-architecture.md) | 패키지, 의존 방향, 데이터 흐름, 확장 지점 |
-| [03-data-model.md](03-data-model.md) | `.duo` 구조, 파일 스키마, Markdown 정의 형식, SQLite 스키마 |
+| [03-data-model.md](03-data-model.md) | `.duo-project` 구조, 파일 스키마, Markdown 정의 형식, SQLite 스키마 |
 | [04-project-graph.md](04-project-graph.md) | Node/Edge 의미, AnalysisResult, 탐색, 증분 갱신 |
 | [05-context-compiler.md](05-context-compiler.md) | Director Context Packet 생성 알고리즘 |
 | [06-mcp-interface.md](06-mcp-interface.md) | MCP Context Gateway Tool 계약 |

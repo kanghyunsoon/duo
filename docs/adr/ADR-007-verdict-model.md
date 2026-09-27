@@ -61,8 +61,8 @@ interface Claim {
 | 규칙 | 조건 | Alignment | blocking / ask | 판정 수단 |
 |---|---|---|---|---|
 | R-LOCK | confirmed Decision의 lock digest 불일치, 또는 HEAD에서 confirmed인 Decision의 내용 변경 | CONFLICT | blocking | rule, git |
-| R-LOCK | 검토 범위에서 lock 없이 수동으로 confirmed가 됨 | UNKNOWN | ask(`duo decision confirm <id>`로 확정) | rule |
-| R-LOCK | `duo decision`으로 정상 confirm/supersede됨 | ALIGNED | - | rule |
+| R-LOCK | 검토 범위에서 lock 없이 수동으로 confirmed가 됨 | UNKNOWN | ask(`duoctl decision confirm <id>`로 확정) | rule |
+| R-LOCK | `duoctl decision`으로 정상 confirm/supersede됨 | ALIGNED | - | rule |
 | R-LOCK | 그 밖의 Human-owned 정의 파일 변경 | PARTIAL | - | git |
 | R-CONSTRAINT | 추가/수정 Symbol 이름, 새 파일 경로, 새 dependency가 confirmed Constraint의 `match`와 일치 | CONFLICT | `enforcement: block`이면 blocking, `warn`이면 non-blocking | rule, static |
 | R-DECISION | 변경이 confirmed Decision의 `forbids`와 일치 | CONFLICT | blocking | rule, static |

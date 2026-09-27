@@ -1,5 +1,5 @@
 {
-  "name": "duo-workspace",
+  "name": "duo-director-workspace",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.25.0",
@@ -15,10 +15,10 @@
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "docs:validate": "tsc -b packages/core && node scripts/validate-docs.mjs",
     "verify": "pnpm check:boundaries && pnpm lint && pnpm typecheck && pnpm build && pnpm test && pnpm docs:validate",
-    "duo": "node apps/cli/dist/main.js"
+    "duoctl": "node apps/cli/dist/main.js"
   },
   "devDependencies": {
-    "@duo/core": "workspace:*",
+    "@duo-director/core": "workspace:*",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.19.0",
     "eslint": "^10.11.0",

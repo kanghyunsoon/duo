@@ -13,6 +13,14 @@ describe("parseYaml", () => {
     expect(r.value?.locate(["governs"], "key")).toMatchObject({ startLine: 2, startColumn: 1 });
   });
 
+  it("computes start and end positions with an exclusive end column", () => {
+    const r = parse("id: D-004\ngoverns:\n  requirements: [AUTH-01, AUTH-03]\n");
+    expect(r.value?.locate(["id"])).toEqual({ path: "a.yaml", startLine: 1, startColumn: 5, endLine: 1, endColumn: 10 });
+    expect(r.value?.locate([])).toMatchObject({ startLine: 1, startColumn: 1, endLine: 3 });
+    // Line 3 is "  requirements: [AUTH-01, AUTH-03]" (34 characters): exclusive end column 35.
+    expect(r.value?.locate(["governs"])).toMatchObject({ startLine: 3, startColumn: 3, endLine: 3, endColumn: 35 });
+  });
+
   it("offsets lines for YAML embedded in another file", () => {
     expect(parse("a: 1\nb: 2\n", 10).value?.locate(["b"])).toMatchObject({ startLine: 11 });
   });
