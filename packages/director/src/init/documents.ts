@@ -31,6 +31,9 @@ function tokens(p: string): string[] {
   return p.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((t) => t !== "");
 }
 
+/** ASCII keywords match whole path tokens; Hangul keywords also match inside a token ("기획서" contains "기획"). */
+const keywordHit = (token: string, keyword: string): boolean => token === keyword || (/\p{Script=Hangul}/u.test(keyword) && token.includes(keyword));
+
 interface Ranked {
   readonly path: RepoPath;
   readonly kind: DocumentKind;
@@ -55,7 +58,9 @@ function rank(p: RepoPath): Ranked | undefined {
   else if ((stem === "architecture" || stem === "design") && depth === 0) { kind = "design"; score = 80; reasons.push("root-design"); }
   else if (inDocs) { kind = "docs"; score = Math.max(30, 60 - 5 * (depth - 1)); reasons.push(depth === 1 ? "docs" : "docs-nested"); }
   else if (stem === "readme") { kind = "package-readme"; score = Math.max(20, 40 - 5 * (depth - 1)); reasons.push("nested-readme"); }
-  const hits = [...new Set(tokens(p).filter((t) => KEYWORDS.includes(t)))].sort(compareUtf8);
+  else if (depth === 0) { score = 60; reasons.push("root-document"); }
+  const pathTokens = tokens(p);
+  const hits = KEYWORDS.filter((k) => pathTokens.some((t) => keywordHit(t, k))).sort(compareUtf8);
   if (hits.length > 0) {
     score += Math.min(40, 20 * hits.length);
     reasons.push(...hits.map((h) => `keyword:${h}`));

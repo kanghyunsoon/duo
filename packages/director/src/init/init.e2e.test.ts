@@ -120,6 +120,13 @@ describe("planInit (TASK-014)", () => {
     expect(p.importCandidates).toEqual([{ status: "candidate", path: "docs/legacy-spec.md", hash: expect.stringMatching(/^sha256:/u), definitions: [{ kind: "requirement", id: "LEDGER-01", title: "Split expenses evenly" }] }]);
     const capped = await planInit(fresh().root, { discovery: { maxDocuments: 2 } });
     expect(capped.value?.documents.map((d) => d.path)).toEqual(["README.md", "CONTRIBUTING.md"]);
+    // A root planning document, also in Korean ("기획서" contains the keyword "기획").
+    const korean = fresh();
+    korean.write("Ledger 기획서.md", "# 기획\n\n가계부 정산.\n");
+    korean.write("NOTES.md", "# Notes\n");
+    const ranked = (await plan(korean.root)).documents.map((d) => [d.path, d.kind, d.score, d.reasons.join(" ")]);
+    expect(ranked).toContainEqual(["Ledger 기획서.md", "design", 80, "root-document keyword:기획"]);
+    expect(ranked).toContainEqual(["NOTES.md", "other", 60, "root-document"]);
   });
 
   it("asks only what observation cannot answer; a README paragraph is a suggestion, not Truth", async () => {
