@@ -142,8 +142,13 @@ const decisionShape = {
   supersedes: id().nullable().optional(),
   evidence: z.array(EvidencePointerSchema).optional(),
   source: sources,
+  /** How a violation is reported (ADR-007); used by Review (TASK-013). */
+  enforcement: z.enum(["warn", "block"]).optional(),
   extensions,
 };
+
+/** Who asked for a Decision operation (T09). Only a human confirms or rejects. */
+export const ACTOR_KINDS = ["human", "agent", "system"] as const;
 
 /** decisions/D-###.yaml and ADR-style Markdown frontmatter. */
 export const DecisionSchema = z.strictObject({
@@ -156,6 +161,9 @@ export const DecisionSchema = z.strictObject({
   confirmed_by: text().optional(),
   proposed_at: text().optional(),
   proposed_by: text().optional(),
+  proposed_by_kind: z.enum(ACTOR_KINDS).optional(),
+  /** The proposal this Decision was confirmed from (DecisionService). */
+  proposal: z.string().regex(PROPOSAL_ID_PATTERN, INVALID_ID_MESSAGE).optional(),
   lock: z.strictObject({ digest: z.string().regex(/^sha256:/) }).optional(),
 });
 
@@ -165,7 +173,13 @@ export const ProposalSchema = z.strictObject({
   ...decisionShape,
   state: z.enum(["proposed", "rejected"]),
   proposed_by: text(),
+  proposed_by_kind: z.enum(ACTOR_KINDS).optional(),
   proposed_at: text().optional(),
+  /** What the proposal was based on, to detect a stale proposal at confirm time. */
+  based_on: z.strictObject({
+    truth_digest: z.string().regex(/^sha256:/),
+    refs: z.array(z.strictObject({ id: id(), digest: z.string().regex(/^sha256:/) })).optional(),
+  }).optional(),
   rejected_at: text().optional(),
   rejected_by: text().optional(),
   reason: text().optional(),

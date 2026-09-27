@@ -2,7 +2,7 @@
  * YAML source parsing. Only this layer knows the "yaml" library; callers receive plain data
  * plus a locator, never YAML AST types.
  */
-import { isMap, isNode, isScalar, LineCounter, parseDocument, visit, type Node as YamlNode } from "yaml";
+import { isMap, isNode, isScalar, LineCounter, parseDocument, stringify, visit, type Node as YamlNode } from "yaml";
 import { createDiagnostic, failure, success, type Diagnostic, type ParseResult, type SourceLocation } from "../diagnostics.js";
 
 export interface YamlInput {
@@ -24,6 +24,24 @@ export interface ParsedYaml {
 
 function firstLine(message: string): string {
   return message.split("\n")[0] ?? message;
+}
+
+/** Plain data as YAML text for a new Project Truth file (DecisionService, T09): no anchors, no line folding. */
+export function stringifyYaml(data: unknown): string {
+  return stringify(data, { aliasDuplicateObjects: false, lineWidth: 0 });
+}
+
+/**
+ * Sets top-level keys of a YAML mapping (undefined deletes the key) and keeps the rest of the text,
+ * comments included. Used for lifecycle fields of Human-owned files.
+ */
+export function setYamlTopLevel(text: string, values: Readonly<Record<string, unknown>>): string {
+  const doc = parseDocument(text);
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined) doc.delete(key);
+    else doc.set(key, value);
+  }
+  return doc.toString({ lineWidth: 0 });
 }
 
 /**

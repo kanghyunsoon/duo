@@ -43,7 +43,7 @@ Pending 항목에만 버튼 두 개가 있다.
 - **Confirm**: 확인 대화상자에 기록될 내용(새 D-### ID, supersede 대상, lock)을 보여 주고, 사용자가 proposal ID를 다시 입력해야 실행된다. 성공하면 새 파일 경로를 표시한다.
 - **Reject**: 사유(선택)를 입력받아 실행한다.
 
-실행 결과는 파일에서 다시 읽어 표시한다. 낙관적 UI 상태를 두지 않는다.
+실행 결과는 파일에서 다시 읽어 표시한다. 낙관적 UI 상태를 두지 않는다. UI 서버는 CLI와 같은 `DecisionService`를 actor `{ kind: "human", name: "ui:<user>" }`로 호출하고 검사·할당·supersede 로직을 따로 두지 않는다. `PROPOSAL_STALE`은 확인 대화상자에 경고로 보여 준다. Pending 목록은 `inspectIndex()`와 별개로 proposal 파일에서 읽는다.
 
 ### Drift
 

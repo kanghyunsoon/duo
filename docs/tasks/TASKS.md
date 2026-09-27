@@ -154,7 +154,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-006](#task-006-git-evidence-provider) | Git Evidence Provider | analyzer | M1 | TASK-002 | done |
 | [TASK-007](#task-007-graph-builder와-일관성-검사) | Graph builder와 일관성 검사 | graph | M1 | TASK-003, TASK-005, TASK-006 | done |
 | [TASK-008](#task-008-증분-인덱싱-trace-impact) | 증분 인덱싱, trace, impact | graph | M1 | TASK-007 | done |
-| [TASK-009](#task-009-decision-생명주기) | Decision 생명주기 | core | M2 | TASK-002 | todo |
+| [TASK-009](#task-009-decision-생명주기) | Decision 생명주기 | core | M2 | TASK-002 | done |
 | [TASK-010](#task-010-context-compiler) | Context Compiler | director | M2 | TASK-008, TASK-009 | todo |
 | [TASK-011](#task-011-knowledge-gap) | Knowledge Gap | director | M2 | TASK-008 | todo |
 | [TASK-012A](#task-012a-llmprovider-계약과-no-op) | LLMProvider 계약과 no-op | director | M2 | TASK-002 | todo |
@@ -427,7 +427,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M2
 package: core
 requirements: [REQ-DECISION-001, REQ-DECISION-002, REQ-DECISION-003]
@@ -435,12 +435,12 @@ decisions: [ADR-013]
 depends_on: [TASK-002]
 ```
 
-- **Goal**: proposal 생성, confirm, reject, lock digest를 구현한다.
+- **Goal**: proposal 생성, confirm, reject, lock digest를 구현한다. AI may propose, Human confirms.
 - **Input**: ADR-013, 03 Decision 스키마
-- **Output**: DecisionService(propose, confirm, reject, verifyLock)
+- **Output**: `createDecisionService`(propose, confirm, reject, repair, verifyLock), actor 권한 표, P-###/D-### 할당, 저장소 lock, exclusive 생성과 atomic 교체, supersede, stale 탐지, `guardDecisionWrite`, schema 확장(enforcement, proposal, proposed_by_kind, based_on)
 - **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
-- **Files expected to change**: `packages/core/src/decisions/**`
-- **Status**: todo
+- **Files expected to change**: `packages/core/src/decisions/**`, `packages/core/src/schema/schemas.ts`, `packages/core/src/domain/**`, `packages/core/src/source/yaml.ts`(YAML 쓰기·수정 helper), `packages/core/src/ids.ts`, `packages/core/src/diagnostics.ts`
+- **Status**: done (T09)
 - **검증 대상 Requirement**: [REQ-DECISION-001](../01-requirements.md#req-decision-001-decision-제안), [REQ-DECISION-002](../01-requirements.md#req-decision-002-human-confirmreject), [REQ-DECISION-003](../01-requirements.md#req-decision-003-decision-lock)
 - **관련 ADR**: [ADR-013](../adr/ADR-013-decision-lifecycle.md)
 

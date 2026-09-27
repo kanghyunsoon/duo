@@ -9,8 +9,11 @@ export const DEFINITION_ID_PATTERN = /^(?:[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Z]
 /** Acceptance criteria: AC-<task number>-<sequence>, e.g. AC-010-02, AC-012A-01. */
 export const ACCEPTANCE_ID_PATTERN = /^AC-\d{3}[A-Z]?-\d{2}$/;
 
-/** Decision proposals: P-YYYYMMDD-xxxxxx. */
-export const PROPOSAL_ID_PATTERN = /^P-\d{8}-[a-z0-9]{6}$/;
+/**
+ * Decision proposals. DecisionService allocates P-### in sequence (T09: time is not an identity);
+ * the earlier P-YYYYMMDD-xxxxxx form is still read.
+ */
+export const PROPOSAL_ID_PATTERN = /^P-(?:\d{3,}|\d{8}-[a-z0-9]{6})$/;
 
 export const DEFINITION_TYPES = ["milestone", "requirement", "decision", "issue"] as const;
 export type DefinitionType = (typeof DEFINITION_TYPES)[number];

@@ -332,6 +332,7 @@ Parser와 loader는 예외를 던지지 않고 모든 문제를 모은다. 일�
 | 추적성 | `DUPLICATE_ID`, `BROKEN_REFERENCE`, `REFERENCE_TYPE_MISMATCH`, `DECISION_SUPERSEDES_SELF`, `DECISION_SUPERSEDE_CYCLE`, `TRACE_MILESTONE_MISMATCH`(warning), `TRACE_DECISION_UNRELATED`(warning), `TRACE_REQUIREMENT_UNTRACKED`(info) |
 | Graph DB | `GRAPH_SCHEMA_UNSUPPORTED`, `GRAPH_OPEN_FAILED` |
 | Indexer(T08) | `INDEX_STATE_INVALID`(warning, 전체 재구축) |
+| DecisionService(T09) | `DECISION_ACTOR_FORBIDDEN`, `PROPOSAL_NOT_FOUND`, `PROPOSAL_NOT_PENDING`, `PROPOSAL_INVALID`, `PROPOSAL_STALE`(warning), `DECISION_LOCKED`, `DECISION_TARGET_UNSUPPORTED`, `DECISION_SUPERSEDE_TARGET_INVALID`, `DECISION_LOCK_BUSY`(모두 transient), `DECISION_LOCK_MISMATCH`(warning, persistent) |
 | Graph build(T07) | `TSCONFIG_INVALID`(warning), `MODULE_UNRESOLVED`(warning), `MODULE_AMBIGUOUS`(warning), `CALL_AMBIGUOUS`(info), `CALL_UNRESOLVED`(info, 통계로만), `ANNOTATION_TARGET_UNKNOWN`(warning), `ANNOTATION_TARGET_UNSUPPORTED`(info), `TEST_ID_CONFLICT`(warning), `DECLARED_SYMBOL_UNRESOLVED`(warning), `EDGE_ENDPOINT_INVALID`, `GRAPH_NODE_CONFLICT`, `GRAPH_PAYLOAD_INVALID`, `GRAPH_WRITE_REFUSED`, `GRAPH_INVARIANT_VIOLATED` |
 
 ## 추적 관계
@@ -424,11 +425,16 @@ governs:
   paths: ["src/auth/**"]
 forbids:
   dependencies: ["express-session"]
+enforcement: block        # warn | block (선택, Review가 TASK-013에서 사용)
 supersedes: D-004          # SUPERSEDES: D-015 → D-004
 superseded_by: null
 evidence:
   - {kind: review, id: R-20260927-153012-91aca1}
-confirmed_at: "2026-09-27T15:40:00+09:00"
+proposal: P-007            # DecisionService가 확정한 proposal(감사 기록)
+proposed_by: codex
+proposed_by_kind: agent    # human | agent | system
+proposed_at: "2026-09-27T06:10:00.000Z"
+confirmed_at: "2026-09-27T06:40:00.000Z"
 confirmed_by: kanghyunsoon
 lock:
   digest: "sha256:3f1c..."
@@ -438,7 +444,32 @@ ADR 형식 Markdown Decision은 같은 필드를 frontmatter에 두고 `type: de
 
 ## decisions/proposals/P-*.yaml
 
-Decision과 같은 내용 필드에 `proposed_by`(agent 이름 또는 `duoctl`), `proposed_at`, `evidence`를 더한다. `state`는 `proposed`로 시작한다. reject되면 `state: rejected`, `rejected_at`, `rejected_by`, `reason`이 기록되고 파일은 남는다. confirm되면 파일은 `decisions/D-###.yaml`로 옮겨진다([ADR-013](adr/ADR-013-decision-lifecycle.md)). Proposal의 `supersedes`는 SUPERSEDES 링크를 만들지 않고 존재만 확인한다.
+Proposal은 Project Truth가 아니고 Graph Node도 아니다. Human이 confirm해야 Decision이 된다([ADR-013](adr/ADR-013-decision-lifecycle.md), TASK-009).
+
+```yaml
+id: P-007                  # DecisionService가 P-### 순서로 할당. 예전 P-YYYYMMDD-xxxxxx 형식도 읽는다
+title: Passkey login
+state: proposed            # proposed | rejected
+question: login_mechanism
+answer: passkey
+governs: {requirements: [AUTH-01]}
+enforcement: warn
+supersedes: D-004          # 선택. 존재하는 confirmed YAML Decision만
+proposed_by: codex
+proposed_by_kind: agent
+proposed_at: "2026-09-27T06:10:00.000Z"
+based_on:                  # stale 탐지용 provenance
+  truth_digest: "sha256:…"   # proposals를 뺀 Project Truth 파일 내용
+  refs: [{id: AUTH-01, digest: "sha256:…"}, {id: D-004, digest: "sha256:…"}]
+# reject 후: state: rejected, rejected_at, rejected_by, reason(선택)
+```
+
+- Decision과 같은 내용 필드(title, kind, question, answer, rationale, governs, forbids, enforcement, supersedes, evidence, source, extensions)를 쓴다. `owner`는 confirm이 `human`으로 기록한다.
+- **propose**: agent, system, human 모두 가능하다. 쓰기 전에 loader와 같은 schema와 core 추적성 규칙(없는 참조, 대상 타입)으로 검사하고, 통과하면 `decisions/proposals/P-###.yaml` 하나만 새로 만든다. supersede 대상은 confirmed Decision이어야 한다.
+- **confirm**(human만): 다음 `D-###`으로 새 `decisions/D-###.yaml`을 exclusive하게 만들고 `proposal`, proposer, `confirmed_by/at`, `lock.digest`를 기록한다. 이 파일 생성이 commit 지점이다. 이어서 supersede 대상의 `state`와 `superseded_by`만 바꾸고 proposal 파일을 지운다. 이 두 단계가 실패하면 다음 DecisionService 조작이 먼저 마무리한다(repair). Project Truth가 proposal 이후 바뀌었으면 `PROPOSAL_STALE`(warning)와 바뀐 참조 목록을 돌려주고 확정은 진행한다.
+- **reject**(human만): 파일을 지우지 않고 `state: rejected`, `rejected_at`, `rejected_by`, `reason`을 기록한다. 다른 필드와 주석은 그대로다.
+- Proposal의 `supersedes`는 SUPERSEDES 링크를 만들지 않고 존재만 확인한다.
+- 시각은 주입 가능한 clock으로 기록하며 ID나 identity로 쓰지 않는다.
 
 ## Review 결과 (runtime/reviews/, reviews/)
 

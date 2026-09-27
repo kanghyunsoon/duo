@@ -24,6 +24,16 @@ export {
 } from "./domain/files.js";
 export * from "./trace/trace.js";
 export { loadProjectTruth, type LoadedProject, type LoadProjectOptions } from "./loader/project.js";
+export {
+  createDecisionService, DECISION_PERMISSIONS,
+  type ConfirmResult, type DecisionService, type DecisionServiceOptions, type ProposalInput, type ProposeResult, type RejectResult, type StaleInfo,
+} from "./decisions/service.js";
+export {
+  DECISION_LOCK_PATH, DECISIONS_DIR, decisionPath, guardDecisionWrite, nodeDecisionFileSystem, proposalPath, PROPOSALS_DIR,
+  type ActorKind, type DecisionActor, type DecisionFileSystem, type DecisionWriteTarget,
+} from "./decisions/files.js";
+export { decisionLockDigest, definitionDigest, stableJson, truthDigest, verifyDecisionLock, type LockStatus, type LockVerification } from "./decisions/digest.js";
+export { nextDecisionId, nextProposalId } from "./decisions/ids.js";
 
 /** Identity of a workspace package and the workspace packages it depends on at runtime. */
 export interface PackageInfo {

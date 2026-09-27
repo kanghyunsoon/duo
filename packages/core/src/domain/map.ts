@@ -186,6 +186,7 @@ function mapDecisionContent(d: DecisionData | ProposalData, ctx: MapContext, gov
     supersedes: d.supersedes ?? null,
     evidence: ctx.evidence(["evidence"], d.evidence),
     sources: ctx.sources(["source"], d.source),
+    enforcement: d.enforcement,
   };
 }
 
@@ -201,6 +202,8 @@ export function mapDecision(d: DecisionData, location: SourceLocation, ctx: MapC
     confirmedBy: d.confirmed_by,
     proposedAt: d.proposed_at,
     proposedBy: d.proposed_by,
+    proposedByKind: d.proposed_by_kind,
+    proposalId: d.proposal,
     lock: d.lock,
     references: ctx.references,
     extensions: d.extensions ?? {},
@@ -213,7 +216,9 @@ export function mapProposal(d: ProposalData, location: SourceLocation, ctx: MapC
     kind: "proposal", id: d.id, location, ...content,
     state: d.state,
     proposedBy: d.proposed_by,
+    proposedByKind: d.proposed_by_kind,
     proposedAt: d.proposed_at,
+    basedOn: d.based_on === undefined ? undefined : { truthDigest: d.based_on.truth_digest, refs: d.based_on.refs ?? [] },
     rejectedAt: d.rejected_at,
     rejectedBy: d.rejected_by,
     reason: d.reason,

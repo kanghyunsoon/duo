@@ -31,16 +31,17 @@ CLI(`apps/cli`)는 얇은 진입점이다. 인자 파싱, 대화형 입력, 출�
 
 - TTY가 아니면 거부하고 종료 코드 1을 반환한다. Agent가 비대화형으로 실행하는 것을 막기 위한 장치이며 보안 경계는 아니다([10-security.md](10-security.md)).
 - confirm은 Decision 내용과 supersede 대상을 보여 준 뒤 ID를 다시 입력받는다.
-- 동작은 [ADR-013](adr/ADR-013-decision-lifecycle.md)을 따른다.
+- 동작은 [ADR-013](adr/ADR-013-decision-lifecycle.md)을 따른다. CLI는 입력·확인 UX만 맡고 core `DecisionService`(actor `{ kind: "human", name: <Git user.name> }`)를 호출한다. 검사, ID 할당, lock, supersede, stale 판단은 서비스가 한다.
+- 결과가 `PROPOSAL_STALE`이면 경고를 보여 준다. 확정 뒤에는 다음 인덱싱이 Graph에 반영한다(`indexRequired`).
 
 ```text
-$ duoctl decision confirm P-20260927-k3f9qa
-Proposal P-20260927-k3f9qa  "Refresh token rotation"
+$ duoctl decision confirm P-007
+Proposal P-007  "Refresh token rotation"
   question  refresh_token_policy
   answer    rotate_on_use
   governs   AUTH-03
   proposed  claude-code · 2026-09-27
-Type the proposal ID to confirm: P-20260927-k3f9qa
+Type the proposal ID to confirm: P-007
 confirmed as D-005 · lock sha256:9b2e… · .duo-project/decisions/D-005.yaml
 ```
 

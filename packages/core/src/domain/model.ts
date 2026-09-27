@@ -110,6 +110,7 @@ export interface DecisionContent {
   readonly supersedes: string | null;
   readonly evidence: readonly EvidencePointer[];
   readonly sources: readonly SourceRef[];
+  readonly enforcement?: "warn" | "block" | undefined;
 }
 
 export type DecisionState = "proposed" | "confirmed" | "superseded" | "rejected";
@@ -123,6 +124,9 @@ export interface Decision extends DefinitionBase, DecisionContent {
   readonly confirmedBy?: string | undefined;
   readonly proposedAt?: string | undefined;
   readonly proposedBy?: string | undefined;
+  readonly proposedByKind?: "human" | "agent" | "system" | undefined;
+  /** Proposal this Decision was confirmed from. */
+  readonly proposalId?: string | undefined;
   readonly lock?: { readonly digest: string } | undefined;
 }
 
@@ -132,7 +136,9 @@ export interface Proposal extends DecisionContent {
   readonly id: string;
   readonly state: "proposed" | "rejected";
   readonly proposedBy: string;
+  readonly proposedByKind?: "human" | "agent" | "system" | undefined;
   readonly proposedAt?: string | undefined;
+  readonly basedOn?: { readonly truthDigest: string; readonly refs: readonly { readonly id: string; readonly digest: string }[] } | undefined;
   readonly rejectedAt?: string | undefined;
   readonly rejectedBy?: string | undefined;
   readonly reason?: string | undefined;

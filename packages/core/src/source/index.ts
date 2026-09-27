@@ -1,4 +1,4 @@
-export { parseYaml, type DataPath, type ParsedYaml, type YamlInput } from "./yaml.js";
+export { parseYaml, setYamlTopLevel, stringifyYaml, type DataPath, type ParsedYaml, type YamlInput } from "./yaml.js";
 export {
   parseMarkdown,
   type MarkdownBlock,

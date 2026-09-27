@@ -191,7 +191,7 @@ class Builder {
       if (accepted(r.id, r.location)) this.addNode(definitionRef("requirement", r.id), clean({ title: r.title, status: r.status, milestone: r.milestone ?? undefined, priority: r.priority }), r.location);
     }
     for (const d of truth.decisions) {
-      if (accepted(d.id, d.location)) this.addNode(definitionRef("decision", d.id), clean({ decisionKind: d.decisionKind, title: d.title, state: d.state }), d.location);
+      if (accepted(d.id, d.location)) this.addNode(definitionRef("decision", d.id), clean({ decisionKind: d.decisionKind, title: d.title, state: d.state, enforcement: d.enforcement }), d.location);
     }
     for (const c of truth.constraints) {
       if (accepted(c.id, c.location)) this.addNode(definitionRef("decision", c.id), clean({ decisionKind: "constraint", title: c.statement, state: c.state, enforcement: c.enforcement }), c.location);
