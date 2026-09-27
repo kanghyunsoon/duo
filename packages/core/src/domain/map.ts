@@ -107,7 +107,7 @@ export function mapProjectConfig(d: ProjectConfigData, ctx: MapContext): Project
       model: d.llm?.model ?? null,
       apiKeyEnv: d.llm?.api_key_env ?? "OPENAI_API_KEY",
       baseUrl: d.llm?.base_url ?? null,
-      maxCallsPerReview: d.llm?.max_calls_per_review ?? 3,
+      maxCallsPerReview: d.llm?.max_calls_per_review ?? 1,
       maxInputTokens: d.llm?.max_input_tokens ?? 4000,
       timeoutMs: d.llm?.timeout_ms ?? 30000,
     },

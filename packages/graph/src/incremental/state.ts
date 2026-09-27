@@ -20,8 +20,11 @@ import { readRegenerable, writeRegenerable } from "./files.js";
 
 export const INDEX_STATE_FILE_PATH = `${STATE_DIR_NAME}/generated/index-state.json` as RepoPath;
 export const INDEX_STATE_FORMAT = "duo-index-state";
-/** 2 (T08.1): configs keep the diagnostics of each config file. */
-export const INDEX_STATE_VERSION = 2;
+/**
+ * 2 (T08.1): configs keep the diagnostics of each config file. 3 (T13): the run's persistent
+ * diagnostics are kept, so readers (Review) reuse the Indexer's findings instead of recomputing them.
+ */
+export const INDEX_STATE_VERSION = 3;
 /** Graph metadata key that holds the token of the state the graph was written with. */
 export const INDEX_STATE_TOKEN_KEY = "index_state_token";
 export const GRAPH_REVISION_KEY = "graph_revision";
@@ -60,6 +63,8 @@ export interface IndexState {
   readonly history?: { readonly headOid: string; readonly shallow: boolean; readonly summary: HistorySummary };
   /** Repository state the Project node was built from (T08.1: a branch switch without a new commit is visible). */
   readonly git?: { readonly headOid?: string; readonly branch?: string; readonly detached: boolean };
+  /** Persistent diagnostics of the run that wrote this state, canonical order (T13). */
+  readonly diagnostics: readonly Diagnostic[];
 }
 
 const repoPath = z.string().refine((p) => normalizeRepoPath(p).value === p, "not a RepoPath");
@@ -120,6 +125,7 @@ const indexState = z.strictObject({
   truthScope: hash,
   history: z.strictObject({ headOid: z.string(), shallow: z.boolean(), summary: historySummary }).optional(),
   git: z.strictObject({ headOid: z.string().optional(), branch: z.string().optional(), detached: z.boolean() }).optional(),
+  diagnostics: z.array(storedDiagnostic),
 });
 
 /** Token of a state: sha256 over its canonical content without the token. */

@@ -14,9 +14,11 @@ compileContext(root, { task, budget?, profile? }, { graph, registry?, historyWin
 |---|---|---|
 | task | 자유 텍스트 또는 ID(`"AUTH-03"`, `"GAME-42 refresh token 만료 처리"`, `"D-004"`). 검색 입력일 뿐이며 shell, 경로, SQL에 넣지 않는다 | 필수 |
 | budget | o200k_base token 상한. 1,000~1,000,000 | `context.default_budget_tokens`(6000) |
-| profile | MVP는 `default` 하나. Digest 입력 | `default` |
+| profile | `default`(코딩 task) 또는 `review`(T13, Review의 맥락). 같은 packing 정책이며 Digest 입력 | `default` |
+| explicitSeeds | 호출자가 직접 지정한 Entity(Review의 diff seed: 변경 Symbol·Test·File·Truth 정의). match `diff`인 explicit·필수 seed이고, 있으면 task 텍스트가 비어도 된다. 없으면 기존 결과가 byte 단위로 같다 | 없음 |
 | graph | Project Graph. 읽기만 한다 | 필수 |
 | cache | `.duo-project/cache/`의 Packet cache와 파일별 token 수 cache를 읽고 쓸지 | false |
+| inspection | 호출자가 이미 한 current `inspectIndex` 결과(Review는 한 번 검사하고 두 번 compile). current가 아니면 무시하고 다시 검사 | 없음 |
 | nodeLimit | 후보 상한. Digest 입력 | 200 |
 
 빈 task, 범위 밖 budget, 모르는 profile, frame보다 작은 budget은 `CONTEXT_REQUEST_INVALID`(error, transient)다. 05의 초기 설계에 있던 `include_diff`는 T10에 없다(C85).
@@ -51,6 +53,7 @@ Compiler는 시작할 때 `inspectIndex`(T08.1)를 부르고 current일 때만 G
 | 경로 | `/`가 있는 token이 File Node 경로와 정확히 같음 | 1.0 |
 | Symbol | token이 qualifiedName과 정확히 같은 Symbol 하나 | 1.0 |
 | Symbol 이름 | token이 이름과 같은 Symbol 하나 | 0.9 |
+| diff | `explicitSeeds`의 Entity(Graph에 있을 때). explicit(T13) | 1.0 |
 | 키워드 | Task를 검색어로 나눠(camelCase·snake_case 분해, 소문자, 불용어 제거, 한글은 공백 단위) Requirement 제목·본문, Decision 제목·question·answer, Constraint statement·keywords, Issue 제목·본문, Milestone 제목, Symbol 이름, 파일 경로에 BM25(k1 1.2, b 0.75). 최고값의 30% 이상인 상위 8개를 최고값으로 정규화해 × 0.6 | ≤ 0.6 |
 
 Proposal ID(`P-018`)는 seed가 아니라 그 proposal을 PENDING HUMAN DECISIONS에 넣는 신호다.

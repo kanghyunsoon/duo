@@ -570,7 +570,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M2
 package: director
 requirements: [REQ-REVIEW-001, REQ-REVIEW-002, REQ-REVIEW-003, REQ-REVIEW-004, REQ-EVIDENCE-001, REQ-LLM-001, REQ-DECISION-003]
@@ -580,10 +580,10 @@ depends_on: [TASK-008, TASK-009, TASK-010, TASK-011, TASK-012A]
 
 - **Goal**: 변경을 규칙과 의미 판정으로 검수하고 Verdict를 낸다.
 - **Input**: ADR-007 규칙 표
-- **Output**: 규칙 실행, semantic escalation, 집계, runtime evidence, Review Record, 구조적 Drift, External Source Drift
+- **Output**: `reviewChanges`(freshness → diff → diff seed → review 맥락 → Gap 평가 → 결정적 규칙 → Evidence → 선택적 의미 보조 → 집계), core `Evidence`, director `EvidenceStore`·`EvidenceProvider` 경계, 규칙 10종(ADR-007 구현 표), structured 의미 batch(호출 1회, timeout, cache), Context `explicitSeeds`·profile `review`, index state v3 diagnostics. Review Record 쓰기와 External Source Drift는 C115, C117
 - **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact), [TASK-009](#task-009-decision-생명주기), [TASK-010](#task-010-context-compiler), [TASK-011](#task-011-knowledge-gap), [TASK-012A](#task-012a-llmprovider-계약과-no-op)
-- **Files expected to change**: `packages/director/src/review/**`, `packages/director/src/evidence/**`
-- **Status**: todo
+- **Files expected to change**: `packages/director/src/review/**`, `packages/director/src/evidence/**`, `packages/core/src/evidence.ts`, `packages/director/src/llm/contract/**`(timeout, cache), `packages/director/src/context/**`(explicitSeeds, review profile), `packages/graph/src/incremental/state.ts`(v3 diagnostics), `fixtures/review/app/**`
+- **Status**: done (T13)
 - **검증 대상 Requirement**: [REQ-REVIEW-001](../01-requirements.md#req-review-001-diff-review-파이프라인), [REQ-REVIEW-002](../01-requirements.md#req-review-002-두-수준-verdict-모델), [REQ-REVIEW-003](../01-requirements.md#req-review-003-scope-drift와-spec-conflict-감지), [REQ-REVIEW-004](../01-requirements.md#req-review-004-specdecisionissue와-code-사이의-drift), [REQ-EVIDENCE-001](../01-requirements.md#req-evidence-001-claim-evidence-verdict와-근거-보존), [REQ-LLM-001](../01-requirements.md#req-llm-001-deterministic-first-판단-순서), [REQ-DECISION-003](../01-requirements.md#req-decision-003-decision-lock)
 - **관련 ADR**: [ADR-007](../adr/ADR-007-verdict-model.md), [ADR-008](../adr/ADR-008-deterministic-first.md), [ADR-013](../adr/ADR-013-decision-lifecycle.md)
 

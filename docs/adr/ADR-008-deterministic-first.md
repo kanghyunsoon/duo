@@ -45,8 +45,10 @@ Rule → Static Analysis → Git → Test → Project Graph → Evidence Retriev
 2. Provider가 사용 가능하고 예산이 남았으면, Context Compiler가 해당 Claim 전용의 작은 Packet(관련 Node L2, 상한 `llm.max_input_tokens`, 기본 4000)을 만든다. Repository 원문을 직접 보내지 않는다.
 3. Provider는 JSON 스키마(`alignment`, `reason`, `evidence_ids`)로 답한다. Packet에 없는 ID를 인용하거나 스키마가 맞지 않으면 결과를 버리고 UNKNOWN을 유지한다.
 4. LLM 결과로 만든 Claim의 `basis`는 `llm`이며 blocking이 될 수 없다. LLM이 확정 Constraint와의 충돌을 근거와 함께 제시하면 `ask`로 올린다.
-5. Review 하나당 호출 수는 `llm.max_calls_per_review`(기본 3)로 제한한다. 초과분은 `skipped_checks`에 남긴다.
-6. 결과는 입력 hash 기준으로 `.duo-project/cache/llm/`에 저장해 같은 입력이면 다시 호출하지 않는다(REQ-NFR-005).
+5. Review 하나당 호출 수는 `llm.max_calls_per_review`(기본 1, T13)로 제한한다. 의미 후보 전부를 한 structured batch로 보내고 retry는 없다. 실행하지 않은 판정은 `skipped_checks`에 남는다.
+6. 결과는 `.duo-project/cache/llm/`에 저장해 같은 입력이면 다시 호출하지 않는다(REQ-NFR-005). key는 Provider의 `cacheIdentity()`(provider, model 등 답하는 쪽의 identity), purpose, instructions, input, output spec, maxOutputTokens의 hash이고 identity가 없으면 cache하지 않는다. 검증된 성공 답변만 저장하고 읽을 때 다시 검증한다(T13, C113).
+7. timeout은 `invokeLLM`이 강제한다(`llm.timeout_ms`): 호출자 signal과 합친 signal을 Provider에 넘기고, Provider가 무시해도 wrapper가 `timeout`을 돌려준다. adapter마다 timeout을 따로 두지 않는다.
+8. Review의 의미 판정 입력은 후보 claim과 DUO가 이미 모은 정확한 Evidence 발췌(Truth slice, 변경 코드 slice, hunk)이며 Evidence ID가 붙는다. 저장소 전체를 보내지 않는다(C111). 스키마는 `{ claims: [{ claim_id, alignment, evidence_ids, reason }] }`(strict)이다.
 
 ### Deterministic Finding → 선택적 의미 보조 (T12A)
 

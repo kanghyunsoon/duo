@@ -60,7 +60,8 @@ export interface RelevanceScope {
   readonly taskText: string;
 }
 
-function wildcard(pattern: string): RegExp {
+/** Symbol-name pattern of match.symbols / forbids.symbols: "*" any text, "?" one character. */
+export function wildcard(pattern: string): RegExp {
   let source = "";
   for (const ch of pattern) source += ch === "*" ? ".*" : ch === "?" ? "." : ch.replace(/[\\^$.*+?()[\]{}|/]/gu, "\\$&");
   return new RegExp(`^${source}$`, "u");

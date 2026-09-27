@@ -1,0 +1,6 @@
+{
+  "name": "review-app",
+  "private": true,
+  "type": "module",
+  "dependencies": {}
+}

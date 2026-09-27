@@ -7,6 +7,7 @@
  */
 import { performance } from "node:perf_hooks";
 import { redactSecrets } from "../../context/redact.js";
+import { readCachedResponse, responseCacheKey, writeCachedResponse } from "./cache.js";
 import { countTokens, TOKEN_ESTIMATOR } from "../../tokens/index.js";
 import type { LLMFailureCategory, LLMProvider, LLMProviderStatus, LLMRequest, LLMResponse } from "./types.js";
 
@@ -15,13 +16,22 @@ export interface InvokeOptions {
   readonly validate?: (value: unknown) => string | undefined;
   /** Evidence citation check (ADR-008): cited IDs must all be among the IDs DUO sent. */
   readonly evidence?: { readonly allowed: readonly string[]; readonly cited: (value: unknown) => readonly string[] };
+  /**
+   * Wall-clock limit enforced here, for every adapter (T13): combined with the caller's signal and
+   * passed to the provider; if the provider ignores it, the wrapper still answers "timeout".
+   */
+  readonly timeoutMs?: number;
+  /** Reuse successful answers under .duo-project/cache/llm/ when the provider has a cacheIdentity(). */
+  readonly cache?: { readonly root: string };
 }
 
 export interface LLMInvocation {
   readonly purpose: LLMRequest["purpose"];
   readonly provider: string;
-  /** False when DUO did not call the provider at all (not configured, cancelled before start). */
+  /** False when DUO did not call the provider at all (not configured, cancelled before start, cache hit). */
   readonly called: boolean;
+  /** The answer came from the LLM response cache. */
+  readonly cached: boolean;
   readonly response: LLMResponse;
   /** DUO's own measurement of the text it sent (not provider usage). */
   readonly requestEstimate: { readonly tokens: number; readonly estimator: typeof TOKEN_ESTIMATOR.name };
@@ -52,8 +62,8 @@ export async function invokeLLM(provider: LLMProvider | undefined, request: LLMR
   // A function, not a value: the signal can fire while the provider is running.
   const aborted = (): boolean => request.signal?.aborted === true;
   const requestEstimate = { tokens: countTokens(request.instructions) + countTokens(request.input), estimator: TOKEN_ESTIMATOR.name };
-  const done = (response: LLMResponse, called: boolean): LLMInvocation => ({
-    purpose: request.purpose, provider: provider?.id ?? "none", called, response: sanitize(response), requestEstimate,
+  const done = (response: LLMResponse, called: boolean, cached = false): LLMInvocation => ({
+    purpose: request.purpose, provider: provider?.id ?? "none", called, cached, response: sanitize(response), requestEstimate,
     elapsedMs: Math.round((performance.now() - t0) * 100) / 100,
   });
   if (provider === undefined) return done(failed("not-configured", "no LLM provider is configured"), false);
@@ -62,28 +72,57 @@ export async function invokeLLM(provider: LLMProvider | undefined, request: LLMR
   if (status === "unavailable") return done(failed("unavailable", `LLM provider ${provider.id} is unavailable`, true), false);
   if (aborted()) return done(failed("cancelled", "the request was cancelled before it started"), false);
 
+  const identity = options.cache === undefined ? undefined : provider.cacheIdentity?.();
+  const key = identity === undefined || identity === "" ? undefined : responseCacheKey(identity, request);
+  const check = (raw: unknown): LLMResponse => {
+    if (!isResponse(raw)) return failed("invalid-response", `provider ${provider.id} returned a malformed response`);
+    if (raw.status === "failed") return raw;
+    if (raw.output.mode !== request.output.mode) return failed("invalid-response", `expected ${request.output.mode} output, got ${raw.output.mode}`);
+    if (raw.output.mode === "structured") {
+      const problem = options.validate?.(raw.output.value);
+      if (problem !== undefined) return failed("invalid-response", `structured output rejected: ${problem}`);
+      if (options.evidence !== undefined) {
+        const allowed = new Set(options.evidence.allowed);
+        const unknown = options.evidence.cited(raw.output.value).filter((id) => !allowed.has(id));
+        if (unknown.length > 0) return failed("invalid-response", `cites evidence that was not provided: ${[...new Set(unknown)].sort().join(", ")}`);
+      }
+    }
+    return raw;
+  };
+  if (key !== undefined && options.cache !== undefined) {
+    const hit = readCachedResponse(options.cache.root, key);
+    // A cached answer passes the same checks; one that no longer does is a miss.
+    if (hit !== undefined && check(hit).status === "success") return done(hit, false, true);
+  }
+
+  const timeout = options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs);
+  const signals = [request.signal, timeout].filter((s): s is AbortSignal => s !== undefined);
+  const signal = signals.length === 0 ? undefined : signals.length === 1 ? signals[0] : AbortSignal.any(signals);
+  const stopped = (): LLMResponse => timeout?.aborted === true && request.signal?.aborted !== true
+    ? failed("timeout", `provider ${provider.id} did not answer within ${options.timeoutMs} ms`, true)
+    : failed("cancelled", "the request was cancelled");
   let raw: unknown;
   try {
-    raw = await provider.invoke(request);
+    const call = provider.invoke(signal === undefined ? request : { ...request, signal });
+    raw = signal === undefined ? await call : await Promise.race([
+      call,
+      new Promise<typeof ABORTED>((resolve) => {
+        if (signal.aborted) resolve(ABORTED);
+        else signal.addEventListener("abort", () => resolve(ABORTED), { once: true });
+      }),
+    ]);
   } catch (error) {
-    if (aborted()) return done(failed("cancelled", "the request was cancelled"), true);
+    if (signal?.aborted === true) return done(stopped(), true);
     return done(failed("provider-error", `provider ${provider.id} threw: ${error instanceof Error ? error.message : String(error)}`), true);
   }
-  if (aborted()) return done(failed("cancelled", "the request was cancelled"), true);
-  if (!isResponse(raw)) return done(failed("invalid-response", `provider ${provider.id} returned a malformed response`), true);
-  if (raw.status === "failed") return done(raw, true);
-  if (raw.output.mode !== request.output.mode) return done(failed("invalid-response", `expected ${request.output.mode} output, got ${raw.output.mode}`), true);
-  if (raw.output.mode === "structured") {
-    const problem = options.validate?.(raw.output.value);
-    if (problem !== undefined) return done(failed("invalid-response", `structured output rejected: ${problem}`), true);
-    if (options.evidence !== undefined) {
-      const allowed = new Set(options.evidence.allowed);
-      const unknown = options.evidence.cited(raw.output.value).filter((id) => !allowed.has(id));
-      if (unknown.length > 0) return done(failed("invalid-response", `cites evidence that was not provided: ${[...new Set(unknown)].sort().join(", ")}`), true);
-    }
-  }
-  return done(raw, true);
+  if (raw === ABORTED || signal?.aborted === true) return done(stopped(), true);
+  const response = check(raw);
+  // Only successes are cached; a failure is never replayed.
+  if (key !== undefined && options.cache !== undefined && response.status === "success") writeCachedResponse(options.cache.root, key, response);
+  return done(response, true);
 }
+
+const ABORTED: unique symbol = Symbol("aborted");
 
 function sanitize(response: LLMResponse): LLMResponse {
   return response.status === "failed" ? { ...response, failure: { ...response.failure, message: redactSecrets(response.failure.message).text } } : response;
@@ -102,6 +141,7 @@ export interface LLMUsageRecord {
   readonly outputTokens?: number;
   readonly cachedInputTokens?: number;
   readonly providerLatencyMs?: number;
+  readonly cached: boolean;
   /** "provider" when the provider reported usage, "none" otherwise. Never estimated. */
   readonly tokenSource: "provider" | "none";
   readonly requestEstimate: LLMInvocation["requestEstimate"];
@@ -114,7 +154,7 @@ export function llmUsageRecord(invocation: LLMInvocation): LLMUsageRecord {
   const reported = u !== undefined && (u.inputTokens !== undefined || u.outputTokens !== undefined || u.cachedInputTokens !== undefined);
   return {
     kind: "llm", purpose: invocation.purpose, provider: u?.provider ?? invocation.provider, ...(u?.model === undefined ? {} : { model: u.model }),
-    called: invocation.called, status: r.status, ...(r.status === "failed" ? { category: r.failure.category } : {}),
+    called: invocation.called, cached: invocation.cached, status: r.status, ...(r.status === "failed" ? { category: r.failure.category } : {}),
     ...(u?.inputTokens === undefined ? {} : { inputTokens: u.inputTokens }), ...(u?.outputTokens === undefined ? {} : { outputTokens: u.outputTokens }),
     ...(u?.cachedInputTokens === undefined ? {} : { cachedInputTokens: u.cachedInputTokens }), ...(u?.latencyMs === undefined ? {} : { providerLatencyMs: u.latencyMs }),
     tokenSource: reported ? "provider" : "none", requestEstimate: invocation.requestEstimate, elapsedMs: invocation.elapsedMs,

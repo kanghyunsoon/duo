@@ -4,12 +4,15 @@
  * rank is an order (04). Nothing time-dependent is in a Packet, so the same input gives the same
  * bytes (REQ-NFR-005).
  */
-import type { Diagnostic, SourceLocation } from "@duo-director/core";
+import type { Diagnostic, EntityRef, SourceLocation } from "@duo-director/core";
 import type { GraphEdgeType } from "@duo-director/graph";
 import type { TextMeasure, TokenEstimatorName } from "../tokens/index.js";
 
-/** MVP has one profile. It is part of the request and of the Packet Dependency Digest. */
-export type ContextProfile = "default";
+/**
+ * default: a coding task. review (T13): the Review's context, seeded with the entities a diff
+ * touches (explicitSeeds). Same packing policy; the profile is part of the Packet Dependency Digest.
+ */
+export type ContextProfile = "default" | "review";
 
 export interface ContextRequest {
   /** Free text or a known ID ("AUTH-03", "GAME-42 refresh token", "D-004"). Search input only: never a shell, path or SQL fragment. */
@@ -17,12 +20,17 @@ export interface ContextRequest {
   /** Token budget (o200k_base). Default: project.yaml context.default_budget_tokens (6000). */
   readonly budget?: number;
   readonly profile?: ContextProfile;
+  /**
+   * Entities the caller names directly (Review: changed Symbols, Tests, Files, Truth definitions).
+   * They are explicit, mandatory seeds (match "diff"); the task text may then be empty.
+   */
+  readonly explicitSeeds?: readonly EntityRef[];
 }
 
 export type ContextStatus = "ready" | "index-required" | "ambiguous" | "insufficient-context";
 
 /** How a seed was found (05 Seed 해석). */
-export type SeedMatch = "id" | "path" | "symbol" | "symbol-name" | "keyword";
+export type SeedMatch = "id" | "path" | "symbol" | "symbol-name" | "keyword" | "diff";
 
 /**
  * T11.1: explicit = the task names the entity exactly (ID, Issue key, RepoPath, qualified or unique
@@ -32,7 +40,7 @@ export type SeedMatch = "id" | "path" | "symbol" | "symbol-name" | "keyword";
 export type SeedProvenance = "explicit" | "retrieved";
 
 export const SEED_PROVENANCE: Readonly<Record<SeedMatch, SeedProvenance>> = {
-  id: "explicit", path: "explicit", symbol: "explicit", "symbol-name": "explicit", keyword: "retrieved",
+  id: "explicit", path: "explicit", symbol: "explicit", "symbol-name": "explicit", keyword: "retrieved", diff: "explicit",
 };
 
 export interface ContextSeed {

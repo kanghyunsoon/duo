@@ -8,7 +8,7 @@
  * a shell argument or SQL.
  */
 import {
-  compareUtf8, definitionRef, fileRef, isDefinitionId, normalizeRepoPath, PROPOSAL_ID_PATTERN, type DefinitionType, type EntityType, type ProjectTruth,
+  compareUtf8, definitionRef, fileRef, isDefinitionId, normalizeRepoPath, PROPOSAL_ID_PATTERN, type DefinitionType, type EntityRef, type EntityType, type ProjectTruth,
 } from "@duo-director/core";
 import type { GraphNode, GraphReader } from "@duo-director/graph";
 import { searchTerms } from "../relevance/terms.js";
@@ -106,7 +106,7 @@ function option(node: GraphNode): SeedOption {
   return { id: node.id, ref: refOfNode(node), kind: node.type, ...(typeof title === "string" ? { title } : {}) };
 }
 
-export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphReader): SeedResult {
+export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphReader, explicit: readonly EntityRef[] = []): SeedResult {
   const found = new Map<string, WeightedSeed>();
   const add = (node: GraphNode, match: SeedMatch, term: string, strength: number) => {
     const prev = found.get(node.id);
@@ -116,6 +116,11 @@ export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphRead
   const proposalIds = new Set<string>();
   const ambiguities: SeedAmbiguity[] = [];
   let exact = 0;
+  // Caller-named entities (Review diff seeds) come first and are exact.
+  for (const ref of explicit) {
+    const node = store.getNode(ref);
+    if (node !== undefined) { add(node, "diff", refOfNode(node), SEED_STRENGTH.diff); exact++; }
+  }
 
   const tokens = rawTokens(task);
   const idTokens = new Set<string>();

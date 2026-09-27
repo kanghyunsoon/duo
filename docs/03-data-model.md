@@ -282,7 +282,7 @@ collectGraphFacts(root)      ProjectTruth + TraceModel, Scan/fingerprint, Source
 | call resolution | analysis 재사용 AND module 결과 같음 AND export dependency 파일의 analysis·module 결과 변화 없음 AND `CALL_RESOLUTION_VERSION` 같음 | `files[].resolution.calls`, `exportDependencies` |
 | Git history window | HEAD OID와 shallow 여부 같음 | `history.summary` |
 
-- **state**: `generated/index-state.json`(`duo-index-state` version 2. 2는 T08.1: config diagnostics와 `git` {headOid, branch, detached}). `token`, `graphSchemaVersion`, `moduleResolutionVersion`, `callResolutionVersion`, `historyWindow`, `files[]`(fingerprint 필드, `analysis` {analyzer, version, status ok·failed}, `resolution` {modules, calls, exportDependencies, configFiles}, scope digest), `configs`(resolver가 읽은 config 파일 → contentHash, 가장 가까운 config에는 그 diagnostics), `truthScope`, `history` {headOid, shallow, summary}. 원문, SourceAnalysis, commit message는 넣지 않는다. zod strict schema로 읽고 `token`(내용의 sha256)이 맞는지 확인한다.
+- **state**: `generated/index-state.json`(`duo-index-state` version 3. 2는 T08.1: config diagnostics와 `git` {headOid, branch, detached}. 3은 T13: 그 실행의 persistent diagnostics `diagnostics`, Review가 `DECLARED_SYMBOL_UNRESOLVED` 등을 다시 계산하지 않고 읽는다, C106). `token`, `graphSchemaVersion`, `moduleResolutionVersion`, `callResolutionVersion`, `historyWindow`, `files[]`(fingerprint 필드, `analysis` {analyzer, version, status ok·failed}, `resolution` {modules, calls, exportDependencies, configFiles}, scope digest), `configs`(resolver가 읽은 config 파일 → contentHash, 가장 가까운 config에는 그 diagnostics), `truthScope`, `history` {headOid, shallow, summary}. 원문, SourceAnalysis, commit message는 넣지 않는다. zod strict schema로 읽고 `token`(내용의 sha256)이 맞는지 확인한다.
 - **analysis cache**: key는 sha256(path, contentHash, analyzer, analyzerVersion)이다. 항목은 불변이고 읽을 때 key 값을 다시 확인하며, 없거나 다르면 cache miss(analysis `missing`)로 다시 parse한다. syntax 사실과 그 diagnostics만 있고 원문은 없다. 성공한 실행 뒤 현재 파일이 쓰지 않는 항목을 지운다. 실패한 analysis는 cache하지 않고 매 실행 다시 시도한다(C58).
 - **Scope와 diff**: Node와 Edge는 scope 하나에 속한다. File·Symbol·Test는 그 파일 scope(`file:<path>`)이고, Edge는 source 쪽 code Node의 파일, 없으면 target 쪽, 둘 다 아니면 Project Truth scope다. state는 scope마다 canonical 행의 sha256을 둔다. digest가 바뀐 scope만 DB에서 읽어(`listNodes({ ownerFile })`, 인접 Edge) 행 단위로 비교하고 추가·갱신·삭제를 계산한다(`diffScopes`). 바뀌지 않은 scope는 읽지도 쓰지도 않는다.
 - **Atomicity**: Graph 변경과 `meta.index_state_token`(새 state의 token)을 한 transaction에 쓰고 commit 뒤 state 파일을 임시 파일 + rename으로 바꾼다. transaction 안에서 이전 token을 다시 확인해 다른 writer의 변경 위에 쓰지 않는다. Graph가 바뀌면 `meta.graph_revision`을 1 올린다. 그다음 `fingerprints.json`을 쓴다. 변경이 없으면 아무것도 쓰지 않는다(C59).
@@ -419,7 +419,7 @@ llm:                          # ADR-012
   model: null
   api_key_env: OPENAI_API_KEY
   base_url: null              # null이면 OpenAI 기본 endpoint
-  max_calls_per_review: 3
+  max_calls_per_review: 1
   max_input_tokens: 4000
   timeout_ms: 30000
 extensions: {}
@@ -517,27 +517,36 @@ based_on:                  # stale 탐지용 provenance
 
 ## Review 결과 (runtime/reviews/, reviews/)
 
-두 위치의 스키마는 같다. `runtime/reviews/`에는 모든 실행 결과가, `reviews/`에는 Human이 `duoctl review --record`로 보존한 Review만 저장된다([ADR-006](adr/ADR-006-duo-layout-git-policy.md)). Record는 원본을 복사하지 않고 Evidence Pointer만 담는다.
+TASK-013. `reviewChanges(root, request, options)`의 결과는 `ReviewResult`(`duo.review/1`)이고, 실행 시간(`ReviewPerformance`)은 결과 밖에 따로 둔다. LLM이 꺼져 있으면 같은 Project Truth, Graph, Git 상태, diff, 요청에 대해 결과가 byte 단위로 같다. 저장은 호출자가 한다: `runtime/reviews/`에는 모든 실행, `reviews/`에는 Human이 `duoctl review --record`로 보존한 Review만(TASK-015, C115). Record는 원본을 복사하지 않고 Evidence Pointer만 담는다([ADR-006](adr/ADR-006-duo-layout-git-policy.md)).
 
-```json
-{
-  "id": "R-20260927-153012-91aca1",
-  "base": "HEAD", "base_sha": "72d066d", "head": "WORKTREE",
-  "verdict": "BLOCK",
-  "claims": [{
-    "id": "C1", "rule": "R-CONSTRAINT",
-    "claim": "OAuth implementation is outside the current MVP.",
-    "alignment": "CONFLICT", "blocking": true, "ask": false, "basis": "static",
-    "evidence": [
-      {"kind": "constraint", "id": "CON-001"},
-      {"kind": "symbol", "path": "src/auth/GoogleOAuthService.ts", "symbol": "GoogleOAuthService", "lines": [1, 42], "commit": "WORKTREE", "content_hash": "sha256:7d9e…"},
-      {"kind": "diff", "path": "src/auth/GoogleOAuthService.ts", "change": "added"}
-    ]
-  }],
-  "skipped_checks": [{"rule": "R-INTENT", "reason": "llm_unavailable"}],
-  "metrics": {"changed_files": 2, "changed_symbols": 3, "llm_calls": 0}
+```ts
+ReviewRequest { task?, diff: { from, to, files? }, budget?, includeSemanticAssist?, testResults? }   // endpoint 기본값 없음(caller가 정함)
+ReviewResult {
+  format: "duo.review/1"; status: "ready" | "index-required"; freshness
+  diff?: { identity, from, to, files: ChangedFile[] }          // identity: endpoint(HEAD는 commit), 경로별 kind·blob·hunk hash
+  seeds: DiffSeed[]                                            // hunk-overlap | file-changed | truth-changed
+  verdict?: "PASS" | "WARN" | "BLOCK" | "ASK"; verdictBasis: { blocking, ask, warn }
+  claims: ReviewClaim[]; evidence: Evidence[]                  // claim은 evidenceIds로 evidence를 가리킴(중복 없음, ID 순)
+  gaps?: KnowledgeGapAssessment; context?: { review?, task?, profile: "review", seeds }
+  limitations; semanticAssist; metrics; diagnostics
 }
+ReviewClaim { id, rule, subject, expected, observed, alignment, evidenceIds(≥1), basis[], reason, enforced, blockEligible, drift, semanticCandidate }
 ```
+
+- Claim ID는 `claim-` + hash(rule, subject, 구분 key, diff identity)이며 실행 시각이나 발견 순서를 쓰지 않는다.
+- PASS는 "DUO가 현재 Evidence 범위에서 방향 위반을 찾지 못했다"는 뜻이지 버그가 없다는 뜻이 아니다.
+
+### Evidence
+
+core `Evidence { id, basis, kind, entity?, source?, contentHash?, summary?, pointer, metadata? }`(C44). `basis`는 `project-truth`, `repository`, `git`, `test`, `llm`이다. ID는 `ev-` + hash(basis, kind, key)이고 key는 내용 기반이다: Truth는 정의 ID + 정확한 slice hash, repository는 Node ID + slice hash, Git hunk는 경로 + 이전 경로 + hunk 줄 hash, test는 command + test + 상태. 줄 번호만으로 identity를 만들지 않는다.
+
+| basis | 내용 | pointer |
+|---|---|---|
+| project-truth | Requirement·Decision·Constraint의 정확한 정의 slice(T09.1). diff 이전 쪽 정의는 `metadata.side` | kind, id, path, lines, content_hash |
+| repository | 변경 후 Symbol·Test slice, File(내용은 참조만) | kind, path, symbol, lines, commit, content_hash |
+| git | hunk 하나(전체 diff 문자열이 아님), 또는 hunk 없는 변경 기록(삭제, binary, rename: oldPath, similarity, old/new blob) | kind diff, path, lines, change, commit |
+| test | 호출자가 준 테스트 실행 결과. Test Node의 존재와 실행 성공은 다른 사실이다 | kind test, path, symbol(test 이름) |
+| llm | Provider 답변(`semanticAssist.evidence`에만) | kind llm |
 
 EvidencePointer 필드: `kind`(requirement, decision, constraint, issue, milestone, file, symbol, test, commit, diff, document, review, llm), `id`, `path`, `symbol`, `lines`, `commit`, `content_hash`, `change`.
 
@@ -550,6 +559,7 @@ EvidencePointer 필드: `kind`(requirement, decision, constraint, issue, milesto
 | `generated/inferred.json` | 구현 상태 추론 | TASK-014 |
 | `cache/analysis/*.json` | SourceAnalysis cache(content-addressed) | TASK-008 |
 | `cache/packets/<digest>.json` | Context Packet cache. key는 Packet Dependency Digest([05](05-context-compiler.md#packet-dependency-digest와-cache)) | TASK-010 |
+| `cache/llm/<key>.json` | 검증된 성공 LLM 답변. key = hash(provider cacheIdentity, purpose, instructions, input, output spec, maxOutputTokens). identity가 없으면 쓰지 않음(C113) | TASK-013 |
 | `cache/token-counts.json` | 파일 content hash → o200k_base token 수와 code point 수. tokenizer identity가 다르면 버림 | TASK-010 |
 | `runtime/metrics.jsonl` | Context, Review, LLM 지표([09](09-token-strategy.md#지표)). Compiler는 값을 돌려주고 기록은 호출자가 한다(C83) | TASK-015, TASK-016 |
 

@@ -12,7 +12,7 @@
 import { performance } from "node:perf_hooks";
 import type { AnalyzerRegistry } from "@duo-director/analyzer";
 import { canonicalDiagnostics, createDiagnostic, failure, loadProjectTruth, success, type Diagnostic, type ParseResult } from "@duo-director/core";
-import { inspectIndex, type GraphReader, type IndexedGraph } from "@duo-director/graph";
+import { inspectIndex, type GraphReader, type IndexedGraph, type IndexInspection } from "@duo-director/graph";
 import { redactSecrets } from "./redact.js";
 import { TOKEN_ESTIMATOR, truncateToTokens } from "../tokens/index.js";
 import { readCachedPacket, writeCachedPacket } from "./cache.js";
@@ -25,7 +25,7 @@ import { packContext } from "./pack.js";
 import { DEFAULT_LIMITS, MAX_BUDGET, MIN_BUDGET, TASK_TOKEN_LIMIT } from "./policy.js";
 import { SourceReader } from "./retrieve.js";
 import { resolveSeeds } from "./seeds.js";
-import type { ContextMetrics, ContextPacket, ContextPerformance, ContextRequest, ContextResult, KnowledgeSignal } from "./types.js";
+import type { ContextMetrics, ContextPacket, ContextPerformance, ContextProfile, ContextRequest, ContextResult, KnowledgeSignal } from "./types.js";
 
 export interface CompileContextOptions {
   /** The project graph, only read. */
@@ -37,19 +37,25 @@ export interface CompileContextOptions {
   readonly cache?: boolean;
   /** Candidate limit (default 200). Part of the Packet Dependency Digest. */
   readonly nodeLimit?: number;
+  /**
+   * A read-only inspection the caller already made for this repository state (Review inspects
+   * once and compiles twice). Only a "current" inspection is accepted; otherwise it is ignored.
+   */
+  readonly inspection?: IndexInspection;
 }
 
 const MAX_TASK_CHARS = 20_000;
 
-function validate(request: ContextRequest, defaultBudget: number): ParseResult<{ task: string; budget: number; profile: "default" }> {
+function validate(request: ContextRequest, defaultBudget: number): ParseResult<{ task: string; budget: number; profile: ContextProfile }> {
   const task = request.task.trim();
   const budget = request.budget ?? defaultBudget;
-  const bad = (m: string) => failure<{ task: string; budget: number; profile: "default" }>([createDiagnostic("CONTEXT_REQUEST_INVALID", m)]);
-  if (task.length === 0) return bad("task is empty");
+  const bad = (m: string) => failure<{ task: string; budget: number; profile: ContextProfile }>([createDiagnostic("CONTEXT_REQUEST_INVALID", m)]);
+  if (task.length === 0 && (request.explicitSeeds ?? []).length === 0) return bad("task is empty");
   if (task.length > MAX_TASK_CHARS) return bad(`task is longer than ${MAX_TASK_CHARS} characters`);
   if (!Number.isInteger(budget) || budget < MIN_BUDGET || budget > MAX_BUDGET) return bad(`budget must be an integer between ${MIN_BUDGET} and ${MAX_BUDGET} (${TOKEN_ESTIMATOR.name} tokens)`);
-  if ((request.profile ?? "default") !== "default") return bad(`unknown profile "${String(request.profile)}"`);
-  return success({ task, budget, profile: "default" });
+  const profile = request.profile ?? "default";
+  if (profile !== "default" && profile !== "review") return bad(`unknown profile "${String(request.profile)}"`);
+  return success({ task, budget, profile });
 }
 
 export async function compileContext(root: string, request: ContextRequest, options: CompileContextOptions): Promise<ParseResult<ContextResult>> {
@@ -65,8 +71,10 @@ export async function compileContext(root: string, request: ContextRequest, opti
 
   // 1. Freshness: read-only; a graph that is not current is never used silently.
   let t = performance.now();
-  const inspected = await inspectIndex(root, { graph: options.graph, ...(options.registry === undefined ? {} : { registry: options.registry }),
-    ...(options.historyWindow === undefined ? {} : { historyWindow: options.historyWindow }) });
+  const inspected = options.inspection?.status === "current" ? success(options.inspection) : await inspectIndex(root, {
+    graph: options.graph, ...(options.registry === undefined ? {} : { registry: options.registry }),
+    ...(options.historyWindow === undefined ? {} : { historyWindow: options.historyWindow }),
+  });
   time.freshnessMs = performance.now() - t;
   if (inspected.value === undefined) return failure(inspected.diagnostics);
   const freshness = { status: inspected.value.status, fullRebuildRequired: inspected.value.status === "incompatible" || inspected.value.status === "missing" };
@@ -84,7 +92,7 @@ export async function compileContext(root: string, request: ContextRequest, opti
 
   // 2. Seeds.
   t = performance.now();
-  const seeds = resolveSeeds(valid.value.task, truth, options.graph);
+  const seeds = resolveSeeds(valid.value.task, truth, options.graph, request.explicitSeeds ?? []);
   time.seedMs = performance.now() - t;
   const resolution = { seeds: seeds.seeds, ambiguities: seeds.ambiguities, unresolvedIds: seeds.unresolvedIds };
   const idSignals: KnowledgeSignal[] = seeds.unresolvedIds.length > 0 ? [{ kind: "unresolved-id", ids: seeds.unresolvedIds }] : [];

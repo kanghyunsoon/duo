@@ -70,7 +70,7 @@ llm:
   model: null                    # 사용자가 지정, 기본값 없음
   api_key_env: OPENAI_API_KEY    # 키는 환경 변수에서만 읽는다
   base_url: null                 # null이면 OpenAI 기본 endpoint
-  max_calls_per_review: 3
+  max_calls_per_review: 1
   max_input_tokens: 4000
   timeout_ms: 30000
 ```
@@ -93,6 +93,7 @@ llm:
 - **보조 구조**(`assistDeterministic`): 결정적 결과 → 선택적 의미 보조 → 추가 해석. 결정적 결과는 Provider 결과와 관계없이 그대로 돌려준다.
 - **패키지 경계**: 계약은 director 소유다. adapter는 `packages/integration/src/llm/`에서 director의 `LLMProvider`를 구현한다(integration → director). vendor SDK(openai, @anthropic-ai/sdk, @google/genai 등)는 그 디렉터리 밖에서 import할 수 없다(lint, `scripts/boundaries.json` llmVendorSdk). T12A는 외부 dependency를 추가하지 않았다.
 - 하지 않은 것: 실제 API 호출, API key 읽기, 의미 판정, retry·backoff, model routing, Provider registry·fallback chain.
+- **T13 추가**: 선택 메서드 `cacheIdentity?(): string | undefined`(secret 없음, 없으면 cache 안 함)와 `invokeLLM` 옵션 `timeoutMs`(wrapper가 강제, `AbortSignal.any`로 호출자 signal과 결합), `cache: { root }`(`.duo-project/cache/llm/`, 성공만, 읽을 때 재검증). usage 기록에 `cached`가 붙는다. Packet cache(`cache/packets/`)와 섞지 않는다.
 
 ## 결과
 

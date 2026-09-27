@@ -1,8 +1,10 @@
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assistDeterministic, blockEligible, createNoopLLMProvider, invokeLLM, llmProviderState, llmUsageRecord,
-  type LLMProvider, type LLMRequest, type LLMResponse,
+  LLM_CACHE_DIR, type LLMProvider, type LLMRequest, type LLMResponse,
 } from "./index.js";
 
 const TEXT: LLMRequest = { purpose: "review-semantic-check", instructions: "Answer briefly.", input: "Packet text", output: { mode: "text" } };
@@ -139,9 +141,57 @@ describe("LLMProvider contract and the no-op provider (TASK-012A)", () => {
     for (const name of fs.readdirSync(dir)) {
       const source = fs.readFileSync(new URL(name, dir), "utf8");
       const imports = [...source.matchAll(/from "([^"]+)"/gu)].map((m) => m[1] ?? "");
-      expect(imports.filter((i) => !i.startsWith(".") && !i.startsWith("node:"))).toEqual([]);
+      expect(imports.filter((i) => !i.startsWith(".") && !i.startsWith("node:") && !i.startsWith("@duo-director/"))).toEqual([]);
       expect(source).not.toMatch(/\b(?:messages|role)\??\s*:/u);
       expect(source).not.toMatch(/openai|anthropic|chat\.completions/iu);
+    }
+  });
+
+  it("timeout is enforced by the wrapper even when the provider ignores the signal", async () => {
+    const hang = fake(() => new Promise(() => {}));
+    const inv = await invokeLLM(hang, TEXT, { timeoutMs: 30 });
+    expect(inv).toMatchObject({ called: true, response: { status: "failed", failure: { category: "timeout", retryable: true } } });
+    // A provider that honours the combined signal sees it abort.
+    let seen: AbortSignal | undefined;
+    const polite = fake(() => new Promise(() => {}));
+    polite.invoke = (r: LLMRequest) => { seen = r.signal; return new Promise(() => {}); };
+    await invokeLLM(polite, TEXT, { timeoutMs: 20 });
+    expect(seen?.aborted).toBe(true);
+    // The caller's own cancellation is "cancelled", not "timeout".
+    const caller = new AbortController();
+    const slow = fake(() => new Promise(() => { setTimeout(() => caller.abort(), 5); }));
+    expect((await invokeLLM(slow, { ...TEXT, signal: caller.signal }, { timeoutMs: 5000 })).response).toMatchObject({ failure: { category: "cancelled" } });
+    expect((await invokeLLM(createNoopLLMProvider(), TEXT, { timeoutMs: 1 })).response).toMatchObject({ failure: { category: "not-configured" } });
+  });
+
+  it("response cache: only with a provider identity; hit on the same request, miss on any input or identity change; failures and corrupt entries are not replayed", async () => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-llm-cache-")));
+    try {
+      const cache = { root };
+      const withId = (id: string | undefined, answer: LLMResponse | (() => Promise<unknown>)) => Object.assign(fake(answer), { cacheIdentity: () => id });
+      const a = withId("fake:model-1", ok());
+      expect((await invokeLLM(a, TEXT, { cache })).cached).toBe(false);
+      const hit = await invokeLLM(a, TEXT, { cache });
+      expect(hit).toMatchObject({ cached: true, called: false, response: ok() });
+      expect(a.calls).toBe(1);
+      expect(llmUsageRecord(hit)).toMatchObject({ cached: true, called: false });
+      expect((await invokeLLM(a, { ...TEXT, input: "Packet text, changed diff slice" }, { cache })).cached).toBe(false);
+      expect((await invokeLLM(a, { ...TEXT, instructions: "Answer briefly. Requirement v2." }, { cache })).cached).toBe(false);
+      expect((await invokeLLM(withId("fake:model-2", ok()), TEXT, { cache })).cached).toBe(false);
+      const noId = withId(undefined, ok());
+      await invokeLLM(noId, TEXT, { cache });
+      await invokeLLM(noId, TEXT, { cache });
+      expect(noId.calls).toBe(2);
+      const failing = withId("fake:failing", () => Promise.reject(new Error("boom")));
+      await invokeLLM(failing, TEXT, { cache });
+      await invokeLLM(failing, TEXT, { cache });
+      expect(failing.calls).toBe(2);
+      for (const f of fs.readdirSync(path.join(root, LLM_CACHE_DIR))) fs.writeFileSync(path.join(root, LLM_CACHE_DIR, f), "{ broken");
+      const again = withId("fake:model-1", ok());
+      expect((await invokeLLM(again, TEXT, { cache })).cached).toBe(false);
+      expect(again.calls).toBe(1);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
     }
   });
 });

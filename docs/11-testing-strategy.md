@@ -15,6 +15,7 @@
 |---|---|---|
 | `fixtures/auth-app/` | 작은 TS/JS 프로젝트(AuthService, JwtProvider, 테스트, .duo-project 포함) | 인덱싱, Graph, Context, Review |
 | `fixtures/auth-app/history.ts` | 임시 디렉터리에 Git 이력을 재현(작성자, 시각 고정). 저장소 안에 중첩 .git을 둘 수 없기 때문 | Git, CHANGED_WITH, Decision Lock |
+| `fixtures/review/app` | Review 시나리오(T13): 정렬, forbids 위반, drift, 미결정 gap, 의미 모호, Decision 직접 수정, 테스트 결과, declared reference, 삭제·rename(C115) | Review |
 | `fixtures/auth-app/changes/*.patch` | 변경 세트 7종: OAuth 추가(Constraint 위반), D-004 수정(Lock 위반), 테스트 없는 변경, 정상 변경, 관련 Gap이 있는 변경, Requirement와 연결되지 않은 추가(R-SCOPE), README 변경(External Source Drift) | Review |
 | self(이 저장소 docs/를 임시 `.duo-project/`로 복사) | REQ/ADR/TASK/Milestone 정의 | 추적성 파싱, Graph 경로, E2E trace |
 | 가짜 Provider, 가짜 Responses API 서버 | 계약 수준 가짜 Provider(TASK-012A)와 OpenAI Responses API 형식으로 응답하는 로컬 HTTP 서버(정상, 스키마 위반, 범위 밖 ID 인용, 타임아웃, TASK-012B) | LLMProvider, escalation |

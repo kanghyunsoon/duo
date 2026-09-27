@@ -4,6 +4,7 @@
  */
 export * from "./constants.js";
 export * from "./diagnostics.js";
+export * from "./evidence.js";
 export * from "./ids.js";
 export * from "./location.js";
 export { readSourceFile, readSourceSlice } from "./source-file.js";

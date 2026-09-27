@@ -1,0 +1,16 @@
+id: D-010
+title: Reports read the replica
+kind: decision
+state: confirmed
+question: report_source
+answer: usage reports query the read replica
+owner: human
+enforcement: warn
+governs:
+  requirements: [RPT-01]
+supersedes: null
+superseded_by: null
+confirmed_at: "2026-09-20T00:00:00Z"
+confirmed_by: tester
+lock:
+  digest: "sha256:7637237a08ad3a975df62eedff42cc1d64f27a25aec521cc482f06af33064524"

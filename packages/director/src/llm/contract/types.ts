@@ -71,4 +71,9 @@ export interface LLMProvider {
   readonly id: string;
   status(): LLMProviderStatus;
   invoke(request: LLMRequest): Promise<LLMResponse>;
+  /**
+   * Optional stable identity of what answers (provider, model, endpoint, relevant settings) for
+   * response caching (T13). Undefined, or absent, means: do not cache. Never contains a secret.
+   */
+  cacheIdentity?(): string | undefined;
 }

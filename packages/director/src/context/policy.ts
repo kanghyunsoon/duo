@@ -23,7 +23,7 @@ export const EDGE_WEIGHTS: Readonly<Record<Exclude<GraphEdgeType, "SUPERSEDES">,
 };
 
 /** Seed strengths (05). Keyword seeds are normalized to the best keyword score, then scaled. */
-export const SEED_STRENGTH = { id: 1.0, path: 1.0, symbol: 1.0, "symbol-name": 0.9, keyword: 0.6 } as const;
+export const SEED_STRENGTH = { id: 1.0, path: 1.0, symbol: 1.0, "symbol-name": 0.9, keyword: 0.6, diff: 1.0 } as const;
 
 export const DEFAULT_LIMITS = {
   /** Upper bound; project.yaml context.max_depth (1–3, default 2) replaces it. */

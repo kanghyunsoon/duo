@@ -33,7 +33,7 @@ flowchart TD
 | Interface | 위치 | MVP 구현 | 향후 |
 |---|---|---|---|
 | `LanguageAnalyzer` | analyzer | TypeScriptAnalyzer, JavaScriptAnalyzer | PythonAnalyzer |
-| `EvidenceProvider` | core(인터페이스, TASK-013에서 정의, C44) | `GitProvider`(analyzer, TASK-006 provenance primitives) | Jira, GitHub Issues(integration) |
+| `EvidenceProvider` | Evidence 데이터 계약은 core(`Evidence`, `EvidenceBasis`), 수집 조정과 외부 provider 경계는 director(`evidence/`, T13, C44) | 내장 source: Project Truth, repository(Graph), Git(`GitProvider`), 호출자 테스트 결과, 선택 LLM | Jira, GitHub Issues(integration) |
 | `LLMProvider` | director(계약, T12A). adapter는 integration(`packages/integration/src/llm/`) → director 방향. director는 vendor SDK를 import하지 않음(lint) | Noop provider(T12A), OpenAIResponsesProvider(T12B) | OpenAICompatibleChatProvider, AnthropicProvider, LocalProvider |
 | `TokenEstimator` | director/tokens(C79) | o200k_base(gpt-tokenizer 4.0.0), chars/4(UI approx) | - |
 | `GraphStore` | graph | NodeSqliteGraphStore(`node:sqlite`는 이 구현 안에서만 import) | better-sqlite3 기반 구현 |

@@ -1,0 +1,18 @@
+id: D-004
+title: Stateless refresh tokens
+kind: decision
+state: confirmed
+question: token_state
+answer: refresh tokens are signed and verified without a server-side session store
+owner: human
+enforcement: block
+governs:
+  requirements: [AUTH-03]
+forbids:
+  symbols: ["*SessionStore*"]
+supersedes: null
+superseded_by: null
+confirmed_at: "2026-09-20T00:00:00Z"
+confirmed_by: tester
+lock:
+  digest: "sha256:68d2c45592ca6e657ed9f1c555eac9efb6c8a77226be82ce8485ea088802c443"

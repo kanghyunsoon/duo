@@ -19,7 +19,10 @@ import {
   compareFingerprints, createDefaultAnalyzerRegistry, fingerprintRepositoryFiles, openGitProvider, scanRepository, writeFingerprintFile,
   type AnalyzerRegistry, type FileFingerprint, type GitRepositoryState,
 } from "@duo-director/analyzer";
-import { canonicalDiagnostics, checkWriteBoundary, compareUtf8, createDiagnostic, failure, loadProjectTruth, STATE_DIR_NAME, success, type Diagnostic, type ParseResult, type RepoPath } from "@duo-director/core";
+import {
+  canonicalDiagnostics, checkWriteBoundary, compareUtf8, createDiagnostic, failure, loadProjectTruth, persistentDiagnostics, STATE_DIR_NAME, success,
+  type Diagnostic, type ParseResult, type RepoPath,
+} from "@duo-director/core";
 import { replaceGraph } from "../build/apply.js";
 import { buildGraphPlan, CALL_RESOLUTION_VERSION } from "../build/builder.js";
 import { HISTORY_WINDOW, summarizeHistory } from "../build/history.js";
@@ -247,6 +250,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
     ...(gitState === undefined ? {} : {
       git: { ...(gitState.headOid === undefined ? {} : { headOid: gitState.headOid }), ...(gitState.branch === undefined ? {} : { branch: gitState.branch }), detached: gitState.detached },
     }),
+    diagnostics: persistentDiagnostics(diagnostics),
   };
   const state: IndexState = { ...content, token: indexStateToken(content) };
 
