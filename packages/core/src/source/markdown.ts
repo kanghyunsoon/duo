@@ -2,7 +2,7 @@
  * Markdown source parsing. Only this layer knows mdast/micromark; it returns DUO-owned
  * structures (headings, fenced code, list items, links, text) with source positions.
  */
-import type { Nodes, Root } from "mdast";
+import type { Nodes, Paragraph, Root } from "mdast";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { frontmatterFromMarkdown } from "mdast-util-frontmatter";
 import { frontmatter } from "micromark-extension-frontmatter";
@@ -60,6 +60,22 @@ export interface MarkdownText {
   readonly location: SourceLocation;
 }
 
+/**
+ * A known-unknown marker (TASK-011): a prose line that starts with "UNKNOWN:" or "UNKNOWN(key):".
+ * Found only in paragraph text of the Markdown AST: fenced and indented code, inline code, HTML and
+ * YAML frontmatter never produce one.
+ */
+export interface MarkdownUnknownMarker {
+  /** Offset of the marker in the document text. */
+  readonly start: number;
+  /** Optional question key, e.g. "max_concurrent_users" in "UNKNOWN(max_concurrent_users): …". */
+  readonly key: string | undefined;
+  /** Text after the colon (inline code keeps its value). */
+  readonly text: string;
+  /** From "UNKNOWN" to the end of its source line. */
+  readonly location: SourceLocation;
+}
+
 export interface MarkdownDocument {
   readonly path: string;
   readonly length: number;
@@ -71,6 +87,8 @@ export interface MarkdownDocument {
   readonly links: readonly MarkdownLink[];
   /** Text, inline code, code and HTML values, for mention scanning. */
   readonly texts: readonly MarkdownText[];
+  /** UNKNOWN markers in prose, in document order. */
+  readonly unknownMarkers: readonly MarkdownUnknownMarker[];
   slice(start: number, end: number): string;
   locationOf(start: number, end: number): SourceLocation;
 }
@@ -80,6 +98,25 @@ function plainText(node: Nodes): string {
   if (node.type === "break") return " ";
   if ("children" in node) return (node.children as Nodes[]).map(plainText).join("");
   return "";
+}
+
+const UNKNOWN_LINE = /^UNKNOWN(?:\(([A-Za-z0-9_.-]+)\))?:\s*(.*)$/u;
+/** Stands for inline code while looking for markers, so `UNKNOWN: x` in backticks is not one. */
+const CODE_MARK = "\uFFFC";
+
+/** A paragraph's lines twice: for detection (inline code masked) and for display (inline code kept). */
+function paragraphLines(p: Paragraph): { detect: string[]; display: string[] } {
+  let detect = "";
+  let display = "";
+  const visit = (node: Nodes): void => {
+    if (node.type === "text") { detect += node.value; display += node.value; }
+    else if (node.type === "inlineCode") { detect += CODE_MARK; display += node.value.replace(/\n/gu, " "); }
+    else if (node.type === "html") { detect += CODE_MARK; display += node.value.replace(/\n/gu, " "); }
+    else if (node.type === "break") { detect += "\n"; display += "\n"; }
+    else if ("children" in node) for (const child of node.children as Nodes[]) visit(child);
+  };
+  for (const child of p.children) visit(child);
+  return { detect: detect.split("\n"), display: display.split("\n") };
 }
 
 export function parseMarkdown(path: string, text: string): ParseResult<MarkdownDocument> {
@@ -127,6 +164,27 @@ export function parseMarkdown(path: string, text: string): ParseResult<MarkdownD
   const listItems: MarkdownListItem[] = [];
   const links: MarkdownLink[] = [];
   const texts: MarkdownText[] = [];
+  const unknownMarkers: MarkdownUnknownMarker[] = [];
+  const lineText = (line: number): { start: number; text: string } => {
+    const start = lineStarts[line - 1] ?? text.length;
+    const next = lineStarts[line];
+    return { start, text: text.slice(start, next === undefined ? text.length : next - 1) };
+  };
+  const markersOf = (p: Paragraph): void => {
+    const first = p.position?.start.line;
+    if (first === undefined) return;
+    const { detect, display } = paragraphLines(p);
+    detect.forEach((raw, i) => {
+      const m = UNKNOWN_LINE.exec(raw.trim());
+      const shown = UNKNOWN_LINE.exec((display[i] ?? "").trim());
+      if (m === null || shown === null) return;
+      const body = (shown[2] ?? "").trim();
+      if (body === "") return;
+      const src = lineText(first + i);
+      const at = Math.max(0, src.text.indexOf("UNKNOWN"));
+      unknownMarkers.push({ start: src.start + at, key: m[1], text: body, location: locationOf(src.start + at, src.start + src.text.length) });
+    });
+  };
 
   for (const child of tree.children) {
     const span = spanOf(child);
@@ -154,6 +212,8 @@ export function parseMarkdown(path: string, text: string): ParseResult<MarkdownD
     if (span !== undefined) {
       if (node.type === "text" || node.type === "inlineCode" || node.type === "code" || node.type === "html" || node.type === "yaml") {
         texts.push({ value: node.value, location: span.location });
+      } else if (node.type === "paragraph") {
+        markersOf(node);
       } else if (node.type === "link" || node.type === "definition") {
         links.push({ url: node.url, location: span.location });
       } else if (node.type === "listItem") {
@@ -185,6 +245,7 @@ export function parseMarkdown(path: string, text: string): ParseResult<MarkdownD
     listItems,
     links,
     texts,
+    unknownMarkers,
     slice: (start, end) => text.slice(start, end),
     locationOf,
   });

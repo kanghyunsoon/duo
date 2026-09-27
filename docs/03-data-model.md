@@ -37,7 +37,7 @@ MCP Tool 이름(`duo_get_context` 등, [06](06-mcp-interface.md))은 서버 이�
 │  └─ *.md                   Project Truth · tracked · Issue와 Milestone의 Markdown 정의
 ├─ integrations/             Project Truth · tracked · (Post-MVP) jira.yaml
 ├─ reviews/*.json            Human-approved History · tracked · Human이 보존·승인한 Review만
-├─ generated/                Regenerable · ignored · graph.db, fingerprints.json, index-state.json, gaps.json, inferred.json
+├─ generated/                Regenerable · ignored · graph.db, fingerprints.json, index-state.json, inferred.json
 ├─ cache/                    Regenerable · ignored · analysis/(SourceAnalysis cache), packets/(Context Packet), token-counts.json, llm/
 └─ runtime/                  Runtime · ignored · reviews/(매 실행), metrics.jsonl, backup/
 ```
@@ -107,7 +107,7 @@ DUO가 어디에 쓸 수 있는지는 core의 순수 정책 함수 `checkWriteBo
 | ID로 시작하는 Heading 뒤에 metadata block이 없음 | `METADATA_BLOCK_MISSING`(warning, 정의 아님) |
 | block YAML 오류, 스키마 위반 | YAML/SCHEMA 코드, Markdown 파일 기준 줄 |
 
-`UNKNOWN:` 줄(Knowledge Gap)은 아직 해석하지 않는다. 본문 텍스트로만 보존하며 TASK-011에서 다룬다([conflicts.md C28](conflicts.md)).
+`UNKNOWN:` 줄(Declared Knowledge Gap, TASK-011)은 Markdown AST의 문단(prose)에서만 찾는다. 문단의 한 줄이 `UNKNOWN: 내용` 또는 `UNKNOWN(key): 내용`으로 시작하면 gap이다(목록 항목, 인용, 굵은 글씨 안도 문단이다). fenced·indented code block, inline code, HTML, YAML frontmatter, `duo` metadata block 안의 문자열은 gap이 아니다. 원문 전체 정규식 검색은 하지 않는다. 모델과 ID는 [Knowledge Gap](#knowledge-gap)에 있다([conflicts.md C28](conflicts.md)).
 
 ### type별 block 필드
 
@@ -320,6 +320,34 @@ Context Packet(T10)은 요청마다 만드는 값이며 저장소 파일이 아�
 - 같은 입력이면 JSON과 Markdown이 byte 단위로 같다. 시각과 실행 시간은 Packet에 없다.
 - `CONTEXT_REQUEST_INVALID`(error, transient): 빈 task, 범위 밖 budget(1,000~1,000,000), 모르는 profile, frame보다 작은 budget.
 
+## Knowledge Gap
+
+TASK-011. Gap은 "지금 작업에 중요한데 아직 정해지지 않은 것"이다. 출처가 둘이며 섞지 않는다. 어느 쪽도 Graph Node가 아니고 파일로 저장하지 않는다(graph schema version 변경 없음, `generated/gaps.json` 없음, C94).
+
+**Declared Gap**(`truth.gaps`, core `DeclaredGap`): Human이 Project Truth 문서에 쓴 `UNKNOWN:` 줄([Markdown 정의 형식](#markdown-정의-형식)).
+
+| 필드 | 의미 |
+|---|---|
+| `id` | `gap-` + sha256(owner Node ID, key, 정규화한 text)의 앞 12자리. 정규화는 NFC, 공백 압축, trim, 소문자(locale 무관). 줄 번호는 identity가 아니다. 앞에 줄을 넣어도 ID가 같고, 내용을 바꾸면 다른 gap이다 |
+| `owner` | gap을 포함한 가장 안쪽 정의(Requirement, Issue, Milestone의 section, ADR 형식 Decision 파일 전체)의 EntityRef. 정의 밖(vision.md, 정의가 없는 specs 문서)은 `project` |
+| `key` | `UNKNOWN(key):`의 key. 해결 판정에만 쓴다 |
+| `text`, `location` | 콜론 뒤 내용, `UNKNOWN`부터 그 줄 끝까지의 위치(정확히 slice됨) |
+
+같은 owner, key, text가 여러 곳에 있으면 gap 하나다(파일 순서상 첫 위치). YAML 파일(`decisions/D-###.yaml`, constraints, milestones YAML)은 prose가 아니라서 읽지 않는다(C92).
+
+**해결 판정**(C93): key가 있는 gap은 question이 그 key와 같은 활성 Decision(confirmed, superseded_by 없음)이 owner를 다룰 때 resolved다. "다룬다"는 owner가 project면 항상, Requirement면 governs.requirements에 있을 때, Issue면 그 Issue의 decisions에 있거나 Issue의 Requirement를 governs할 때, Milestone이면 그 Milestone의 Requirement를 governs할 때, Decision이면 같은 Decision이거나 그것을 supersede(연쇄 포함)하거나 같은 Requirement를 governs할 때다. key가 없거나 그런 Decision이 없으면 unresolved다. 텍스트 의미는 해석하지 않는다. `UNKNOWN:` 줄을 지우면 gap은 더는 선언되지 않는다(AC-011-04).
+
+**Runtime Gap**: 이번 요청을 평가하며 DUO가 찾은 불확실성이다. ID는 `rgap-` + sha256(kind, task, 관련 anchor ID)이며 그 평가 안에서만 안정적이다.
+
+| kind | 출처 | 기본 action |
+|---|---|---|
+| `ambiguous-target` | Context `ambiguous`(선택지 포함) | ask |
+| `unresolved-target` | Task에 쓴 ID가 Project Truth에 없음 | ask |
+| `pending-decision` | Packet `pendingDecisions`. `requiresHumanDecision`이면 ask, 아니면 surface | ask / surface |
+| `missing-intent` | seed 없음, 또는 `no-confirmed-intent` signal | surface |
+
+모델 `KnowledgeGap { id, source, kind, text, anchors, location?, relevance, reasons, action, key?, resolution?, term?, options?, target?, pending? }`와 평가 결과 `KnowledgeGapAssessment`는 [05 Knowledge Gap assessment](05-context-compiler.md#knowledge-gap-assessment)에 있다.
+
 ## Diagnostics
 
 ```ts
@@ -516,7 +544,6 @@ EvidencePointer 필드: `kind`(requirement, decision, constraint, issue, milesto
 | 파일 | 내용 | Task |
 |---|---|---|
 | `generated/graph.db` | Project Graph(ADR-002, [04](04-project-graph.md)) | TASK-003, 007 |
-| `generated/gaps.json` | Knowledge Gap | TASK-011 |
 | `generated/index-state.json` | 증분 인덱싱 state([증분 인덱싱](#증분-인덱싱)) | TASK-008 |
 | `generated/inferred.json` | 구현 상태 추론 | TASK-014 |
 | `cache/analysis/*.json` | SourceAnalysis cache(content-addressed) | TASK-008 |

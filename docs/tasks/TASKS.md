@@ -487,7 +487,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M2
 package: director
 requirements: [REQ-GAP-001]
@@ -497,10 +497,10 @@ depends_on: [TASK-008]
 
 - **Goal**: Gap을 탐지하고 Task 관련성으로 노출 여부를 정한다.
 - **Input**: 03 gaps, 05 필수 항목 규칙
-- **Output**: GapDetector, relevance 판정
+- **Output**: T10.1 공통 Intent relevance policy(`matchConstraint`, `matchDeclaredGap`), Markdown AST 기반 `UNKNOWN:` 추출과 `DeclaredGap`(owner, 안정 ID, key), `assessKnowledgeGaps`(Declared·Runtime Gap, ask·surface·ignore, requiresHumanInput, primary), `renderGapQuestions`
 - **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact)
-- **Files expected to change**: `packages/director/src/gap/**`
-- **Status**: todo
+- **Files expected to change**: `packages/director/src/gap/**`, `packages/director/src/relevance/**`, `packages/director/src/context/candidates.ts`, `packages/core/src/source/markdown.ts`, `packages/core/src/domain/**`, `packages/core/src/loader/project.ts`, `fixtures/gap/app/**`
+- **Status**: done (T10.1, T11)
 - **검증 대상 Requirement**: [REQ-GAP-001](../01-requirements.md#req-gap-001-knowledge-gap-기록과-관련성-기반-질문)
 - **관련 ADR**: [ADR-008](../adr/ADR-008-deterministic-first.md)
 
@@ -510,6 +510,7 @@ Acceptance Criteria
 - **AC-011-02** anchor가 Subgraph에 있는 Gap만 ASK가 된다
 - **AC-011-03** 무관한 Gap은 Packet에 없고 gaps_suppressed만 증가한다
 - **AC-011-04** UNKNOWN: 줄을 지우면 resolved가 된다
+
 
 ### TASK-012A LLMProvider 계약과 no-op
 

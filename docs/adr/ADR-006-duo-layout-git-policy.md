@@ -63,7 +63,7 @@ evidence:
 
 | 경로 | 내용 |
 |---|---|
-| `generated/` | graph.db, fingerprints.json(Repository scan cache, graph.db와 분리), index-state.json(증분 인덱싱 state, TASK-008), gaps.json, inferred.json. 삭제 후 `duoctl init --reindex`로 같은 결과가 나와야 한다 |
+| `generated/` | graph.db, fingerprints.json(Repository scan cache, graph.db와 분리), index-state.json(증분 인덱싱 state, TASK-008), inferred.json. Knowledge Gap은 요청마다 계산하고 저장하지 않는다(T11, conflicts C94). 삭제 후 `duoctl init --reindex`로 같은 결과가 나와야 한다 |
 | `cache/` | analysis/(SourceAnalysis cache, content-addressed, TASK-008), tokenizer 결과, Packet cache, LLM 응답 cache. 성능 목적이며 언제 지워도 된다 |
 | `runtime/` | reviews/(매 실행), metrics.jsonl, backup/(install). 로컬 기록이며 공유하지 않는다 |
 

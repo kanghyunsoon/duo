@@ -29,7 +29,7 @@
 | Context retrieval | 시나리오별 필수 Node Coverage | AC-010-01 |
 | Token budget | property test(500~50000) | AC-010-02 |
 | Decision Lock | lock 생성, digest 불일치 BLOCK, 수동 confirm ASK, supersede 유효성, confirmed 기록 경로 정적 검사 | AC-009-02~05, AC-013-01 |
-| Knowledge Gap | 관련 Gap만 ASK, 무관 Gap 억제, UNKNOWN 삭제 시 resolved | AC-011-02~04 |
+| Knowledge Gap | 관련 Gap만 ASK, 무관 Gap 억제, UNKNOWN 삭제 시 resolved(`fixtures/gap/app`, `gap.e2e.test.ts`: Task A/B, 해결된 gap, pending, 모호·없는 대상, intent 없음, unresolved call) | AC-011-01~04 |
 | Diff review | 변경 세트 7종의 verdict와 규칙 ID, Evidence ≥ 1 | AC-013-01, AC-013-02 |
 | LLM 없이 동작 | Provider 없음에서 전체 테스트 통과, 의미 판정은 UNKNOWN과 skipped_checks | AC-012A-01, AC-013-03 |
 | LLM Provider | 가짜 서버로 정상, 오류, 스키마 위반, 범위 밖 인용 처리 | AC-012A-02, AC-012B-01 |

@@ -11,4 +11,5 @@ export {
   type MarkdownOtherBlock,
   type MarkdownSpan,
   type MarkdownText,
+  type MarkdownUnknownMarker,
 } from "./markdown.js";

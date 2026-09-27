@@ -1,0 +1,13 @@
+id: D-031
+title: Plain SQL migrations
+kind: decision
+state: confirmed
+question: migration_tool
+answer: numbered plain SQL files
+owner: human
+governs:
+  requirements: [DATA-01]
+supersedes: null
+superseded_by: null
+confirmed_at: "2026-09-20T00:00:00Z"
+confirmed_by: tester

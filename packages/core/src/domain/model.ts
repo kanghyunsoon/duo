@@ -3,7 +3,7 @@
  * reference YAML or Markdown AST types.
  */
 import type { SourceLocation } from "../diagnostics.js";
-import type { DefinitionType } from "../ids.js";
+import type { DefinitionRef, DefinitionType, ProjectRef } from "../ids.js";
 import type { RepoPath } from "../paths.js";
 
 /**
@@ -196,6 +196,21 @@ export interface ProjectConfig {
   readonly extensions: Readonly<Record<string, unknown>>;
 }
 
+/**
+ * A known unknown written in Project Truth prose ("UNKNOWN: …" or "UNKNOWN(key): …", TASK-011).
+ * Not a Graph entity. owner is the definition whose section contains it, or the project.
+ */
+export interface DeclaredGap {
+  readonly kind: "declared-gap";
+  /** "gap-" + 12 hex of sha256(owner node ID, key, normalized text). */
+  readonly id: string;
+  readonly owner: DefinitionRef | ProjectRef;
+  /** Question key; an active Decision with the same question that covers the owner resolves the gap. */
+  readonly key?: string | undefined;
+  readonly text: string;
+  readonly location: SourceLocation;
+}
+
 /** Graph-entity definitions (everything with a global ID). */
 export type Definition = Requirement | Decision | Constraint | Issue | Milestone;
 
@@ -206,6 +221,8 @@ export interface DefinitionSet {
   readonly issues: readonly Issue[];
   readonly milestones: readonly Milestone[];
   readonly proposals: readonly Proposal[];
+  /** Declared Knowledge Gaps found in the Markdown documents (TASK-011). */
+  readonly gaps: readonly DeclaredGap[];
 }
 
 export interface ProjectTruth extends DefinitionSet {
@@ -216,5 +233,5 @@ export interface ProjectTruth extends DefinitionSet {
 }
 
 export function emptyDefinitionSet(): { -readonly [K in keyof DefinitionSet]: DefinitionSet[K][number][] } {
-  return { requirements: [], decisions: [], constraints: [], issues: [], milestones: [], proposals: [] };
+  return { requirements: [], decisions: [], constraints: [], issues: [], milestones: [], proposals: [], gaps: [] };
 }

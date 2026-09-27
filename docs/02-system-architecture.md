@@ -55,7 +55,7 @@ LLM을 쓸 수 없으면 의미 판단은 UNKNOWN이나 ASK로 남고 나머지 
 Git root 확인 ─▶ 스캔(.gitignore, 기본 제외, 비밀 파일 제외) ─▶ manifest / README / docs / 기획 문서 탐지
   ─▶ Git metadata(branch, HEAD, 최근 커밋) ─▶ LanguageAnalyzer로 Symbol·Import·Call·Test 추출
   ─▶ 초안: project.yaml, intent/vision.md(status: draft), intent/constraints.yaml, .duo-project/.gitignore
-  ─▶ 구현 상태 추론(generated/inferred.json) · Knowledge Gap(generated/gaps.json)
+  ─▶ 구현 상태 추론(generated/inferred.json) · Knowledge Gap(Truth의 `UNKNOWN:` 줄, 요청마다 평가하고 저장하지 않음)
   ─▶ Human 확인(TTY 대화형 또는 ASK 목록) ─▶ Graph 구축(generated/graph.db) ─▶ 요약 출력
 ```
 

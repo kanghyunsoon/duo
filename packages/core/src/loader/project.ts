@@ -4,6 +4,8 @@ import path from "node:path";
 import { PROJECT_FILE_NAME, STATE_DIR_NAME } from "../constants.js";
 import { compareDiagnostics, createDiagnostic, type Diagnostic, type ParseResult } from "../diagnostics.js";
 import { parseDefinitionMarkdown } from "../domain/definitions.js";
+import { declaredGapsOf } from "../domain/gaps.js";
+import { parseMarkdown } from "../source/markdown.js";
 import {
   parseConstraintsFile, parseDecisionFile, parseMilestoneFile, parseProjectConfig, parseProposalFile, parseVisionFile,
 } from "../domain/files.js";
@@ -57,6 +59,7 @@ function merge(target: ReturnType<typeof emptyDefinitionSet>, source: Definition
   target.issues.push(...source.issues);
   target.milestones.push(...source.milestones);
   target.proposals.push(...source.proposals);
+  target.gaps.push(...source.gaps);
 }
 
 /**
@@ -95,6 +98,9 @@ export function loadProjectTruth(root: string, options: LoadProjectOptions = {})
       const r = parseVisionFile(visionFile.path, text);
       diagnostics.push(...r.diagnostics);
       vision = r.value;
+      // vision.md holds no definitions: its gaps are project-scoped.
+      const md = parseMarkdown(visionFile.path, text);
+      if (md.value !== undefined) defs.gaps.push(...declaredGapsOf(md.value, []));
     }
   }
   const constraintsFile: SourceFile = {
@@ -145,6 +151,14 @@ export function loadProjectTruth(root: string, options: LoadProjectOptions = {})
 
   const trace = analyzeTrace({ ...defs, references: config.value.references }, options.tracePolicy);
   diagnostics.push(...trace.diagnostics);
+  // One gap per ID: the same owner, key and text in two places is one known unknown (first by file order).
+  const gapIds = new Set<string>();
+  const gaps = defs.gaps.filter((g) => {
+    if (gapIds.has(g.id)) return false;
+    gapIds.add(g.id);
+    return true;
+  });
+  defs.gaps.splice(0, defs.gaps.length, ...gaps);
   const truth: ProjectTruth = { ...defs, config: config.value, vision, files: files.sort(compareUtf8) };
   return { value: { truth, trace: trace.model }, diagnostics: diagnostics.sort(compareDiagnostics) };
 }

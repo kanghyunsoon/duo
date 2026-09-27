@@ -11,6 +11,7 @@ import {
   compareUtf8, definitionRef, fileRef, isDefinitionId, normalizeRepoPath, PROPOSAL_ID_PATTERN, type DefinitionType, type EntityType, type ProjectTruth,
 } from "@duo-director/core";
 import type { GraphNode, GraphReader } from "@duo-director/graph";
+import { searchTerms } from "../relevance/terms.js";
 import { KEYWORD, SEED_STRENGTH, SYMBOL_NAME_MAX_MATCHES } from "./policy.js";
 import type { ContextSeed, SeedAmbiguity, SeedMatch, SeedOption, SeedResolution } from "./types.js";
 
@@ -26,11 +27,6 @@ export interface SeedResult extends SeedResolution {
 
 const DEFINITION_TYPES_BY_LOOKUP: readonly DefinitionType[] = ["requirement", "decision", "issue", "milestone"];
 
-const STOPWORDS = new Set([
-  "a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "with", "by", "at", "from", "is", "are", "be", "as", "it", "this", "that",
-  "implement", "implementation", "add", "fix", "update", "make", "use", "support", "change", "task", "new",
-]);
-
 /** Display reference of a node: definition ID, path, or path#name. */
 export function refOfNode(node: Pick<GraphNode, "ref">): string {
   const ref = node.ref;
@@ -41,12 +37,6 @@ export function refOfNode(node: Pick<GraphNode, "ref">): string {
     case "test": return `${ref.path}#${ref.name}`;
     default: return ref.id;
   }
-}
-
-/** Lower-case search terms: camelCase and snake_case split, stopwords removed; Hangul stays in whitespace units (05). */
-export function searchTerms(text: string): string[] {
-  const spaced = text.replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, "$1 $2").replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2");
-  return spaced.split(/[^\p{L}\p{N}]+/u).map((t) => t.toLowerCase()).filter((t) => t.length >= 2 && !STOPWORDS.has(t) && !/^\d+$/u.test(t));
 }
 
 function rawTokens(task: string): string[] {

@@ -15,6 +15,7 @@ export * from "./schema/schemas.js";
 export { validateData } from "./schema/validate.js";
 export * from "./domain/model.js";
 export { parseDefinitionDocument, parseDefinitionMarkdown } from "./domain/definitions.js";
+export { declaredGapId, normalizeGapText } from "./domain/gaps.js";
 export {
   parseConstraintsFile,
   parseDecisionFile,

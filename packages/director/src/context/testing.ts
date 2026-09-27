@@ -8,11 +8,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDefaultAnalyzerRegistry, type AnalyzerRegistry } from "@duo-director/analyzer";
+import { loadProjectTruth, type ProjectTruth } from "@duo-director/core";
 import { dumpGraph, indexRepository, openProjectGraphStore, type GraphStore } from "@duo-director/graph";
 import { compileContext, type CompileContextOptions } from "./compile.js";
 import type { ContextRequest, ContextResult } from "./types.js";
 
 export const CONTEXT_FIXTURE = fileURLToPath(new URL("../../../../fixtures/context/app/", import.meta.url));
+export const GAP_FIXTURE = fileURLToPath(new URL("../../../../fixtures/gap/app/", import.meta.url));
 export const HISTORY = 20;
 
 const env = {
@@ -30,6 +32,7 @@ export interface ContextRepo {
   index(): Promise<void>;
   compile(request: ContextRequest, options?: Omit<CompileContextOptions, "graph" | "registry">): Promise<ContextResult>;
   graphDump(): ReturnType<typeof dumpGraph>;
+  truth(): ProjectTruth;
   meta(key: string): string | undefined;
 }
 
@@ -50,10 +53,10 @@ function withGraph<T>(root: string, fn: (store: GraphStore) => T): T {
 }
 
 /** The fixture as a Git repository; AuthService.ts and util/config.ts change together in three commits (CHANGED_WITH). Not indexed yet. */
-export function makeContextRepo(temps: string[], registry: AnalyzerRegistry): ContextRepo {
+export function makeContextRepo(temps: string[], registry: AnalyzerRegistry, fixture: string = CONTEXT_FIXTURE): ContextRepo {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-context-")));
   temps.push(root);
-  fs.cpSync(CONTEXT_FIXTURE, root, { recursive: true });
+  fs.cpSync(fixture, root, { recursive: true });
   const abs = (f: string) => path.join(root, f);
   const repo: ContextRepo = {
     root,
@@ -90,6 +93,11 @@ export function makeContextRepo(temps: string[], registry: AnalyzerRegistry): Co
       }
     },
     graphDump: () => withGraph(root, (s) => dumpGraph(s)),
+    truth: () => {
+      const loaded = loadProjectTruth(root);
+      if (loaded.value === undefined) throw new Error(JSON.stringify(loaded.diagnostics));
+      return loaded.value.truth;
+    },
     meta: (key) => withGraph(root, (s) => s.readMeta(key)),
   };
   repo.git("-c", "init.defaultBranch=main", "init", "-q");
@@ -97,6 +105,7 @@ export function makeContextRepo(temps: string[], registry: AnalyzerRegistry): Co
   repo.git("config", "commit.gpgsign", "false");
   repo.git("add", "-A");
   repo.git("commit", "-q", "-m", "init");
+  if (fixture !== CONTEXT_FIXTURE) return repo;
   for (const n of [1, 2, 3]) {
     fs.appendFileSync(abs("src/auth/AuthService.ts"), `// revision ${n}\n`);
     fs.appendFileSync(abs("src/util/config.ts"), `// revision ${n}\n`);

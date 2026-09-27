@@ -9,10 +9,11 @@
  * are never placed in the intent or decision sections (T09.1).
  */
 import {
-  compareUtf8, compileRepoPattern, pendingDecisionProposals, type Constraint, type Decision, type Diagnostic, type Issue, type Milestone,
-  type ProjectTruth, type Proposal, type RepoPath, type Requirement, type SourceLocation,
+  compareUtf8, pendingDecisionProposals, type Constraint, type Decision, type Diagnostic, type Issue, type Milestone,
+  type ProjectTruth, type Proposal, type Requirement, type SourceLocation,
 } from "@duo-director/core";
 import type { GraphNode } from "@duo-director/graph";
+import { matchConstraint, type RelevanceScope, type ScopeEntry } from "../relevance/policy.js";
 import { displayRef, type Candidate, type Expansion } from "./expand.js";
 import { TIER_ORDER } from "./policy.js";
 import { redactSecrets } from "./redact.js";
@@ -123,10 +124,20 @@ function codeTier(c: Candidate): ContextTier {
   return "code-structural";
 }
 
-function wildcard(pattern: string): RegExp {
-  let source = "";
-  for (const ch of pattern) source += ch === "*" ? ".*" : ch === "?" ? "." : ch.replace(/[\\^$.*+?()[\]{}|/]/gu, "\\$&");
-  return new RegExp(`^${source}$`, "u");
+/** The traversal candidates as a relevance scope, in rank order (T10.1). */
+export function candidateScope(expansion: Expansion, seedIds: ReadonlySet<string>, task: string): RelevanceScope {
+  return {
+    taskText: task,
+    entries: expansion.candidates.map((x): ScopeEntry => {
+      const ref = x.node.ref;
+      const path = ref.type === "symbol" || ref.type === "file" ? ref.path : undefined;
+      const qn = x.node.payload.qualifiedName;
+      return {
+        id: x.node.id, ref: displayRef(x.node.id), type: x.node.type, hops: x.depth, seed: seedIds.has(x.node.id),
+        ...(path === undefined ? {} : { path }), ...(typeof qn === "string" ? { qualifiedName: qn } : {}),
+      };
+    }),
+  };
 }
 
 export interface PlanInput {
@@ -297,26 +308,17 @@ export function planContext(input: PlanInput): ContextPlan {
     }
   }
 
-  // Constraints have no graph edges: their match rules (paths, symbols, keywords) are checked against the candidates.
-  const code = expansion.candidates.filter((c) => c.node.type === "symbol" || c.node.type === "file");
-  const taskText = input.task.toLowerCase();
+  // Constraints have no graph edges: the shared relevance policy matches them against the ranked candidates (T10.1).
+  const byId = new Map(expansion.candidates.map((x) => [x.node.id, x] as const));
+  const scope = candidateScope(expansion, seedIds, input.task);
   for (const k of truth.constraints) {
     if (drafts.has(`dec:${k.id}`) || pendingDrafts.has(k.id) || (k.state !== "confirmed" && k.state !== "draft")) continue;
-    const paths = k.match.paths.flatMap((p) => compileRepoPattern(p) ?? []);
-    const symbols = k.match.symbols.map(wildcard);
-    let hit: { c: Candidate; field: string } | undefined;
-    for (const c of code) {
-      const ref = c.node.ref;
-      const file = (ref.type === "symbol" || ref.type === "file" ? ref.path : "") as RepoPath;
-      if (paths.some((m) => m(file))) { hit = { c, field: "match.paths" }; break; }
-      if (ref.type === "symbol" && symbols.some((re) => re.test(String(c.node.payload.qualifiedName ?? "")))) { hit = { c, field: "match.symbols" }; break; }
-    }
-    const first = expansion.candidates[0];
-    if (hit === undefined && first !== undefined && k.match.keywords.some((w) => w.length > 0 && taskText.includes(w.toLowerCase()))) hit = { c: first, field: "match.keywords" };
-    if (hit === undefined) continue;
-    const step: EvidenceStep = { from: hit.field === "match.keywords" ? "task" : displayRef(hit.c.node.id), type: "MATCHES", to: k.id, provenance: hit.field };
-    if (k.state === "confirmed") constraintItem(k, hit.c, [step]);
-    else pendingDecision(k.id, "constraint", k.statement, [], k.location, hit.c);
+    const r = matchConstraint(k, scope);
+    const hit = r.matched === undefined ? undefined : byId.get(r.matched);
+    if (r.relevance === "none" || hit === undefined || r.field === undefined) continue;
+    const step: EvidenceStep = { from: r.field === "match.keywords" ? "task" : displayRef(hit.node.id), type: "MATCHES", to: k.id, provenance: r.field };
+    if (k.state === "confirmed") constraintItem(k, hit, [step]);
+    else pendingDecision(k.id, "constraint", k.statement, [], k.location, hit);
   }
 
   // Pending proposals: only those that refer to a seed or a Truth item next to it (T09.1 read model).

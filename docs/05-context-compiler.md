@@ -1,6 +1,6 @@
 # 05. Context Compiler
 
-상태: Frozen (T00 final, 2026-09-27) · T10 구현 반영(2026-09-27) · 관련: REQ-CONTEXT-001~003, REQ-GAP-001, REQ-NFR-005, [ADR-005](adr/ADR-005-token-measurement.md), [ADR-008](adr/ADR-008-deterministic-first.md)
+상태: Frozen (T00 final, 2026-09-27) · T10 구현 반영(2026-09-27) · T10.1 relevance policy, T11 Knowledge Gap 반영(2026-09-28) · 관련: REQ-CONTEXT-001~003, REQ-GAP-001, REQ-NFR-005, [ADR-005](adr/ADR-005-token-measurement.md), [ADR-008](adr/ADR-008-deterministic-first.md)
 
 Context Compiler는 Task 하나에 대해 "이번 작업을 하는 Coding Agent에게 무엇을 보여줘야 하는가"를 결정적으로 답한다. 결과는 token budget 이하의 **Director Context Packet**이다. 전체 Repository 요약은 만들지 않고 LLM, embedding, vector DB를 쓰지 않는다. MCP의 `duo_get_context`가 주 사용자다(Context Gateway, [ADR-004](adr/ADR-004-mcp-context-gateway.md)). 구현은 `packages/director/src/context/`, 공식 토큰 측정은 `packages/director/src/tokens/`다.
 
@@ -90,7 +90,7 @@ Proposal ID(`P-018`)는 seed가 아니라 그 proposal을 PENDING HUMAN DECISION
 | Test | TESTS | test |
 | Issue, Milestone | ISSUES / MILESTONE | issue |
 
-Constraint는 Graph Edge가 없다(T07). confirmed와 draft Constraint는 `match.paths`·`match.symbols`를 후보 코드와, `match.keywords`를 Task 텍스트와 비교해 맞으면 넣는다(`MATCHES` 근거, C84).
+Constraint는 Graph Edge가 없다(T07). confirmed와 draft Constraint는 공통 relevance policy의 `matchConstraint`로 판정해 `none`이 아니면 넣는다(`MATCHES` 근거, [Intent relevance policy](#intent-relevance-policy), C84).
 
 **필수 항목**: 정확한 seed(키워드 seed 제외), 활성 Decision, 맞은 confirmed Constraint는 budget보다 먼저 L1로 넣는다. pending decision은 frame에 L1로 항상 들어간다.
 
@@ -102,6 +102,19 @@ Proposal은 Project Truth가 아니다(T09.1). pending 여부는 core `pendingDe
 - 각 항목은 `confirmed: false`, `status: "PENDING / NOT CONFIRMED"`, `relatesTo`, `requiresHumanDecision`(정확한 seed나 depth ≤ 1의 Truth를 참조하거나 활성 Decision을 supersede할 때)을 가진다. Packet의 `requiresHumanDecision`은 그중 하나라도 true인지다.
 - ranking 후보가 아니고 CONFIRMED INTENT에 들어가지 않는다. Markdown은 "Not confirmed … do not implement them as decided"로 시작한다.
 
+## Intent relevance policy
+
+T10.1. "이 intent가 현재 Task와 관련 있는가"를 한 곳(`packages/director/src/relevance/`, `RELEVANCE_POLICY_VERSION` "1")에서 정한다. Context Compiler(Constraint 선택), Knowledge Gap(Declared Gap), 이후 Review가 같은 함수를 쓰고 각자 matcher를 두지 않는다. 점수는 없고 결과는 `direct | related | none`과 근거 목록(`reasons: { code, ref?, detail? }[]`), 근거가 된 scope 항목(`matched`)이다.
+
+scope는 Task의 후보 맥락을 순위 순으로 늘어놓은 목록이다(`ScopeEntry { id, ref, type, hops, seed, path?, qualifiedName? }`). Compiler는 탐색 후보 전체를, Gap assessment는 Packet 항목과 `omittedCandidates`(hops 없음)를 넘긴다.
+
+| 함수 | direct | related | none |
+|---|---|---|---|
+| `matchConstraint` | `match.paths`·`match.symbols`에 맞는 코드 항목이 seed이거나 seed에서 1 Edge(`match-path`, `match-symbol`) | 그 코드 항목이 더 멀리 있음, 또는 Task 텍스트에 `match.keywords`가 있음(`match-keyword`) | 둘 다 아님 |
+| `matchDeclaredGap` | owner가 seed(`task-seed`), seed에서 1 Edge인 Requirement·Decision(`near-intent`), 또는 맥락 안 Requirement를 맥락 안 활성 Decision이 governs(`governed-by-active-decision`) | owner가 맥락의 다른 곳(Issue·Milestone, 2 Edge 이상, budget으로 생략, `in-context`), 또는 project gap이 Task와 검색어를 공유(`keyword-overlap`) | 그 외. project gap은 direct가 되지 않음 |
+
+첫 번째로 맞는 항목이 근거다. T10.1은 기존 판정을 옮기기만 했고 T10 fixture의 13개 요청에서 Packet JSON, Markdown, digest, token 수, 선택된 Constraint가 byte 단위로 같았다.
+
 ## Knowledge Gap signal
 
 TASK-011이 쓸 구조화 신호만 낸다. 질문은 만들지 않는다.
@@ -112,6 +125,20 @@ TASK-011이 쓸 구조화 신호만 낸다. 질문은 만들지 않는다.
 | `unresolved-id` | Task의 ID가 Graph에 없음 |
 | `no-confirmed-intent` | Requirement와 활성 Decision·Constraint가 하나도 없음 |
 | `unconfirmed-decision` | `requiresHumanDecision`인 pending decision이 있음 |
+
+## Knowledge Gap assessment
+
+TASK-011. Compiler는 무엇을 보여줄지 고르고, 무엇이 아직 정해지지 않았는지는 별도 서비스 `assessKnowledgeGaps({ request, result, truth })`(`packages/director/src/gap/`)가 정한다. Compiler는 질문을 만들지 않고 Packet 구조도 바뀌지 않는다. 입력은 Compiler 결과(status, resolution, Packet의 signals·pendingDecisions·limitations·항목)와 Project Truth(`truth.gaps`, Decision)다. 계산이 가벼워 cache하지 않는다. Packet cache가 hit여도 같은 Packet으로 다시 평가하면 된다. LLM은 쓰지 않는다(`metrics.llmCalls: 0`).
+
+- `index-required`면 판단하지 않는다: `status: "index-required"`, gap 없음, `requiresHumanInput: false`.
+- Runtime Gap과 Declared Gap의 정의·ID는 [03 Knowledge Gap](03-data-model.md#knowledge-gap)이다.
+- Declared Gap: resolved면 ignore. 아니면 relevance policy로 direct → ask, related → surface, none → ignore. direct라도 이미 결정된 gap은 다시 묻지 않는다.
+- 기술적 불확실성(unresolved call·module, `.d.ts` 모호함, instance receiver, partial parse)은 gap이 아니다. `technicalLimitations`(Packet limitation 코드에서 intent 관련 `no-confirmed-intent`를 뺀 것)로만 남는다.
+- `requiresHumanInput`은 ask gap이 하나라도 있을 때만 true다: 모호한 대상, 없는 ID, Task가 의존하는 pending decision, 직접 관련된 미해결 Declared Gap. intent 없음은 surface라 false다.
+- 순서: action(ask, surface, ignore), kind 우선순위(ambiguous-target, unresolved-target, pending-decision, declared, missing-intent), 그 안에서 발견 순서 또는 owner의 Packet 순위, 마지막으로 ID. 첫 ask가 `primary`, 나머지 ask가 `additional`이다. 한 답이 다른 gap을 바꿀 수 있으므로 한 번에 하나를 먼저 묻는다(대화 loop는 MCP·CLI).
+- 결과: `KnowledgeGapAssessment { format: "duo.gap-assessment/1", status, gaps, requiresHumanInput, primary?, additional, technicalLimitations, metrics }`. metrics는 declaredConsidered, runtime, direct, related, none, ask, surface, ignore, llmCalls이며 품질 지표가 아닌 관찰값이다.
+- 문구: `renderGapQuestions(assessment)`가 고정 template로 `primaryQuestion`, `additionalQuestions`, surface gap의 `notes`를 만든다. 선택·관련성 로직은 없다. pending proposal은 "확정되지 않은 제안"으로만 부르고 제안된 답은 쓰지 않는다.
+- 같은 Task, Project Truth, Graph, proposal 상태, Packet이면 결과와 문구가 byte 단위로 같다(시각, locale, 파일 순회 순서에 의존하지 않음).
 
 ## 표현 단계
 

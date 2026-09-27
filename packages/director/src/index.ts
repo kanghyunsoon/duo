@@ -7,6 +7,8 @@ import { packageInfo as analyzer } from "@duo-director/analyzer";
 import { packageInfo as core, type PackageInfo } from "@duo-director/core";
 
 export * from "./context/index.js";
+export * from "./gap/index.js";
+export * from "./relevance/index.js";
 export * from "./tokens/index.js";
 
 export const packageInfo: PackageInfo = {

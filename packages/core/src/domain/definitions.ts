@@ -5,12 +5,13 @@
  */
 import { METADATA_BLOCK_LANG } from "../constants.js";
 import { createDiagnostic, type Diagnostic, type ParseResult, type SourceLocation } from "../diagnostics.js";
-import { ACCEPTANCE_ID_PATTERN, DEFINITION_ID_PATTERN } from "../ids.js";
+import { ACCEPTANCE_ID_PATTERN, DEFINITION_ID_PATTERN, definitionRef } from "../ids.js";
 import { DecisionSchema, IssueBlockSchema, MilestoneBlockSchema, RequirementBlockSchema } from "../schema/schemas.js";
 import { validateData } from "../schema/validate.js";
 import { parseMarkdown, type MarkdownDocument, type MarkdownHeading } from "../source/markdown.js";
 import { parseYaml } from "../source/yaml.js";
 import { MapContext, mapDecision, mapIssue, mapMilestone, mapRequirement, unknownTypeDiagnostic } from "./map.js";
+import { declaredGapsOf, type GapSection } from "./gaps.js";
 import { emptyDefinitionSet, type AcceptanceCriterion, type DefinitionSet } from "./model.js";
 
 const DEFINITION_HEADING_DEPTHS = new Set([2, 3, 4]);
@@ -30,6 +31,7 @@ export function parseDefinitionDocument(doc: MarkdownDocument): ParseResult<Defi
   const diagnostics: Diagnostic[] = [];
   // An ADR-style Decision is the whole file: [start of text, end of text).
   const wholeFile: SourceLocation = doc.locationOf(0, doc.length);
+  const sections: GapSection[] = [];
 
   if (doc.frontmatter !== undefined) {
     const parsed = parseYaml({ path: doc.path, text: doc.frontmatter.value, startLine: doc.frontmatter.contentStartLine });
@@ -38,7 +40,9 @@ export function parseDefinitionDocument(doc: MarkdownDocument): ParseResult<Defi
       const valid = validateData(DecisionSchema, parsed.value, doc.frontmatter.location);
       diagnostics.push(...valid.diagnostics);
       if (valid.value !== undefined) {
-        out.decisions.push(mapDecision(valid.value, wholeFile, new MapContext(parsed.value, doc.frontmatter.location, diagnostics)));
+        const decision = mapDecision(valid.value, wholeFile, new MapContext(parsed.value, doc.frontmatter.location, diagnostics));
+        out.decisions.push(decision);
+        sections.push({ start: 0, end: doc.length + 1, owner: definitionRef("decision", decision.id) });
       }
     }
   }
@@ -87,7 +91,10 @@ export function parseDefinitionDocument(doc: MarkdownDocument): ParseResult<Defi
     if (type === "requirement") {
       const valid = validateData(RequirementBlockSchema, yaml, block.location);
       diagnostics.push(...valid.diagnostics);
-      if (valid.value !== undefined) out.requirements.push(mapRequirement(id, title, description, location, valid.value, ctx));
+      if (valid.value !== undefined) {
+        out.requirements.push(mapRequirement(id, title, description, location, valid.value, ctx));
+        sections.push({ start: heading.start, end: sectionEnd, owner: definitionRef("requirement", id) });
+      }
     } else if (type === "issue") {
       const valid = validateData(IssueBlockSchema, yaml, block.location);
       diagnostics.push(...valid.diagnostics);
@@ -100,12 +107,16 @@ export function parseDefinitionDocument(doc: MarkdownDocument): ParseResult<Defi
           diagnostics.push(createDiagnostic("INVALID_ID", `"${item.leadingStrong}" is not a valid acceptance criterion ID`, item.location));
         }
       }
-      if (valid.value !== undefined) out.issues.push(mapIssue(id, title, description, location, valid.value, acceptance, ctx));
+      if (valid.value !== undefined) {
+        out.issues.push(mapIssue(id, title, description, location, valid.value, acceptance, ctx));
+        sections.push({ start: heading.start, end: sectionEnd, owner: definitionRef("issue", id) });
+      }
     } else if (type === "milestone") {
       const valid = validateData(MilestoneBlockSchema, yaml, block.location);
       diagnostics.push(...valid.diagnostics);
       if (valid.value !== undefined) {
         out.milestones.push(mapMilestone(id, valid.value.title, valid.value.state, valid.value.issues, location, valid.value.extensions, ctx));
+        sections.push({ start: heading.start, end: sectionEnd, owner: definitionRef("milestone", id) });
       }
     } else {
       diagnostics.push(unknownTypeDiagnostic(type, yaml.locate(["type"]) ?? block.location));
@@ -124,6 +135,7 @@ export function parseDefinitionDocument(doc: MarkdownDocument): ParseResult<Defi
     }
   });
 
+  out.gaps.push(...declaredGapsOf(doc, sections));
   return { value: out, diagnostics };
 }
 
