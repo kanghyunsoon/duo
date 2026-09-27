@@ -1,253 +1,761 @@
 # TASKS
 
-상태: Draft · 각 Task는 한 번에 하나씩 구현한다. Task를 마치면 "검증할 문서"와 실제 구현을 대조하고, 차이는 [conflicts.md](../conflicts.md)에 기록한 뒤 Status를 Done으로 바꾼다.
+상태: Draft (T00 2차)
+
+## 규칙
+
+- Task는 한 번에 하나씩 구현하고, 끝나면 "검증 대상 Requirement"의 문서와 실제 구현을 대조한다. 차이는 [conflicts.md](../conflicts.md)에 기록한 뒤 status를 `done`으로 바꾼다.
+- 각 Task의 `duo` block은 DUO가 Issue Node로 읽는 정규 데이터다([03](../03-data-model.md#markdown-정의-형식)). Acceptance Criteria는 `**AC-NNN-NN**`로 시작하는 목록 항목이다.
+- status: `todo` · `in_progress` · `review`(Human 검토 대기) · `done`
+
+## 병렬 개발 Lane
+
+6개 패키지가 곧 6개 Lane이다. 같은 Milestone 안에서 의존성이 없는 Task는 동시에 진행할 수 있다.
+
+| Lane | Task |
+|---|---|
+| core | TASK-002, TASK-009 |
+| analyzer | TASK-004, TASK-005, TASK-006 |
+| graph | TASK-003, TASK-007, TASK-008 |
+| director | TASK-010, TASK-011, TASK-012, TASK-013, TASK-014 |
+| integration | TASK-016, TASK-017 |
+| ui | TASK-018 |
+| 공통(repo, apps/cli, bench, E2E) | TASK-001, TASK-015, TASK-019, TASK-020 |
 
 ## 의존성
 
 ```mermaid
 flowchart LR
-  T00 --> T01 --> T02 --> T03 --> T04 --> T05 --> T06 --> T07 --> T08
-  T02 --> T04
-  T06 --> T09
-  T07 --> T10
-  T09 --> T10
-  T09 --> T11
-  T10 --> T11
-  T08 --> T12
-  T10 --> T12
-  T11 --> T12
-  T10 --> T13
-  T11 --> T13
-  T12 --> T14
-  T13 --> T14
-  T11 --> T15
-  T12 --> T15
-  T10 --> T16
-  T11 --> T16
-  T12 & T13 & T14 & T15 & T16 --> T17
+  subgraph M0
+    TASK000["TASK-000<br/>SDD 문서 작성"]
+  end
+  subgraph M1
+    TASK001["TASK-001<br/>저장소 골격"]
+    TASK002["TASK-002<br/>core 스키마, loader, 추적성 파서"]
+    TASK003["TASK-003<br/>GraphStore"]
+    TASK004["TASK-004<br/>파일 스캔, fingerprint, 토큰 측정"]
+    TASK005["TASK-005<br/>LanguageAnalyzer와 TS/JS Analyzer"]
+    TASK006["TASK-006<br/>Git Evidence Provider"]
+    TASK007["TASK-007<br/>Graph builder와 일관성 검사"]
+    TASK008["TASK-008<br/>증분 인덱싱, trace, impact"]
+  end
+  subgraph M2
+    TASK009["TASK-009<br/>Decision 생명주기"]
+    TASK010["TASK-010<br/>Context Compiler"]
+    TASK011["TASK-011<br/>Knowledge Gap"]
+    TASK012["TASK-012<br/>LLMProvider와 OpenAI 호환 Provider"]
+    TASK013["TASK-013<br/>Review 엔진"]
+    TASK014["TASK-014<br/>init 파이프라인"]
+  end
+  subgraph M3
+    TASK015["TASK-015<br/>CLI"]
+    TASK016["TASK-016<br/>MCP 서버"]
+    TASK017["TASK-017<br/>Agent Adapter와 duo install"]
+    TASK018["TASK-018<br/>Local HTTP API와 Web UI"]
+  end
+  subgraph M4
+    TASK019["TASK-019<br/>Benchmark"]
+    TASK020["TASK-020<br/>E2E와 문서-구현 대조"]
+  end
+  TASK000 --> TASK001
+  TASK001 --> TASK002
+  TASK002 --> TASK003
+  TASK002 --> TASK004
+  TASK004 --> TASK005
+  TASK002 --> TASK006
+  TASK003 --> TASK007
+  TASK005 --> TASK007
+  TASK006 --> TASK007
+  TASK007 --> TASK008
+  TASK002 --> TASK009
+  TASK008 --> TASK010
+  TASK009 --> TASK010
+  TASK008 --> TASK011
+  TASK002 --> TASK012
+  TASK008 --> TASK013
+  TASK009 --> TASK013
+  TASK010 --> TASK013
+  TASK011 --> TASK013
+  TASK012 --> TASK013
+  TASK008 --> TASK014
+  TASK011 --> TASK014
+  TASK009 --> TASK015
+  TASK010 --> TASK015
+  TASK013 --> TASK015
+  TASK014 --> TASK015
+  TASK010 --> TASK016
+  TASK013 --> TASK016
+  TASK015 --> TASK017
+  TASK016 --> TASK017
+  TASK009 --> TASK018
+  TASK013 --> TASK018
+  TASK015 --> TASK018
+  TASK010 --> TASK019
+  TASK013 --> TASK019
+  TASK015 --> TASK020
+  TASK016 --> TASK020
+  TASK017 --> TASK020
+  TASK018 --> TASK020
+  TASK019 --> TASK020
 ```
 
-구현 순서: T01 → T02 → T03 → T04 → T05 → T06 → T07 → T09 → T08 → T10 → T11 → T12 → T13 → T14 → T15 → T16 → T17
+구현 순서(위상 정렬, 번호 순): TASK-000 → TASK-001 → TASK-002 → TASK-003 → TASK-004 → TASK-005 → TASK-006 → TASK-007 → TASK-008 → TASK-009 → TASK-010 → TASK-011 → TASK-012 → TASK-013 → TASK-014 → TASK-015 → TASK-016 → TASK-017 → TASK-018 → TASK-019 → TASK-020
+
+병렬 가능 묶음(선행 Task 완료 기준):
+
+1. TASK-000
+2. TASK-001
+3. TASK-002
+4. TASK-003, TASK-004, TASK-006, TASK-009, TASK-012
+5. TASK-005
+6. TASK-007
+7. TASK-008
+8. TASK-010, TASK-011
+9. TASK-013, TASK-014
+10. TASK-015, TASK-016, TASK-019
+11. TASK-017, TASK-018
+12. TASK-020
+
+## MVP End-to-End 흐름과 Task
+
+| 흐름 단계 | 담당 Task |
+|---|---|
+| Repository | TASK-002(fixture), TASK-020(이 저장소 self fixture) |
+| DUO 설치 | TASK-001(패키지), TASK-017(`duo install codex/claude`) |
+| `duo init` | TASK-014(InitService), TASK-015(명령) |
+| 자동 프로젝트 분석 | TASK-004(스캔), TASK-005(AST), TASK-006(Git) |
+| 필요한 Human Intent 확인 | TASK-014(질문 생성), TASK-015(대화형 입력) |
+| .duo 생성 | TASK-002(스키마, 쓰기 guard), TASK-014 |
+| Project Graph 생성 | TASK-003, TASK-007, TASK-008 |
+| Agent가 MCP로 Context 요청 | TASK-016(Gateway), TASK-010(Compiler), TASK-011(Gap), TASK-017(설정) |
+| 코딩 | Coding Agent(DUO 범위 밖) |
+| Git Diff | TASK-006, TASK-008(변경 Symbol) |
+| Duo Review | TASK-013, TASK-012(의미 판정), TASK-009(Lock) |
+| PASS / WARN / BLOCK / ASK | TASK-013, TASK-015/016(출력) |
+| UI에서 Evidence와 Drift 확인, Decision Confirm/Reject | TASK-018, TASK-009 |
+| 전체 검증 | TASK-020 |
 
 ## 요약
 
-| ID | Goal | Dependencies | Status |
-|---|---|---|---|
-| T00 | SDD 문서 작성 | 없음 | Done (Human 검토 대기) |
-| T01 | 저장소 골격 | T00 | Todo |
-| T02 | .duo 스키마·loader와 fixture | T01 | Todo |
-| T03 | GraphStore | T02 | Todo |
-| T04 | 스캔과 fingerprint | T02, T03 | Todo |
-| T05 | TS/JS LanguageAdapter | T04 | Todo |
-| T06 | Graph builder와 일관성 검사 | T03, T05 | Todo |
-| T07 | 증분 인덱싱 | T06 | Todo |
-| T08 | duo init | T07 | Todo |
-| T09 | Decision Lock과 proposal | T06 | Todo |
-| T10 | Context Compiler | T07, T09 | Todo |
-| T11 | Review 엔진 | T09, T10 | Todo |
-| T12 | CLI | T08, T10, T11 | Todo |
-| T13 | MCP 서버 | T10, T11 | Todo |
-| T14 | duo install codex/claude | T12, T13 | Todo |
-| T15 | Web UI | T11, T12 | Todo |
-| T16 | Benchmark | T10, T11 | Todo |
-| T17 | E2E와 문서 대조 | T12~T16 | Todo |
+| ID | Title | Lane | Milestone | Dependencies | Status |
+|---|---|---|---|---|---|
+| [TASK-000](#task-000-sdd-문서-작성) | SDD 문서 작성 | - | M0 | - | review |
+| [TASK-001](#task-001-저장소-골격) | 저장소 골격 | 공통 | M1 | TASK-000 | todo |
+| [TASK-002](#task-002-core-스키마-loader-추적성-파서) | core 스키마, loader, 추적성 파서 | core | M1 | TASK-001 | todo |
+| [TASK-003](#task-003-graphstore) | GraphStore | graph | M1 | TASK-002 | todo |
+| [TASK-004](#task-004-파일-스캔-fingerprint-토큰-측정) | 파일 스캔, fingerprint, 토큰 측정 | analyzer | M1 | TASK-002 | todo |
+| [TASK-005](#task-005-languageanalyzer와-tsjs-analyzer) | LanguageAnalyzer와 TS/JS Analyzer | analyzer | M1 | TASK-004 | todo |
+| [TASK-006](#task-006-git-evidence-provider) | Git Evidence Provider | analyzer | M1 | TASK-002 | todo |
+| [TASK-007](#task-007-graph-builder와-일관성-검사) | Graph builder와 일관성 검사 | graph | M1 | TASK-003, TASK-005, TASK-006 | todo |
+| [TASK-008](#task-008-증분-인덱싱-trace-impact) | 증분 인덱싱, trace, impact | graph | M1 | TASK-007 | todo |
+| [TASK-009](#task-009-decision-생명주기) | Decision 생명주기 | core | M2 | TASK-002 | todo |
+| [TASK-010](#task-010-context-compiler) | Context Compiler | director | M2 | TASK-008, TASK-009 | todo |
+| [TASK-011](#task-011-knowledge-gap) | Knowledge Gap | director | M2 | TASK-008 | todo |
+| [TASK-012](#task-012-llmprovider와-openai-호환-provider) | LLMProvider와 OpenAI 호환 Provider | director | M2 | TASK-002 | todo |
+| [TASK-013](#task-013-review-엔진) | Review 엔진 | director | M2 | TASK-008, TASK-009, TASK-010, TASK-011, TASK-012 | todo |
+| [TASK-014](#task-014-init-파이프라인) | init 파이프라인 | director | M2 | TASK-008, TASK-011 | todo |
+| [TASK-015](#task-015-cli) | CLI | apps/cli | M3 | TASK-009, TASK-010, TASK-013, TASK-014 | todo |
+| [TASK-016](#task-016-mcp-서버) | MCP 서버 | integration | M3 | TASK-010, TASK-013 | todo |
+| [TASK-017](#task-017-agent-adapter와-duo-install) | Agent Adapter와 duo install | integration | M3 | TASK-015, TASK-016 | todo |
+| [TASK-018](#task-018-local-http-api와-web-ui) | Local HTTP API와 Web UI | ui | M3 | TASK-009, TASK-013, TASK-015 | todo |
+| [TASK-019](#task-019-benchmark) | Benchmark | bench | M4 | TASK-010, TASK-013 | todo |
+| [TASK-020](#task-020-e2e와-문서-구현-대조) | E2E와 문서-구현 대조 | 공통 | M4 | TASK-015, TASK-016, TASK-017, TASK-018, TASK-019 | todo |
 
 ## 상세
 
-### T00 SDD 문서 작성
+### TASK-000 SDD 문서 작성
 
-- **Goal**: SDD 문서 작성
-- **Input**: 원본 지시문, 기획서
-- **Output**: docs/ 전체, ADR, TASKS.md, conflicts.md
+```duo
+type: issue
+status: review
+milestone: M0
+package: docs
+requirements: [REQ-TRACE-001]
+decisions: [ADR-014]
+depends_on: []
+```
+
+- **Goal**: MVP 설계를 docs/에 확정한다.
+- **Input**: 개발 지시문, 기획서, Human 결정 H-1~H-11
+- **Output**: docs/ 13개 문서, conflicts.md, ADR 14개, TASKS.md
 - **Dependencies**: 없음
-- **Acceptance Criteria**: 00~12 문서, ADR 001~011, conflicts.md 존재. 문서 간 용어·ID·Tool 이름 일치. Human 검토 요청
-- **Files expected to change**: docs/**
-- **Status**: Done (Human 검토 대기)
-- **검증할 문서**: 전체
+- **Files expected to change**: `docs/**`
+- **Status**: review
+- **검증 대상 Requirement**: [REQ-TRACE-001](../01-requirements.md#req-trace-001-id-기반-추적성)
+- **관련 ADR**: [ADR-014](../adr/ADR-014-traceability-ids.md)
 
-### T01 저장소 골격
+Acceptance Criteria
 
-- **Goal**: 저장소 골격
+- **AC-000-01** 00~12 문서, conflicts.md, adr/, tasks/TASKS.md가 존재한다
+- **AC-000-02** 모든 REQ/ADR/TASK ID가 유일하고 모든 참조가 존재하는 ID를 가리킨다
+- **AC-000-03** MVP Requirement마다 최소 하나의 Task가 있다
+- **AC-000-04** Human 검토를 요청한다
+
+### TASK-001 저장소 골격
+
+```duo
+type: issue
+status: todo
+milestone: M1
+package: repo
+requirements: [REQ-NFR-001, REQ-NFR-003, REQ-CLI-001]
+decisions: [ADR-001, ADR-010]
+depends_on: [TASK-000]
+```
+
+- **Goal**: 6개 패키지와 apps/cli의 빈 골격, 빌드, 테스트, CI를 만든다.
 - **Input**: ADR-001, ADR-010
-- **Output**: pnpm workspace, 10개 패키지 빈 구현, 빌드·테스트·lint, CI
-- **Dependencies**: T00
-- **Acceptance Criteria**: `pnpm install && pnpm build && pnpm test`가 3 OS CI에서 통과. `duo --version` 출력. engines node >=24.15. 번들러 결정을 ADR-010에 기록
-- **Files expected to change**: package.json, pnpm-workspace.yaml, tsconfig.base.json, vitest.config.ts, packages/*/package.json, packages/*/src/index.ts, .github/workflows/ci.yml
-- **Status**: Todo
-- **검증할 문서**: 02, ADR-001, ADR-010
+- **Output**: pnpm workspace, 패키지 빈 구현, lint/test/build, 3 OS CI
+- **Dependencies**: [TASK-000](#task-000-sdd-문서-작성)
+- **Files expected to change**: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `vitest.config.ts`, `packages/*/package.json`, `apps/cli/package.json`, `.github/workflows/ci.yml`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-NFR-001](../01-requirements.md#req-nfr-001-cross-platform), [REQ-NFR-003](../01-requirements.md#req-nfr-003-네이티브-빌드-없는-설치), [REQ-CLI-001](../01-requirements.md#req-cli-001-얇은-cli)
+- **관련 ADR**: [ADR-001](../adr/ADR-001-language-runtime.md), [ADR-010](../adr/ADR-010-package-structure.md)
 
-### T02 .duo 스키마·loader와 fixture
+Acceptance Criteria
 
-- **Goal**: .duo 스키마·loader와 fixture
-- **Input**: 03 문서
-- **Output**: core: zod 스키마, Markdown Requirement 파서, loader(오류 파일:줄), 경로 정규화, fs-guard. fixtures/auth-app 소스와 .duo, history.ts
-- **Dependencies**: T01
-- **Acceptance Criteria**: fixture .duo 전체 로드 성공. 잘못된 파일 10종이 정확한 파일:줄 오류. fs-guard가 허용 경로 밖 쓰기를 거부. Windows 경로 정규화 테스트
-- **Files expected to change**: packages/core/**, fixtures/auth-app/**
-- **Status**: Todo
-- **검증할 문서**: 03, 10
+- **AC-001-01** `pnpm install && pnpm build && pnpm test`가 ubuntu/windows/macos CI에서 통과한다
+- **AC-001-02** 패키지 의존 방향(02 문서) 위반 import가 lint에서 실패한다
+- **AC-001-03** `duo --version`이 동작하고 apps/cli에는 domain 코드가 없다
+- **AC-001-04** engines가 node >=24.15이고 네이티브 빌드 의존성이 없다
 
-### T03 GraphStore
+### TASK-002 core 스키마, loader, 추적성 파서
 
-- **Goal**: GraphStore
-- **Input**: ADR-002, 03 SQLite 스키마
-- **Output**: graph: node:sqlite 구현, 스키마 생성, CRUD, 인접 조회, BFS traverse(결정적 순서), 쓰기 잠금
-- **Dependencies**: T02
-- **Acceptance Criteria**: 메모리·파일 DB 모두 동작. traverse가 depth/nodeLimit/edgeTypes를 지키고 순서가 결정적. 동시 쓰기 시 두 번째 프로세스는 stale 읽기
-- **Files expected to change**: packages/graph/src/store/**, packages/graph/src/traverse.ts
-- **Status**: Todo
-- **검증할 문서**: 03, 04
+```duo
+type: issue
+status: todo
+milestone: M1
+package: core
+requirements: [REQ-TRUTH-001, REQ-TRUTH-003, REQ-TRACE-001, REQ-SAFETY-001]
+decisions: [ADR-006, ADR-014]
+depends_on: [TASK-001]
+```
 
-### T04 스캔과 fingerprint
+- **Goal**: .duo 파일과 추적성 Markdown을 읽고 검증하는 core를 만든다.
+- **Input**: 03 문서, ADR-006, ADR-014
+- **Output**: zod 스키마, loader, Markdown duo block/frontmatter 파서, ID 검사, fs-guard, fixtures/auth-app
+- **Dependencies**: [TASK-001](#task-001-저장소-골격)
+- **Files expected to change**: `packages/core/src/schema/**`, `packages/core/src/loader/**`, `packages/core/src/trace/**`, `packages/core/src/fs-guard.ts`, `fixtures/auth-app/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-TRUTH-001](../01-requirements.md#req-truth-001-duo-project-truth-layer와-소유권), [REQ-TRUTH-003](../01-requirements.md#req-truth-003-human-readable-형식과-스키마-검증), [REQ-TRACE-001](../01-requirements.md#req-trace-001-id-기반-추적성), [REQ-SAFETY-001](../01-requirements.md#req-safety-001-source-code-비수정과-쓰기-경로-제한)
+- **관련 ADR**: [ADR-006](../adr/ADR-006-duo-layout-git-policy.md), [ADR-014](../adr/ADR-014-traceability-ids.md)
 
-- **Goal**: 스캔과 fingerprint
-- **Input**: 03 project.yaml index 설정, 10 제외 규칙
-- **Output**: indexer: 파일 목록(.gitignore, 기본·비밀 제외, 크기·바이너리), sha256, stat, 파일별 토큰(TokenEstimator 임시 구현)
-- **Dependencies**: T02, T03
-- **Acceptance Criteria**: fixture 파일·제외 목록 golden 일치. 변경 없는 재실행에서 hash 계산 0회(stat 일치 시). 비밀 파일 미포함
-- **Files expected to change**: packages/indexer/src/scan/**, packages/providers/src/token/**
-- **Status**: Todo
-- **검증할 문서**: 03, 09, 10
+Acceptance Criteria
 
-### T05 TS/JS LanguageAdapter
+- **AC-002-01** fixtures/auth-app/.duo 전체가 오류 없이 로드된다
+- **AC-002-02** 잘못된 파일 10종이 파일:줄을 포함한 오류를 낸다
+- **AC-002-03** 이 저장소의 docs/를 sources로 읽으면 REQ/ADR/TASK/Milestone이 모두 파싱되고 참조가 전부 해석된다(self fixture)
+- **AC-002-04** fs-guard가 허용 경로 밖 쓰기를 거부한다
+- **AC-002-05** Windows 경로가 POSIX 상대경로로 정규화된다
 
-- **Goal**: TS/JS LanguageAdapter
-- **Input**: ADR-003
-- **Output**: Symbol(function, class, method, exported variable), import, call reference, 테스트(describe/it/test) 추출
-- **Dependencies**: T04
-- **Acceptance Criteria**: grammar ABI 호환 테스트 통과. fixture Symbol·import·call·test golden 일치. parse 오류 파일은 File Node만 생성
-- **Files expected to change**: packages/indexer/src/language/typescript/**, packages/indexer/grammars/*.wasm
-- **Status**: Todo
-- **검증할 문서**: 04, ADR-003
+### TASK-003 GraphStore
 
-### T06 Graph builder와 일관성 검사
+```duo
+type: issue
+status: todo
+milestone: M1
+package: graph
+requirements: [REQ-GRAPH-001, REQ-GRAPH-002]
+decisions: [ADR-002]
+depends_on: [TASK-002]
+```
 
-- **Goal**: Graph builder와 일관성 검사
-- **Input**: T02 loader, T05 추출 결과, Git log
-- **Output**: Node 8종·Edge 9종 생성(provenance 포함), CHANGED_WITH, `graph.check()`
-- **Dependencies**: T03, T05
-- **Acceptance Criteria**: fixture Graph의 Node/Edge golden 일치. 불변식 1~4 통과. Edge 방향이 04 표와 일치
-- **Files expected to change**: packages/graph/src/build/**, packages/graph/src/check.ts, packages/providers/src/git/**
-- **Status**: Todo
-- **검증할 문서**: 04
+- **Goal**: Node/Edge 저장과 bounded traversal을 제공한다.
+- **Input**: 03 SQLite 스키마, 04 탐색 규칙
+- **Output**: node:sqlite GraphStore, 스키마 생성, 인접 조회, BFS, 쓰기 잠금
+- **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
+- **Files expected to change**: `packages/graph/src/store/**`, `packages/graph/src/traverse.ts`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-GRAPH-001](../01-requirements.md#req-graph-001-node-8종과-edge-9종의-embedded-저장), [REQ-GRAPH-002](../01-requirements.md#req-graph-002-결정적-bounded-traversal-trace-impact)
+- **관련 ADR**: [ADR-002](../adr/ADR-002-graph-storage.md)
 
-### T07 증분 인덱싱
+Acceptance Criteria
 
-- **Goal**: 증분 인덱싱
-- **Input**: 04 증분 갱신
-- **Output**: 변경 탐지, owner_file 단위 교체, unresolved_refs 재연결, .duo 파일 변경 반영
-- **Dependencies**: T06
-- **Acceptance Criteria**: 변경 시퀀스 fuzz에서 증분 == 전체 재구축(불변식 5). 무변경 재실행 parse 0회. rename·삭제 처리
-- **Files expected to change**: packages/graph/src/incremental/**
-- **Status**: Todo
-- **검증할 문서**: 02 Freshness, 04
+- **AC-003-01** 메모리와 파일 DB에서 같은 테스트가 통과한다
+- **AC-003-02** traverse가 maxDepth, nodeLimit, edgeTypes를 지키고 방문 순서가 결정적이다
+- **AC-003-03** 쓰기 잠금을 얻지 못한 두 번째 프로세스는 stale 표시와 함께 읽기만 한다
+- **AC-003-04** SQL이 graph 패키지 밖으로 노출되지 않는다
 
-### T08 duo init
+### TASK-004 파일 스캔, fingerprint, 토큰 측정
 
-- **Goal**: duo init
+```duo
+type: issue
+status: todo
+milestone: M1
+package: analyzer
+requirements: [REQ-INDEX-002, REQ-TOKEN-001, REQ-SAFETY-001, REQ-NFR-001]
+decisions: [ADR-005]
+depends_on: [TASK-002]
+```
+
+- **Goal**: 인덱싱 대상 파일을 찾고 fingerprint와 토큰 수를 계산한다.
+- **Input**: 03 project.yaml index 설정, 09 측정 방식, 10 제외 규칙
+- **Output**: 스캐너, fingerprint, TokenEstimator(o200k_base, chars4 fallback)
+- **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
+- **Files expected to change**: `packages/analyzer/src/scan/**`, `packages/analyzer/src/fingerprint/**`, `packages/core/src/tokens/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-INDEX-002](../01-requirements.md#req-index-002-fingerprint-기반-증분-인덱싱), [REQ-TOKEN-001](../01-requirements.md#req-token-001-토큰-측정-방식과-표기), [REQ-SAFETY-001](../01-requirements.md#req-safety-001-source-code-비수정과-쓰기-경로-제한), [REQ-NFR-001](../01-requirements.md#req-nfr-001-cross-platform)
+- **관련 ADR**: [ADR-005](../adr/ADR-005-token-measurement.md)
+
+Acceptance Criteria
+
+- **AC-004-01** fixture의 포함/제외 파일 목록이 golden과 같다
+- **AC-004-02** 비밀 파일 패턴과 .gitignore 대상이 제외된다
+- **AC-004-03** stat이 같으면 재실행 시 hash 계산이 0회다(계측 카운터)
+- **AC-004-04** 모든 토큰 값에 estimator 이름이 붙고 bytes/chars도 함께 저장된다
+
+### TASK-005 LanguageAnalyzer와 TS/JS Analyzer
+
+```duo
+type: issue
+status: todo
+milestone: M1
+package: analyzer
+requirements: [REQ-INDEX-001]
+decisions: [ADR-003]
+depends_on: [TASK-004]
+```
+
+- **Goal**: 언어 비종속 인터페이스와 TypeScript/JavaScript 구현을 만든다.
+- **Input**: ADR-003, 04 AnalysisResult
+- **Output**: LanguageAnalyzer, TypeScriptAnalyzer, JavaScriptAnalyzer, grammar wasm
+- **Dependencies**: [TASK-004](#task-004-파일-스캔-fingerprint-토큰-측정)
+- **Files expected to change**: `packages/analyzer/src/language/**`, `packages/analyzer/grammars/*.wasm`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-INDEX-001](../01-requirements.md#req-index-001-언어-비종속-languageanalyzer)
+- **관련 ADR**: [ADR-003](../adr/ADR-003-language-analysis.md)
+
+Acceptance Criteria
+
+- **AC-005-01** grammar wasm과 web-tree-sitter ABI 호환 테스트가 먼저 통과한다
+- **AC-005-02** fixture의 Symbol, import, call reference, test 추출 결과가 golden과 같다
+- **AC-005-03** parse 오류 파일은 diagnostics와 함께 File 수준 결과만 낸다
+- **AC-005-04** Analyzer 등록부에 새 언어를 추가하는 데 다른 패키지 수정이 필요 없다(테스트용 더미 Analyzer로 검증)
+
+### TASK-006 Git Evidence Provider
+
+```duo
+type: issue
+status: todo
+milestone: M1
+package: analyzer
+requirements: [REQ-INDEX-003, REQ-PROVIDER-001]
+decisions: []
+depends_on: [TASK-002]
+```
+
+- **Goal**: Git diff, 로그, HEAD 내용, co-change, Issue 키를 LLM 없이 제공한다.
+- **Input**: 02 EvidenceProvider, 04 CHANGED_WITH 규칙
+- **Output**: GitEvidenceProvider
+- **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
+- **Files expected to change**: `packages/analyzer/src/git/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-INDEX-003](../01-requirements.md#req-index-003-git-diff에서-변경-symbol-도출), [REQ-PROVIDER-001](../01-requirements.md#req-provider-001-evidenceprovider와-git-provider)
+- **관련 ADR**: 없음
+
+Acceptance Criteria
+
+- **AC-006-01** working tree, staged, base..HEAD diff의 파일 목록과 hunk 줄 범위가 정확하다
+- **AC-006-02** HEAD 시점 파일 내용을 읽을 수 있다(Decision Lock 기준선)
+- **AC-006-03** CHANGED_WITH 후보가 04 규칙(최근 500 커밋, 3회 이상, 50파일 초과 커밋 제외)대로 계산된다
+- **AC-006-04** 커밋 메시지와 브랜치 이름에서 Issue 키를 추출한다
+
+### TASK-007 Graph builder와 일관성 검사
+
+```duo
+type: issue
+status: todo
+milestone: M1
+package: graph
+requirements: [REQ-GRAPH-001, REQ-GRAPH-003, REQ-TRACE-001]
+decisions: [ADR-002, ADR-014]
+depends_on: [TASK-003, TASK-005, TASK-006]
+```
+
+- **Goal**: core, analyzer 결과로 Project Graph를 만든다.
+- **Input**: 04 Node/Edge 표
+- **Output**: builder, provenance, graph.check()
+- **Dependencies**: [TASK-003](#task-003-graphstore), [TASK-005](#task-005-languageanalyzer와-tsjs-analyzer), [TASK-006](#task-006-git-evidence-provider)
+- **Files expected to change**: `packages/graph/src/build/**`, `packages/graph/src/check.ts`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-GRAPH-001](../01-requirements.md#req-graph-001-node-8종과-edge-9종의-embedded-저장), [REQ-GRAPH-003](../01-requirements.md#req-graph-003-graph-일관성-불변식), [REQ-TRACE-001](../01-requirements.md#req-trace-001-id-기반-추적성)
+- **관련 ADR**: [ADR-002](../adr/ADR-002-graph-storage.md), [ADR-014](../adr/ADR-014-traceability-ids.md)
+
+Acceptance Criteria
+
+- **AC-007-01** fixture Graph의 Node/Edge가 golden과 같다
+- **AC-007-02** 불변식 1~4와 6(정의 ID 전역 유일성)이 통과한다
+- **AC-007-03** 이 저장소 docs/로 만든 Graph에서 REQ-CONTEXT-001 → ADR-005 → TASK-010 경로가 탐색된다
+- **AC-007-04** Edge 방향과 endpoint 타입이 04 표와 일치한다
+
+### TASK-008 증분 인덱싱, trace, impact
+
+```duo
+type: issue
+status: todo
+milestone: M1
+package: graph
+requirements: [REQ-INDEX-002, REQ-GRAPH-002, REQ-GRAPH-003]
+decisions: [ADR-002]
+depends_on: [TASK-007]
+```
+
+- **Goal**: 변경 파일만 다시 분석하고 trace/impact를 제공한다.
+- **Input**: 04 증분 갱신 절차
+- **Output**: incremental updater, trace(), impact()
+- **Dependencies**: [TASK-007](#task-007-graph-builder와-일관성-검사)
+- **Files expected to change**: `packages/graph/src/incremental/**`, `packages/graph/src/query/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-INDEX-002](../01-requirements.md#req-index-002-fingerprint-기반-증분-인덱싱), [REQ-GRAPH-002](../01-requirements.md#req-graph-002-결정적-bounded-traversal-trace-impact), [REQ-GRAPH-003](../01-requirements.md#req-graph-003-graph-일관성-불변식)
+- **관련 ADR**: [ADR-002](../adr/ADR-002-graph-storage.md)
+
+Acceptance Criteria
+
+- **AC-008-01** 임의 변경 시퀀스(fuzz)에서 증분 결과가 전체 재구축 결과와 같다(불변식 5)
+- **AC-008-02** 변경 없는 재실행에서 parse 호출이 0회다
+- **AC-008-03** rename과 삭제를 올바르게 반영한다
+- **AC-008-04** trace와 impact 결과가 fixture golden과 같다
+
+### TASK-009 Decision 생명주기
+
+```duo
+type: issue
+status: todo
+milestone: M2
+package: core
+requirements: [REQ-DECISION-001, REQ-DECISION-002, REQ-DECISION-003]
+decisions: [ADR-013]
+depends_on: [TASK-002]
+```
+
+- **Goal**: proposal 생성, confirm, reject, lock digest를 구현한다.
+- **Input**: ADR-013, 03 Decision 스키마
+- **Output**: DecisionService(propose, confirm, reject, verifyLock)
+- **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
+- **Files expected to change**: `packages/core/src/decisions/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-DECISION-001](../01-requirements.md#req-decision-001-decision-제안), [REQ-DECISION-002](../01-requirements.md#req-decision-002-human-confirmreject), [REQ-DECISION-003](../01-requirements.md#req-decision-003-decision-lock)
+- **관련 ADR**: [ADR-013](../adr/ADR-013-decision-lifecycle.md)
+
+Acceptance Criteria
+
+- **AC-009-01** propose는 decisions/proposals/에 새 파일만 만든다
+- **AC-009-02** confirm은 다음 D-### ID로 파일을 옮기고 confirmed_by, confirmed_at, lock digest를 기록한다
+- **AC-009-03** supersede confirm 시 기존 Decision은 state와 superseded_by만 바뀌고 lock digest는 유효하다
+- **AC-009-04** reject는 proposal에 rejected 상태와 사유를 기록한다
+- **AC-009-05** confirm/reject 외에는 state: confirmed를 쓰는 코드 경로가 없다(정적 검사 테스트)
+
+### TASK-010 Context Compiler
+
+```duo
+type: issue
+status: todo
+milestone: M2
+package: director
+requirements: [REQ-CONTEXT-001, REQ-CONTEXT-002, REQ-CONTEXT-003, REQ-NFR-005]
+decisions: [ADR-005, ADR-008, ADR-004]
+depends_on: [TASK-008, TASK-009]
+```
+
+- **Goal**: Task에서 budget 이하의 Director Context Packet을 만든다.
+- **Input**: 05 알고리즘, 09 지표
+- **Output**: Seed 해석, 확장, L1~L3 표현, packing, text/json 출력, metrics
+- **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact), [TASK-009](#task-009-decision-생명주기)
+- **Files expected to change**: `packages/director/src/context/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-CONTEXT-001](../01-requirements.md#req-context-001-director-context-packet-생성), [REQ-CONTEXT-002](../01-requirements.md#req-context-002-token-budget-상한), [REQ-CONTEXT-003](../01-requirements.md#req-context-003-context-지표-기록), [REQ-NFR-005](../01-requirements.md#req-nfr-005-결정적-출력)
+- **관련 ADR**: [ADR-005](../adr/ADR-005-token-measurement.md), [ADR-008](../adr/ADR-008-deterministic-first.md), [ADR-004](../adr/ADR-004-mcp-context-gateway.md)
+
+Acceptance Criteria
+
+- **AC-010-01** fixture 시나리오의 필수 Node Coverage가 100%다
+- **AC-010-02** property test에서 budget 초과가 0건이다
+- **AC-010-03** 같은 입력은 byte 단위로 같은 Packet을 만든다
+- **AC-010-04** Context 생성 중 LLM 호출이 0회다
+- **AC-010-05** 비밀 패턴이 [REDACTED]로 치환된다
+
+### TASK-011 Knowledge Gap
+
+```duo
+type: issue
+status: todo
+milestone: M2
+package: director
+requirements: [REQ-GAP-001]
+decisions: [ADR-008]
+depends_on: [TASK-008]
+```
+
+- **Goal**: Gap을 탐지하고 Task 관련성으로 노출 여부를 정한다.
+- **Input**: 03 gaps, 05 필수 항목 규칙
+- **Output**: GapDetector, relevance 판정
+- **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact)
+- **Files expected to change**: `packages/director/src/gap/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-GAP-001](../01-requirements.md#req-gap-001-knowledge-gap-기록과-관련성-기반-질문)
+- **관련 ADR**: [ADR-008](../adr/ADR-008-deterministic-first.md)
+
+Acceptance Criteria
+
+- **AC-011-01** UNKNOWN: 줄과 구조 규칙에서 Gap이 생성되고 ID가 안정적이다
+- **AC-011-02** anchor가 Subgraph에 있는 Gap만 ASK가 된다
+- **AC-011-03** 무관한 Gap은 Packet에 없고 gaps_suppressed만 증가한다
+- **AC-011-04** UNKNOWN: 줄을 지우면 resolved가 된다
+
+### TASK-012 LLMProvider와 OpenAI 호환 Provider
+
+```duo
+type: issue
+status: todo
+milestone: M2
+package: director
+requirements: [REQ-LLM-002, REQ-LLM-003, REQ-LLM-004, REQ-NFR-002]
+decisions: [ADR-008, ADR-012]
+depends_on: [TASK-002]
+```
+
+- **Goal**: 의미 판정 인터페이스와 동작하는 Provider 1종을 만든다.
+- **Input**: ADR-008, ADR-012
+- **Output**: LLMProvider, NoneProvider, OpenAICompatibleProvider, 응답 cache, usage 기록
+- **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
+- **Files expected to change**: `packages/director/src/llm/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-LLM-002](../01-requirements.md#req-llm-002-llmprovider와-동작하는-provider-1종), [REQ-LLM-003](../01-requirements.md#req-llm-003-llm-없이도-동작), [REQ-LLM-004](../01-requirements.md#req-llm-004-llm-사용량-기록), [REQ-NFR-002](../01-requirements.md#req-nfr-002-local-first)
+- **관련 ADR**: [ADR-008](../adr/ADR-008-deterministic-first.md), [ADR-012](../adr/ADR-012-llm-provider.md)
+
+Acceptance Criteria
+
+- **AC-012-01** Provider 미설정이나 API Key 없음이면 NoneProvider가 선택되고 모든 호출이 UNAVAILABLE을 반환한다
+- **AC-012-02** 가짜 HTTP 서버로 요청 형식, 타임아웃, 재시도, 스키마 검증 실패 처리를 검증한다
+- **AC-012-03** 응답이 제공된 Evidence ID 밖을 인용하면 결과를 버리고 UNKNOWN으로 처리한다
+- **AC-012-04** usage(입력/출력 토큰)가 runtime/metrics.jsonl에 기록된다
+- **AC-012-05** API Key는 환경 변수에서만 읽고 파일이나 로그에 쓰지 않는다
+
+### TASK-013 Review 엔진
+
+```duo
+type: issue
+status: todo
+milestone: M2
+package: director
+requirements: [REQ-REVIEW-001, REQ-REVIEW-002, REQ-REVIEW-003, REQ-REVIEW-004, REQ-EVIDENCE-001, REQ-LLM-001, REQ-DECISION-003]
+decisions: [ADR-007, ADR-008, ADR-013]
+depends_on: [TASK-008, TASK-009, TASK-010, TASK-011, TASK-012]
+```
+
+- **Goal**: 변경을 규칙과 의미 판정으로 검수하고 Verdict를 낸다.
+- **Input**: ADR-007 규칙 표
+- **Output**: 규칙 실행, semantic escalation, 집계, runtime evidence, Review Record, 구조적 Drift
+- **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact), [TASK-009](#task-009-decision-생명주기), [TASK-010](#task-010-context-compiler), [TASK-011](#task-011-knowledge-gap), [TASK-012](#task-012-llmprovider와-openai-호환-provider)
+- **Files expected to change**: `packages/director/src/review/**`, `packages/director/src/evidence/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-REVIEW-001](../01-requirements.md#req-review-001-diff-review-파이프라인), [REQ-REVIEW-002](../01-requirements.md#req-review-002-두-수준-verdict-모델), [REQ-REVIEW-003](../01-requirements.md#req-review-003-scope-drift와-spec-conflict-감지), [REQ-REVIEW-004](../01-requirements.md#req-review-004-specdecisionissue와-code-사이의-drift), [REQ-EVIDENCE-001](../01-requirements.md#req-evidence-001-claim-evidence-verdict와-근거-보존), [REQ-LLM-001](../01-requirements.md#req-llm-001-deterministic-first-판단-순서), [REQ-DECISION-003](../01-requirements.md#req-decision-003-decision-lock)
+- **관련 ADR**: [ADR-007](../adr/ADR-007-verdict-model.md), [ADR-008](../adr/ADR-008-deterministic-first.md), [ADR-013](../adr/ADR-013-decision-lifecycle.md)
+
+Acceptance Criteria
+
+- **AC-013-01** 변경 세트 6종의 Verdict와 규칙 ID가 기대값과 같다
+- **AC-013-02** 모든 Claim이 Evidence를 1개 이상 가진다
+- **AC-013-03** LLM 없이 실행하면 의미 판단 Claim은 UNKNOWN이고 skipped_checks에 기록된다
+- **AC-013-04** LLM이나 heuristic 근거만으로는 BLOCK이 나오지 않는다
+- **AC-013-05** --record는 .duo/reviews/에 코드 본문 없이 참조만 저장한다
+
+### TASK-014 init 파이프라인
+
+```duo
+type: issue
+status: todo
+milestone: M2
+package: director
+requirements: [REQ-INIT-001, REQ-INIT-002, REQ-INIT-003, REQ-TRUTH-001, REQ-TRUTH-002]
+decisions: [ADR-006, ADR-008]
+depends_on: [TASK-008, TASK-011]
+```
+
+- **Goal**: 최초 분석, 초안, Human 확인 질문을 만든다.
 - **Input**: 02 init 흐름, 07 init 대화
-- **Output**: init 파이프라인, 초안(vision, constraints, project.yaml), inferred.json, gaps.json, .duo/.gitignore, 대화형·비대화형
-- **Dependencies**: T07
-- **Acceptance Criteria**: fixture(.duo 제거본)에서 init 결과 golden 일치. llm_calls 0. 기존 .duo가 있으면 거부, --reindex는 Human 파일 불변. 비TTY에서 ASK 목록 출력. UNKNOWN 줄 → gap
-- **Files expected to change**: packages/cli/src/commands/init.ts, packages/core/src/init/**
-- **Status**: Todo
-- **검증할 문서**: 02, 03, 07
+- **Output**: InitService(analyze, draft, questions, write)
+- **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact), [TASK-011](#task-011-knowledge-gap)
+- **Files expected to change**: `packages/director/src/init/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-INIT-001](../01-requirements.md#req-init-001-결정적-repository-분석), [REQ-INIT-002](../01-requirements.md#req-init-002-intent-초안-구현-상태-추론-knowledge-gap-생성), [REQ-INIT-003](../01-requirements.md#req-init-003-human-intent-확인), [REQ-TRUTH-001](../01-requirements.md#req-truth-001-duo-project-truth-layer와-소유권), [REQ-TRUTH-002](../01-requirements.md#req-truth-002-git-관리-정책)
+- **관련 ADR**: [ADR-006](../adr/ADR-006-duo-layout-git-policy.md), [ADR-008](../adr/ADR-008-deterministic-first.md)
 
-### T09 Decision Lock과 proposal
+Acceptance Criteria
 
-- **Goal**: Decision Lock과 proposal
-- **Input**: 03 Decision Lock
-- **Output**: HEAD 기준 lock 판정 함수, 상태 전이 검사, proposal 파일 생성
-- **Dependencies**: T06
-- **Acceptance Criteria**: R-LOCK 시나리오 3종(BLOCK/ASK/WARN) 통과. proposal은 새 파일만 생성. 코드에서 `state: confirmed` 기록 경로 없음을 테스트로 확인
-- **Files expected to change**: packages/review/src/lock/**, packages/core/src/proposals.ts
-- **Status**: Todo
-- **검증할 문서**: 03, ADR-007
+- **AC-014-01** fixture(.duo 제거본)에서 init 결과가 golden과 같다
+- **AC-014-02** init 중 LLM 호출이 0회다
+- **AC-014-03** 기존 .duo가 있으면 거부한다. --reindex는 Human-owned 파일을 바꾸지 않고, generated/를 지운 뒤 실행하면 같은 Graph를 만든다
+- **AC-014-04** 비대화형 실행은 질문을 ASK 목록으로 반환하고 초안에 UNKNOWN: 줄로 남긴다
+- **AC-014-05** .duo/.gitignore가 ADR-006 정책대로 생성된다
 
-### T10 Context Compiler
+### TASK-015 CLI
 
-- **Goal**: Context Compiler
-- **Input**: 05, 09, ADR-005
-- **Output**: Seed 해석, 확장, 필수 항목, L1~L3, packing, text/json 출력, metrics.jsonl, TokenEstimator 확정
-- **Dependencies**: T07, T09
-- **Acceptance Criteria**: fixture 시나리오 Coverage 100%. property test로 budget 초과 0건. 결정성(같은 입력 byte 동일). 관련 gap만 ASK. 비밀 패턴 치환
-- **Files expected to change**: packages/compiler/**, packages/providers/src/token/**
-- **Status**: Todo
-- **검증할 문서**: 05, 09
+```duo
+type: issue
+status: todo
+milestone: M3
+package: cli
+requirements: [REQ-CLI-001, REQ-DECISION-002, REQ-NFR-006]
+decisions: [ADR-010, ADR-013]
+depends_on: [TASK-009, TASK-010, TASK-013, TASK-014]
+```
 
-### T11 Review 엔진
+- **Goal**: 명령을 packages의 서비스에 연결한다.
+- **Input**: 07 명령 표
+- **Output**: apps/cli 명령, 대화형 입력, 출력 형식, 종료 코드
+- **Dependencies**: [TASK-009](#task-009-decision-생명주기), [TASK-010](#task-010-context-compiler), [TASK-013](#task-013-review-엔진), [TASK-014](#task-014-init-파이프라인)
+- **Files expected to change**: `apps/cli/src/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-CLI-001](../01-requirements.md#req-cli-001-얇은-cli), [REQ-DECISION-002](../01-requirements.md#req-decision-002-human-confirmreject), [REQ-NFR-006](../01-requirements.md#req-nfr-006-간결한-기본-출력)
+- **관련 ADR**: [ADR-010](../adr/ADR-010-package-structure.md), [ADR-013](../adr/ADR-013-decision-lifecycle.md)
 
-- **Goal**: Review 엔진
-- **Input**: ADR-007, 03 evidence
-- **Output**: diff 수집, 변경 Symbol, 규칙 7종, 집계, evidence 저장, 구조적 Drift
-- **Dependencies**: T09, T10
-- **Acceptance Criteria**: 변경 세트 5종의 기대 verdict와 규칙 ID 일치. 모든 Claim Evidence ≥ 1. heuristic 단독 BLOCK 없음. llm_calls 0
-- **Files expected to change**: packages/review/**
-- **Status**: Todo
-- **검증할 문서**: ADR-007, 08 Drift
+Acceptance Criteria
 
-### T12 CLI
+- **AC-015-01** 07의 모든 명령이 스모크 테스트를 통과한다
+- **AC-015-02** 종료 코드가 07 표와 같다
+- **AC-015-03** --json 출력이 MCP structuredContent 스키마와 같다
+- **AC-015-04** `duo decision confirm`은 TTY가 아니면 거부한다
+- **AC-015-05** apps/cli에 domain 로직이 없다(의존 방향 lint)
 
-- **Goal**: CLI
-- **Input**: 07
-- **Output**: 명령 10종, 공통 옵션, text/json 출력, 종료 코드
-- **Dependencies**: T08, T10, T11
-- **Acceptance Criteria**: 명령별 스모크 테스트와 종료 코드 테스트. --json 출력이 MCP structured 스키마와 같음
-- **Files expected to change**: packages/cli/src/**
-- **Status**: Todo
-- **검증할 문서**: 07
+### TASK-016 MCP 서버
 
-### T13 MCP 서버
+```duo
+type: issue
+status: todo
+milestone: M3
+package: integration
+requirements: [REQ-MCP-001, REQ-NFR-007]
+decisions: [ADR-004]
+depends_on: [TASK-010, TASK-013]
+```
 
-- **Goal**: MCP 서버
-- **Input**: 06, ADR-004
-- **Output**: Tool 9종, freshness, 오류 코드, stdio 서버(`duo mcp`)
-- **Dependencies**: T10, T11
-- **Acceptance Criteria**: 계약 테스트(tools/list 스냅샷, 입력 검증, 출력 스키마) 통과. stdout 순수성 테스트 통과
-- **Files expected to change**: packages/mcp/**, packages/cli/src/commands/mcp.ts
-- **Status**: Todo
-- **검증할 문서**: 06
+- **Goal**: Context Gateway MCP 서버를 만든다.
+- **Input**: 06 Tool 계약, ADR-004
+- **Output**: Tool 9종, freshness, 오류 코드, `duo mcp`
+- **Dependencies**: [TASK-010](#task-010-context-compiler), [TASK-013](#task-013-review-엔진)
+- **Files expected to change**: `packages/integration/src/mcp/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-MCP-001](../01-requirements.md#req-mcp-001-mcp-context-gateway), [REQ-NFR-007](../01-requirements.md#req-nfr-007-mcp-stdout-순수성)
+- **관련 ADR**: [ADR-004](../adr/ADR-004-mcp-context-gateway.md)
 
-### T14 duo install codex/claude
+Acceptance Criteria
 
-- **Goal**: duo install codex|claude
+- **AC-016-01** 착수 시 MCP SDK v2 공식 문서를 다시 확인하고 ADR-004에 버전을 기록한다
+- **AC-016-02** tools/list 스냅샷이 06의 9개 Tool과 같다
+- **AC-016-03** 각 Tool의 입력 검증 오류와 structured 출력 스키마가 계약과 같다
+- **AC-016-04** stdout에 JSON-RPC 외 바이트가 없다
+- **AC-016-05** confirm/reject Tool이 존재하지 않는다
+
+### TASK-017 Agent Adapter와 duo install
+
+```duo
+type: issue
+status: todo
+milestone: M3
+package: integration
+requirements: [REQ-AGENT-001]
+decisions: [ADR-011]
+depends_on: [TASK-015, TASK-016]
+```
+
+- **Goal**: Codex와 Claude Code 연동을 설치한다.
 - **Input**: ADR-011
-- **Output**: AgentAdapter 2종, dry-run, 백업, idempotent, uninstall
-- **Dependencies**: T12, T13
-- **Acceptance Criteria**: 착수 시 공식 문서로 설정 형식 확인 후 ADR-011 갱신. 임시 환경에서 install → 재실행 동일 → uninstall 복원
-- **Files expected to change**: packages/adapters/**, packages/cli/src/commands/install.ts
-- **Status**: Todo
-- **검증할 문서**: ADR-011, 10
+- **Output**: AgentAdapter(codex, claude), dry-run, 백업, uninstall
+- **Dependencies**: [TASK-015](#task-015-cli), [TASK-016](#task-016-mcp-서버)
+- **Files expected to change**: `packages/integration/src/agents/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-AGENT-001](../01-requirements.md#req-agent-001-duo-install-codexclaude)
+- **관련 ADR**: [ADR-011](../adr/ADR-011-agent-integration.md)
 
-### T15 Web UI
+Acceptance Criteria
 
-- **Goal**: Web UI
-- **Input**: 08, ADR-009
-- **Output**: HTTP 서버(API 6종, Host 검사), React 5개 화면
-- **Dependencies**: T11, T12
-- **Acceptance Criteria**: API 스키마 테스트. Host 헤더 위조 거부. 5개 화면이 fixture 데이터로 렌더링(컴포넌트 테스트). Graph 300 Node 상한
-- **Files expected to change**: packages/ui/**, packages/cli/src/server/**
-- **Status**: Todo
-- **검증할 문서**: 08, 10
+- **AC-017-01** 착수 시 두 Agent의 공식 문서로 MCP 설정 형식을 확인하고 ADR-011을 갱신한다
+- **AC-017-02** 임시 환경에서 install 후 설정과 instruction 블록이 기대와 같다
+- **AC-017-03** install을 반복해도 결과가 같다
+- **AC-017-04** uninstall이 원래 상태로 복원한다
+- **AC-017-05** instruction 블록이 10줄 이하이고 Repository Context가 없다
 
-### T16 Benchmark
+### TASK-018 Local HTTP API와 Web UI
 
-- **Goal**: Benchmark
-- **Input**: 09 Benchmark
-- **Output**: bench runner, 시나리오, 결과 md/json, 공개 repo 1~2개 pin
-- **Dependencies**: T10, T11
-- **Acceptance Criteria**: `pnpm bench` 두 번 실행 결과 동일. 09의 모든 열 포함. 결과 파일 커밋
-- **Files expected to change**: bench/**
-- **Status**: Todo
-- **검증할 문서**: 09
+```duo
+type: issue
+status: todo
+milestone: M3
+package: ui
+requirements: [REQ-UI-001, REQ-UI-002, REQ-REVIEW-004]
+decisions: [ADR-009, ADR-013]
+depends_on: [TASK-009, TASK-013, TASK-015]
+```
 
-### T17 E2E와 문서 대조
+- **Goal**: 5개 화면과 Decision Confirm/Reject를 제공한다.
+- **Input**: 08 화면과 API
+- **Output**: integration/http API, React 앱
+- **Dependencies**: [TASK-009](#task-009-decision-생명주기), [TASK-013](#task-013-review-엔진), [TASK-015](#task-015-cli)
+- **Files expected to change**: `packages/integration/src/http/**`, `packages/ui/src/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-UI-001](../01-requirements.md#req-ui-001-읽기-중심-web-ui-5개-화면), [REQ-UI-002](../01-requirements.md#req-ui-002-ui의-decision-confirmreject), [REQ-REVIEW-004](../01-requirements.md#req-review-004-specdecisionissue와-code-사이의-drift)
+- **관련 ADR**: [ADR-009](../adr/ADR-009-ui-stack.md), [ADR-013](../adr/ADR-013-decision-lifecycle.md)
 
-- **Goal**: E2E와 문서 대조
+Acceptance Criteria
+
+- **AC-018-01** GET API 6종의 응답 스키마 테스트가 통과한다
+- **AC-018-02** Confirm/Reject는 DecisionService를 거쳐 .duo/decisions/만 바꾸고 UI 전용 상태가 없다
+- **AC-018-03** Host/Origin 검사와 실행별 token이 없는 쓰기 요청을 거부한다
+- **AC-018-04** 5개 화면이 fixture 데이터로 렌더링된다
+- **AC-018-05** Graph 화면은 300 Node 상한을 지킨다
+
+### TASK-019 Benchmark
+
+```duo
+type: issue
+status: todo
+milestone: M4
+package: bench
+requirements: [REQ-TOKEN-002, REQ-NFR-004]
+decisions: [ADR-005]
+depends_on: [TASK-010, TASK-013]
+```
+
+- **Goal**: Context 절감 효과를 재현 가능하게 측정한다.
+- **Input**: 09 Benchmark 절
+- **Output**: bench runner, 시나리오, 결과 md/json
+- **Dependencies**: [TASK-010](#task-010-context-compiler), [TASK-013](#task-013-review-엔진)
+- **Files expected to change**: `bench/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-TOKEN-002](../01-requirements.md#req-token-002-재현-가능한-benchmark), [REQ-NFR-004](../01-requirements.md#req-nfr-004-성능-목표)
+- **관련 ADR**: [ADR-005](../adr/ADR-005-token-measurement.md)
+
+Acceptance Criteria
+
+- **AC-019-01** `pnpm bench`를 두 번 실행한 결과가 같다
+- **AC-019-02** 결과에 09의 모든 열과 측정 방식이 있다
+- **AC-019-03** fixture와 pin한 공개 repository 1~2개 결과를 커밋한다
+- **AC-019-04** NFR-004 목표 대비 실측값을 기록한다
+
+### TASK-020 E2E와 문서-구현 대조
+
+```duo
+type: issue
+status: todo
+milestone: M4
+package: all
+requirements: [REQ-TRACE-001, REQ-NFR-001]
+decisions: [ADR-014]
+depends_on: [TASK-015, TASK-016, TASK-017, TASK-018, TASK-019]
+```
+
+- **Goal**: MVP End-to-End 흐름을 검증한다.
 - **Input**: 11 E2E 시나리오
-- **Output**: E2E 테스트, 문서-구현 차이 목록
-- **Dependencies**: T12~T16
-- **Acceptance Criteria**: 11의 E2E 6단계가 3 OS CI 통과. 모든 문서와 구현 대조 후 차이를 conflicts.md에 기록. v0.1 태그 준비
-- **Files expected to change**: tests/e2e/**, docs/**
-- **Status**: Todo
-- **검증할 문서**: 전체
+- **Output**: E2E 테스트, self fixture 테스트, 대조 결과
+- **Dependencies**: [TASK-015](#task-015-cli), [TASK-016](#task-016-mcp-서버), [TASK-017](#task-017-agent-adapter와-duo-install), [TASK-018](#task-018-local-http-api와-web-ui), [TASK-019](#task-019-benchmark)
+- **Files expected to change**: `tests/e2e/**`, `docs/**`
+- **Status**: todo
+- **검증 대상 Requirement**: [REQ-TRACE-001](../01-requirements.md#req-trace-001-id-기반-추적성), [REQ-NFR-001](../01-requirements.md#req-nfr-001-cross-platform)
+- **관련 ADR**: [ADR-014](../adr/ADR-014-traceability-ids.md)
+
+Acceptance Criteria
+
+- **AC-020-01** 11의 E2E 단계가 3 OS CI에서 통과한다
+- **AC-020-02** DUO가 이 저장소 docs/를 인덱싱해 `duo trace REQ-CONTEXT-001`로 ADR과 Task를 찾는다
+- **AC-020-03** 모든 문서와 구현을 대조하고 차이를 conflicts.md에 기록한다
