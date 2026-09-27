@@ -25,8 +25,9 @@ export {
 } from "./fingerprint/store.js";
 export { compareFingerprints, type FingerprintChange, type FingerprintChangeStatus } from "./fingerprint/compare.js";
 export type {
-  AnalyzedSymbol, CallSite, CallSiteKind, DuoAnnotation, LanguageAnalyzer, ModuleReference, ModuleReferenceKind, ParseStatus,
-  SourceAnalysis, SourceInput, SourceLanguage, SymbolKind,
+  AnalyzedSymbol, AnalyzedTest, CallSite, CallSiteKind, DuoAnnotation, ImportBinding, LanguageAnalyzer, MemberScope, ModuleReference,
+  ModuleReferenceKind, ParseStatus, ReExportBinding, SourceAnalysis, SourceInput, SourceLanguage, SymbolKind, TestConfidence,
+  TestFrameworkHint, TestKind, TestModifier,
 } from "./language/types.js";
 export { createAnalyzerRegistry, type AnalyzerRegistry } from "./language/registry.js";
 export { parseDuoAnnotations } from "./language/annotations.js";

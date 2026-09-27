@@ -18,8 +18,11 @@ import { extractTypeScriptJavaScript } from "./ts-js-extract.js";
 export const TYPESCRIPT_EXTENSIONS: Readonly<Record<string, GrammarId>> = { ts: "typescript", mts: "typescript", cts: "typescript", tsx: "tsx" };
 export const JAVASCRIPT_EXTENSIONS: Readonly<Record<string, GrammarId>> = { js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript" };
 
-/** Bump when extraction output changes (04: a new version re-analyzes that analyzer's files). */
-export const TS_JS_ANALYZER_VERSION = "1";
+/**
+ * Bump when extraction output changes (04: a new version re-analyzes that analyzer's files).
+ * 2: T05.1 static member identity, import bindings, tests.
+ */
+export const TS_JS_ANALYZER_VERSION = "2";
 /** Per-file parse limit (docs/10-security.md). */
 export const DEFAULT_PARSE_TIMEOUT_MS = 2000;
 
@@ -90,6 +93,7 @@ class TreeSitterAnalyzer implements LanguageAnalyzer {
         moduleReferences: x.moduleReferences,
         callSites: x.callSites,
         annotations: x.annotations,
+        tests: x.tests,
       }, x.diagnostics);
     } finally {
       tree.delete();

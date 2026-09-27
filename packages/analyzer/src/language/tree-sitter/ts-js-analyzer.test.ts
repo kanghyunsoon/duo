@@ -76,7 +76,9 @@ describe("symbols", () => {
     // Not symbols: the constant TIMEOUT, the nested function, class fields, the computed [Symbol.iterator].
     const names = a.symbols.map((s) => s.qualifiedName);
     for (const absent of ["TIMEOUT", "nested", "legacy.nested", "AuthService.instances", "AuthService.#token"]) expect(names).not.toContain(absent);
-    expect(a.symbols.find((s) => s.qualifiedName === "AuthService.create")).toMatchObject({ static: true, parent: "AuthService" });
+    expect(a.symbols.find((s) => s.qualifiedName === "AuthService.create")).toMatchObject({ memberScope: "static", parent: "AuthService" });
+    expect(a.symbols.find((s) => s.qualifiedName === "AuthService.create")?.ref.symbol).toBe("AuthService.static.create");
+    expect(a.symbols.find((s) => s.qualifiedName === "AuthService.quoted-name")?.ref.symbol).toBe('AuthService["quoted-name"]');
   });
 
   it("uses core symbolRef/nodeId as identity", () => {

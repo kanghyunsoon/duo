@@ -78,6 +78,8 @@ export const DIAGNOSTIC_SEVERITY = {
   AST_PARSE_TIMEOUT: "error",
   /** A "duo:" comment line that does not start with a definition ID. */
   DUO_ANNOTATION_INVALID: "warning",
+  /** A test/suite call whose name is not a literal; it (and tests inside a suite) is not recorded (T05.1). */
+  TEST_NAME_DYNAMIC: "info",
 } as const satisfies Record<string, DiagnosticSeverity>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_SEVERITY;

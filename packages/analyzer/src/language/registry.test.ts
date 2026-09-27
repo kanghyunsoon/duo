@@ -12,7 +12,7 @@ const dummy: LanguageAnalyzer = {
   supports: (path) => path.endsWith(".dummy"),
   analyze: (input) => success({
     path: input.path, language: "dummy-lang", contentHash: "sha256:" + "0".repeat(64), parseStatus: "complete",
-    symbols: [], moduleReferences: [], callSites: [], annotations: [],
+    symbols: [], moduleReferences: [], callSites: [], annotations: [], tests: [],
   }),
   dispose: () => { disposed.push("dummy"); },
 };

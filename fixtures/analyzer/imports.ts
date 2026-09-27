@@ -1,0 +1,17 @@
+import foo from "./foo";
+import { bar } from "./bar";
+import { baz as qux } from "./baz";
+import * as Ns from "./ns";
+import type { T } from "./types";
+import { type U, value } from "./mixed";
+import def, { named, "x-y" as xy, default as other } from "./many";
+import "./side-effect";
+import Legacy = require("./legacy");
+const Cjs = require("./cjs");
+const { a, b: renamed, default: Dflt } = require("./destructured");
+require("./bare");
+export { foo2 } from "./foo2";
+export { foo3 as bar3 } from "./foo3";
+export * from "./all";
+export * as grouped from "./grouped";
+export type { V } from "./vtypes";
