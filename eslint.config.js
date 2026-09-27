@@ -13,7 +13,7 @@ const dirs = Object.values(packages).map((p) => p.dir.split("/")[1]);
 
 /**
  * @param {string} name
- * @param {{ sqliteAllowed?: boolean, cliNode?: boolean, sourceParsingAllowed?: boolean, treeSitterAllowed?: boolean, typescriptApiAllowed?: boolean, tokenizerAllowed?: boolean }} [opts]
+ * @param {{ sqliteAllowed?: boolean, cliNode?: boolean, sourceParsingAllowed?: boolean, treeSitterAllowed?: boolean, typescriptApiAllowed?: boolean, tokenizerAllowed?: boolean, llmVendorAllowed?: boolean }} [opts]
  */
 function restrictions(name, opts = {}) {
   const spec = packages[name];
@@ -59,6 +59,10 @@ function restrictions(name, opts = {}) {
       regex: `^(\\.\\./)+(packages/|apps/)?(${dirs.join("|")})/src(/|$)`,
       message: "Import other workspace packages by name, not by relative path (ADR-010).",
     },
+    ...(opts.llmVendorAllowed ? [] : [{
+      group: boundaries.llmVendorSdk.modules.flatMap((m) => [m, `${m}/*`]),
+      message: `LLM vendor SDKs may be imported only in ${boundaries.llmVendorSdk.dir}/ (director owns only the LLMProvider contract, ADR-012).`,
+    }]),
   ];
   return ["error", { paths, patterns }];
 }
@@ -100,5 +104,9 @@ export default defineConfig(
   {
     files: [`${boundaries.tokenizer.dir}/${TS}`],
     rules: { [RULE]: restrictions("@duo-director/director", { tokenizerAllowed: true }) },
+  },
+  {
+    files: [`${boundaries.llmVendorSdk.dir}/${TS}`],
+    rules: { [RULE]: restrictions("@duo-director/integration", { llmVendorAllowed: true }) },
   },
 );

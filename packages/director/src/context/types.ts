@@ -24,6 +24,17 @@ export type ContextStatus = "ready" | "index-required" | "ambiguous" | "insuffic
 /** How a seed was found (05 Seed 해석). */
 export type SeedMatch = "id" | "path" | "symbol" | "symbol-name" | "keyword";
 
+/**
+ * T11.1: explicit = the task names the entity exactly (ID, Issue key, RepoPath, qualified or unique
+ * symbol name); retrieved = lexical search found it (keyword, BM25). Retrieved seeds are good for
+ * finding context but never enough to block on a human question.
+ */
+export type SeedProvenance = "explicit" | "retrieved";
+
+export const SEED_PROVENANCE: Readonly<Record<SeedMatch, SeedProvenance>> = {
+  id: "explicit", path: "explicit", symbol: "explicit", "symbol-name": "explicit", keyword: "retrieved",
+};
+
 export interface ContextSeed {
   /** Node ID. */
   readonly id: string;

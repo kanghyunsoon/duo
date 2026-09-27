@@ -104,14 +104,16 @@ Proposal은 Project Truth가 아니다(T09.1). pending 여부는 core `pendingDe
 
 ## Intent relevance policy
 
-T10.1. "이 intent가 현재 Task와 관련 있는가"를 한 곳(`packages/director/src/relevance/`, `RELEVANCE_POLICY_VERSION` "1")에서 정한다. Context Compiler(Constraint 선택), Knowledge Gap(Declared Gap), 이후 Review가 같은 함수를 쓰고 각자 matcher를 두지 않는다. 점수는 없고 결과는 `direct | related | none`과 근거 목록(`reasons: { code, ref?, detail? }[]`), 근거가 된 scope 항목(`matched`)이다.
+T10.1. "이 intent가 현재 Task와 관련 있는가"를 한 곳(`packages/director/src/relevance/`, `RELEVANCE_POLICY_VERSION` "2", T11.1)에서 정한다. Context Compiler(Constraint 선택), Knowledge Gap(Declared Gap), 이후 Review가 같은 함수를 쓰고 각자 matcher를 두지 않는다. 점수는 없고 결과는 `direct | related | none`과 근거 목록(`reasons: { code, ref?, detail? }[]`), 근거가 된 scope 항목(`matched`)이다.
 
 scope는 Task의 후보 맥락을 순위 순으로 늘어놓은 목록이다(`ScopeEntry { id, ref, type, hops, seed, path?, qualifiedName? }`). Compiler는 탐색 후보 전체를, Gap assessment는 Packet 항목과 `omittedCandidates`(hops 없음)를 넘긴다.
 
 | 함수 | direct | related | none |
 |---|---|---|---|
 | `matchConstraint` | `match.paths`·`match.symbols`에 맞는 코드 항목이 seed이거나 seed에서 1 Edge(`match-path`, `match-symbol`) | 그 코드 항목이 더 멀리 있음, 또는 Task 텍스트에 `match.keywords`가 있음(`match-keyword`) | 둘 다 아님 |
-| `matchDeclaredGap` | owner가 seed(`task-seed`), seed에서 1 Edge인 Requirement·Decision(`near-intent`), 또는 맥락 안 Requirement를 맥락 안 활성 Decision이 governs(`governed-by-active-decision`) | owner가 맥락의 다른 곳(Issue·Milestone, 2 Edge 이상, budget으로 생략, `in-context`), 또는 project gap이 Task와 검색어를 공유(`keyword-overlap`) | 그 외. project gap은 direct가 되지 않음 |
+| `matchDeclaredGap` | Task가 gap 자체를 가리킴(key token, 또는 정규화한 gap text 전체 포함, 4자 이상, `gap-mentioned`. project gap 포함), owner가 explicit seed(`task-seed`), explicit seed에서 1 Edge인 Requirement·Decision(`near-intent`), explicit seed에서 닿은 Requirement를 맥락 안 활성 Decision이 governs(`governed-by-active-decision`) | owner가 retrieved seed이거나 그것에서 닿음(`retrieved-seed`), 맥락의 다른 곳(Issue·Milestone, 2 Edge 이상, budget으로 생략, `in-context`), project gap이 Task와 검색어를 공유(`keyword-overlap`) | 그 외 |
+
+**Seed provenance**(T11.1, C99): seed의 `match`가 id, path, symbol, symbol-name이면 **explicit**, keyword(BM25)면 **retrieved**다(`SEED_PROVENANCE`). scope 항목은 자기 seed 여부(`seed`)와 최선 경로가 시작한 seed의 provenance(`origin`, `originRef`)를 가진다. Context retrieval relevance와 Human-blocking confidence는 다르다: retrieved seed는 후보 탐색에 그대로 쓰지만, 그것만으로 gap이 direct(ask)가 되지 않는다. Packet 구조와 T10 선택 결과는 바뀌지 않는다(provenance는 `match`에서 파생).
 
 첫 번째로 맞는 항목이 근거다. T10.1은 기존 판정을 옮기기만 했고 T10 fixture의 13개 요청에서 Packet JSON, Markdown, digest, token 수, 선택된 Constraint가 byte 단위로 같았다.
 
@@ -128,16 +130,17 @@ TASK-011이 쓸 구조화 신호만 낸다. 질문은 만들지 않는다.
 
 ## Knowledge Gap assessment
 
-TASK-011. Compiler는 무엇을 보여줄지 고르고, 무엇이 아직 정해지지 않았는지는 별도 서비스 `assessKnowledgeGaps({ request, result, truth })`(`packages/director/src/gap/`)가 정한다. Compiler는 질문을 만들지 않고 Packet 구조도 바뀌지 않는다. 입력은 Compiler 결과(status, resolution, Packet의 signals·pendingDecisions·limitations·항목)와 Project Truth(`truth.gaps`, Decision)다. 계산이 가벼워 cache하지 않는다. Packet cache가 hit여도 같은 Packet으로 다시 평가하면 된다. LLM은 쓰지 않는다(`metrics.llmCalls: 0`).
+TASK-011. Compiler는 무엇을 보여줄지 고르고, 무엇이 아직 정해지지 않았는지는 별도 서비스 `assessKnowledgeGaps({ request, result, truth })`(`packages/director/src/gap/`)가 정한다. Compiler는 질문을 만들지 않고 Packet 구조도 바뀌지 않는다. 입력은 Compiler 결과(status, resolution, Packet의 signals·pendingDecisions·limitations·항목)와 Project Truth(`truth.gaps`, Decision)다. 계산이 가벼워 cache하지 않는다. Compiler와 평가 모두 LLMProvider를 받지 않는다(T12A). Packet cache가 hit여도 같은 Packet으로 다시 평가하면 된다. LLM은 쓰지 않는다(`metrics.llmCalls: 0`).
 
 - `index-required`면 판단하지 않는다: `status: "index-required"`, gap 없음, `requiresHumanInput: false`.
 - Runtime Gap과 Declared Gap의 정의·ID는 [03 Knowledge Gap](03-data-model.md#knowledge-gap)이다.
-- Declared Gap: resolved면 ignore. 아니면 relevance policy로 direct → ask, related → surface, none → ignore. direct라도 이미 결정된 gap은 다시 묻지 않는다.
+- Declared Gap: resolved면 ignore. 아니면 relevance policy로 direct → ask, related → surface, none → ignore. direct라도 이미 결정된 gap은 다시 묻지 않는다. retrieved seed만으로는 related다(T11.1).
+- Pending decision: Packet의 `requiresHumanDecision`은 "이 맥락에 닿는 미결정"이라는 context 표시다. ask는 명시적 연결(관련 ID가 explicit seed이거나 explicit seed에서 1 Edge, 또는 Task에 proposal ID)이 있을 때만이고, 검색으로만 닿았으면 surface다(C100).
 - 기술적 불확실성(unresolved call·module, `.d.ts` 모호함, instance receiver, partial parse)은 gap이 아니다. `technicalLimitations`(Packet limitation 코드에서 intent 관련 `no-confirmed-intent`를 뺀 것)로만 남는다.
 - `requiresHumanInput`은 ask gap이 하나라도 있을 때만 true다: 모호한 대상, 없는 ID, Task가 의존하는 pending decision, 직접 관련된 미해결 Declared Gap. intent 없음은 surface라 false다.
 - 순서: action(ask, surface, ignore), kind 우선순위(ambiguous-target, unresolved-target, pending-decision, declared, missing-intent), 그 안에서 발견 순서 또는 owner의 Packet 순위, 마지막으로 ID. 첫 ask가 `primary`, 나머지 ask가 `additional`이다. 한 답이 다른 gap을 바꿀 수 있으므로 한 번에 하나를 먼저 묻는다(대화 loop는 MCP·CLI).
 - 결과: `KnowledgeGapAssessment { format: "duo.gap-assessment/1", status, gaps, requiresHumanInput, primary?, additional, technicalLimitations, metrics }`. metrics는 declaredConsidered, runtime, direct, related, none, ask, surface, ignore, llmCalls이며 품질 지표가 아닌 관찰값이다.
-- 문구: `renderGapQuestions(assessment)`가 고정 template로 `primaryQuestion`, `additionalQuestions`, surface gap의 `notes`를 만든다. 선택·관련성 로직은 없다. pending proposal은 "확정되지 않은 제안"으로만 부르고 제안된 답은 쓰지 않는다.
+- 문구: `renderGapQuestions(assessment, { locale })`가 고정 template로 `primaryQuestion`, `additionalQuestions`, surface gap의 `notes`를 만든다. locale은 `en`(기본)과 `ko`이고 호출자(CLI, MCP, UI)가 정한다. 언어를 추측하지 않는다. 선택·관련성·primary·filtering 로직은 없고 같은 assessment와 locale이면 byte 단위로 같다. Gap domain은 언어 중립 데이터(kind, anchors, options, reasons, action)이며 문장은 Declared Gap의 사람이 쓴 `text`뿐이다. pending proposal은 "확정되지 않은 제안"으로만 부르고 제안된 답은 쓰지 않는다.
 - 같은 Task, Project Truth, Graph, proposal 상태, Packet이면 결과와 문구가 byte 단위로 같다(시각, locale, 파일 순회 순서에 의존하지 않음).
 
 ## 표현 단계

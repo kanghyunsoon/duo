@@ -7,15 +7,16 @@
  * The scope is the task's candidate context as an ordered list: the Compiler passes its ranked
  * traversal candidates, Gap assessment passes the Packet's items and omitted candidates.
  */
-import { compileRepoPattern, type Constraint, type DeclaredGap, type EntityType, type ProjectTruth, type RepoPath } from "@duo-director/core";
+import { compileRepoPattern, normalizeGapText, type Constraint, type DeclaredGap, type EntityType, type ProjectTruth, type RepoPath } from "@duo-director/core";
+import type { SeedProvenance } from "../context/types.js";
 import { searchTerms } from "./terms.js";
 
-export const RELEVANCE_POLICY_VERSION = "1";
+export const RELEVANCE_POLICY_VERSION = "2";
 
 export type Relevance = "direct" | "related" | "none";
 
 export type RelevanceReasonCode =
-  | "task-seed" | "near-intent" | "governed-by-active-decision" | "in-context"
+  | "task-seed" | "near-intent" | "governed-by-active-decision" | "in-context" | "gap-mentioned" | "retrieved-seed"
   | "match-path" | "match-symbol" | "match-keyword" | "keyword-overlap"
   | "project-scope" | "not-in-context";
 
@@ -43,7 +44,11 @@ export interface ScopeEntry {
   readonly type: EntityType;
   /** Edges from a seed; undefined when the entry was a candidate but is not in the Packet. */
   readonly hops: number | undefined;
-  readonly seed: boolean;
+  /** Set when the entry is itself a seed. */
+  readonly seed?: SeedProvenance;
+  /** Provenance of the seed its best path starts from, and that seed's reference. */
+  readonly origin?: SeedProvenance;
+  readonly originRef?: string;
   /** Symbols and files. */
   readonly path?: string;
   readonly qualifiedName?: string;
@@ -93,15 +98,33 @@ function activeGoverning(truth: Pick<ProjectTruth, "decisions">, requirementId: 
   return truth.decisions.find((d) => d.state === "confirmed" && d.supersededBy === null && inScope.has(d.id) && d.governs.requirements.includes(requirementId))?.id;
 }
 
+const KEY_TOKENS = /[^a-z0-9_.-]+/u;
+const MIN_MENTION_CHARS = 4;
+
+/** The task names the gap itself: its key as a token, or its whole normalized text. */
+function gapMention(gap: DeclaredGap, task: string): RelevanceReason | undefined {
+  if (gap.key !== undefined && task.toLowerCase().split(KEY_TOKENS).includes(gap.key.toLowerCase())) {
+    return { code: "gap-mentioned", ref: gap.id, detail: `key ${gap.key}` };
+  }
+  const text = normalizeGapText(gap.text);
+  if ([...text].length >= MIN_MENTION_CHARS && normalizeGapText(task).includes(text)) return { code: "gap-mentioned", ref: gap.id, detail: "text" };
+  return undefined;
+}
+
 /**
- * A declared gap concerns the task through its owner:
- * - direct: the owner is a task seed, a Requirement or Decision one edge from a seed, or a
- *   Requirement in the context that an active Decision in the context governs;
- * - related: the owner is elsewhere in the context (further away, an Issue or Milestone, or a
- *   candidate that did not fit the budget), or a project-scoped gap shares a search term with the task;
- * - none: otherwise. Project-scoped gaps are never direct.
+ * A declared gap concerns the task through an explicit link (T11.1):
+ * - direct: the task mentions the gap itself (key or whole text; any owner, project included), or
+ *   the owner is an explicit seed, a Requirement or Decision one edge from an explicit seed, or a
+ *   Requirement reached from an explicit seed that an active Decision in the context governs;
+ * - related: the owner is only a retrieved (keyword) seed or reached from one, or elsewhere in the
+ *   context (further away, an Issue or Milestone, omitted by budget), or a project-scoped gap
+ *   shares a search term with the task;
+ * - none: otherwise.
+ * Retrieval finds context; it never alone makes a gap direct (never alone a human question).
  */
 export function matchDeclaredGap(gap: DeclaredGap, scope: RelevanceScope, truth: Pick<ProjectTruth, "decisions">): RelevanceResult {
+  const mention = gapMention(gap, scope.taskText);
+  if (mention !== undefined) return { relevance: "direct", reasons: [mention] };
   if (gap.owner.type === "project") {
     const task = new Set(searchTerms(scope.taskText));
     const shared = [...new Set(searchTerms(gap.text).filter((t) => task.has(t)))];
@@ -112,7 +135,11 @@ export function matchDeclaredGap(gap: DeclaredGap, scope: RelevanceScope, truth:
   const ownerId = gap.owner.id;
   const entry = scope.entries.find((e) => e.type === gap.owner.type && e.ref === ownerId);
   if (entry === undefined) return { relevance: "none", reasons: [{ code: "not-in-context", ref: ownerId }] };
-  if (entry.seed) return { relevance: "direct", reasons: [{ code: "task-seed", ref: ownerId }], matched: entry.id };
+  if (entry.seed === "explicit") return { relevance: "direct", reasons: [{ code: "task-seed", ref: ownerId }], matched: entry.id };
+  if (entry.seed === "retrieved") return { relevance: "related", reasons: [{ code: "retrieved-seed", ref: ownerId, detail: "keyword seed" }], matched: entry.id };
+  if (entry.hops !== undefined && entry.origin === "retrieved") {
+    return { relevance: "related", reasons: [{ code: "retrieved-seed", ref: entry.originRef ?? ownerId, detail: `reached from a keyword seed, ${entry.hops} edges` }], matched: entry.id };
+  }
   if (entry.hops !== undefined && entry.hops <= 1 && (entry.type === "requirement" || entry.type === "decision")) {
     return { relevance: "direct", reasons: [{ code: "near-intent", ref: ownerId, detail: "1 edge from a seed" }], matched: entry.id };
   }

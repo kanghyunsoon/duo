@@ -333,6 +333,8 @@ TASK-011. Gap은 "지금 작업에 중요한데 아직 정해지지 않은 것"�
 | `key` | `UNKNOWN(key):`의 key. 해결 판정에만 쓴다 |
 | `text`, `location` | 콜론 뒤 내용, `UNKNOWN`부터 그 줄 끝까지의 위치(정확히 slice됨) |
 
+새 문서에는 `UNKNOWN(key): 내용` 형식을 권장한다. key가 있어야 Decision의 question으로 결정적으로 해결되고 Task가 key로 gap을 가리킬 수 있다. key 없는 `UNKNOWN:`도 계속 지원하지만 LLM이나 fuzzy 비교로 자동 해결하지 않으며, 줄을 지우기 전까지 unresolved다(C93).
+
 같은 owner, key, text가 여러 곳에 있으면 gap 하나다(파일 순서상 첫 위치). YAML 파일(`decisions/D-###.yaml`, constraints, milestones YAML)은 prose가 아니라서 읽지 않는다(C92).
 
 **해결 판정**(C93): key가 있는 gap은 question이 그 key와 같은 활성 Decision(confirmed, superseded_by 없음)이 owner를 다룰 때 resolved다. "다룬다"는 owner가 project면 항상, Requirement면 governs.requirements에 있을 때, Issue면 그 Issue의 decisions에 있거나 Issue의 Requirement를 governs할 때, Milestone이면 그 Milestone의 Requirement를 governs할 때, Decision이면 같은 Decision이거나 그것을 supersede(연쇄 포함)하거나 같은 Requirement를 governs할 때다. key가 없거나 그런 Decision이 없으면 unresolved다. 텍스트 의미는 해석하지 않는다. `UNKNOWN:` 줄을 지우면 gap은 더는 선언되지 않는다(AC-011-04).
@@ -346,7 +348,7 @@ TASK-011. Gap은 "지금 작업에 중요한데 아직 정해지지 않은 것"�
 | `pending-decision` | Packet `pendingDecisions`. `requiresHumanDecision`이면 ask, 아니면 surface | ask / surface |
 | `missing-intent` | seed 없음, 또는 `no-confirmed-intent` signal | surface |
 
-모델 `KnowledgeGap { id, source, kind, text, anchors, location?, relevance, reasons, action, key?, resolution?, term?, options?, target?, pending? }`와 평가 결과 `KnowledgeGapAssessment`는 [05 Knowledge Gap assessment](05-context-compiler.md#knowledge-gap-assessment)에 있다.
+모델 `KnowledgeGap { id, source, kind, text?(Declared만), anchors, location?, relevance, reasons, action, key?, resolution?, term?, options?, target?, pending? }`와 평가 결과 `KnowledgeGapAssessment`는 [05 Knowledge Gap assessment](05-context-compiler.md#knowledge-gap-assessment)에 있다.
 
 ## Diagnostics
 

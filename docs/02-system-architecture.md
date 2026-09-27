@@ -34,8 +34,8 @@ flowchart TD
 |---|---|---|---|
 | `LanguageAnalyzer` | analyzer | TypeScriptAnalyzer, JavaScriptAnalyzer | PythonAnalyzer |
 | `EvidenceProvider` | core(인터페이스, TASK-013에서 정의, C44) | `GitProvider`(analyzer, TASK-006 provenance primitives) | Jira, GitHub Issues(integration) |
-| `LLMProvider` | director | NoneProvider, OpenAIResponsesProvider | OpenAICompatibleChatProvider, AnthropicProvider, LocalProvider |
-| `TokenEstimator` | core | o200k_base, chars4(approx) | - |
+| `LLMProvider` | director(계약, T12A). adapter는 integration(`packages/integration/src/llm/`) → director 방향. director는 vendor SDK를 import하지 않음(lint) | Noop provider(T12A), OpenAIResponsesProvider(T12B) | OpenAICompatibleChatProvider, AnthropicProvider, LocalProvider |
+| `TokenEstimator` | director/tokens(C79) | o200k_base(gpt-tokenizer 4.0.0), chars/4(UI approx) | - |
 | `GraphStore` | graph | NodeSqliteGraphStore(`node:sqlite`는 이 구현 안에서만 import) | better-sqlite3 기반 구현 |
 | `AgentAdapter` | integration | codex, claude | 기타 MCP Agent |
 
@@ -46,6 +46,8 @@ Rule → Static Analysis → Git → Test → Project Graph → Evidence Retriev
 ```
 
 LLM을 쓸 수 없으면 의미 판단은 UNKNOWN이나 ASK로 남고 나머지 기능은 그대로 동작한다([ADR-008](adr/ADR-008-deterministic-first.md)).
+
+**Deterministic First, LLM Optional**(T12A): Index, Graph, Context Compiler, Knowledge Gap 평가, Decision 생명주기는 LLMProvider를 받지 않고 호출하지도 않는다(`llmCalls: 0`). Provider가 없거나 꺼져 있거나 실패해도 application 오류가 아니다. LLM 결과는 결정적 결과 옆의 추가 해석일 뿐이며 Project Truth를 고치거나 Decision을 확정하지 않는다([ADR-012](adr/ADR-012-llm-provider.md#구현-t12a)).
 
 ## 주요 흐름
 
@@ -108,4 +110,4 @@ SQLite는 WAL 모드로 연다. Graph 쓰기는 SQLite writer lock(`BEGIN IMMEDI
 - `.duo-project` 파일 파싱 오류는 파일 경로와 줄 번호를 보고하고, 해당 파일만 제외한 채 계속 동작한다. 제외 사실은 Knowledge Gap으로 기록한다.
 - 파싱할 수 없는 소스 파일은 File Node와 diagnostics만 남긴다.
 - v0.1은 Git Repository만 지원한다. Git이 없으면 init을 거부한다.
-- LLM 오류는 NoneProvider와 같은 결과(UNKNOWN)로 처리하고 Review를 실패시키지 않는다.
+- LLM 오류는 분류된 failure(`not-configured`, `unavailable`, `timeout`, `cancelled`, `authentication`, `rate-limit`, `invalid-response`, `provider-error`)로 돌아오며 Noop provider와 같은 결과(UNKNOWN)로 처리하고 Review를 실패시키지 않는다.

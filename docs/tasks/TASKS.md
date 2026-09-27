@@ -516,7 +516,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M2
 package: director
 requirements: [REQ-LLM-002, REQ-LLM-003, REQ-LLM-004]
@@ -526,10 +526,10 @@ depends_on: [TASK-002]
 
 - **Goal**: Provider에 종속되지 않는 LLMProvider 계약, NoneProvider, 응답 검증, 사용량 기록 형식을 만든다.
 - **Input**: ADR-008, ADR-012
-- **Output**: LLMProvider 인터페이스, NoneProvider, 응답 스키마와 Evidence 인용 검증, usage 기록
+- **Output**: `LLMProvider`·`LLMRequest`·`LLMResponse`·failure 분류, `invokeLLM`(status·취소·응답 모양·structured·Evidence 인용 검증, 비밀 치환), `createNoopLLMProvider`(NoneProvider), `llmProviderState`, `llmUsageRecord`, `assistDeterministic`, `blockEligible`, vendor SDK import lint. T11.1(seed provenance, locale renderer)도 이 단계에서 반영
 - **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
-- **Files expected to change**: `packages/director/src/llm/contract/**`, `packages/director/src/llm/none/**`
-- **Status**: todo
+- **Files expected to change**: `packages/director/src/llm/contract/**`, `packages/director/src/llm/none/**`, `scripts/boundaries.json`, `eslint.config.js`
+- **Status**: done (T11.1, T12A)
 - **검증 대상 Requirement**: [REQ-LLM-002](../01-requirements.md#req-llm-002-llmprovider와-동작하는-provider-1종), [REQ-LLM-003](../01-requirements.md#req-llm-003-llm-없이도-동작), [REQ-LLM-004](../01-requirements.md#req-llm-004-llm-사용량-기록)
 - **관련 ADR**: [ADR-008](../adr/ADR-008-deterministic-first.md), [ADR-012](../adr/ADR-012-llm-provider.md)
 
@@ -538,6 +538,7 @@ Acceptance Criteria
 - **AC-012A-01** Provider가 꺼져 있거나 API Key가 없으면 NoneProvider가 선택되고 모든 호출이 UNAVAILABLE을 반환한다
 - **AC-012A-02** 응답이 Packet에 없는 Evidence ID를 인용하거나 스키마가 맞지 않으면 결과를 버리고 UNKNOWN으로 처리한다(가짜 Provider로 검증)
 - **AC-012A-03** usage(입력/출력 토큰, 출처 provider 또는 estimated)가 runtime/metrics.jsonl 형식으로 기록된다
+
 
 ### TASK-012B OpenAI Responses Provider
 

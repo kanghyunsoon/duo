@@ -19,7 +19,7 @@ import { TIER_ORDER } from "./policy.js";
 import { redactSecrets } from "./redact.js";
 import type { SourceReader } from "./retrieve.js";
 import type { SeedResult } from "./seeds.js";
-import type { ContextTier, DecisionHistoryItem, EvidenceStep, KnowledgeSignal, PacketItem, Representation } from "./types.js";
+import { SEED_PROVENANCE, type ContextSeed, type ContextTier, type DecisionHistoryItem, type EvidenceStep, type KnowledgeSignal, type PacketItem, type Representation } from "./types.js";
 
 export interface LevelText {
   readonly level: Representation;
@@ -125,7 +125,8 @@ function codeTier(c: Candidate): ContextTier {
 }
 
 /** The traversal candidates as a relevance scope, in rank order (T10.1). */
-export function candidateScope(expansion: Expansion, seedIds: ReadonlySet<string>, task: string): RelevanceScope {
+export function candidateScope(expansion: Expansion, seeds: readonly ContextSeed[], task: string): RelevanceScope {
+  const bySeed = new Map(seeds.map((s) => [s.id, s] as const));
   return {
     taskText: task,
     entries: expansion.candidates.map((x): ScopeEntry => {
@@ -133,7 +134,9 @@ export function candidateScope(expansion: Expansion, seedIds: ReadonlySet<string
       const path = ref.type === "symbol" || ref.type === "file" ? ref.path : undefined;
       const qn = x.node.payload.qualifiedName;
       return {
-        id: x.node.id, ref: displayRef(x.node.id), type: x.node.type, hops: x.depth, seed: seedIds.has(x.node.id),
+        id: x.node.id, ref: displayRef(x.node.id), type: x.node.type, hops: x.depth,
+        ...(bySeed.has(x.node.id) ? { seed: SEED_PROVENANCE[bySeed.get(x.node.id)?.match ?? "keyword"] } : {}),
+        ...(bySeed.has(x.seed) ? { origin: SEED_PROVENANCE[bySeed.get(x.seed)?.match ?? "keyword"], originRef: displayRef(x.seed) } : {}),
         ...(path === undefined ? {} : { path }), ...(typeof qn === "string" ? { qualifiedName: qn } : {}),
       };
     }),
@@ -310,7 +313,7 @@ export function planContext(input: PlanInput): ContextPlan {
 
   // Constraints have no graph edges: the shared relevance policy matches them against the ranked candidates (T10.1).
   const byId = new Map(expansion.candidates.map((x) => [x.node.id, x] as const));
-  const scope = candidateScope(expansion, seedIds, input.task);
+  const scope = candidateScope(expansion, input.seeds.seeds, input.task);
   for (const k of truth.constraints) {
     if (drafts.has(`dec:${k.id}`) || pendingDrafts.has(k.id) || (k.state !== "confirmed" && k.state !== "draft")) continue;
     const r = matchConstraint(k, scope);

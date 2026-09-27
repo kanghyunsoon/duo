@@ -7,10 +7,11 @@
  * Policy:
  * - index-required: no judgement at all (a stale graph must not produce questions).
  * - ambiguous target, unresolved explicit ID: ask.
- * - pending decision the task depends on (requiresHumanDecision): ask; other related pending: surface.
+ * - pending decision the task depends on (requiresHumanDecision) through an explicit link (explicit
+ *   seed, one edge from one, or the proposal ID in the task): ask; reached only by retrieval: surface.
  * - no seed, no confirmed intent: surface (a bug fix may not need intent; nothing proves otherwise).
  * - declared gap: resolved by an active Decision → ignore; else direct → ask, related → surface,
- *   none → ignore (shared relevance policy).
+ *   none → ignore (shared relevance policy; a retrieved seed alone is at most related, T11.1).
  * - technical uncertainty (unresolved calls, partial parses) is never a gap: it stays a limitation.
  * Priority of asks: ambiguous-target, unresolved-target, pending-decision, declared.
  */
@@ -18,7 +19,7 @@ import { createHash } from "node:crypto";
 import {
   compareUtf8, definitionRef, parseNodeId, PROJECT_REF, type Decision, type DeclaredGap, type EntityRef, type ProjectTruth,
 } from "@duo-director/core";
-import type { ContextPacket, ContextRequest, ContextResult } from "../context/types.js";
+import { SEED_PROVENANCE, type ContextPacket, type ContextRequest, type ContextResult } from "../context/types.js";
 import { matchDeclaredGap, type RelevanceScope, type ScopeEntry } from "../relevance/index.js";
 import type { GapAction, GapKind, GapRelevance, KnowledgeGap, KnowledgeGapAssessment } from "./types.js";
 
@@ -49,18 +50,27 @@ function refOfDefinition(truth: ProjectTruth, id: string): EntityRef | undefined
 
 /** The Packet as a relevance scope: included items in rank order, then candidates omitted by budget. */
 export function packetScope(packet: ContextPacket, task: string): RelevanceScope {
-  const seeds = new Set(packet.seeds.map((s) => s.id));
+  const seedById = new Map(packet.seeds.map((s) => [s.id, s] as const));
+  const seedByRef = new Map(packet.seeds.map((s) => [s.ref, s] as const));
+  const provenance = (id: string) => {
+    const s = seedById.get(id);
+    return s === undefined ? {} : { seed: SEED_PROVENANCE[s.match] };
+  };
   const items = [...packet.intent.requirements, ...packet.intent.constraints, ...packet.decisions.active, ...packet.code, ...packet.tests, ...packet.issues]
     .sort((a, b) => a.rank - b.rank);
   const entries: ScopeEntry[] = [];
   for (const i of items) {
     const ref = parseNodeId(i.id);
     if (ref === undefined) continue;
-    entries.push({ id: i.id, ref: i.ref, type: ref.type, hops: i.via.steps.length, seed: seeds.has(i.id), ...(i.source === undefined ? {} : { path: i.source.path }) });
+    const origin = seedByRef.get(i.via.seed);
+    entries.push({
+      id: i.id, ref: i.ref, type: ref.type, hops: i.via.steps.length, ...provenance(i.id),
+      ...(origin === undefined ? {} : { origin: SEED_PROVENANCE[origin.match], originRef: origin.ref }), ...(i.source === undefined ? {} : { path: i.source.path }),
+    });
   }
   for (const o of packet.omittedCandidates) {
     const ref = parseNodeId(o.id);
-    if (ref !== undefined) entries.push({ id: o.id, ref: o.ref, type: ref.type, hops: undefined, seed: seeds.has(o.id) });
+    if (ref !== undefined) entries.push({ id: o.id, ref: o.ref, type: ref.type, hops: undefined, ...provenance(o.id) });
   }
   return { entries, taskText: task };
 }
@@ -119,19 +129,19 @@ export function assessKnowledgeGaps(input: AssessInput): KnowledgeGapAssessment 
     const anchors = a.options.flatMap((o) => parseNodeId(o.id) ?? []);
     gaps.push({
       id: runtimeId("ambiguous-target", task, a.options.map((o) => o.id)), source: "runtime", kind: "ambiguous-target",
-      text: `"${a.term}" matches ${a.options.length} candidates`, anchors, relevance: "direct",
+      anchors, relevance: "direct",
       reasons: [{ code: "ambiguous-seed", ref: a.term, detail: a.reason }], action: "ask", term: a.term, options: a.options, order: n,
     });
   });
   (resolution?.unresolvedIds ?? []).forEach((id, n) => {
     gaps.push({
-      id: runtimeId("unresolved-target", task, [id]), source: "runtime", kind: "unresolved-target", text: `${id} is not in Project Truth`, anchors: [],
+      id: runtimeId("unresolved-target", task, [id]), source: "runtime", kind: "unresolved-target", anchors: [],
       relevance: "direct", reasons: [{ code: "unresolved-id", ref: id }], action: "ask", target: id, order: n,
     });
   });
   if (result.status === "insufficient-context" && (resolution?.unresolvedIds.length ?? 0) === 0) {
     gaps.push({
-      id: runtimeId("missing-intent", task, []), source: "runtime", kind: "missing-intent", text: "no Requirement, Decision or code matches the task",
+      id: runtimeId("missing-intent", task, []), source: "runtime", kind: "missing-intent",
       anchors: [], relevance: "direct", reasons: [{ code: "no-seed" }], action: "surface", order: 0,
     });
   }
@@ -142,17 +152,23 @@ export function assessKnowledgeGaps(input: AssessInput): KnowledgeGapAssessment 
       const anchors = packet.seeds.flatMap((s) => parseNodeId(s.id) ?? []);
       gaps.push({
         id: runtimeId("missing-intent", task, packet.seeds.map((s) => s.id)), source: "runtime", kind: "missing-intent",
-        text: "no confirmed Requirement, Decision or Constraint relates to this task", anchors, relevance: "direct",
+        anchors, relevance: "direct",
         reasons: [{ code: "no-confirmed-intent" }], action: "surface", order: 0,
       });
     }
+    const pscope = packetScope(packet, task);
+    const taskTokens = new Set(task.toUpperCase().split(/[^A-Z0-9-]+/u));
     packet.pendingDecisions.forEach((p, n) => {
       const anchors = p.relatesTo.flatMap((id) => refOfDefinition(truth, id) ?? []);
-      const requires = p.requiresHumanDecision;
+      // The Packet flag says the pending choice touches the task's context; asking needs an explicit link (T11.1).
+      const explicit = taskTokens.has(p.id) || p.relatesTo.some((id) => pscope.entries.some((e) => e.ref === id
+        && (e.seed === "explicit" || (e.seed === undefined && e.origin === "explicit" && e.hops !== undefined && e.hops <= 1))));
+      const requires = p.requiresHumanDecision && explicit;
+      const reason = requires ? "requires-human-decision" as const : p.requiresHumanDecision ? "retrieved-seed" as const : "pending-related" as const;
       gaps.push({
         id: runtimeId("pending-decision", task, [p.id, ...p.relatesTo]), source: "runtime", kind: "pending-decision",
-        text: `${p.id} ${p.title} is PENDING / NOT CONFIRMED`, anchors, relevance: requires ? "direct" : "related",
-        reasons: [{ code: requires ? "requires-human-decision" : "pending-related", ref: p.id, ...(p.relatesTo.length === 0 ? {} : { detail: p.relatesTo.join(", ") }) }],
+        anchors, relevance: requires ? "direct" : "related",
+        reasons: [{ code: reason, ref: p.id, ...(p.relatesTo.length === 0 ? {} : { detail: p.relatesTo.join(", ") }) }],
         action: requires ? "ask" : "surface", pending: { id: p.id, title: p.title, relatesTo: p.relatesTo }, order: n,
       });
     });

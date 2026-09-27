@@ -8,6 +8,7 @@ import { packageInfo as core, type PackageInfo } from "@duo-director/core";
 
 export * from "./context/index.js";
 export * from "./gap/index.js";
+export * from "./llm/index.js";
 export * from "./relevance/index.js";
 export * from "./tokens/index.js";
 

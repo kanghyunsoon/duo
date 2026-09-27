@@ -29,8 +29,8 @@ export interface KnowledgeGap {
   readonly id: string;
   readonly source: GapSource;
   readonly kind: GapKind;
-  /** What is unknown, as data (no question wording: see render.ts). */
-  readonly text: string;
+  /** Declared gaps only: the human-written text after "UNKNOWN:". Runtime gaps carry data, no wording (render.ts). */
+  readonly text?: string;
   readonly anchors: readonly EntityRef[];
   readonly location?: SourceLocation;
   readonly relevance: GapRelevance;

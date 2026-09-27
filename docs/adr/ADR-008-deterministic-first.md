@@ -48,6 +48,16 @@ Rule → Static Analysis → Git → Test → Project Graph → Evidence Retriev
 5. Review 하나당 호출 수는 `llm.max_calls_per_review`(기본 3)로 제한한다. 초과분은 `skipped_checks`에 남긴다.
 6. 결과는 입력 hash 기준으로 `.duo-project/cache/llm/`에 저장해 같은 입력이면 다시 호출하지 않는다(REQ-NFR-005).
 
+### Deterministic Finding → 선택적 의미 보조 (T12A)
+
+```text
+Deterministic Finding → Semantic Assistance(선택) → 추가 해석
+```
+
+- LLM 결과는 결정적 결과를 덮어쓰지 않는다(`assistDeterministic`는 결정적 결과를 그대로 돌려준다). LLM 결과로 Project Truth를 고치거나 Decision을 확정하는 경로는 없다.
+- **BLOCK 안전 규칙**(TASK-013에서 적용): Review 수준 BLOCK에는 명시적 Project Truth와 관찰 가능한 저장소 근거(repository, git, test)가 함께 있어야 한다. LLM·추론 근거만으로, 또는 Truth와 LLM 근거만으로는 BLOCK이 되지 않는다(`blockEligible`). LLM은 의미적 충돌을 보조하거나 ASK를 올릴 수 있지만 Human이 소유한 Truth를 대신하지 않는다.
+- **Knowledge Gap 의미 보조는 예약만 한다**: 위 표의 "Gap 중요도"는 향후 `gap-semantic-assist` 용도가 될 수 있다. T12A는 related gap에 대해 LLM을 호출하지 않으며 T11의 결정적 결과가 항상 기본 결과다.
+
 ### LLM unavailable ≠ DUO unavailable
 
 Provider가 설정되지 않았거나, API Key가 없거나, 네트워크나 응답에 오류가 나면 NoneProvider와 같게 동작한다. 결정적 기능은 모두 그대로 동작한다. 의미 판단은 추측하지 않고 UNKNOWN으로 두거나(ask 조건이면 ASK), 실행하지 않은 검사로 기록한다.
