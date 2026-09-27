@@ -1,0 +1,13 @@
+id: D-020
+title: In-memory room registry
+kind: decision
+state: confirmed
+question: room_storage
+answer: rooms live in process memory
+owner: human
+governs:
+  requirements: [LOBBY-01]
+supersedes: null
+superseded_by: null
+confirmed_at: "2026-09-20T00:00:00Z"
+confirmed_by: tester

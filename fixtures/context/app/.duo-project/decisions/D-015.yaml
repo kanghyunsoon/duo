@@ -1,0 +1,15 @@
+id: D-015
+title: Short-lived JWT with refresh token
+kind: decision
+state: confirmed
+question: token_format
+answer: 15-minute JWT access token plus an opaque refresh token
+rationale: A leaked access token expires quickly; the refresh token can be revoked on the server.
+owner: human
+enforcement: block
+governs:
+  requirements: [AUTH-01, AUTH-03]
+supersedes: D-004
+superseded_by: null
+confirmed_at: "2026-09-20T00:00:00Z"
+confirmed_by: tester

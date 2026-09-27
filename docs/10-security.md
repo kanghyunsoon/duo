@@ -14,7 +14,7 @@
 
 | 위협 | 대응 |
 |---|---|
-| 비밀 정보가 Context, Evidence, LLM 요청으로 새어 나감 | 기본 제외(`.env*`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`, `secrets.*`, `credentials*`, .gitignore 대상, `.git/`, `.duo-project/generated|cache|runtime/`). symlink는 따라가지 않고 저장소 밖 대상은 읽지 않는다(TASK-004). Packet 생성 시 알려진 토큰 형식(AWS, GitHub, OpenAI 등)을 `[REDACTED]`로 치환. LLM 요청은 치환이 끝난 Packet만 보냄 |
+| 비밀 정보가 Context, Evidence, LLM 요청으로 새어 나감 | 기본 제외(`.env*`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`, `secrets.*`, `credentials*`, .gitignore 대상, `.git/`, `.duo-project/generated|cache|runtime/`). symlink는 따라가지 않고 저장소 밖 대상은 읽지 않는다(TASK-004). Packet 생성 시 알려진 토큰 형식(private key block, AWS, GitHub, OpenAI, Anthropic, Slack, Google API key, JWT)을 측정 전에 `[REDACTED]`로 치환(T10 `redactSecrets`, Task 텍스트 포함). Task 텍스트는 검색 입력일 뿐 경로·shell·SQL에 넣지 않고, 원문은 `readSourceFile`이 저장소 경계와 symlink를 다시 확인한 뒤 읽는다. LLM 요청은 치환이 끝난 Packet만 보냄 |
 | 외부 네트워크 전송 | 기본 `llm.provider: none`에서는 네트워크 코드가 실행되지 않는다. Provider를 켜면 설정된 `base_url`로만 보내고, 요청 크기는 `max_input_tokens`로 제한 |
 | API Key 노출 | Key는 `api_key_env`가 가리키는 환경 변수에서만 읽고 파일, 로그, metrics, 오류 메시지에 쓰지 않는다 |
 | Repository 코드 실행 | DUO는 소스를 parse만 한다. 예외는 사용자가 project.yaml에 설정한 `test_command`를 `--run-tests`로 명시했을 때뿐 |

@@ -161,17 +161,7 @@ ID는 Project Truth에 있는 것만 쓰고 annotation으로 정의를 만들지
 
 저장 계층(TASK-003)은 두 가지를 제공한다. `adjacentEdges(refs, { direction, types, limit })`는 인접 Edge를 `(from, type, to)` 순으로 limit까지 돌려주는 bounded lookup이다. `traverse(store, seeds, { maxDepth, nodeLimit, direction, edgeTypes })`는 이를 이용한 BFS이며 방문 순서는 `(depth, id)`로 결정적이다. nodeLimit이나 Edge 상한에 걸리면 `truncated`를 표시한다([conflicts.md C30](conflicts.md)).
 
-Context Compiler(TASK-010)는 traverse 결과에 아래 Edge weight를 적용해 순위를 매긴다. weight는 비교 순서로만 쓰고 점수로 노출하지 않는다.
-
-| Edge | weight |
-|---|---|
-| GOVERNS, IMPLEMENTS, TRACKED_BY, VALIDATED_BY | 1.0 |
-| REQUIRES, CALLS | 0.7 |
-| CONTAINS(File → Symbol) | 0.6 |
-| IMPORTS | 0.5 |
-| CHANGED_WITH | 0.3 |
-
-Node 순위 값 = seed 값 × Π(경로의 edge weight). 경로가 여럿이면 최댓값을 쓴다.
+Context Compiler(TASK-010)는 `traverse()`가 아니라 자체 best-first 탐색으로 후보 순서를 정한다. hop weight, hub 규칙, 순서 값은 [05 가중 탐색](05-context-compiler.md#가중-탐색)에 있다. T10에서 IMPLEMENTS·TRACKED_BY를 0.9, VALIDATED_BY를 0.8로 낮췄다. 모든 선언 관계가 1.0이면 두 hop 떨어진 항목이 직접 관계와 같은 값이 되기 때문이다([conflicts.md C80](conflicts.md)). weight는 비교 순서로만 쓰고 점수로 노출하지 않는다.
 
 - `trace(node, depth = 2)`(T08 구현): 추적 관계 REQUIRES, TRACKED_BY, GOVERNS, IMPLEMENTS, VALIDATED_BY, SUPERSEDES를 양방향으로 따라가는 bounded traverse다. 상위(Requirement, Decision, Issue, Milestone)와 하위(Symbol, File, Test)를 돌려준다. CONTAINS, CALLS, IMPORTS, CHANGED_WITH는 따라가지 않는다.
 - `impact(seeds, depth = 2)`(T08 구현): 바뀐 File·Symbol에서 **DUO Graph에 기록된 영향 관계**를 돌려준다. 영향받는 모든 코드를 주장하지 않는다(CALLS는 exact만 있고 instance 호출은 unresolved, C53). 관계는 direct(역방향 CALLS·IMPORTS, VALIDATED_BY와 그 Requirement, IMPLEMENTS, GOVERNS), structural(CONTAINS: seed 파일의 Symbol, Symbol의 class와 파일), historical(CHANGED_WITH) 세 가지이고, 경로에서 가장 약한 관계를 붙여 (관계, depth, id) 순으로 정렬한다. 점수는 없고 `nodeLimit`을 넘으면 `truncated`다. 결과에 `evidence: "graph"`를 둔다.

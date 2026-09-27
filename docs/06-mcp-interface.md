@@ -55,7 +55,7 @@ Decision confirm/reject는 Human Action이라 MCP로 노출하지 않는다([ADR
 ### duo_get_context
 
 - 입력: `{ task: string (1..2000자), budget_tokens?: int (500..50000), include_diff?: boolean = true }`
-- 출력: Packet text([05](05-context-compiler.md#6-출력)), structured `{ packet, items, asks, metrics }`
+- 출력: Packet text([05 Markdown 출력](05-context-compiler.md#markdown-출력)), structured `ContextPacket`([05 Packet 모델](05-context-compiler.md#packet-모델))과 요청 지표(T10 구현, 전송 형식은 TASK-016)
 - 사용 시점: 작업 시작 시 한 번, 범위가 바뀔 때.
 
 ### duo_review_changes

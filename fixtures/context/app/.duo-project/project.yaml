@@ -1,0 +1,6 @@
+schema_version: 1
+name: context-app
+current_milestone: M1
+context:
+  default_budget_tokens: 6000
+  max_depth: 2

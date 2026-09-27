@@ -38,7 +38,7 @@ MCP Tool 이름(`duo_get_context` 등, [06](06-mcp-interface.md))은 서버 이�
 ├─ integrations/             Project Truth · tracked · (Post-MVP) jira.yaml
 ├─ reviews/*.json            Human-approved History · tracked · Human이 보존·승인한 Review만
 ├─ generated/                Regenerable · ignored · graph.db, fingerprints.json, index-state.json, gaps.json, inferred.json
-├─ cache/                    Regenerable · ignored · analysis/(SourceAnalysis cache), tokenizer, Packet, llm/
+├─ cache/                    Regenerable · ignored · analysis/(SourceAnalysis cache), packets/(Context Packet), token-counts.json, llm/
 └─ runtime/                  Runtime · ignored · reviews/(매 실행), metrics.jsonl, backup/
 ```
 
@@ -310,6 +310,16 @@ type SourceLocation = { path: string; startLine?: number; startColumn?: number; 
 - **단위**: 줄은 LF로 센다. 칸은 UTF-16 code unit(JS 문자열 index + 1)이다. YAML(`LineCounter`), Markdown, Tree-sitter(web-tree-sitter는 JS 문자열을 UTF-16으로 넘긴다) 모두 같은 단위이며 UTF-8 byte나 code point가 아니다. 예: `/* 😀😀 */ 표시()`의 `표시`는 12번째 칸이다(UTF-8 byte로는 16, code point로는 10). LF 앞의 CR은 그 줄 끝에 속하므로 LF와 CRLF checkout에서 같은 위치가 같은 텍스트를 가리킨다.
 - core `sliceSource(canonicalText, location)`이 위치의 정확한 원문을 돌려준다. 불완전한 범위나 원문 밖을 가리키는 위치는 잘라 맞추지 않고 `SOURCE_LOCATION_INVALID`(error, persistent)다. 잘못된 위치는 producer의 버그이며 Evidence로 쓰지 않는다. `readSourceFile` / `readSourceSlice(root, location)`는 저장소 경계와 symlink를 확인한 뒤 canonical text를 읽는다. Decision digest, Packet Dependency Digest, Evidence, UI source 이동이 모두 이 경로를 쓴다. 저수준 `sliceSourceLocation`은 같은 규칙으로 `undefined`를 돌려준다. `compareSourceLocations`가 path(UTF-8), 시작, 끝 순으로 정렬한다.
 
+## Context Packet
+
+Context Packet(T10)은 요청마다 만드는 값이며 저장소 파일이 아니다. 형식은 [05 Packet 모델](05-context-compiler.md#packet-모델)의 `ContextPacket`(`duo.context-packet/1`)이다.
+
+- CONFIRMED INTENT는 Project Truth만 담는다: Requirement, confirmed이고 superseded_by가 없는 Decision, confirmed Constraint. superseded Decision은 `decisions.history`에 ID, 제목, superseded_by만 둔다.
+- Proposal, proposed Decision, draft Constraint는 `pendingDecisions`(`confirmed: false`, `status: "PENDING / NOT CONFIRMED"`)에만 둔다. pending 판정은 `pendingDecisionProposals()`다.
+- 원문은 이 문서의 [SourceLocation](#sourcelocation) 계약으로 slice한다. Packet의 `source`는 그 위치다.
+- 같은 입력이면 JSON과 Markdown이 byte 단위로 같다. 시각과 실행 시간은 Packet에 없다.
+- `CONTEXT_REQUEST_INVALID`(error, transient): 빈 task, 범위 밖 budget(1,000~1,000,000), 모르는 profile, frame보다 작은 budget.
+
 ## Diagnostics
 
 ```ts
@@ -510,6 +520,8 @@ EvidencePointer 필드: `kind`(requirement, decision, constraint, issue, milesto
 | `generated/index-state.json` | 증분 인덱싱 state([증분 인덱싱](#증분-인덱싱)) | TASK-008 |
 | `generated/inferred.json` | 구현 상태 추론 | TASK-014 |
 | `cache/analysis/*.json` | SourceAnalysis cache(content-addressed) | TASK-008 |
-| `runtime/metrics.jsonl` | Context, Review, LLM 지표([09](09-token-strategy.md#지표)) | TASK-010 |
+| `cache/packets/<digest>.json` | Context Packet cache. key는 Packet Dependency Digest([05](05-context-compiler.md#packet-dependency-digest와-cache)) | TASK-010 |
+| `cache/token-counts.json` | 파일 content hash → o200k_base token 수와 code point 수. tokenizer identity가 다르면 버림 | TASK-010 |
+| `runtime/metrics.jsonl` | Context, Review, LLM 지표([09](09-token-strategy.md#지표)). Compiler는 값을 돌려주고 기록은 호출자가 한다(C83) | TASK-015, TASK-016 |
 
 Graph DB 스키마와 transaction·제약·index 정책은 [ADR-002](adr/ADR-002-graph-storage.md#sqlite-스키마)에 있다.

@@ -1,0 +1,4 @@
+id: M1
+title: Accounts and lobby
+state: active
+issues: [GAME-42, GAME-50]

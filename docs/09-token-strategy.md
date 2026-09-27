@@ -23,7 +23,7 @@ LLM을 호출하지 않는 작업과 LLM을 쓸 수 있는 의미 판단 목록�
 
 | 용도 | 방식 | 표기 |
 |---|---|---|
-| 공식 지표, benchmark, budget 판정 | tokenizer `o200k_base` | `o200k_base` |
+| 공식 지표, benchmark, budget 판정 | tokenizer `o200k_base`(gpt-tokenizer 4.0.0, `packages/director/src/tokens/`) | `o200k_base` |
 | 정확한 tokenizer를 적용할 수 없는 대상 모델 | o200k_base 값 | `estimated` |
 | UI의 대략 추정(tokenizer 값이 없을 때만) | `ceil(chars/4)` | `approx (chars/4)` |
 | Provider와 무관한 비교 | UTF-8 bytes, chars | 별도 열 |
@@ -31,17 +31,20 @@ LLM을 호출하지 않는 작업과 LLM을 쓸 수 있는 의미 판단 목록�
 
 `chars/4`는 공식 benchmark와 budget 판정에 쓰지 않는다.
 
+구현(T10): 공식 값은 `countTokens`/`measureText`(`@duo-director/director`)만 만든다. 라이브러리 import는 `packages/director/src/tokens/`로 제한한다(lint, `scripts/boundaries.json` tokenizer). `<|endoftext|>` 같은 special token 문자열은 일반 텍스트로 센다. DUO는 보낼 텍스트를 세며 control token을 만들지 않는다. tokenizer identity `o200k_base@gpt-tokenizer@4.0.0`은 Packet Dependency Digest와 token 수 cache의 key이므로 라이브러리 version이 바뀌면 둘 다 무효가 된다. `approximateTokens`(`approx (chars/4)`)는 UI 전용이다.
+
 ## 지표
 
 | 지표 | 정의 |
 |---|---|
 | Repository Files | 인덱싱 대상 파일 수(제외 규칙 적용 후) |
-| Repository Estimated Tokens | 인덱싱 대상 파일 전체 내용의 토큰 합. 파일별 값은 TASK-010이 계산한다(fingerprint에는 bytes만 있음, H-21) |
+| Repository Estimated Tokens | 인덱싱 대상 파일 전체 내용의 토큰 합. T10: index fingerprint 목록의 normalized-text 파일을 canonical text로 센 합이고 raw(binary) 파일은 수만 센다. 파일별 값은 content hash를 key로 `cache/token-counts.json`에 memo할 수 있다(cache 옵션) |
 | Repository Bytes / Chars | 같은 파일 집합의 UTF-8 bytes, chars |
 | Files Considered | 후보 Subgraph의 Node가 속한 서로 다른 파일 수(정의 파일 포함) |
-| Candidate (Raw) Context Tokens | Files Considered 파일 전체 내용의 토큰 합. "관련 파일을 통째로 읽는 Agent"의 비용 근사 |
+| Candidate (Raw) Context Tokens | Files Considered 파일 전체 내용의 토큰 합. "관련 파일을 통째로 읽는 Agent"의 비용 근사(`rawCandidateTokens`) |
+| Candidate Representation Tokens | 모든 후보를 최대 표현 단계로 넣을 때의 항목 비용 합. frame 제외(`candidateTokens`) |
 | Files Loaded | Packet에 L2 이상으로 내용이 들어간 파일 수 |
-| Loaded (Compiled) Context Tokens | 출력된 Packet text의 토큰 수 |
+| Loaded (Compiled) Context Tokens | 렌더링한 Markdown Packet 전체의 토큰 수(`selectedTokens` = `budget.used`) |
 | Compiled Context Bytes / Chars | 같은 Packet의 bytes, chars |
 | Reduction % | `(1 − Loaded / Repository) × 100`, 소수 둘째 자리. Candidate 대비 값도 함께 기록 |
 | LLM Calls | 이 요청에서 DUO가 한 LLM 호출 수 |
@@ -49,7 +52,23 @@ LLM을 호출하지 않는 작업과 LLM을 쓸 수 있는 의미 판단 목록�
 | Token Estimator | 측정 방식 이름 |
 | Ground-truth Coverage | benchmark 전용. 시나리오의 필수 Node 중 Packet에 L1 이상으로 포함된 비율과 누락 목록 |
 
+Packet 안의 지표와 요청 단위 지표를 나눈다. Repository 합계처럼 관계없는 파일에도 바뀌는 값은 Packet 밖(`ContextResult.metrics`)에 두어 Packet cache를 무효로 만들지 않는다([05 지표](05-context-compiler.md#지표)).
+
 Reduction만으로는 품질을 보장하지 못한다. 아무것도 넣지 않으면 절감률은 100%가 되기 때문이다. 그래서 benchmark는 Coverage를 반드시 함께 보고한다.
+
+## T10 fixture 측정
+
+`fixtures/context/app`(인증, lobby, game 모듈과 문서)에서 `context.demo.e2e.test.ts`가 잰 실제 o200k_base 값이다. budget 6000, cache 사용. 일반화한 절감 주장이 아니며 공식 benchmark는 TASK-019다.
+
+| Task | Repository | Files Considered / Raw | Candidates | Packet | vs Repository | vs Raw |
+|---|---|---|---|---|---|---|
+| GAME-42 | 5,187 (30 files) | 8 / 1,318 | 9개, 1,144 | 1,364 | 73.70% | −3.49% |
+| AUTH-03 | 5,187 | 10 / 1,616 | 16개, 1,819 | 2,039 | 60.69% | −26.18% |
+| LOBBY-01 | 5,187 | 9 / 987 | 12개, 1,196 | 1,392 | 73.16% | −41.03% |
+| 같은 세 Task, 관계없는 모듈 40개 추가 후 | 17,947 (70 files) | 같음 | 같음 | 같음(cache hit, 같은 digest) | 92.40%, 88.64%, 92.24% | 같음 |
+
+- 이 fixture의 파일은 작아서 Packet이 관련 파일 전체보다 크다(vs Raw 음수). frame(약 290 token), EVIDENCE 줄, Truth 정의 slice가 들어가기 때문이다. 파일이 크고 관련 없는 부분이 많을수록 vs Raw가 양수가 된다. TASK-019에서 실제 저장소로 확인한다.
+- Repository가 커져도 Packet은 그대로였다. Packet이 후보 Subgraph에만 의존한다는 성질(Packet Dependency Digest)의 직접 측정이다.
 
 ## Benchmark
 

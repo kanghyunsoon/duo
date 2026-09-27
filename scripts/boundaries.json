@@ -81,6 +81,14 @@
     "node:http",
     "node:net"
   ],
+  "tokenizer": {
+    "$comment": "gpt-tokenizer(o200k_base, ADR-005)는 director의 tokens 계층에서만 import한다(T10). 공식 토큰 값의 출처를 한 곳으로 둔다.",
+    "dir": "packages/director/src/tokens",
+    "modules": [
+      "gpt-tokenizer",
+      "gpt-tokenizer/encoding/o200k_base"
+    ]
+  },
   "sourceParsing": {
     "$comment": "YAML/Markdown 라이브러리는 core의 source 계층에서만 import한다(T02). 라이브러리 타입이 domain 밖으로 새지 않게 한다.",
     "dir": "packages/core/src/source",

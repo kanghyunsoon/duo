@@ -1,0 +1,13 @@
+id: D-004
+title: Long-lived JWT access tokens
+kind: decision
+state: superseded
+question: token_format
+answer: JWT access token valid for 30 days
+owner: human
+governs:
+  requirements: [AUTH-01, AUTH-03]
+supersedes: null
+superseded_by: D-015
+confirmed_at: "2026-09-01T00:00:00Z"
+confirmed_by: tester

@@ -13,7 +13,7 @@ const dirs = Object.values(packages).map((p) => p.dir.split("/")[1]);
 
 /**
  * @param {string} name
- * @param {{ sqliteAllowed?: boolean, cliNode?: boolean, sourceParsingAllowed?: boolean, treeSitterAllowed?: boolean, typescriptApiAllowed?: boolean }} [opts]
+ * @param {{ sqliteAllowed?: boolean, cliNode?: boolean, sourceParsingAllowed?: boolean, treeSitterAllowed?: boolean, typescriptApiAllowed?: boolean, tokenizerAllowed?: boolean }} [opts]
  */
 function restrictions(name, opts = {}) {
   const spec = packages[name];
@@ -40,6 +40,10 @@ function restrictions(name, opts = {}) {
     ...(opts.typescriptApiAllowed ? [] : boundaries.typescriptApi.modules.map((m) => ({
       name: m,
       message: `${m} may be imported only in ${boundaries.typescriptApi.dir}/ (TypeScriptModuleResolver, ADR-003).`,
+    }))),
+    ...(opts.tokenizerAllowed ? [] : boundaries.tokenizer.modules.map((m) => ({
+      name: m,
+      message: `${m} may be imported only in ${boundaries.tokenizer.dir}/ (official o200k_base measurement, ADR-005).`,
     }))),
     ...(opts.cliNode ? boundaries.cliForbiddenNodeModules.filter((m) => m !== "node:sqlite").map((m) => ({
       name: m,
@@ -92,5 +96,9 @@ export default defineConfig(
   {
     files: [`${boundaries.typescriptApi.dir}/${TS}`],
     rules: { [RULE]: restrictions("@duo-director/graph", { typescriptApiAllowed: true }) },
+  },
+  {
+    files: [`${boundaries.tokenizer.dir}/${TS}`],
+    rules: { [RULE]: restrictions("@duo-director/director", { tokenizerAllowed: true }) },
   },
 );

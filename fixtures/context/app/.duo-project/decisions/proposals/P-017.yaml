@@ -1,0 +1,11 @@
+id: P-017
+title: Server-authoritative match simulation
+question: match_authority
+answer: server_authoritative
+rationale: Clients cannot be trusted with game state.
+state: proposed
+proposed_by: claude-code
+proposed_by_kind: agent
+proposed_at: "2026-09-25T00:00:00Z"
+governs:
+  requirements: [LOBBY-01]

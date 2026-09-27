@@ -456,7 +456,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M2
 package: director
 requirements: [REQ-CONTEXT-001, REQ-CONTEXT-002, REQ-CONTEXT-003, REQ-NFR-005, REQ-TOKEN-001]
@@ -466,10 +466,10 @@ depends_on: [TASK-008, TASK-009]
 
 - **Goal**: Task에서 budget 이하의 Director Context Packet을 만든다.
 - **Input**: 05 알고리즘, 09 지표
-- **Output**: Seed 해석, 확장, L1~L3 표현, packing, text/json 출력, metrics, TokenEstimator(o200k_base, chars/4 fallback. 라이브러리는 착수 전에 고른다, H-21)
+- **Output**: `compileContext`(read-only freshness, seed 해석, 가중 best-first 탐색, 후보 분류와 순위, L1~L3 표현, budget 배분, Packet Dependency Digest, opt-in Packet cache), `ContextPacket` 구조와 `renderContextMarkdown`, 비밀 치환, 요청 지표와 단계별 시간, TokenEstimator(o200k_base = gpt-tokenizer 4.0.0, chars/4는 UI 전용, H-21, ADR-005)
 - **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact), [TASK-009](#task-009-decision-생명주기)
-- **Files expected to change**: `packages/director/src/context/**`, `packages/core/src/tokens/**`
-- **Status**: todo
+- **Files expected to change**: `packages/director/src/context/**`, `packages/director/src/tokens/**`(TASKS의 core/src/tokens 대신, C79), `fixtures/context/app/**`, `packages/core/src/diagnostics.ts`, `scripts/boundaries.json`, `eslint.config.js`
+- **Status**: done (T10)
 - **검증 대상 Requirement**: [REQ-CONTEXT-001](../01-requirements.md#req-context-001-director-context-packet-생성), [REQ-CONTEXT-002](../01-requirements.md#req-context-002-token-budget-상한), [REQ-CONTEXT-003](../01-requirements.md#req-context-003-context-지표-기록), [REQ-NFR-005](../01-requirements.md#req-nfr-005-결정적-출력), [REQ-TOKEN-001](../01-requirements.md#req-token-001-토큰-측정-방식과-표기)
 - **관련 ADR**: [ADR-005](../adr/ADR-005-token-measurement.md), [ADR-008](../adr/ADR-008-deterministic-first.md), [ADR-004](../adr/ADR-004-mcp-context-gateway.md)
 
@@ -481,6 +481,7 @@ Acceptance Criteria
 - **AC-010-04** Context 생성 중 LLM 호출이 0회다
 - **AC-010-05** 비밀 패턴이 [REDACTED]로 치환된다
 - **AC-010-06** 모든 토큰 값에 estimator 이름이 붙고 bytes/chars도 함께 기록된다(TASK-004의 이전 AC-004-04를 옮김, H-21)
+
 
 ### TASK-011 Knowledge Gap
 

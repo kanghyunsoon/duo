@@ -140,6 +140,8 @@ export const DIAGNOSTIC_SEVERITY = {
   DECISION_LOCK_MISMATCH: "warning",
   /** A SourceLocation that does not address its canonical source text (a producer bug, T09.1). */
   SOURCE_LOCATION_INVALID: "error",
+  /** Context Compiler: the request cannot be compiled (empty task, budget out of range or below the packet frame, unknown profile). */
+  CONTEXT_REQUEST_INVALID: "error",
 } as const satisfies Record<string, DiagnosticSeverity>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_SEVERITY;
@@ -182,6 +184,7 @@ export const DIAGNOSTIC_PERSISTENCE = {
   DECISION_LOCKED: T, DECISION_TARGET_UNSUPPORTED: T, DECISION_SUPERSEDE_TARGET_INVALID: T, DECISION_LOCK_BUSY: T,
   DECISION_LOCK_MISMATCH: P,
   SOURCE_LOCATION_INVALID: P,
+  CONTEXT_REQUEST_INVALID: T,
 } as const satisfies Record<DiagnosticCode, DiagnosticPersistence>;
 
 export function isPersistentDiagnostic(diagnostic: Diagnostic): boolean {

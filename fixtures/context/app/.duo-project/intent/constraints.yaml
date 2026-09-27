@@ -1,0 +1,19 @@
+constraints:
+  - id: CON-001
+    statement: Tokens are never written to logs.
+    state: confirmed
+    enforcement: block
+    match:
+      paths: ["src/auth/**"]
+      symbols: []
+      dependencies: []
+      keywords: [token]
+  - id: CON-002
+    statement: A room holds at most eight players.
+    state: confirmed
+    enforcement: warn
+    match:
+      paths: ["src/lobby/**"]
+      symbols: []
+      dependencies: []
+      keywords: [room]

@@ -15,8 +15,9 @@
     "dist"
   ],
   "dependencies": {
-    "@duo-director/graph": "workspace:*",
     "@duo-director/analyzer": "workspace:*",
-    "@duo-director/core": "workspace:*"
+    "@duo-director/core": "workspace:*",
+    "@duo-director/graph": "workspace:*",
+    "gpt-tokenizer": "4.0.0"
   }
 }
