@@ -8,7 +8,26 @@ DUO는 Codex, Claude Code 같은 AI Coding Agent가 프로젝트의 목표와 �
 
 ## 상태
 
-설계 단계(v0.1 SDD)입니다. 아직 실행 가능한 코드는 없습니다. 구현은 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)의 순서를 따릅니다.
+T00 설계는 동결되었고 T01 Repository Skeleton까지 진행했습니다. 기능 구현은 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)의 순서를 따릅니다.
+
+## 개발
+
+Node.js 24(`>=24.15.0`)와 pnpm 11이 필요합니다.
+
+```bash
+pnpm install
+pnpm verify        # check:boundaries → lint → typecheck → build → test → docs:validate
+pnpm duo --version
+```
+
+| 명령 | 내용 |
+|---|---|
+| `pnpm check:boundaries` | 패키지 의존 방향(package.json, tsconfig references) 검사 |
+| `pnpm lint` | ESLint(패키지 경계, `node:sqlite` 격리 포함) |
+| `pnpm typecheck` | 테스트를 포함한 전체 타입 검사 |
+| `pnpm build` | `tsc -b` project references 빌드 |
+| `pnpm test` | Vitest |
+| `pnpm docs:validate` | Requirement/ADR/Task/AC 추적성 검사 |
 
 ## 문서
 

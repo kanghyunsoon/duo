@@ -1,0 +1,22 @@
+{
+  "name": "@duo/director",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Context Compiler, Evidence, Review, Knowledge Gap, token budget, LLMProvider, init",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@duo/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@duo/graph": "workspace:*",
+    "@duo/analyzer": "workspace:*",
+    "@duo/core": "workspace:*"
+  }
+}

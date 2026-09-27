@@ -146,7 +146,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | ID | Title | Lane | Milestone | Dependencies | Status |
 |---|---|---|---|---|---|
 | [TASK-000](#task-000-sdd-문서-작성) | SDD 문서 작성 | - | M0 | - | done |
-| [TASK-001](#task-001-저장소-골격) | 저장소 골격 | 공통 | M1 | TASK-000 | todo |
+| [TASK-001](#task-001-저장소-골격) | 저장소 골격 | 공통 | M1 | TASK-000 | done |
 | [TASK-002](#task-002-core-스키마-loader-추적성-파서) | core 스키마, loader, 추적성 파서 | core | M1 | TASK-001 | todo |
 | [TASK-003](#task-003-graphstore) | GraphStore | graph | M1 | TASK-002 | todo |
 | [TASK-004](#task-004-파일-스캔-fingerprint-토큰-측정) | 파일 스캔, fingerprint, 토큰 측정 | analyzer | M1 | TASK-002 | todo |
@@ -202,7 +202,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M1
 package: repo
 requirements: [REQ-NFR-001, REQ-NFR-003, REQ-CLI-001]
@@ -215,7 +215,7 @@ depends_on: [TASK-000]
 - **Output**: pnpm workspace, 패키지 빈 구현, lint/test/build, 3 OS CI
 - **Dependencies**: [TASK-000](#task-000-sdd-문서-작성)
 - **Files expected to change**: `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `vitest.config.ts`, `packages/*/package.json`, `apps/cli/package.json`, `.github/workflows/ci.yml`
-- **Status**: todo
+- **Status**: done
 - **검증 대상 Requirement**: [REQ-NFR-001](../01-requirements.md#req-nfr-001-cross-platform), [REQ-NFR-003](../01-requirements.md#req-nfr-003-네이티브-빌드-없는-설치), [REQ-CLI-001](../01-requirements.md#req-cli-001-얇은-cli)
 - **관련 ADR**: [ADR-001](../adr/ADR-001-language-runtime.md), [ADR-010](../adr/ADR-010-package-structure.md)
 

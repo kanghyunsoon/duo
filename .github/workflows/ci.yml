@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }}, node 24)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      # pnpm 버전은 package.json packageManager에서 읽는다.
+      - uses: pnpm/action-setup@v6
+      # ADR-001: CI 기준 런타임은 Node 24(최신 24.x, patch 고정 없음).
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: check boundaries (manifests, tsconfig references)
+        run: pnpm check:boundaries
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+      - name: validate docs traceability
+        run: pnpm docs:validate
+      - name: smoke test built CLI
+        run: node apps/cli/dist/main.js --version

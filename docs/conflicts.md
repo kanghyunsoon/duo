@@ -58,6 +58,8 @@ T00 동결 시점에 **Proposed** 상태인 해석은 구현 기본값으로 적
 | C21 | "Source of Truth는 .duo"와 .duo 밖 문서를 정의 소스로 읽는 것의 긴장 | 외부 문서는 External Evidence/Input Source. self fixture는 docs/를 임시 .duo로 복사해 사용 | 03, ADR-014 | **Resolved** (H-16) |
 | C22 | D§12 예시의 "LLM Calls 1"과 Context Packet 생성의 LLM 미사용 | Context 생성은 항상 0. LLM 호출은 Review 의미 판정에서만 생기며 해당 지표에 표시 | 09 | Proposed |
 | C23 | 12번 Task 분리로 생긴 `TASK-012A` 형식이 기존 ID 정규식(`-\d+`로 끝남)과 맞지 않음 | ID 정규식에 선택적 알파벳 접미사 허용(`-\d+[A-Z]?`), AC는 `AC-NNN[A-Z]?-NN` | ADR-014, 03 | **Resolved** (H-15의 결과) |
+| C24 | ADR-010은 배포 번들러를 TASK-001에서 고른다고 했으나, T01 범위(H-18 이후 지시)는 workspace, TypeScript, Vitest, Lint, skeleton, 경계, CI, 기본 build/test로 한정됨 | T01은 `tsc -b` 빌드만 둔다. 번들러는 배포 산출물이 필요한 시점(TASK-017 또는 TASK-020 전)에 고르고 ADR-010에 기록 | ADR-010 | Proposed |
+| C25 | TASK-001의 "Files expected to change"와 실제 변경 차이: `eslint.config.js`, `tsconfig.json`(테스트 포함 typecheck), `tsconfig.build.json`(빌드 solution), `scripts/boundaries.json`, `scripts/check-boundaries.mjs`, `tests/workspace/`가 추가됨. TypeScript는 7.0이 나왔지만 typescript-eslint 8.70이 `<6.1.0`만 지원해 `~6.0.3`으로 고정 | 경계 강제(AC-001-02)와 테스트 typecheck에 필요한 파일. TypeScript 7 전환은 lint 도구 지원 후 별도 검토 | TASKS, ADR-001 | Proposed |
 
 ## 미결 사항
 

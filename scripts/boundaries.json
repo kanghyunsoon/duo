@@ -1,0 +1,70 @@
+{
+  "$comment": "ADR-010 의존 방향의 단일 원본. eslint.config.js와 scripts/check-boundaries.mjs가 읽는다.",
+  "packages": {
+    "@duo/core": {
+      "dir": "packages/core",
+      "allow": [],
+      "typeOnly": []
+    },
+    "@duo/analyzer": {
+      "dir": "packages/analyzer",
+      "allow": [
+        "@duo/core"
+      ],
+      "typeOnly": []
+    },
+    "@duo/graph": {
+      "dir": "packages/graph",
+      "allow": [
+        "@duo/analyzer",
+        "@duo/core"
+      ],
+      "typeOnly": []
+    },
+    "@duo/director": {
+      "dir": "packages/director",
+      "allow": [
+        "@duo/graph",
+        "@duo/analyzer",
+        "@duo/core"
+      ],
+      "typeOnly": []
+    },
+    "@duo/integration": {
+      "dir": "packages/integration",
+      "allow": [
+        "@duo/director",
+        "@duo/graph",
+        "@duo/core"
+      ],
+      "typeOnly": []
+    },
+    "@duo/ui": {
+      "dir": "packages/ui",
+      "allow": [],
+      "typeOnly": [
+        "@duo/core"
+      ]
+    },
+    "@duo/cli": {
+      "dir": "apps/cli",
+      "allow": [
+        "@duo/integration",
+        "@duo/director",
+        "@duo/graph",
+        "@duo/analyzer",
+        "@duo/core"
+      ],
+      "typeOnly": []
+    }
+  },
+  "nodeSqliteAllowed": "packages/graph/src/store/node-sqlite",
+  "cliForbiddenNodeModules": [
+    "node:fs",
+    "node:fs/promises",
+    "node:child_process",
+    "node:sqlite",
+    "node:http",
+    "node:net"
+  ]
+}

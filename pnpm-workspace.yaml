@@ -1,0 +1,6 @@
+packages:
+  - packages/*
+  - apps/*
+
+# package.json engines(node >=24.15.0)를 설치 시 강제한다(ADR-001).
+engineStrict: true

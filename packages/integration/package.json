@@ -1,0 +1,22 @@
+{
+  "name": "@duo/integration",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MCP, Codex/Claude adapters, local HTTP API",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@duo/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@duo/director": "workspace:*",
+    "@duo/graph": "workspace:*",
+    "@duo/core": "workspace:*"
+  }
+}
