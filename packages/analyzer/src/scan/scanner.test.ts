@@ -166,8 +166,10 @@ describe("PATH_PORTABILITY_COLLISION", () => {
 });
 
 describe("symlinks are never followed", () => {
-  it("skips symlinks recorded in the index even when checked out as plain files (every OS)", async () => {
+  it("skips symlinks recorded in the index even when checked out as plain files (core.symlinks=false, every OS)", async () => {
     const repo = createTempRepo();
+    // The Windows default: Git writes symlinks as plain files holding the link text.
+    repo.git("config", "core.symlinks", "false");
     repo.addSymlinkEntry("inside-link", "src/a.ts");
     repo.addSymlinkEntry("outside-link", "../../etc/passwd");
     repo.write("inside-link", "src/a.ts");
