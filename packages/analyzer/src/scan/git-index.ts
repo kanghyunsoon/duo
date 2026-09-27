@@ -2,11 +2,9 @@
  * Batch Git queries for the scanner. Internal: nothing here is exported from the package, so Git
  * CLI details do not leak into the domain model. One subprocess per query, never per file.
  */
-import { execFile } from "node:child_process";
+import { runGit, type GitResult } from "../git/exec.js";
 
-export type GitResult<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly message: string; readonly gitMissing?: boolean };
+export type { GitResult };
 
 export interface GitIndexEntry {
   readonly path: string;
@@ -14,33 +12,6 @@ export interface GitIndexEntry {
   readonly mode: string;
   /** Blob OID of stage 0. Absent when the path has unmerged stages. */
   readonly oid?: string;
-}
-
-/** Variables that would point Git at another repository or index than the scan root. */
-const REDIRECTING_ENV = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_COMMON_DIR", "GIT_PREFIX", "GIT_NAMESPACE"];
-
-function runGit(root: string, args: readonly string[]): Promise<GitResult<string>> {
-  const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
-  for (const key of REDIRECTING_ENV) delete env[key];
-  return new Promise((resolve) => {
-    execFile(
-      "git",
-      ["-c", "core.quotePath=false", ...args],
-      { cwd: root, env, encoding: "buffer", maxBuffer: 1024 * 1024 * 1024, windowsHide: true },
-      (error, stdout, stderr) => {
-        if (error === null) {
-          resolve({ ok: true, value: stdout.toString("utf8") });
-          return;
-        }
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-          resolve({ ok: false, message: "git executable not found", gitMissing: true });
-          return;
-        }
-        const detail = stderr.toString("utf8").trim();
-        resolve({ ok: false, message: detail === "" ? error.message : detail });
-      },
-    );
-  });
 }
 
 /** Path of root relative to the work tree top level ("" at the top level). */

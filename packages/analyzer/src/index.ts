@@ -25,6 +25,12 @@ export {
 } from "./fingerprint/store.js";
 export { compareFingerprints, type FingerprintChange, type FingerprintChangeStatus } from "./fingerprint/compare.js";
 export type {
+  GitBlobProvenance, GitBlobSource, GitChangeKind, GitCommit, GitDiffEnd, GitDiffHunk, GitDiffRequest, GitFileDiff, GitObjectFormat,
+  GitRangeChange, GitRepositoryState, GitWorkingTreeChange,
+} from "./git/types.js";
+export { openGitProvider, type GitProvider } from "./git/provider.js";
+export { computeCoChangeCandidates, extractIssueKeys, type CoChangeCandidate, type CoChangeOptions } from "./git/history.js";
+export type {
   AnalyzedSymbol, AnalyzedTest, CallSite, CallSiteKind, DuoAnnotation, ImportBinding, LanguageAnalyzer, MemberScope, ModuleReference,
   ModuleReferenceKind, ParseStatus, ReExportBinding, SourceAnalysis, SourceInput, SourceLanguage, SymbolKind, TestConfidence,
   TestFrameworkHint, TestKind, TestModifier,

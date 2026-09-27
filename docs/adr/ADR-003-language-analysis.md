@@ -34,6 +34,7 @@ interface LanguageAnalyzer {
 - 초기화는 비동기 factory가 한다: `createTypeScriptAnalyzer()`, `createJavaScriptAnalyzer()`, `createDefaultAnalyzerRegistry()`. web-tree-sitter runtime(`Parser.init()`)은 프로세스에 하나라 한 번만 초기화하고, Language는 Analyzer마다 grammar당 한 번 load하며, Parser는 grammar당 하나를 재사용한다. 파일마다 한 번 parse하고 tree는 추출 직후 `delete()`한다. 전역 가변 상태는 runtime 초기화 promise 하나뿐이다.
 - `SourceAnalysis`(symbols, moduleReferences, callSites, annotations, parseStatus)는 [04-project-graph.md](../04-project-graph.md#sourceanalysis)에 있다. 추가 언어는 `createAnalyzerRegistry([...])`에 LanguageAnalyzer를 더하면 되고 다른 패키지를 고치지 않는다(AC-005-04).
 - MVP 구현: `TypeScriptAnalyzer`(.ts .mts .cts → TypeScript grammar, .tsx → TSX grammar)와 `JavaScriptAnalyzer`(.js .mjs .cjs .jsx → JavaScript grammar). Flow, Vue, Svelte 문법은 범위 밖이다.
+- T05.1: static member는 identity가 `Class.static.name`이고(instance와 구분), getter/setter는 같은 scope 안에서만 합친다. import binding, re-export, test 정의(vitest, @jest/globals, node:test explicit / test 파일 전역 heuristic)도 syntax 사실로 낸다. Analyzer version 2.
 - Post-MVP: `PythonAnalyzer`(REQ-POST-003).
 
 ### 의존성과 WASM

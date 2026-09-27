@@ -56,6 +56,14 @@ export const DIAGNOSTIC_SEVERITY = {
   /** Repository scan (T04). The scan root must be the top level of its Git work tree. */
   SCAN_ROOT_INVALID: "error",
   GIT_COMMAND_FAILED: "error",
+  /** Git Provider (T06): a revision that does not name a commit. */
+  GIT_REVISION_NOT_FOUND: "error",
+  /** Git Provider: a request the provider does not support (for example a whole-repository diff). */
+  GIT_REQUEST_INVALID: "error",
+  /** Git Provider: Git printed output the parser does not understand. */
+  GIT_OUTPUT_UNEXPECTED: "error",
+  /** Git Provider: no blob for the path at the requested source. */
+  GIT_OBJECT_NOT_FOUND: "error",
   /** A repository entry the scanner does not index: submodule, nested repository, non-portable name, not a regular file. */
   SCAN_ENTRY_SKIPPED: "info",
   /** A symlink inside the repository. Its target is never followed. */

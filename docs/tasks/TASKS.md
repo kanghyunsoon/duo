@@ -151,7 +151,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-003](#task-003-graphstore) | GraphStore | graph | M1 | TASK-002 | done |
 | [TASK-004](#task-004-파일-스캔과-fingerprint) | 파일 스캔과 fingerprint | analyzer | M1 | TASK-002 | done |
 | [TASK-005](#task-005-languageanalyzer와-tsjs-analyzer) | LanguageAnalyzer와 TS/JS Analyzer | analyzer | M1 | TASK-004 | done |
-| [TASK-006](#task-006-git-evidence-provider) | Git Evidence Provider | analyzer | M1 | TASK-002 | todo |
+| [TASK-006](#task-006-git-evidence-provider) | Git Evidence Provider | analyzer | M1 | TASK-002 | done |
 | [TASK-007](#task-007-graph-builder와-일관성-검사) | Graph builder와 일관성 검사 | graph | M1 | TASK-003, TASK-005, TASK-006 | todo |
 | [TASK-008](#task-008-증분-인덱싱-trace-impact) | 증분 인덱싱, trace, impact | graph | M1 | TASK-007 | todo |
 | [TASK-009](#task-009-decision-생명주기) | Decision 생명주기 | core | M2 | TASK-002 | todo |
@@ -335,7 +335,7 @@ depends_on: [TASK-004]
 Acceptance Criteria
 
 - **AC-005-01** grammar wasm과 web-tree-sitter ABI 호환 테스트가 먼저 통과한다(CI `pnpm test:grammars`, 3개 OS)
-- **AC-005-02** fixture의 Symbol, module reference, call site, DUO annotation 추출 결과가 기대값·golden과 같다(3개 OS). 테스트 추출은 이 Task에 없다(C40)
+- **AC-005-02** fixture의 Symbol, module reference(import binding, re-export), call site, DUO annotation, test 정의 추출 결과가 기대값·golden과 같다(3개 OS, T05.1에서 test와 binding 추가, C40)
 - **AC-005-03** parse 오류 파일은 `parseStatus: "partial"`과 `AST_PARSE_ERROR`를 내고 ERROR 노드 밖의 사실은 계속 추출한다(C39)
 - **AC-005-04** Analyzer 등록부에 새 언어를 추가하는 데 다른 패키지 수정이 필요 없다(테스트용 더미 Analyzer로 검증)
 
@@ -343,7 +343,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M1
 package: analyzer
 requirements: [REQ-INDEX-003, REQ-PROVIDER-001]
@@ -351,12 +351,12 @@ decisions: []
 depends_on: [TASK-002]
 ```
 
-- **Goal**: Git diff, 로그, HEAD 내용, co-change, Issue 키를 LLM 없이 제공한다.
+- **Goal**: Git 상태와 Evidence provenance(HEAD / Index / Working Tree, 변경, diff, HEAD 내용, co-change 후보, Issue 키 후보)를 LLM 없이 read-only로 제공한다. Graph 갱신과 freshness 판정은 하지 않는다.
 - **Input**: 02 EvidenceProvider, 04 CHANGED_WITH 규칙
-- **Output**: GitEvidenceProvider
+- **Output**: `GitProvider`(`openGitProvider`: repositoryState, listWorkingTreeChanges, listChanges, getDiff, blobProvenance, readBlob, listCommits), `computeCoChangeCandidates`, `extractIssueKeys`. core `EvidenceProvider` 인터페이스 연결은 TASK-013(C44)
 - **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
-- **Files expected to change**: `packages/analyzer/src/git/**`
-- **Status**: todo
+- **Files expected to change**: `packages/analyzer/src/git/**`(Scanner의 Git 실행도 `git/exec.ts`로 옮김)
+- **Status**: done (T06)
 - **검증 대상 Requirement**: [REQ-INDEX-003](../01-requirements.md#req-index-003-git-diff에서-변경-symbol-도출), [REQ-PROVIDER-001](../01-requirements.md#req-provider-001-evidenceprovider와-git-provider)
 - **관련 ADR**: 없음
 

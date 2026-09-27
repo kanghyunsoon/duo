@@ -21,7 +21,7 @@ flowchart TD
 | 패키지 | 책임 | Lane Task |
 |---|---|---|
 | core | .duo-project 스키마, loader, Markdown 정의 파서, ID와 추적성 검사, DecisionService, state 경로, Claim/Evidence/Verdict 타입, TokenEstimator, write boundary 정책 | TASK-002, 009 |
-| analyzer | 파일 스캔, fingerprint, LanguageAnalyzer(TS/JS), GitEvidenceProvider | TASK-004, 005, 006 |
+| analyzer | 파일 스캔, fingerprint, LanguageAnalyzer(TS/JS), GitProvider | TASK-004, 005, 006 |
 | graph | GraphStore(node:sqlite), builder, traversal, incremental, trace, impact, check | TASK-003, 007, 008 |
 | director | Context Compiler, Evidence, Review, Knowledge Gap, token budget, LLMProvider, InitService | TASK-010~014 |
 | integration | MCP 서버, Codex/Claude Adapter, 로컬 HTTP API, (향후) 외부 EvidenceProvider | TASK-016, 017, 018 |
@@ -33,7 +33,7 @@ flowchart TD
 | Interface | 위치 | MVP 구현 | 향후 |
 |---|---|---|---|
 | `LanguageAnalyzer` | analyzer | TypeScriptAnalyzer, JavaScriptAnalyzer | PythonAnalyzer |
-| `EvidenceProvider` | core(인터페이스) | GitEvidenceProvider(analyzer) | Jira, GitHub Issues(integration) |
+| `EvidenceProvider` | core(인터페이스, TASK-013에서 정의, C44) | `GitProvider`(analyzer, TASK-006 provenance primitives) | Jira, GitHub Issues(integration) |
 | `LLMProvider` | director | NoneProvider, OpenAIResponsesProvider | OpenAICompatibleChatProvider, AnthropicProvider, LocalProvider |
 | `TokenEstimator` | core | o200k_base, chars4(approx) | - |
 | `GraphStore` | graph | NodeSqliteGraphStore(`node:sqlite`는 이 구현 안에서만 import) | better-sqlite3 기반 구현 |

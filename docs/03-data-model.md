@@ -223,13 +223,28 @@ WAL에서 다른 연결이 쓰는 동안 마지막 commit 상태를 읽는 것�
 
 ## Source analysis
 
-¦LanguageAnalyzer¦의 결과 계약이다(TASK-005, [ADR-003](adr/ADR-003-language-analysis.md), 형식은 [04 SourceAnalysis](04-project-graph.md#sourceanalysis)). Graph를 만들지 않고 syntax 사실만 낸다.
+`LanguageAnalyzer`의 결과 계약이다(TASK-005, T05.1, [ADR-003](adr/ADR-003-language-analysis.md), 형식은 [04 SourceAnalysis](04-project-graph.md#sourceanalysis)). Graph를 만들지 않고 syntax 사실만 낸다.
 
-- **대상**: 지원 확장자만 parse한다(.ts .mts .cts → TypeScript, .tsx → TSX, .js .mjs .cjs .jsx → JavaScript grammar). Scanner는 ¦.duo-project/¦의 Truth 파일도 찾지만 Markdown/YAML은 LanguageAnalyzer가 ¦supports() == false¦이며 parse하지 않는다. Project Truth parsing은 core가 맡는다.
-- **입력과 hash**: 입력은 파일 bytes다. fingerprint와 같은 canonical bytes(normalized-text)를 UTF-8로 decode해 parse하므로 ¦SourceAnalysis.contentHash¦는 ¦FileFingerprint.contentHash¦와 같다. UTF-8이 아니면 ¦SOURCE_DECODE_ERROR¦. BOM은 그대로 두고 칸 수에 포함한다.
-- **Symbol identity**: core ¦symbolRef(path, qualifiedName)¦와 ¦nodeId()¦만 쓴다. 위치나 byte offset은 ID에 넣지 않는다.
-- **정렬**: 모든 목록은 ¦compareSourceLocations¦ 순서, 같으면 qualifiedName / specifier, kind / calleeText / ids(¦compareUtf8¦) 순서다. AST 순회 순서에 기대지 않는다.
-- **partial**: 트리에 ERROR나 MISSING 노드가 있으면 ¦parseStatus: "partial"¦과 ¦AST_PARSE_ERROR¦(warning, 파일당 20개 + 요약 1개). ERROR 노드 안은 읽지 않고 나머지는 계속 추출한다. parse가 파일당 제한 시간(기본 2초)을 넘으면 ¦AST_PARSE_TIMEOUT¦이고 결과가 없다.
+- **대상**: 지원 확장자만 parse한다(.ts .mts .cts → TypeScript, .tsx → TSX, .js .mjs .cjs .jsx → JavaScript grammar). Scanner는 `.duo-project/`의 Truth 파일도 찾지만 Markdown/YAML은 LanguageAnalyzer가 `supports() == false`이며 parse하지 않는다. Project Truth parsing은 core가 맡는다. `.d.ts`도 TypeScript 파일로 분석하고 특별 취급하지 않는다.
+- **입력과 hash**: 입력은 파일 bytes다. fingerprint와 같은 canonical bytes(normalized-text)를 UTF-8로 decode해 parse하므로 `SourceAnalysis.contentHash`는 `FileFingerprint.contentHash`와 같다. UTF-8이 아니면 `SOURCE_DECODE_ERROR`. BOM은 그대로 두고 칸 수에 포함한다.
+- **Symbol identity**: core `symbolRef(path, symbol)`와 `nodeId()`만 쓴다. `symbol`은 top-level과 instance member가 qualifiedName(`User.load`), static member가 `User.static.load`다. identifier가 아닌 member 이름은 JSON 문자열로 감싼다(`User["a.b"]`, `User.static["a.b"]`). 그래서 `static User.load` ≠ `instance User.load`이고 문자열 이름 안의 `.`이 static 접두사와 충돌하지 않는다. `qualifiedName`은 표시용이며 scope 간에 겹칠 수 있다. 위치나 byte offset은 ID에 넣지 않는다.
+- **정렬**: 모든 목록은 `compareSourceLocations` 순서, 같으면 symbol identity / specifier, kind / calleeText / ids / fullName(`compareUtf8`) 순서다. AST 순회 순서에 기대지 않는다.
+- **partial**: 트리에 ERROR나 MISSING 노드가 있으면 `parseStatus: "partial"`과 `AST_PARSE_ERROR`(warning, 파일당 20개 + 요약 1개). ERROR 노드 안은 읽지 않고 나머지는 계속 추출한다. parse가 파일당 제한 시간(기본 2초)을 넘으면 `AST_PARSE_TIMEOUT`이고 결과가 없다.
+- **버전**: `TS_JS_ANALYZER_VERSION` 2(T05.1: static identity, binding, test). 버전이 바뀌면 그 Analyzer의 파일을 다시 분석한다(04).
+
+## Git Provider
+
+`openGitProvider(root)`가 돌려주는 read-only 사실이다(TASK-006). commit, checkout, add, reset, stash, merge, fetch 같은 쓰기는 없고, Graph 갱신과 freshness 판정도 하지 않는다. root가 Git work tree 최상위가 아니면 `GIT_REPOSITORY_REQUIRED` / `SCAN_ROOT_INVALID`다.
+
+- **실행**: shell 없이 `git` 실행 파일과 인자 배열로 spawn한다. 환경은 `LC_ALL=C`, `GIT_PAGER=cat`, `GIT_TERMINAL_PROMPT=0`, `GIT_OPTIONAL_LOCKS=0`로 고정하고 다른 저장소를 가리키는 변수와 `GIT_EXTERNAL_DIFF`를 지운다. diff 관련 사용자 설정(prefix, algorithm, external diff, textconv, color, submodule 표시)은 명령행 옵션과 `-c`로 덮어쓰며 설정 파일은 고치지 않는다. 경로는 `--literal-pathspecs` 뒤 `--` 다음에 넘기고, revision은 `-`로 시작하면 거부한 뒤 `rev-parse --verify <rev>^{commit}`로 OID로 바꿔 쓴다. 출력은 가능한 곳에서 모두 `-z` 형식이라 공백, tab, 줄바꿈, `#`, Unicode 경로를 그대로 다룬다. 파일마다 Git을 부르지 않는다.
+- **`GitRepositoryState`**: `objectFormat`, `headOid?`, `branch?`(detached면 없음, unborn이면 첫 commit이 올라갈 이름), `detached`, `unborn`, `shallow`, `rootCommitOids`(HEAD에서 닿는 root commit, 저장소 identity). 절대 경로는 domain 값에 넣지 않고 `GitProvider.root`에만 둔다.
+- **세 상태**: HEAD, Index, Working Tree는 서로 다르다. `GitBlobProvenance { path, headBlobOid?, indexBlobOid? }`는 두 OID를 섞지 않는다. T04 `gitBlobOid`는 계속 index 기준이고 working tree는 fingerprint `contentHash`다. `readBlob("HEAD" | "INDEX" | { commit }, path)`가 내용을 읽는다(Decision Lock 기준선, AC-006-02).
+- **변경 모델**: `listWorkingTreeChanges()`(`status --porcelain=v2 -z`)는 path마다 `staged`(HEAD → Index)와 `unstaged`(Index → Working Tree)를 따로 둔다. 종류는 `added | modified | deleted | renamed | copied | type-changed | untracked | unmerged`이고 untracked는 unstaged 축에만 있다. mode와 HEAD/Index OID, 충돌 코드, submodule 여부를 함께 준다. `listChanges(from, to)`(`diff --raw -z`)는 두 endpoint 사이의 한 축 변경이다.
+- **rename**: Git similarity heuristic(`-M`, 50%) 결과이며 `oldPath`, `path`, `similarity`로 준다. Graph Node ID는 옮기지 않고 Indexer가 판단한다. `git status`는 staged rename만 찾는다(C45).
+- **Diff**: `listChanges`는 metadata만, `getDiff({ from, to, files, contextLines })`는 요청한 파일의 hunk(`oldStart, oldLines, newStart, newLines, section, lines`)만 준다. 파일 목록이 비면 `GIT_REQUEST_INVALID`이며 저장소 전체 diff 문자열은 만들지 않는다. endpoint 조합은 HEAD→INDEX, INDEX→WORKTREE, HEAD→WORKTREE, commit→INDEX|WORKTREE|HEAD|commit, HEAD→commit이다. unborn에서 HEAD는 빈 tree다. binary는 hunk 없이 `binary: true`, OID, 알 수 있으면 크기만 준다.
+- **submodule**: gitlink entry는 `submodule: true`인 사실로만 기록하고 안으로 들어가지 않는다(T04 Scanner의 nested-repository 제외와 같은 정책).
+- **history**: `listCommits({ maxCommits = 500 })`는 최신순 `{ oid, parents, message, files }`다(merge commit은 files 없음). `computeCoChangeCandidates`가 04의 CHANGED_WITH 규칙(3회 이상, 50파일 초과 commit 제외)으로 후보 쌍을 만들고(AC-006-03), `extractIssueKeys`가 commit message와 branch 이름에서 ID 후보를 뽑는다(AC-006-04). Project Truth와 대조는 TASK-007이다.
+- **Evidence provenance primitives**: commit SHA(`headOid`, commit oid), RepoPath, HEAD blob OID, Index blob OID, working-tree `contentHash`(fingerprint), diff range(hunk의 new/old 줄 범위). Evidence 조립은 TASK-013이다.
 
 ## SourceLocation
 
