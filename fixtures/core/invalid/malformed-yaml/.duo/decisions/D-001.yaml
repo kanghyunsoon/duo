@@ -1,0 +1,7 @@
+id: D-001
+title: Unclosed flow sequence
+state: confirmed
+question: auth_mechanism
+answer: jwt
+governs:
+  requirements: [AUTH-01

@@ -1,56 +1,107 @@
 #!/usr/bin/env node
-// DUO docs trace validator (T00). docs/의 Markdown 정의 형식을 DUO와 같은 규칙으로 파싱해
-// 링크, 앵커, ID 중복, 참조 타입, ADR-Task 정합, MVP Requirement 연결, 문서 내 ID 언급을 검사한다.
-import fs from 'node:fs';
-import path from 'node:path';
-const F = '\x60\x60\x60';
-const SKIP = new Set(['.git', 'tmp', '.worklog', 'node_modules', 'dist', 'coverage']);
-const files = [];
-(function walk(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { if (SKIP.has(e.name)) continue; const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (p.endsWith('.md')) files.push(p); } })('.');
-const read = (f) => fs.readFileSync(f, 'utf8').replace(/\r\n/g, '\n');
-const errors = [], brokenLinks = [], brokenAnchors = [], dup = [], unknownRefs = new Set();
-const slug = (s) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
-const anchors = {};
-for (const f of files) { const set = new Set(); let inF = false; for (const l of read(f).split('\n')) { if (l.startsWith(F) || l.startsWith('~~~')) inF = !inF; if (!inF) { const m = l.match(/^#{1,6}\s+(.*)$/); if (m) set.add(slug(m[1])); } } anchors[path.resolve(f)] = set; }
-for (const f of files) { for (const m of read(f).matchAll(/\]\(([^)\s]+)\)/g)) { const t = m[1]; if (/^https?:/.test(t)) continue; const [p, a] = t.split('#'); const tgt = p ? path.resolve(path.dirname(f), decodeURIComponent(p)) : path.resolve(f); if (!fs.existsSync(tgt)) { brokenLinks.push(f + ' -> ' + t); continue; } if (a && anchors[tgt] && !anchors[tgt].has(decodeURIComponent(a))) brokenAnchors.push(f + ' -> ' + t); } }
-const ID = /^([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Z]?|M\d+)$/;
-const defs = {};
-const add = (id, type, f, data) => { if (defs[id]) dup.push(id + ' ' + f + ' & ' + defs[id].f); defs[id] = { type, f, data }; };
-const flat = (b) => { const o = {}; for (const l of b.split('\n')) { const m = l.match(/^(\w+):\s*(.*)$/); if (!m) continue; let v = m[2].replace(/\s+#.*$/, '').trim(); if (/^\[.*\]$/.test(v)) v = v.slice(1, -1).split(',').map((x) => x.trim()).filter(Boolean); o[m[1]] = v; } return o; };
-const src = ['docs/01-requirements.md', 'docs/tasks/TASKS.md', 'docs/12-roadmap.md', ...fs.readdirSync('docs/adr').filter((x) => /^ADR-\d+/.test(x)).map((x) => 'docs/adr/' + x)];
-for (const f of src) {
-  const s = read(f);
-  const fm = s.match(/^---\n([\s\S]*?)\n---/);
-  if (fm) { const d = flat(fm[1]); const g = fm[1].match(/requirements:\s*\[(.*)\]/); d.governs = g ? g[1].split(',').map((x) => x.trim()) : []; if (d.type !== 'decision' || !ID.test(d.id)) errors.push('bad frontmatter ' + f); add(d.id, 'decision', f, d); continue; }
-  const lines = s.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^#{2,4}\s+(\S+)\s+(.+)$/); if (!m || !ID.test(m[1])) continue;
-    let j = i + 1; while (j < lines.length && lines[j].trim() === '') j++;
-    if (lines[j] !== F + 'duo') { errors.push('no duo block ' + m[1] + ' ' + f); continue; }
-    let k = j + 1; const b = []; while (k < lines.length && lines[k] !== F) { b.push(lines[k]); k++; }
-    const d = flat(b.join('\n')); d.type = d.type || 'requirement';
-    if (d.type === 'issue') { d.ac = []; for (let q = k + 1; q < lines.length && !/^#{2,4}\s/.test(lines[q]); q++) { const a = lines[q].match(/^- \*\*(AC-\d{3}[A-Z]?-\d{2})\*\*/); if (a) d.ac.push(a[1]); } }
-    add(m[1], d.type, f, d);
+// SDD traceability validator for this repository.
+// Parsing, schemas and trace rules come from @duo/core: the same parser DUO uses for .duo/.
+// This script adds only repository documentation policy: which files define REQ/ADR/TASK/Milestone,
+// link and anchor checks, and the REQ-/ADR-/TASK-/AC- mention convention.
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { analyzeTrace, formatDiagnostic, parseDefinitionDocument, parseMarkdown } from "@duo/core";
+
+const SKIP = new Set([".git", "node_modules", "dist", "coverage", "tmp", ".worklog", "fixtures"]);
+const MENTION = /\b(?:REQ-[A-Z]+-\d{3}|ADR-\d{3}|TASK-\d{3}[A-Z]?|AC-\d{3}[A-Z]?-\d{2})\b/g;
+
+/** Files that define REQ/ADR/TASK/Milestone (ADR-014). */
+export function isDefinitionSource(repoPath) {
+  return ["docs/01-requirements.md", "docs/tasks/TASKS.md", "docs/12-roadmap.md"].includes(repoPath)
+    || /^docs\/adr\/ADR-\d+[^/]*\.md$/.test(repoPath);
+}
+
+/** GitHub-style heading anchor. */
+export function slug(text) {
+  return text.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/\s/g, "-");
+}
+
+function walk(root, dir = "", out = []) {
+  for (const entry of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+    if (SKIP.has(entry.name)) continue;
+    const rel = dir ? `${dir}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) walk(root, rel, out);
+    else if (rel.endsWith(".md")) out.push(rel);
+  }
+  return out.sort();
+}
+
+export function validateDocs(root) {
+  const problems = [];
+  const report = (d) => problems.push(formatDiagnostic(d));
+  const docs = new Map();
+  for (const file of walk(root)) {
+    const parsed = parseMarkdown(file, fs.readFileSync(path.join(root, file), "utf8"));
+    parsed.diagnostics.forEach(report);
+    if (parsed.value) docs.set(file, parsed.value);
+  }
+
+  // Links and anchors
+  const anchors = new Map([...docs].map(([file, doc]) => [file, new Set(doc.blocks.filter((b) => b.kind === "heading").map((b) => slug(b.text)))]));
+  for (const [file, doc] of docs) {
+    for (const link of doc.links) {
+      if (/^[a-z][a-z0-9+.-]*:/i.test(link.url)) continue; // http:, https:, mailto:, codex: ...
+      const [target, anchor] = link.url.split("#");
+      const targetPath = target ? path.posix.normalize(path.posix.join(path.posix.dirname(file), decodeURIComponent(target))) : file;
+      const at = `${link.location.path}:${link.location.startLine}`;
+      if (!fs.existsSync(path.join(root, targetPath))) problems.push(`${at} broken link ${link.url}`);
+      else if (anchor && anchors.has(targetPath) && !anchors.get(targetPath).has(decodeURIComponent(anchor))) problems.push(`${at} broken anchor ${link.url}`);
+    }
+  }
+
+  // Definitions and trace (core)
+  const defs = { requirements: [], decisions: [], constraints: [], issues: [], milestones: [], proposals: [] };
+  for (const [file, doc] of docs) {
+    if (!isDefinitionSource(file)) continue;
+    const parsed = parseDefinitionDocument(doc);
+    parsed.diagnostics.forEach((d) => d.severity !== "info" && report(d));
+    for (const key of Object.keys(defs)) defs[key].push(...(parsed.value?.[key] ?? []));
+  }
+  const trace = analyzeTrace(defs, { requireTrackedRequirements: true });
+  trace.diagnostics.filter((d) => d.severity !== "info").forEach(report);
+
+  // ID mentions outside definitions must refer to defined IDs
+  const known = (id) => (id.startsWith("AC-") ? trace.model.acceptance.has(id) : trace.model.entities.has(id));
+  const unknown = new Set();
+  for (const [file, doc] of docs) {
+    if (file.startsWith("docs/references/")) continue;
+    for (const t of doc.texts) {
+      for (const m of t.value.matchAll(MENTION)) {
+        if (!known(m[0])) unknown.add(`${t.location.path}:${t.location.startLine} unknown ID ${m[0]}`);
+      }
+    }
+  }
+  problems.push(...[...unknown].sort());
+
+  return {
+    report: {
+      files: docs.size,
+      requirements: defs.requirements.length,
+      decisions: defs.decisions.length,
+      issues: defs.issues.length,
+      milestones: defs.milestones.length,
+      acceptanceCriteria: trace.model.acceptance.size,
+      links: trace.model.links.length,
+    },
+    problems,
+  };
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const { report, problems } = validateDocs(root);
+  console.log(JSON.stringify(report, null, 1));
+  for (const p of problems) console.error(p);
+  if (problems.length > 0) {
+    console.error(`validate-docs: ${problems.length} problem(s)`);
+    process.exitCode = 1;
+  } else {
+    console.error("validate-docs: OK");
   }
 }
-const ids = new Set(Object.keys(defs));
-const acs = new Set(Object.values(defs).flatMap((d) => d.data.ac || []));
-const chk = (from, list, type) => { for (const x of list || []) { if (!defs[x]) errors.push(from + ' -> missing ' + x); else if (type && defs[x].type !== type) errors.push(from + ' -> ' + x + ' is ' + defs[x].type + ', expected ' + type); } };
-const covered = new Set();
-for (const [id, d] of Object.entries(defs)) {
-  const x = d.data;
-  if (d.type === 'decision') chk(id, x.governs, 'requirement');
-  if (d.type === 'issue') {
-    chk(id, x.requirements, 'requirement'); chk(id, x.decisions, 'decision'); chk(id, x.depends_on, 'issue'); if (x.milestone) chk(id, [x.milestone], 'milestone');
-    (x.requirements || []).forEach((r) => covered.add(r));
-    for (const a of x.decisions || []) { const g = (defs[a] && defs[a].data.governs) || []; if (!g.some((r) => (x.requirements || []).includes(r))) errors.push(id + ' decision ' + a + ' governs none of its requirements'); }
-  }
-  if (d.type === 'requirement' && x.milestone && x.milestone !== 'null') chk(id, [x.milestone], 'milestone');
-}
-for (const [id, d] of Object.entries(defs)) if (d.type === 'requirement' && d.data.status !== 'deferred' && !covered.has(id)) errors.push(id + ' has no task');
-for (const f of files) { if (f.includes(path.join('docs', 'references'))) continue; for (const m of read(f).matchAll(/\b(REQ-[A-Z]+-\d{3}|ADR-\d{3}|TASK-\d{3}[A-Z]?|AC-\d{3}[A-Z]?-\d{2})\b/g)) { const t = m[1]; if (t.startsWith('AC-') ? !acs.has(t) : !ids.has(t)) unknownRefs.add(t + ' @ ' + f); } }
-const count = (t) => Object.values(defs).filter((d) => d.type === t).length;
-const report = { files: files.length, requirements: count('requirement'), decisions: count('decision'), issues: count('issue'), milestones: count('milestone'), acceptanceCriteria: acs.size, errors, duplicates: dup, brokenLinks, brokenAnchors, unknownRefs: [...unknownRefs] };
-console.log(JSON.stringify(report, null, 1));
-const n = errors.length + dup.length + brokenLinks.length + brokenAnchors.length + unknownRefs.size;
-if (n > 0) { console.error('validate-docs: ' + n + ' problem(s)'); process.exitCode = 1; } else console.error('validate-docs: OK');

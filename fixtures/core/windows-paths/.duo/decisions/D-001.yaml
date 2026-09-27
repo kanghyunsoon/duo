@@ -1,0 +1,12 @@
+id: D-001
+title: JWT
+state: confirmed
+question: auth
+answer: jwt
+governs:
+  requirements: [AUTH-01]
+  paths: [".\\src\\auth\\"]
+evidence:
+  - kind: symbol
+    path: src\auth\AuthService.ts
+    symbol: AuthService

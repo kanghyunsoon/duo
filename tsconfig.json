@@ -5,12 +5,14 @@
     "rootDir": ".",
     "customConditions": [
       "@duo/source"
-    ]
+    ],
+    "allowJs": true
   },
   "include": [
     "packages/*/src/**/*.ts",
     "apps/*/src/**/*.ts",
     "tests/**/*.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "scripts/**/*.mjs"
   ]
 }

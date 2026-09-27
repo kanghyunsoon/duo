@@ -3,7 +3,7 @@
  * Parses arguments and formats output only. Commands are implemented in packages (TASK-015).
  */
 import { packageInfo as analyzer } from "@duo/analyzer";
-import { packageInfo as core, type PackageInfo } from "@duo/core";
+import { CLI_NAME, packageInfo as core, PRODUCT_NAME, type PackageInfo } from "@duo/core";
 import { packageInfo as director } from "@duo/director";
 import { packageInfo as graph } from "@duo/graph";
 import { packageInfo as integration } from "@duo/integration";
@@ -22,9 +22,9 @@ export const PLANNED_COMMANDS = [
 const WORKSPACE: readonly PackageInfo[] = [core, analyzer, graph, director, integration];
 
 const HELP = [
-  `duo ${VERSION} — AI Project Direction Layer for Coding Agents`,
+  `${PRODUCT_NAME} ${VERSION} — AI Project Direction Layer for Coding Agents`,
   "",
-  "Usage: duo <command> [options]",
+  `Usage: ${CLI_NAME} <command> [options]`,
   "",
   `Commands (not implemented yet): ${PLANNED_COMMANDS.join(", ")}`,
   "",
@@ -40,8 +40,8 @@ export function run(argv: readonly string[], io: Io): number {
 
   if (args.includes("--version") || args.includes("-v")) {
     io.out(json
-      ? JSON.stringify({ name: "duo", version: VERSION, packages: WORKSPACE.map((p) => p.name) })
-      : `duo ${VERSION}`);
+      ? JSON.stringify({ name: CLI_NAME, version: VERSION, packages: WORKSPACE.map((p) => p.name) })
+      : `${CLI_NAME} ${VERSION}`);
     return 0;
   }
   const [command] = args;
@@ -50,9 +50,9 @@ export function run(argv: readonly string[], io: Io): number {
     return 0;
   }
   if ((PLANNED_COMMANDS as readonly string[]).includes(command)) {
-    io.err(`duo: '${command}' is not implemented yet (docs/07-cli-interface.md)`);
+    io.err(`${CLI_NAME}: '${command}' is not implemented yet (docs/07-cli-interface.md)`);
     return 1;
   }
-  io.err(`duo: unknown command '${command}'. Run 'duo --help'.`);
+  io.err(`${CLI_NAME}: unknown command '${command}'. Run '${CLI_NAME} --help'.`);
   return 1;
 }

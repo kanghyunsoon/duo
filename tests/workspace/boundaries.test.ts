@@ -29,6 +29,9 @@ describe("AC-001-02 lint enforces the ADR-010 dependency direction", () => {
     ["director cannot import node:sqlite", "packages/director/src/probe.ts", 'import { DatabaseSync } from "node:sqlite";', false],
     ["cli cannot do file I/O directly", "apps/cli/src/probe.ts", 'import { readFileSync } from "node:fs";', false],
     ["cli may import packages", "apps/cli/src/probe.ts", 'import { packageInfo } from "@duo/integration";', true],
+    ["core domain cannot import the YAML library", "packages/core/src/domain/probe.ts", 'import { parseDocument } from "yaml";', false],
+    ["core domain cannot import mdast types", "packages/core/src/domain/probe.ts", 'import type { Root } from "mdast";', false],
+    ["core source layer may import the YAML library", "packages/core/src/source/probe.ts", 'import { parseDocument } from "yaml";', true],
   ];
   for (const [name, file, code, allowed] of cases) {
     it(name, async () => {

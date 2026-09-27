@@ -1,0 +1,5 @@
+id: d-001
+title: Lower-case ID
+state: proposed
+question: auth_mechanism
+answer: jwt

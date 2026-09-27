@@ -66,5 +66,16 @@
     "node:sqlite",
     "node:http",
     "node:net"
-  ]
+  ],
+  "sourceParsing": {
+    "$comment": "YAML/Markdown 라이브러리는 core의 source 계층에서만 import한다(T02). 라이브러리 타입이 domain 밖으로 새지 않게 한다.",
+    "dir": "packages/core/src/source",
+    "modules": [
+      "yaml",
+      "mdast",
+      "mdast-util-from-markdown",
+      "mdast-util-frontmatter",
+      "micromark-extension-frontmatter"
+    ]
+  }
 }

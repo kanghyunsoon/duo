@@ -1,0 +1,8 @@
+id: M1
+title: First
+state: active
+issues:
+  - id: GAME-1
+    title: Refresh
+    status: todo
+    requirements: [AUTH-99]

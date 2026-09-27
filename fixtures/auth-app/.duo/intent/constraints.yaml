@@ -1,0 +1,12 @@
+constraints:
+  - id: CON-001
+    statement: OAuth is outside MVP.
+    state: confirmed
+    enforcement: warn
+    match:
+      paths: ["src/**/oauth/**"]
+      symbols: ["*OAuth*"]
+      dependencies: [passport-google-oauth20]
+      keywords: [oauth]
+    source:
+      - {path: README.md, hash: "sha256:5b1e0c", section: Scope}

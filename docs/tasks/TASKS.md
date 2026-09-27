@@ -147,7 +147,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 |---|---|---|---|---|---|
 | [TASK-000](#task-000-sdd-문서-작성) | SDD 문서 작성 | - | M0 | - | done |
 | [TASK-001](#task-001-저장소-골격) | 저장소 골격 | 공통 | M1 | TASK-000 | done |
-| [TASK-002](#task-002-core-스키마-loader-추적성-파서) | core 스키마, loader, 추적성 파서 | core | M1 | TASK-001 | todo |
+| [TASK-002](#task-002-core-스키마-loader-추적성-파서) | core 스키마, loader, 추적성 파서 | core | M1 | TASK-001 | review |
 | [TASK-003](#task-003-graphstore) | GraphStore | graph | M1 | TASK-002 | todo |
 | [TASK-004](#task-004-파일-스캔-fingerprint-토큰-측정) | 파일 스캔, fingerprint, 토큰 측정 | analyzer | M1 | TASK-002 | todo |
 | [TASK-005](#task-005-languageanalyzer와-tsjs-analyzer) | LanguageAnalyzer와 TS/JS Analyzer | analyzer | M1 | TASK-004 | todo |
@@ -230,7 +230,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: review
 milestone: M1
 package: core
 requirements: [REQ-TRUTH-001, REQ-TRUTH-003, REQ-TRACE-001, REQ-SAFETY-001]
@@ -243,7 +243,7 @@ depends_on: [TASK-001]
 - **Output**: zod 스키마, loader, Markdown 정의 파서, External Source provenance(path, hash), ID 검사, fs-guard, fixtures/auth-app
 - **Dependencies**: [TASK-001](#task-001-저장소-골격)
 - **Files expected to change**: `packages/core/src/schema/**`, `packages/core/src/loader/**`, `packages/core/src/trace/**`, `packages/core/src/fs-guard.ts`, `fixtures/auth-app/**`
-- **Status**: todo
+- **Status**: review (AC-002-04 fs-guard 미구현, conflicts.md C26)
 - **검증 대상 Requirement**: [REQ-TRUTH-001](../01-requirements.md#req-truth-001-duo-project-truth-layer와-소유권), [REQ-TRUTH-003](../01-requirements.md#req-truth-003-human-readable-형식과-스키마-검증), [REQ-TRACE-001](../01-requirements.md#req-trace-001-id-기반-추적성), [REQ-SAFETY-001](../01-requirements.md#req-safety-001-source-code-비수정과-쓰기-경로-제한)
 - **관련 ADR**: [ADR-006](../adr/ADR-006-duo-layout-git-policy.md), [ADR-014](../adr/ADR-014-traceability-ids.md)
 

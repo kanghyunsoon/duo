@@ -13,7 +13,7 @@ const dirs = Object.values(packages).map((p) => p.dir.split("/")[1]);
 
 /**
  * @param {string} name
- * @param {{ sqliteAllowed?: boolean, cliNode?: boolean }} [opts]
+ * @param {{ sqliteAllowed?: boolean, cliNode?: boolean, sourceParsingAllowed?: boolean }} [opts]
  */
 function restrictions(name, opts = {}) {
   const spec = packages[name];
@@ -29,6 +29,10 @@ function restrictions(name, opts = {}) {
       name: "node:sqlite",
       message: `node:sqlite is allowed only in ${boundaries.nodeSqliteAllowed}/ (ADR-002).`,
     }]),
+    ...(opts.sourceParsingAllowed ? [] : boundaries.sourceParsing.modules.map((m) => ({
+      name: m,
+      message: `${m} may be imported only in ${boundaries.sourceParsing.dir}/ (source parsing layer).`,
+    }))),
     ...(opts.cliNode ? boundaries.cliForbiddenNodeModules.filter((m) => m !== "node:sqlite").map((m) => ({
       name: m,
       message: "apps/cli is a thin entry point; do I/O through packages (REQ-CLI-001).",
@@ -63,6 +67,10 @@ export default defineConfig(
     files: [`apps/cli/src/${TS}`],
     ignores: ["**/*.test.ts"],
     rules: { [RULE]: restrictions("@duo/cli", { cliNode: true }) },
+  },
+  {
+    files: [`${boundaries.sourceParsing.dir}/${TS}`],
+    rules: { [RULE]: restrictions("@duo/core", { sourceParsingAllowed: true }) },
   },
   {
     files: [`${boundaries.nodeSqliteAllowed}/${TS}`],

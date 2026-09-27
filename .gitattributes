@@ -1,3 +1,5 @@
 * text=auto eol=lf
 *.wasm binary
 *.png binary
+# Windows fixture: checked out with CRLF on every OS (T02 path/line-ending tests).
+fixtures/core/windows-paths/** text eol=crlf

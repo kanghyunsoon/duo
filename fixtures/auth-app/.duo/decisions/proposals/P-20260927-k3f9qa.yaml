@@ -1,0 +1,12 @@
+id: P-20260927-k3f9qa
+title: Refresh token rotation
+question: refresh_token_policy
+answer: rotate_on_use
+rationale: Limit the damage of a leaked refresh token.
+state: proposed
+proposed_by: claude-code
+proposed_at: "2026-09-27T16:00:00+09:00"
+governs:
+  requirements: [AUTH-03]
+evidence:
+  - {kind: requirement, id: AUTH-03}

@@ -1,0 +1,5 @@
+id: D-001
+title: Alias
+state: proposed
+question: &q auth_mechanism
+answer: *q

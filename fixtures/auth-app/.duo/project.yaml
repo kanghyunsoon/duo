@@ -1,0 +1,10 @@
+schema_version: 1
+name: auth-app
+current_milestone: M1
+sources:
+  markdown: [README.md]
+context:
+  default_budget_tokens: 6000
+  max_depth: 2
+llm:
+  provider: none

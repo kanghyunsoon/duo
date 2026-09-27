@@ -29,6 +29,7 @@ T00 동결 시점에 **Proposed** 상태인 해석은 구현 기본값으로 적
 | H-15 | 2026-09-27 | ADR-012 수정 확정: MVP 실제 Provider는 OpenAI Responses API 1종(`OpenAIResponsesProvider`). 계약은 Provider 비종속. 기존 12번 Task를 TASK-012A(계약, no-op)와 TASK-012B(Responses Adapter, Context/Review 계약 안정 후)로 분리 | ADR-012, TASKS |
 | H-16 | 2026-09-27 | ADR-014 수정 확정: `.duo`가 유일한 Project Truth. `sources.markdown` 등 외부 문서는 External Evidence/Input Source이며 init 이해, draft, Review 근거, Drift 탐지에만 사용. 외부 변경은 `.duo`를 자동 변경하지 않고 Drift로 보고. provenance는 `{path, hash}` 수준 | ADR-014, 03, ADR-007 |
 | H-17 | 2026-09-27 | ADR-011은 미결 유지. MCP Core는 v2 기준으로 진행하고, Codex/Claude 설정 변경은 TASK-017 직전에 공식 문서로 확인. Core 설계를 Adapter 설정에 종속시키지 않음 | ADR-011 |
+| H-19 | 2026-09-27 | T02 범위: `@duo/core`의 Core Data Contract(스키마, domain model, YAML loader, Markdown metadata parser, 추적성 파서, diagnostics, fixture, 검증)만. YAML은 `yaml` 2.x `parseDocument()`, Markdown은 `mdast-util-from-markdown` + frontmatter 확장(remark/unified 없음). 원문 파싱과 domain 분리, `schema_version`, strict schema + `extensions`, 오류를 diagnostic으로 수집, POSIX 저장소 경로, `EntityRef` 식별자 계약, docs validator는 core parser 사용. 이름 공간은 Q-NAMESPACE로 기록하고 상수로 관리 | ADR-014, 03, core |
 | H-18 | 2026-09-27 | T00 동결. Requirement, ADR, Task, AC를 더 세분화하지 않는다. 새 Requirement/ADR은 구현 중 필요가 발견될 때만 추가. 다음 단계는 T01 Repository Skeleton | 전체 |
 
 ## 충돌과 해석
@@ -60,11 +61,16 @@ T00 동결 시점에 **Proposed** 상태인 해석은 구현 기본값으로 적
 | C23 | 12번 Task 분리로 생긴 `TASK-012A` 형식이 기존 ID 정규식(`-\d+`로 끝남)과 맞지 않음 | ID 정규식에 선택적 알파벳 접미사 허용(`-\d+[A-Z]?`), AC는 `AC-NNN[A-Z]?-NN` | ADR-014, 03 | **Resolved** (H-15의 결과) |
 | C24 | ADR-010은 배포 번들러를 TASK-001에서 고른다고 했으나, T01 범위(H-18 이후 지시)는 workspace, TypeScript, Vitest, Lint, skeleton, 경계, CI, 기본 build/test로 한정됨 | T01은 `tsc -b` 빌드만 둔다. 번들러는 배포 산출물이 필요한 시점(TASK-017 또는 TASK-020 전)에 고르고 ADR-010에 기록 | ADR-010 | Proposed |
 | C25 | TASK-001의 "Files expected to change"와 실제 변경 차이: `eslint.config.js`, `tsconfig.json`(테스트 포함 typecheck), `tsconfig.build.json`(빌드 solution), `scripts/boundaries.json`, `scripts/check-boundaries.mjs`, `tests/workspace/`가 추가됨. TypeScript는 7.0이 나왔지만 typescript-eslint 8.70이 `<6.1.0`만 지원해 `~6.0.3`으로 고정 | 경계 강제(AC-001-02)와 테스트 typecheck에 필요한 파일. TypeScript 7 전환은 lint 도구 지원 후 별도 검토 | TASKS, ADR-001 | Proposed |
+| C26 | TASK-002 AC-002-04(fs-guard가 허용 경로 밖 쓰기를 거부)가 H-19의 T02 범위 목록에 없음 | T02에서 구현하지 않음. 파일 쓰기가 처음 생기는 TASK-009(DecisionService) 또는 TASK-014(init) 전에 구현. TASK-002는 AC-002-04를 남겨 둔 채 `review` | TASKS | Proposed |
+| C27 | 03 문서에 없던 Core 계약 세부: (1) 모든 스키마가 strict이고 사용자 데이터는 `extensions`에만 둠 (2) `schema_version`은 `project.yaml`에만 있고 `.duo` 전체에 적용 (3) YAML은 core schema, 명시적 tag·anchor·alias·merge key 금지 (4) Markdown 정의는 정규식이 아닌 mdast 구조로 읽으며, 2~4수준 Heading 바로 다음 블록이 metadata block일 때만 정의 (5) `specs/`, `decisions/`, `milestones/`의 Markdown은 폴더와 관계없이 같은 규칙으로 읽음 (6) ID Heading 뒤에 metadata block이 없으면 `METADATA_BLOCK_MISSING` 경고 | 구현 기준으로 적용. 03 문서 반영은 문서 갱신 시점에 | 03, core | Proposed |
+| C28 | 03의 `UNKNOWN:` 줄(Knowledge Gap)은 T02 파서가 해석하지 않음. Markdown 본문은 `description`과 `texts`로만 보존 | Gap 탐지는 TASK-011 | 03, TASKS | Proposed |
+| C29 | "Requirement에 Task가 없음"은 사용자 프로젝트에서는 흔한 상태라 core 기본 심각도는 info. 이 저장소 docs validator만 정책으로 error로 올림(`requireTrackedRequirements`) | 규칙은 core 한 곳, 심각도만 호출 측 정책 | core, scripts | Proposed |
 
 ## 미결 사항
 
 | ID | 질문 | 현재 기본안 |
 |---|---|---|
+| Q-NAMESPACE | DUO, `duo` 실행 파일, `.duo/` 이름이 외부 AI coding 도구와 충돌할 수 있음. 공개 배포 구조가 굳기 전에 확정. 검토 대상: 제품 표시 이름, npm 패키지 이름, CLI 실행 파일, 프로젝트 상태 디렉터리, MCP 서버 이름 | 현재 이름 유지. 코드에서는 `packages/core/src/constants.ts`(`PRODUCT_NAME`, `CLI_NAME`, `STATE_DIR_NAME`, `MCP_SERVER_NAME`, `METADATA_BLOCK_LANG`)만 바꾸면 됨. 상수 밖에 남은 이름: 패키지 scope `@duo/*`, `apps/cli/package.json`의 bin `duo`, export 조건 `@duo/source`, 문서 |
 | Q-E | ADR-011 Codex/Claude Code 설정 형식 | TASK-017 착수 직전에 공식 문서로 확인 (H-17) |
 | Q3 | 배포 패키지 이름과 라이선스 | 미정. 공개 전에 결정 |
 | Q4 | 저장소 공개 시점 | 현재 private |

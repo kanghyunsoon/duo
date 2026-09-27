@@ -1,0 +1,19 @@
+id: D-004
+title: JWT Authentication
+kind: decision
+state: confirmed
+question: auth_mechanism
+answer: jwt
+rationale: Stateless API servers.
+owner: human
+governs:
+  requirements: [AUTH-01, AUTH-03]
+  paths: ["src/auth/**"]
+forbids:
+  dependencies: [express-session]
+supersedes: null
+superseded_by: null
+confirmed_at: "2026-09-27T15:40:00+09:00"
+confirmed_by: kanghyunsoon
+lock:
+  digest: "sha256:3f1c9a"
