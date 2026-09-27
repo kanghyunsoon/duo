@@ -148,7 +148,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-000](#task-000-sdd-문서-작성) | SDD 문서 작성 | - | M0 | - | done |
 | [TASK-001](#task-001-저장소-골격) | 저장소 골격 | 공통 | M1 | TASK-000 | done |
 | [TASK-002](#task-002-core-스키마-loader-추적성-파서) | core 스키마, loader, 추적성 파서 | core | M1 | TASK-001 | done |
-| [TASK-003](#task-003-graphstore) | GraphStore | graph | M1 | TASK-002 | todo |
+| [TASK-003](#task-003-graphstore) | GraphStore | graph | M1 | TASK-002 | done |
 | [TASK-004](#task-004-파일-스캔-fingerprint-토큰-측정) | 파일 스캔, fingerprint, 토큰 측정 | analyzer | M1 | TASK-002 | todo |
 | [TASK-005](#task-005-languageanalyzer와-tsjs-analyzer) | LanguageAnalyzer와 TS/JS Analyzer | analyzer | M1 | TASK-004 | todo |
 | [TASK-006](#task-006-git-evidence-provider) | Git Evidence Provider | analyzer | M1 | TASK-002 | todo |
@@ -259,7 +259,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M1
 package: graph
 requirements: [REQ-GRAPH-001, REQ-GRAPH-002]
@@ -272,7 +272,7 @@ depends_on: [TASK-002]
 - **Output**: GraphStore 인터페이스, NodeSqliteGraphStore, graph_schema_version, 인접 조회, BFS, 쓰기 잠금
 - **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
 - **Files expected to change**: `packages/graph/src/store/**`, `packages/graph/src/store/node-sqlite/**`, `packages/graph/src/traverse.ts`
-- **Status**: todo
+- **Status**: done (T03; AC-003-03은 conflicts.md C31의 해석)
 - **검증 대상 Requirement**: [REQ-GRAPH-001](../01-requirements.md#req-graph-001-node-8종과-edge-10종의-embedded-저장), [REQ-GRAPH-002](../01-requirements.md#req-graph-002-결정적-bounded-traversal-trace-impact)
 - **관련 ADR**: [ADR-002](../adr/ADR-002-graph-storage.md)
 

@@ -75,9 +75,9 @@ TS/JS CALLS는 정적 타입 정보 없이 **이름 기반 heuristic**으로 해
 
 ## 탐색
 
-`traverse(seeds, { maxDepth, edgeTypes, direction, nodeLimit })`는 BFS다. 같은 거리의 Node는 `(edge weight 내림차순, id 오름차순)`으로 방문해 결정적 순서를 보장한다.
+저장 계층(TASK-003)은 두 가지를 제공한다. `adjacentEdges(refs, { direction, types, limit })`는 인접 Edge를 `(from, type, to)` 순으로 limit까지 돌려주는 bounded lookup이다. `traverse(store, seeds, { maxDepth, nodeLimit, direction, edgeTypes })`는 이를 이용한 BFS이며 방문 순서는 `(depth, id)`로 결정적이다. nodeLimit이나 Edge 상한에 걸리면 `truncated`를 표시한다([conflicts.md C30](conflicts.md)).
 
-Context용 기본 Edge weight(비교 순서로만 쓰고 점수로 노출하지 않는다):
+Context Compiler(TASK-010)는 traverse 결과에 아래 Edge weight를 적용해 순위를 매긴다. weight는 비교 순서로만 쓰고 점수로 노출하지 않는다.
 
 | Edge | weight |
 |---|---|

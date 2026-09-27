@@ -66,6 +66,9 @@ T00 동결 시점에 **Proposed** 상태인 해석은 구현 기본값으로 적
 | C27 | 03 문서에 없던 Core 계약 세부(strict + `extensions`, `schema_version`, YAML 제한, metadata 인식 규칙, RepoPath, SourceLocation, EntityRef, Namespace 등) | T02.1에서 03을 구현 기준으로 다시 작성 | 03 | **Resolved** (H-20) |
 | C28 | 03의 `UNKNOWN:` 줄(Knowledge Gap)은 T02 파서가 해석하지 않음. Markdown 본문은 `description`과 `texts`로만 보존 | Gap 탐지는 TASK-011 | 03, TASKS | Proposed |
 | C29 | "Requirement에 Task가 없음"은 사용자 프로젝트에서는 흔한 상태라 core 기본 심각도는 info. 이 저장소 docs validator만 정책으로 error로 올림(`requireTrackedRequirements`) | 규칙은 core 한 곳, 심각도만 호출 측 정책 | core, scripts | Proposed |
+| C30 | 04의 traverse는 "같은 거리의 Node를 edge weight 순으로 방문"한다고 했으나, 저장 계층 traverse(TASK-003)에는 weight가 없음 | 저장 계층은 (depth, id)의 결정적 BFS와 bounded adjacency만 제공. weight 기반 순위는 Context Compiler(TASK-010)가 traverse 결과에 적용. 04 갱신 | 04, graph | Proposed |
+| C31 | AC-003-03 "쓰기 잠금을 얻지 못한 두 번째 프로세스는 stale 표시와 함께 읽기만 한다" | 저장 계층은 `tryTransaction` → `{ status: "busy" }`와 마지막 commit 상태 읽기(WAL)로 충족. 출력에 stale을 표시하는 것은 CLI/MCP(TASK-015/016)의 책임 | graph, TASKS | Proposed |
+| C32 | 03의 이전 SQLite 계획(`owner_file`, Edge `provenance` 칼럼, fingerprints·unresolved_refs 테이블)이 T03 스키마에 없음 | T03은 저장 계층만. provenance는 Edge metadata에 둘 수 있고, 나머지는 TASK-004/007/008에서 `graph_schema_version`을 올리며 추가(ADR-002) | ADR-002, 03 | Proposed |
 
 ## 미결 사항
 

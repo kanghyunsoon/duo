@@ -358,4 +358,4 @@ EvidencePointer 필드: `kind`(requirement, decision, constraint, issue, milesto
 | `generated/inferred.json`, `index.json` | 구현 상태 추론, 마지막 인덱싱 상태 | TASK-008, 014 |
 | `runtime/metrics.jsonl` | Context, Review, LLM 지표([09](09-token-strategy.md#지표)) | TASK-010 |
 
-Graph DB 스키마는 [ADR-002](adr/ADR-002-graph-storage.md)에 있다.
+Graph DB 스키마와 transaction·제약·index 정책은 [ADR-002](adr/ADR-002-graph-storage.md#sqlite-스키마)에 있다.

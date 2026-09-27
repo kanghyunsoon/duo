@@ -47,6 +47,67 @@ node:sqlite
 - 스키마 버전 필드 `graph_schema_version`을 처음부터 `meta` 테이블에 둔다. 코드가 기대하는 버전과 다르면 `graph.db`를 지우고 재생성한다(재생성 가능한 generated 데이터이므로). 범용 migration framework는 만들지 않는다.
 - BFS는 애플리케이션 코드에서 수행하고 SQLite는 인접 조회만 담당한다.
 
+## SQLite 스키마
+
+TASK-003에서 구현한 스키마다(`packages/graph/src/store/node-sqlite/schema.ts`). 모든 테이블은 STRICT다.
+
+```sql
+CREATE TABLE graph_meta (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE graph_nodes (
+  id TEXT PRIMARY KEY NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('project', 'milestone', 'requirement', 'decision', 'issue', 'file', 'symbol', 'test')),
+  source_path TEXT,
+  source_start_line INTEGER,
+  source_start_column INTEGER,
+  source_end_line INTEGER,
+  source_end_column INTEGER,
+  content_hash TEXT,
+  payload TEXT NOT NULL DEFAULT '{}'
+) STRICT;
+
+-- listNodes({ type }) ordered by id. Lookups by id use the primary key.
+CREATE INDEX graph_nodes_type ON graph_nodes (type, id);
+
+CREATE TABLE graph_edges (
+  from_id TEXT NOT NULL REFERENCES graph_nodes (id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+  type TEXT NOT NULL CHECK (type IN ('CONTAINS', 'REQUIRES', 'IMPLEMENTS', 'CALLS', 'IMPORTS', 'GOVERNS', 'TRACKED_BY', 'VALIDATED_BY', 'CHANGED_WITH', 'SUPERSEDES')),
+  to_id TEXT NOT NULL REFERENCES graph_nodes (id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+  metadata TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (from_id, type, to_id)
+) STRICT, WITHOUT ROWID;
+
+-- The primary key serves edge.from and edge(from, type). This index serves edge.to and edge(to, type).
+CREATE INDEX graph_edges_to ON graph_edges (to_id, type, from_id);
+```
+
+`graph_nodes.id`와 `graph_edges.from_id/to_id`는 core `nodeId(EntityRef)`가 만든 Node ID다. GraphStore는 별도 ID 규칙을 만들지 않는다. `payload`와 `metadata`는 키를 정렬한 canonical JSON이라 같은 입력은 같은 바이트가 된다.
+
+## Transaction, 제약, Index 정책
+
+| 항목 | 정책 |
+|---|---|
+| Transaction | 모든 쓰기는 transaction 안에서 한다. transaction 밖의 쓰기 호출은 각자 자기 transaction을 연다. `BEGIN IMMEDIATE`로 writer lock을 먼저 잡고, 얻지 못하면 `busy_timeout`(기본 5000ms) 뒤 `BUSY`다. `tryTransaction`은 이 경우를 값(`{ status: "busy" }`)으로 돌려준다. 콜백이 throw하면 rollback한다. 재진입과 비동기 콜백은 금지한다 |
+| Foreign key | `graph_edges`의 두 끝은 `graph_nodes(id)`를 참조하고 `ON DELETE CASCADE`, `DEFERRABLE INITIALLY DEFERRED`다. 검사는 commit 시점이므로 한 transaction 안에서 Node와 Edge를 어떤 순서로 써도 된다. 없는 Node를 가리키는 Edge가 남으면 commit이 `CONSTRAINT`로 실패하고 전체가 rollback된다. Node를 지우면 양방향 Edge가 함께 지워진다. 연결마다 `PRAGMA foreign_keys = ON` |
+| CHECK | Node type은 core `ENTITY_TYPES`, Edge type은 `GRAPH_EDGE_TYPES`(10종)만 허용한다 |
+| Idempotency | Node는 id로, Edge는 `(from_id, type, to_id)`로 upsert한다. 같은 Edge를 여러 번 넣어도 한 행이다 |
+| Index | node.id는 primary key, node.type은 `(type, id)`, edge.from과 edge(from, type)은 primary key `(from_id, type, to_id)`의 앞부분, edge.to와 edge(to, type)은 `graph_edges_to(to_id, type, from_id)`가 맡는다. edge.type 단독 조회는 없어서 index를 두지 않는다 |
+| 정렬 | Node는 id, Edge는 `(from, type, to)` 순서다. 비교는 SQLite BINARY(UTF-8 바이트 순)다 |
+| 동시성 | 파일 DB는 WAL 모드다. 다른 연결이 쓰는 동안에도 읽기는 마지막 commit 상태를 본다 |
+| Endpoint 타입 규칙 | Edge 종류별 허용 endpoint(04의 표)는 저장 계층이 아니라 Graph builder와 `graph.check()`(TASK-007)가 검사한다 |
+
+## Graph Schema Version과 수명 주기
+
+- `graph_meta.graph_schema_version`은 Graph DB 스키마 버전이다. Project Truth의 `schema_version`과 다른 개념이다.
+- 빈 파일을 열면 스키마를 만들고 버전 1을 기록한다. 여러 프로세스가 동시에 만들 수 있도록 생성 여부를 lock 안에서 다시 확인한다.
+- 다른 버전인 DUO graph DB는 `GRAPH_SCHEMA_UNSUPPORTED`와 `regenerable: true`를 돌려준다(generated 데이터라 지우고 다시 만들 수 있음). `onUnsupportedSchema: "recreate"`를 주면 DB 파일(`-wal`, `-shm` 포함)을 지우고 빈 graph를 만든다. `graph_meta`가 없는 외부 SQLite 파일은 `regenerable: false`이고 지우지 않는다.
+- 손상된 파일은 `GRAPH_OPEN_FAILED`이며, 연결을 닫아 파일 잠금을 남기지 않는다.
+- 범용 migration framework는 만들지 않는다. 스키마를 바꾸면 버전을 올리고 재생성한다.
+- 이후 Task가 추가할 것: 파일 fingerprint(TASK-004), 증분 삭제용 소유 파일(`owner_file`)과 미해결 참조(TASK-007/008). 추가할 때 `graph_schema_version`을 올린다.
+
 ## 결과
 
 - DB 구현을 바꿀 때는 `NodeSqliteGraphStore`만 대체한다. 대체 후보는 better-sqlite3다.
