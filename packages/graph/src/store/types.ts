@@ -2,7 +2,7 @@
  * GraphStore contract. Storage-agnostic: no SQL, no SQLite types. Nodes and edges are addressed
  * with core EntityRefs; node IDs come only from core nodeId() (ADR-002, TASK-003).
  */
-import type { EntityRef, EntityType, ParseResult, SourceLocation } from "@duo-director/core";
+import type { EntityRef, EntityType, ParseResult, RepoPath, SourceLocation } from "@duo-director/core";
 
 /** Edge types (docs/04-project-graph.md). SUPERSEDES was added in T02.1 (H-20). */
 export const GRAPH_EDGE_TYPES = [
@@ -19,6 +19,11 @@ export interface GraphNodeInput {
   readonly contentHash?: string | undefined;
   /** Reference metadata. Stored as canonical JSON (sorted keys). */
   readonly payload?: JsonObject | undefined;
+  /**
+   * File a derived node belongs to (Symbol, Test: TASK-008). Incremental indexing deletes and
+   * rebuilds a file's derived nodes by this key. Project Truth and File nodes have none.
+   */
+  readonly ownerFile?: RepoPath | undefined;
 }
 
 export interface GraphNode {
@@ -29,6 +34,7 @@ export interface GraphNode {
   readonly source: SourceLocation | undefined;
   readonly contentHash: string | undefined;
   readonly payload: JsonObject;
+  readonly ownerFile: RepoPath | undefined;
 }
 
 export interface GraphEdgeInput {
@@ -57,6 +63,8 @@ export type EdgeDirection = "outgoing" | "incoming" | "both";
 
 export interface NodeQuery {
   readonly type?: EntityType;
+  /** Only nodes owned by this file (GraphNodeInput.ownerFile). */
+  readonly ownerFile?: RepoPath;
   /** Keyset pagination: return nodes with id greater than this. */
   readonly afterId?: string;
   readonly limit: number;
@@ -85,6 +93,8 @@ export interface GraphReader {
   /** Bounded lookup primitive: edges touching any of refs, deterministic order. */
   adjacentEdges(refs: readonly EntityRef[], query: AdjacencyQuery): AdjacencyResult;
   counts(): { readonly nodes: number; readonly edges: number };
+  /** A graph metadata value (e.g. "graph_revision"), or undefined. */
+  readMeta(key: string): string | undefined;
 }
 
 export interface GraphWriter {
@@ -95,6 +105,8 @@ export interface GraphWriter {
   /** Deletes nodes and every edge that touches them. Returns the number of deleted nodes. */
   deleteNodes(refs: readonly EntityRef[]): number;
   deleteEdges(keys: readonly EdgeKey[]): number;
+  /** Sets a graph metadata value. "graph_schema_version" is reserved and cannot be written. */
+  writeMeta(key: string, value: string): void;
 }
 
 export type TryTransactionResult<T> = { readonly status: "committed"; readonly value: T } | { readonly status: "busy" };

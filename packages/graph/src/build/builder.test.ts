@@ -128,8 +128,10 @@ describe("tests, supersedes and validation", () => {
       // graph.check() reports what the builder never plans.
       store.upsertEdges([{ from: fileRef("a.ts" as RepoPath), type: "CALLS", to: fileRef("a.ts" as RepoPath) }]);
       store.deleteEdges([{ from: fileRef("a.ts" as RepoPath), type: "CONTAINS", to: { type: "symbol", path: "a.ts" as RepoPath, symbol: "a" } }]);
+      // Ownership (TASK-008): a File node never owns itself.
+      store.upsertNodes([{ ref: fileRef("a.ts" as RepoPath), ownerFile: "a.ts" as RepoPath, payload: store.getNode(fileRef("a.ts" as RepoPath))?.payload }]);
       // a.ts and tsconfig.json are File nodes without fingerprints here.
-      expect(checkGraph(store, { fingerprints: [] }).map((d) => d.message.slice(0, 12))).toEqual(["Invariant 2:", "Invariant 3:", "Invariant 3:", "Invariant 4:"]);
+      expect(checkGraph(store, { fingerprints: [] }).map((d) => d.message.slice(0, 12))).toEqual(["Invariant 2:", "Invariant 3:", "Invariant 3:", "Invariant 4:", "Invariant 4:"]);
     } finally {
       store.close();
     }

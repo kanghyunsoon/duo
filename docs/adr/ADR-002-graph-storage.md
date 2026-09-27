@@ -49,7 +49,7 @@ node:sqlite
 
 ## SQLite 스키마
 
-TASK-003에서 구현한 스키마다(`packages/graph/src/store/node-sqlite/schema.ts`). 모든 테이블은 STRICT다.
+TASK-003에서 구현하고 TASK-008에서 `graph_schema_version` 2로 올린 스키마다(`packages/graph/src/store/node-sqlite/schema.ts`). 모든 테이블은 STRICT다.
 
 ```sql
 CREATE TABLE graph_meta (
@@ -66,11 +66,15 @@ CREATE TABLE graph_nodes (
   source_end_line INTEGER,
   source_end_column INTEGER,
   content_hash TEXT,
-  payload TEXT NOT NULL DEFAULT '{}'
+  payload TEXT NOT NULL DEFAULT '{}',
+  -- File that a derived node (Symbol, Test) belongs to. NULL for Project Truth and File nodes.
+  owner_file TEXT
 ) STRICT;
 
 -- listNodes({ type }) ordered by id. Lookups by id use the primary key.
 CREATE INDEX graph_nodes_type ON graph_nodes (type, id);
+-- listNodes({ ownerFile }) ordered by id (incremental rebuild of one file's nodes).
+CREATE INDEX graph_nodes_owner ON graph_nodes (owner_file, id) WHERE owner_file IS NOT NULL;
 
 CREATE TABLE graph_edges (
   from_id TEXT NOT NULL REFERENCES graph_nodes (id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
@@ -94,7 +98,7 @@ CREATE INDEX graph_edges_to ON graph_edges (to_id, type, from_id);
 | Foreign key | `graph_edges`의 두 끝은 `graph_nodes(id)`를 참조하고 `ON DELETE CASCADE`, `DEFERRABLE INITIALLY DEFERRED`다. 검사는 commit 시점이므로 한 transaction 안에서 Node와 Edge를 어떤 순서로 써도 된다. 없는 Node를 가리키는 Edge가 남으면 commit이 `CONSTRAINT`로 실패하고 전체가 rollback된다. Node를 지우면 양방향 Edge가 함께 지워진다. 연결마다 `PRAGMA foreign_keys = ON` |
 | CHECK | Node type은 core `ENTITY_TYPES`, Edge type은 `GRAPH_EDGE_TYPES`(10종)만 허용한다 |
 | Idempotency | Node는 id로, Edge는 `(from_id, type, to_id)`로 upsert한다. 같은 Edge를 여러 번 넣어도 한 행이다 |
-| Index | node.id는 primary key, node.type은 `(type, id)`, edge.from과 edge(from, type)은 primary key `(from_id, type, to_id)`의 앞부분, edge.to와 edge(to, type)은 `graph_edges_to(to_id, type, from_id)`가 맡는다. edge.type 단독 조회는 없어서 index를 두지 않는다 |
+| Index | node.id는 primary key, node.type은 `(type, id)`, node.owner_file은 `(owner_file, id)`(partial, T08), edge.from과 edge(from, type)은 primary key `(from_id, type, to_id)`의 앞부분, edge.to와 edge(to, type)은 `graph_edges_to(to_id, type, from_id)`가 맡는다. edge.type 단독 조회는 없어서 index를 두지 않는다 |
 | 정렬 | Node는 id, Edge는 `(from, type, to)` 순서다. 비교는 SQLite BINARY(UTF-8 바이트 순)다. JS 쪽(traverse, canonical JSON 키)은 core `compareUtf8`로 같은 순서를 쓴다(`fixtures/core/ordering.json`) |
 | 동시성 | 파일 DB는 WAL 모드다. 다른 연결이 쓰는 동안에도 읽기는 마지막 commit 상태를 본다(snapshot visibility). 이것은 freshness 판정이 아니다. GraphStore는 Node의 `contentHash`와 `source`를 저장만 하고 stale을 만들지 않는다([03 Freshness 책임](../03-data-model.md#freshness-책임), C31) |
 | Endpoint 타입 규칙 | Edge 종류별 허용 endpoint(04의 표)는 저장 계층이 아니라 Graph builder와 `graph.check()`(TASK-007)가 검사한다 |
@@ -102,12 +106,13 @@ CREATE INDEX graph_edges_to ON graph_edges (to_id, type, from_id);
 ## Graph Schema Version과 수명 주기
 
 - `graph_meta.graph_schema_version`은 Graph DB 스키마 버전이다. Project Truth의 `schema_version`과 다른 개념이다.
-- 빈 파일을 열면 스키마를 만들고 버전 1을 기록한다. 여러 프로세스가 동시에 만들 수 있도록 생성 여부를 lock 안에서 다시 확인한다.
+- 빈 파일을 열면 스키마를 만들고 현재 버전(2)을 기록한다. 여러 프로세스가 동시에 만들 수 있도록 생성 여부를 lock 안에서 다시 확인한다.
 - 다른 버전인 DUO graph DB는 `GRAPH_SCHEMA_UNSUPPORTED`와 `regenerable: true`를 돌려준다(generated 데이터라 지우고 다시 만들 수 있음). `onUnsupportedSchema: "recreate"`를 주면 DB 파일(`-wal`, `-shm` 포함)을 지우고 빈 graph를 만든다. `graph_meta`가 없는 외부 SQLite 파일은 `regenerable: false`이고 지우지 않는다.
 - 손상된 파일은 `GRAPH_OPEN_FAILED`이며, 연결을 닫아 파일 잠금을 남기지 않는다.
 - 범용 migration framework는 만들지 않는다. 스키마를 바꾸면 버전을 올리고 재생성한다.
 - 파일 fingerprint는 graph.db에 넣지 않는다. Repository scan cache는 `generated/fingerprints.json`에 따로 두어 Graph 스키마와 수명 주기를 분리한다(TASK-004, H-21).
-- 이후 Task가 추가할 것: 증분 삭제용 소유 파일(`owner_file`)과 미해결 참조(TASK-007/008). 추가할 때 `graph_schema_version`을 올린다.
+- TASK-008(버전 2): `graph_nodes.owner_file`(Symbol·Test의 소유 파일)과 `graph_nodes_owner` index를 더했다. GraphStore API에는 `NodeQuery.ownerFile`, `GraphNode.ownerFile`, `readMeta(key)`/`writeMeta(key, value)`(예약 키 `graph_schema_version`은 쓰기 금지)가 생겼다. meta에는 `graph_revision`과 `index_state_token`이 있다. 미해결 참조 테이블은 두지 않는다. resolution 결과와 dependency는 Graph가 아니라 `generated/index-state.json`에 둔다(C32, [03 증분 인덱싱](../03-data-model.md#증분-인덱싱)).
+- 버전 1 DB는 regenerable이다. Indexer는 `onUnsupportedSchema: "recreate"`로 열어 다시 만든다.
 
 ## 결과
 

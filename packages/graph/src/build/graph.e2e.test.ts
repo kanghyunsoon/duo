@@ -146,7 +146,18 @@ describe("Project Graph E2E (TASK-007)", () => {
   it("CHANGED_WITH only above the co-change threshold, as historical correlation", () => {
     const changed = plan.edges.filter((e) => e.type === "CHANGED_WITH").map((e) => `${nodeId(e.from)} → ${nodeId(e.to)}`);
     expect(changed).toEqual(["file:src/app.ts → file:src/auth/login.ts", "file:src/auth/login.ts → file:src/app.ts"]);
-    expect(edgeMeta("file:src/app.ts", "CHANGED_WITH", "file:src/auth/login.ts")).toEqual({ provenance: "git", correlation: "historical", count: 4 });
+    expect(edgeMeta("file:src/app.ts", "CHANGED_WITH", "file:src/auth/login.ts")).toEqual({ provenance: "git", correlation: "historical", count: 4, categories: ["git-history"] });
+  });
+
+  it("records why each edge exists and which file owns derived nodes (TASK-008)", () => {
+    expect(edgeMeta("sym:src/auth/login.ts#login", "IMPLEMENTS", "req:APP-01")?.categories).toEqual(["annotation", "project-truth"]);
+    expect(edgeMeta("file:src/app.ts", "IMPORTS", "file:src/auth/login.ts")?.categories).toEqual(["module-resolution"]);
+    expect(edgeMeta("sym:src/auth/session.ts#Session.save", "CALLS", "sym:src/auth/session.ts#Session.validate")?.categories).toEqual(["call-resolution"]);
+    expect(edgeMeta("dec:D-002", "SUPERSEDES", "dec:D-001")?.categories).toEqual(["project-truth"]);
+    for (const n of plan.nodes) {
+      const owned = n.ref.type === "symbol" || n.ref.type === "test";
+      expect(n.ownerFile).toBe(owned && "path" in n.ref ? n.ref.path : undefined);
+    }
   });
 
   it("uses Git Issue candidates only when Project Truth has the Issue", () => {

@@ -116,6 +116,8 @@ export const DIAGNOSTIC_SEVERITY = {
   DECLARED_SYMBOL_UNRESOLVED: "warning",
   /** graph.check(): a consistency invariant (04) does not hold. */
   GRAPH_INVARIANT_VIOLATED: "error",
+  /** Incremental Indexer (T08): generated/index-state.json is missing parts, corrupt or of another version; the graph is rebuilt. */
+  INDEX_STATE_INVALID: "warning",
 } as const satisfies Record<string, DiagnosticSeverity>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_SEVERITY;

@@ -2,8 +2,11 @@
 import { ENTITY_TYPES } from "@duo-director/core";
 import { GRAPH_EDGE_TYPES } from "../types.js";
 
-/** Graph DB schema version. Different from Project Truth schema_version. Bump = regenerate. */
-export const GRAPH_SCHEMA_VERSION = 1;
+/**
+ * Graph DB schema version. Different from Project Truth schema_version. Bump = regenerate.
+ * 2 (TASK-008): graph_nodes.owner_file for incremental deletion of file-derived nodes.
+ */
+export const GRAPH_SCHEMA_VERSION = 2;
 
 const list = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
 
@@ -22,11 +25,15 @@ CREATE TABLE graph_nodes (
   source_end_line INTEGER,
   source_end_column INTEGER,
   content_hash TEXT,
-  payload TEXT NOT NULL DEFAULT '{}'
+  payload TEXT NOT NULL DEFAULT '{}',
+  -- File that a derived node (Symbol, Test) belongs to. NULL for Project Truth and File nodes.
+  owner_file TEXT
 ) STRICT;
 
 -- listNodes({ type }) ordered by id. Lookups by id use the primary key.
 CREATE INDEX graph_nodes_type ON graph_nodes (type, id);
+-- listNodes({ ownerFile }) ordered by id (incremental rebuild of one file's nodes).
+CREATE INDEX graph_nodes_owner ON graph_nodes (owner_file, id) WHERE owner_file IS NOT NULL;
 
 CREATE TABLE graph_edges (
   from_id TEXT NOT NULL REFERENCES graph_nodes (id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,

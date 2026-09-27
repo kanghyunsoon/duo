@@ -3,12 +3,15 @@
  * stored graph. 1 edge endpoints exist, 2 endpoint types match the 04 table, 3 File nodes ↔
  * fingerprints (outside .duo-project/), 4 Symbol/Test nodes have exactly one containing File,
  * 6 definition IDs are unique across types, 7 SUPERSEDES has no self-loop or cycle.
- * Invariant 5 (incremental = full) is TASK-008.
+ * Invariant 4 also checks ownership (TASK-008): a Symbol/Test is owned by the file that contains
+ * it, and no other node has an owner. Invariant 5 (incremental = clean full rebuild) compares two
+ * graphs: dumpGraph() gives the canonical rows to compare.
  */
 import type { FileFingerprint } from "@duo-director/analyzer";
 import { compareUtf8, createDiagnostic, nodeId, STATE_DIR_NAME, type Diagnostic } from "@duo-director/core";
 import type { GraphEdge, GraphNode, GraphReader } from "./store/types.js";
 import { isEdgeEndpointAllowed } from "./build/endpoints.js";
+import { edgeRow, nodeRow } from "./build/scope.js";
 
 const PAGE = 1000;
 const violation = (n: number, message: string) => createDiagnostic("GRAPH_INVARIANT_VIOLATED", `Invariant ${n}: ${message}`);
@@ -62,6 +65,8 @@ export function checkGraph(store: GraphReader, options: GraphCheckOptions = {}):
   for (const e of edges) if (e.type === "CONTAINS" && byId.get(e.from)?.type === "file") containers.set(e.to, (containers.get(e.to) ?? 0) + 1);
   for (const n of nodes) {
     if ((n.type === "symbol" || n.type === "test") && containers.get(n.id) !== 1) diagnostics.push(violation(4, `${n.id} is contained by ${containers.get(n.id) ?? 0} files`));
+    const owner = n.ref.type === "symbol" || n.ref.type === "test" ? n.ref.path : undefined;
+    if (n.ownerFile !== owner) diagnostics.push(violation(4, `${n.id} has owner file ${n.ownerFile ?? "none"}, expected ${owner ?? "none"}`));
   }
   const definitionType = new Map<string, string>();
   for (const n of nodes) {
@@ -83,4 +88,16 @@ export function checkGraph(store: GraphReader, options: GraphCheckOptions = {}):
   };
   for (const id of [...supersedes.keys()].sort(compareUtf8)) if (state.get(id) === undefined) visit(id, []);
   return diagnostics;
+}
+
+/** Canonical rows of every node and edge, sorted: two graphs are equal when their dumps are equal (invariant 5). */
+export function dumpGraph(store: GraphReader): { readonly nodes: readonly string[]; readonly edges: readonly string[] } {
+  const nodes = allNodes(store);
+  const byId = new Map(nodes.map((n) => [n.id, n.ref] as const));
+  const edges = allEdges(store, nodes).map((e) => {
+    const from = byId.get(e.from);
+    const to = byId.get(e.to);
+    return from === undefined || to === undefined ? `dangling ${e.from} ${e.type} ${e.to}` : edgeRow({ from, type: e.type, to, metadata: e.metadata });
+  });
+  return { nodes: nodes.map((n) => nodeRow(n)).sort(compareUtf8), edges: edges.sort(compareUtf8) };
 }

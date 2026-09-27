@@ -4,9 +4,13 @@
  * that TypeScript resolves to one indexed file, calls resolved exactly from syntax facts, and Git
  * co-change counts above the 04 threshold. A missing edge is preferred to a wrong one. No source is
  * parsed again and no LLM is used. Nothing here is global: every index belongs to one build.
+ *
+ * The same builder serves full and incremental builds (TASK-008). An incremental build passes a
+ * ResolutionMemo so unchanged module and call results are reused; everything else is recomputed
+ * from the facts, so the plan equals the plan of a clean full build of the same state.
  */
 import {
-  computeCoChangeCandidates, extractIssueKeys,
+  extractIssueKeys,
   type AnalyzedSymbol, type AnalyzedTest, type CallSite, type ImportBinding, type ModuleReference, type SourceAnalysis,
 } from "@duo-director/analyzer";
 import {
@@ -21,15 +25,17 @@ import { isEdgeEndpointAllowed } from "./endpoints.js";
 import { ExportIndex, type ExportLookup } from "./exports.js";
 import { payloadProblem } from "./payload.js";
 import type { ModuleResolution, ModuleResolutionStatus } from "./resolve/module-resolver.js";
-import type { CallResolution, CallResolutionStatus, GraphBuildInput, GraphBuildPlan, GraphBuildStats, ModuleResolutionRecord } from "./types.js";
+import type {
+  CallResolution, CallResolutionFreshness, CallResolutionStatus, EdgeCategory, FileResolution, GraphBuildInput, GraphBuildPlan, GraphBuildStats,
+  ModuleResolutionRecord, ResolutionMemo, StoredCallOutcome,
+} from "./types.js";
 
 /** Files whose symbols are test helpers, never validated code (VALIDATED_BY from calls). */
 const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/iu;
 const STATE_PREFIX = `${STATE_DIR_NAME}/`;
-/** Commits kept as provenance on an Issue node (newest first). */
-const MAX_ISSUE_COMMITS = 20;
-/** Commits considered for CHANGED_WITH (04). */
-const CO_CHANGE_COMMITS = 500;
+
+/** Version of the call resolution rules. Stored call results with another version are recomputed (TASK-008). */
+export const CALL_RESOLUTION_VERSION = 1;
 
 type Json = JsonObject;
 const json = (value: object): Json => JSON.parse(JSON.stringify(value)) as Json;
@@ -71,6 +77,9 @@ interface FileContext {
 type Target = { readonly file: RepoPath; readonly symbol: AnalyzedSymbol };
 type CallOutcome = { readonly status: CallResolutionStatus; readonly reason?: string; readonly target?: Target };
 
+const OWNED_TYPES = new Set<EntityType>(["symbol", "test"]);
+const union = (a: unknown, b: readonly string[]) => [...new Set([...(Array.isArray(a) ? a.map(String) : []), ...b])].sort(compareUtf8);
+
 class Builder {
   private readonly nodes = new Map<string, GraphNodeInput>();
   private readonly edges = new Map<string, GraphEdgeInput>();
@@ -84,16 +93,25 @@ class Builder {
     { exact: 0, heuristic: 0, ambiguous: 0, unresolved: 0, exactWithoutSourceSymbol: 0 };
   private readonly annotations = { symbol: 0, test: 0, file: 0, unknownId: 0, unsupportedId: 0 };
   private readonly exportIndex: ExportIndex;
+  private readonly moduleResults = new Map<RepoPath, ReadonlyMap<ModuleReference, ModuleResolution>>();
+  private readonly resolution = new Map<RepoPath, FileResolution>();
+  private readonly callFreshness = new Map<RepoPath, CallResolutionFreshness>();
+  private readonly work = { filesModulesRecomputed: 0, modulesRecomputed: 0, modulesReused: 0, filesCallsRecomputed: 0, callsRecomputed: 0, callsReused: 0 };
 
-  constructor(private readonly input: GraphBuildInput) {
+  constructor(private readonly input: GraphBuildInput, private readonly memo?: ResolutionMemo) {
     const analyses = new Map(input.analyses.map((a) => [a.analysis.path, a.analysis] as const));
-    this.exportIndex = new ExportIndex(analyses, (from, ref) => this.resolveModule(from, ref));
+    this.exportIndex = new ExportIndex(analyses, (from, ref) => this.moduleResult(from, ref));
   }
 
   // ---- nodes and edges ----
 
   private addNode(ref: EntityRef, payload: Json, source: SourceLocation | undefined, contentHash?: string): void {
-    const node: GraphNodeInput = { ref, payload, ...(source === undefined ? {} : { source }), ...(contentHash === undefined ? {} : { contentHash }) };
+    // Symbol and Test nodes belong to the file they were extracted from (incremental deletion key).
+    const ownerFile = OWNED_TYPES.has(ref.type) && "path" in ref ? ref.path : undefined;
+    const node: GraphNodeInput = {
+      ref, payload, ...(source === undefined ? {} : { source }), ...(contentHash === undefined ? {} : { contentHash }),
+      ...(ownerFile === undefined ? {} : { ownerFile }),
+    };
     const id = nodeId(ref);
     const existing = this.nodes.get(id);
     if (existing !== undefined) {
@@ -112,13 +130,13 @@ class Builder {
     this.nodes.set(id, node);
   }
 
-  /** Adds an edge; an existing (from, type, to) keeps one row and merges metadata. */
-  private addEdge(from: EntityRef, type: GraphEdgeType, to: EntityRef, metadata: Json, merge?: (old: Json) => Json): void {
+  /** Adds an edge; an existing (from, type, to) keeps one row and merges metadata and categories. */
+  private addEdge(from: EntityRef, type: GraphEdgeType, to: EntityRef, category: EdgeCategory, metadata: Json, merge?: (old: Json) => Json): void {
     const key = `${nodeId(from)}\u0000${type}\u0000${nodeId(to)}`;
     const existing = this.edges.get(key);
     const old = existing?.metadata;
     const merged = old === undefined ? metadata : merge === undefined ? mergeEvidence(old, metadata) : merge(old);
-    this.edges.set(key, { from, type, to, metadata: merged });
+    this.edges.set(key, { from, type, to, metadata: json({ ...merged, categories: union(old?.categories, [category]) }) });
   }
 
   private has(ref: EntityRef): boolean {
@@ -140,7 +158,8 @@ class Builder {
       compareUtf8(nodeId(a.from), nodeId(b.from)) || compareUtf8(a.type, b.type) || compareUtf8(nodeId(a.to), nodeId(b.to)));
     return {
       nodes, edges, diagnostics: this.diagnostics, stats: this.stats(nodes, edges),
-      moduleResolutions: this.moduleResolutions, callResolutions: this.callResolutions, valid: this.valid,
+      moduleResolutions: this.moduleResolutions, callResolutions: this.callResolutions,
+      resolution: this.resolution, resolutionWork: { ...this.work, callFreshness: this.callFreshness }, valid: this.valid,
     };
   }
 
@@ -164,7 +183,7 @@ class Builder {
     for (const m of truth.milestones) {
       if (!accepted(m.id, m.location)) continue;
       this.addNode(definitionRef("milestone", m.id), clean({ title: m.title, state: m.state }), m.location);
-      this.addEdge(PROJECT_REF, "CONTAINS", definitionRef("milestone", m.id), { provenance: "declared" });
+      this.addEdge(PROJECT_REF, "CONTAINS", definitionRef("milestone", m.id), "project-truth", { provenance: "declared" });
     }
     for (const r of truth.requirements) {
       if (accepted(r.id, r.location)) this.addNode(definitionRef("requirement", r.id), clean({ title: r.title, status: r.status, milestone: r.milestone ?? undefined, priority: r.priority }), r.location);
@@ -175,18 +194,12 @@ class Builder {
     for (const c of truth.constraints) {
       if (accepted(c.id, c.location)) this.addNode(definitionRef("decision", c.id), clean({ decisionKind: "constraint", title: c.statement, state: c.state, enforcement: c.enforcement }), c.location);
     }
-    const commitsByIssue = new Map<string, string[]>();
-    for (const commit of git?.commits ?? []) {
-      for (const key of extractIssueKeys(commit.message)) {
-        if (!issueIds.has(key)) continue; // candidates only count when Project Truth has the Issue
-        const list = commitsByIssue.get(key) ?? [];
-        if (list.length < MAX_ISSUE_COMMITS && !list.includes(commit.oid)) list.push(commit.oid);
-        commitsByIssue.set(key, list);
-      }
-    }
+    // Issue key candidates from commit messages count only when Project Truth has the Issue.
+    const issueCommits = git?.history?.issueCommits ?? {};
     for (const i of truth.issues) {
       if (!accepted(i.id, i.location)) continue;
-      const commits = commitsByIssue.get(i.id);
+      const found = Object.hasOwn(issueCommits, i.id) ? issueCommits[i.id] : undefined;
+      const commits = found === undefined || found.length === 0 ? undefined : [...found];
       this.addNode(definitionRef("issue", i.id), clean({ title: i.title, status: i.status, milestone: i.milestone ?? undefined, commits }), i.location);
     }
     // Declared links (03 추적 관계). SUPERSEDES links on a cycle are dropped.
@@ -194,7 +207,7 @@ class Builder {
     for (const link of trace.links) {
       if (link.relation === "SUPERSEDES" && cyclic.has(`${link.from.id}\u0000${link.to.id}`)) continue;
       if (!this.has(link.from) || !this.has(link.to)) continue;
-      this.addEdge(link.from, link.relation, link.to, json({ provenance: "declared", declaredAt: link.declaredAt }));
+      this.addEdge(link.from, link.relation, link.to, "project-truth", json({ provenance: "declared", declaredAt: link.declaredAt }));
     }
   }
 
@@ -257,7 +270,7 @@ class Builder {
         analysis: analyzed !== undefined ? analyzed.analysis.parseStatus : failed.has(f.path) ? "failed" : undefined,
         analyzerVersion: analyzed?.analyzerVersion,
       }), { path: f.path }, f.contentHash);
-      this.addEdge(PROJECT_REF, "CONTAINS", ref, { provenance: "static" });
+      this.addEdge(PROJECT_REF, "CONTAINS", ref, "source-analysis", { provenance: "static" });
       if (analyzed !== undefined) this.code(analyzed.analysis, analyzed.analyzerVersion);
     }
   }
@@ -273,11 +286,11 @@ class Builder {
         name: s.name, qualifiedName: s.qualifiedName, kind: s.kind, exported: s.exported, memberScope: s.memberScope, parent: s.parent,
         additionalLocations: s.additionalLocations, analyzerVersion,
       }), s.location, analysis.contentHash);
-      this.addEdge(file, "CONTAINS", s.ref, { provenance: "static" });
+      this.addEdge(file, "CONTAINS", s.ref, "source-analysis", { provenance: "static" });
     }
     for (const s of analysis.symbols) {
       const parent = s.parent === undefined ? undefined : byIdentity.get(s.parent);
-      if (parent?.kind === "class") this.addEdge(parent.ref, "CONTAINS", s.ref, { provenance: "static" });
+      if (parent?.kind === "class") this.addEdge(parent.ref, "CONTAINS", s.ref, "source-analysis", { provenance: "static" });
     }
     const byName = new Map<string, AnalyzedTest[]>();
     for (const t of analysis.tests) if (t.kind === "test") byName.set(t.fullName, [...(byName.get(t.fullName) ?? []), t]);
@@ -294,7 +307,7 @@ class Builder {
       this.addNode(ref, clean({
         name: t.name, fullName, frameworkHint: t.frameworkHint, confidence: t.confidence, modifier: t.modifier, enclosingSuite: t.enclosingSuite, analyzerVersion,
       }), t.location, analysis.contentHash);
-      this.addEdge(file, "CONTAINS", ref, { provenance: "static" });
+      this.addEdge(file, "CONTAINS", ref, "source-analysis", { provenance: "static" });
     }
     const bindings = new Map<string, { ref: ModuleReference; binding: ImportBinding }>();
     for (const ref of analysis.moduleReferences) for (const binding of ref.bindings) bindings.set(binding.local, { ref, binding });
@@ -335,50 +348,112 @@ class Builder {
     for (const r of truth.requirements) {
       const req = definitionRef("requirement", r.id);
       if (!this.has(req)) continue;
-      for (const f of this.filesMatching(r.implements.paths)) this.addEdge(fileRef(f), "IMPLEMENTS", req, { provenance: "declared", basis: ["implements.paths"] });
+      for (const f of this.filesMatching(r.implements.paths)) this.addEdge(fileRef(f), "IMPLEMENTS", req, "project-truth", { provenance: "declared", basis: ["implements.paths"] });
       for (const name of r.implements.symbols) {
         const s = this.declaredSymbol(req, name, r.implements.paths, "implements.symbols", r.location);
-        if (s !== undefined) this.addEdge(s, "IMPLEMENTS", req, { provenance: "declared", basis: ["implements.symbols"] });
+        if (s !== undefined) this.addEdge(s, "IMPLEMENTS", req, "project-truth", { provenance: "declared", basis: ["implements.symbols"] });
       }
       const patterns = r.tests.map(wildcard);
       for (const { file, test } of allTests) {
-        if (patterns.some((p) => p.test(test.fullName))) this.addEdge(req, "VALIDATED_BY", testRef(file, test.fullName), { provenance: "declared", basis: ["tests"] });
+        if (patterns.some((p) => p.test(test.fullName))) this.addEdge(req, "VALIDATED_BY", testRef(file, test.fullName), "project-truth", { provenance: "declared", basis: ["tests"] });
       }
     }
     // A Requirement ID written in a test name is an explicit declaration too (04).
     for (const { file, test } of allTests) {
       for (const id of extractIssueKeys(test.fullName)) {
         if (requirementIds.has(id) && this.has(definitionRef("requirement", id))) {
-          this.addEdge(definitionRef("requirement", id), "VALIDATED_BY", testRef(file, test.fullName), { provenance: "declared", basis: ["test-name"] });
+          this.addEdge(definitionRef("requirement", id), "VALIDATED_BY", testRef(file, test.fullName), "project-truth", { provenance: "declared", basis: ["test-name"] });
         }
       }
     }
     for (const d of truth.decisions) {
       const dec = definitionRef("decision", d.id);
       if (!this.has(dec)) continue;
-      for (const f of this.filesMatching(d.governs.paths)) this.addEdge(dec, "GOVERNS", fileRef(f), { provenance: "declared", basis: ["governs.paths"] });
+      for (const f of this.filesMatching(d.governs.paths)) this.addEdge(dec, "GOVERNS", fileRef(f), "project-truth", { provenance: "declared", basis: ["governs.paths"] });
       for (const name of d.governs.symbols) {
         const s = this.declaredSymbol(dec, name, [], "governs.symbols", d.location);
-        if (s !== undefined) this.addEdge(dec, "GOVERNS", s, { provenance: "declared", basis: ["governs.symbols"] });
+        if (s !== undefined) this.addEdge(dec, "GOVERNS", s, "project-truth", { provenance: "declared", basis: ["governs.symbols"] });
       }
     }
   }
 
   // ---- modules and calls ----
 
-  private resolveModule(from: RepoPath, ref: ModuleReference): ModuleResolution {
-    return this.input.moduleResolver.resolve({ fromPath: from, specifier: ref.specifier, kind: ref.kind });
+  /** The module result of one reference (precomputed per file before any call is resolved). */
+  private moduleResult(from: RepoPath, ref: ModuleReference): ModuleResolution {
+    return this.moduleResults.get(from)?.get(ref)
+      ?? this.input.moduleResolver.resolve({ fromPath: from, specifier: ref.specifier, kind: ref.kind });
+  }
+
+  /** Module results for every analyzed file: stored results when the Indexer allows it, else TypeScript resolution. */
+  private resolveModules(): void {
+    for (const [path, ctx] of [...this.contexts].sort(([a], [b]) => compareUtf8(a, b))) {
+      const refs = ctx.analysis.moduleReferences;
+      const previous = this.memo?.previous.get(path);
+      let results: readonly ModuleResolution[];
+      let configFiles: readonly RepoPath[];
+      if (previous !== undefined && this.memo?.reusableModules.has(path) === true && previous.modules.length === refs.length) {
+        results = previous.modules;
+        configFiles = previous.configFiles;
+        this.work.modulesReused += refs.length;
+      } else {
+        results = refs.map((ref) => this.input.moduleResolver.resolve({ fromPath: path, specifier: ref.specifier, kind: ref.kind }));
+        configFiles = this.input.moduleResolver.configFiles(path);
+        this.work.modulesRecomputed += refs.length;
+        this.work.filesModulesRecomputed++;
+      }
+      this.moduleResults.set(path, new Map(refs.map((ref, i) => [ref, results[i] as ModuleResolution] as const)));
+      this.resolution.set(path, { modules: results, calls: [], exportDependencies: [], configFiles });
+    }
+  }
+
+  private sameModules(path: RepoPath): boolean {
+    const previous = this.memo?.previous.get(path);
+    const current = this.resolution.get(path);
+    return previous !== undefined && current !== undefined
+      && canonicalJson(json({ m: previous.modules }), "modules") === canonicalJson(json({ m: current.modules }), "modules");
+  }
+
+  /** A file whose export surface a stored call result may have read has changed. */
+  private surfaceChanged(path: RepoPath): boolean {
+    return this.memo === undefined || this.memo.changedFiles.has(path) || !this.sameModules(path);
+  }
+
+  private callFreshnessOf(path: RepoPath, ctx: FileContext): CallResolutionFreshness {
+    const previous = this.memo?.previous.get(path);
+    if (this.memo === undefined || previous === undefined) return "missing";
+    if (this.memo.callVersionChanged) return "stale-version";
+    if (this.memo.changedFiles.has(path)) return "stale-source";
+    if (!this.sameModules(path)) return "stale-modules";
+    if (previous.exportDependencies.some((d) => this.surfaceChanged(d))) return "stale-dependency";
+    return previous.calls.length === ctx.analysis.callSites.length ? "fresh" : "missing";
+  }
+
+  /** Stored outcomes with their targets looked up again; undefined when a target no longer exists. */
+  private rehydrate(stored: readonly StoredCallOutcome[]): CallOutcome[] | undefined {
+    const out: CallOutcome[] = [];
+    for (const s of stored) {
+      if (s.target === undefined) {
+        out.push({ status: s.status, ...(s.reason === undefined ? {} : { reason: s.reason }) });
+        continue;
+      }
+      const symbol = this.contexts.get(s.target.file)?.byIdentity.get(s.target.symbol);
+      if (symbol === undefined) return undefined;
+      out.push({ status: s.status, ...(s.reason === undefined ? {} : { reason: s.reason }), target: { file: s.target.file, symbol } });
+    }
+    return out;
   }
 
   private modulesAndCalls(): void {
+    this.resolveModules();
     for (const [path, ctx] of [...this.contexts].sort(([a], [b]) => compareUtf8(a, b))) {
       const file = fileRef(path);
       for (const ref of ctx.analysis.moduleReferences) {
-        const result = this.resolveModule(path, ref);
+        const result = this.moduleResult(path, ref);
         this.moduleResolutions.push({ from: path, specifier: ref.specifier, kind: ref.kind, location: ref.location, result });
         if (result.status === "resolved" && result.path !== path && this.filePaths.has(result.path)) {
           const kinds = [ref.kind];
-          this.addEdge(file, "IMPORTS", fileRef(result.path),
+          this.addEdge(file, "IMPORTS", fileRef(result.path), "module-resolution",
             json({ provenance: "static", resolution: result.claim, kinds, typeOnly: ref.typeOnly, declarationOnly: result.declarationOnly, extensionSubstituted: result.extensionSubstituted }),
             (old) => json({
               ...old,
@@ -393,9 +468,38 @@ class Builder {
       }
     }
     for (const [path, ctx] of [...this.contexts].sort(([a], [b]) => compareUtf8(a, b))) {
+      const sites = ctx.analysis.callSites;
+      let freshness = this.callFreshnessOf(path, ctx);
+      const previous = this.memo?.previous.get(path);
+      let outcomes = freshness === "fresh" && previous !== undefined ? this.rehydrate(previous.calls) : undefined;
+      if (freshness === "fresh" && outcomes === undefined) freshness = "stale-dependency";
+      let exportDependencies = previous?.exportDependencies ?? [];
+      if (outcomes === undefined) {
+        const deps = new Set<RepoPath>();
+        outcomes = sites.map((call) => this.resolveCall(path, ctx, call, deps));
+        deps.delete(path);
+        exportDependencies = [...deps].sort(compareUtf8);
+        this.work.callsRecomputed += sites.length;
+        this.work.filesCallsRecomputed++;
+      } else {
+        this.work.callsReused += sites.length;
+      }
+      this.callFreshness.set(path, freshness);
+      const resolved = outcomes;
+      const current = this.resolution.get(path);
+      if (current !== undefined) {
+        this.resolution.set(path, {
+          ...current,
+          calls: resolved.map((o) => ({
+            status: o.status, ...(o.reason === undefined ? {} : { reason: o.reason }),
+            ...(o.target === undefined ? {} : { target: { file: o.target.file, symbol: o.target.symbol.ref.symbol } }),
+          })),
+          exportDependencies,
+        });
+      }
       const exactTargets: { call: CallSite; target: Target }[] = [];
-      for (const call of ctx.analysis.callSites) {
-        const outcome = this.resolveCall(path, ctx, call);
+      sites.forEach((call, i) => {
+        const outcome = resolved[i] as CallOutcome;
         this.calls[outcome.status]++;
         const target = outcome.target;
         this.callResolutions.push({
@@ -407,16 +511,16 @@ class Builder {
         if (outcome.status === "ambiguous") {
           this.diagnostics.push(createDiagnostic("CALL_AMBIGUOUS", `"${call.calleeText}" has more than one candidate target; no edge`, call.location));
         }
-        if (outcome.status !== "exact" || target === undefined) continue;
+        if (outcome.status !== "exact" || target === undefined) return;
         exactTargets.push({ call, target });
         if (call.enclosingSymbol === undefined) {
           this.calls.exactWithoutSourceSymbol++;
-          continue;
+          return;
         }
         const declarationOnly = /\.d\.[cm]?ts$/u.test(target.file);
-        this.addEdge(call.enclosingSymbol, "CALLS", target.symbol.ref, json({ provenance: "static", resolution: "exact", callSites: 1, declarationOnly }),
+        this.addEdge(call.enclosingSymbol, "CALLS", target.symbol.ref, "call-resolution", json({ provenance: "static", resolution: "exact", callSites: 1, declarationOnly }),
           (old) => json({ ...old, callSites: (typeof old.callSites === "number" ? old.callSites : 0) + 1 }));
-      }
+      });
       this.validatedByCalls(path, ctx, exactTargets);
     }
   }
@@ -428,7 +532,7 @@ class Builder {
       if (test === undefined) continue;
       const targetCtx = this.contexts.get(target.file);
       if (TEST_FILE.test(target.file) || (targetCtx?.analysis.tests.length ?? 0) > 0) continue; // helpers, not validated code
-      this.addEdge(target.symbol.ref, "VALIDATED_BY", testRef(path, test.fullName), { provenance: "static", basis: ["exact-call"] });
+      this.addEdge(target.symbol.ref, "VALIDATED_BY", testRef(path, test.fullName), "test", { provenance: "static", basis: ["exact-call"] });
     }
   }
 
@@ -448,17 +552,24 @@ class Builder {
     return CALLABLE_BY_KIND[kind].has(lookup.symbol.kind) ? { status: "exact", target: lookup } : { status: "unresolved", reason: "target-not-callable" };
   }
 
-  private viaImport(path: RepoPath, entry: { ref: ModuleReference; binding: ImportBinding }, member: string | undefined, kind: CallSite["kind"]): CallOutcome {
+  /** Export lookup that records the files it read into deps (TASK-008 export dependencies). */
+  private lookupExport(file: RepoPath, name: string, deps: Set<RepoPath>): ExportLookup {
+    const r = this.exportIndex.lookupWithDependencies(file, name);
+    for (const d of r.dependencies) deps.add(d);
+    return r.result;
+  }
+
+  private viaImport(path: RepoPath, entry: { ref: ModuleReference; binding: ImportBinding }, member: string | undefined, kind: CallSite["kind"], deps: Set<RepoPath>): CallOutcome {
     const { ref, binding } = entry;
     if (binding.typeOnly) return { status: "unresolved", reason: "type-only-binding" };
-    const module = this.resolveModule(path, ref);
+    const module = this.moduleResult(path, ref);
     if (module.status !== "resolved") return { status: "unresolved", reason: module.status === "external" ? "external-module" : "module-unresolved" };
     if (binding.imported === "*") {
       // Namespace object: import * as ns. The CommonJS module object (require) has no export index.
       if (ref.kind !== "import" || member === undefined) return { status: "unresolved", reason: "namespace-call" };
-      return this.fromExport(this.exportIndex.lookup(module.path, member), kind);
+      return this.fromExport(this.lookupExport(module.path, member, deps), kind);
     }
-    const imported = this.exportIndex.lookup(module.path, binding.imported);
+    const imported = this.lookupExport(module.path, binding.imported, deps);
     if (member === undefined) return this.fromExport(imported, kind);
     // Imported class, static member: import { User } from "./user"; User.load().
     if (imported.status !== "symbol" || imported.symbol.kind !== "class") return { status: "unresolved", reason: "receiver-type-unknown" };
@@ -471,7 +582,7 @@ class Builder {
   }
 
   /** Exact resolution from syntax facts only (no type checker). Anything else is unresolved or ambiguous. */
-  private resolveCall(path: RepoPath, ctx: FileContext, call: CallSite): CallOutcome {
+  private resolveCall(path: RepoPath, ctx: FileContext, call: CallSite, deps: Set<RepoPath>): CallOutcome {
     const names = call.calleePath;
     if (names === undefined || names.length === 0) return { status: "unresolved", reason: "computed-callee" };
     if (call.rootLocal === true) return { status: "unresolved", reason: "local-binding" };
@@ -486,7 +597,7 @@ class Builder {
       return target?.kind === "method" ? { status: "exact", target: { file: path, symbol: target } } : { status: "unresolved", reason: "member-not-found" };
     }
     const imported = ctx.bindings.get(root);
-    if (imported !== undefined) return this.viaImport(path, imported, second, call.kind);
+    if (imported !== undefined) return this.viaImport(path, imported, second, call.kind, deps);
     const local = (ctx.topLevel.get(root) ?? []);
     if (second === undefined) {
       const callable = local.filter((s) => CALLABLE_BY_KIND[call.kind].has(s.kind));
@@ -528,9 +639,9 @@ class Builder {
             continue;
           }
           const metadata = json({ provenance: "static", basis: ["annotation"], annotation: annotation.location });
-          if (target.kind === "symbol") this.addEdge(target.ref, "IMPLEMENTS", entity.ref, metadata);
-          else if (target.kind === "test") this.addEdge(entity.ref, "VALIDATED_BY", testRef(path, target.fullName), metadata);
-          else this.addEdge(fileRef(path), "IMPLEMENTS", entity.ref, metadata);
+          if (target.kind === "symbol") this.addEdge(target.ref, "IMPLEMENTS", entity.ref, "annotation", metadata);
+          else if (target.kind === "test") this.addEdge(entity.ref, "VALIDATED_BY", testRef(path, target.fullName), "annotation", metadata);
+          else this.addEdge(fileRef(path), "IMPLEMENTS", entity.ref, "annotation", metadata);
           this.annotations[target.kind]++;
         }
       }
@@ -540,13 +651,11 @@ class Builder {
   // ---- history ----
 
   private coChange(): void {
-    const commits = this.input.git?.commits;
-    if (commits === undefined) return;
-    for (const c of computeCoChangeCandidates(commits.slice(0, CO_CHANGE_COMMITS))) {
+    for (const c of this.input.git?.history?.coChange ?? []) {
       if (!this.filePaths.has(c.a) || !this.filePaths.has(c.b)) continue;
       const metadata = { provenance: "git", correlation: "historical", count: c.count };
-      this.addEdge(fileRef(c.a), "CHANGED_WITH", fileRef(c.b), metadata);
-      this.addEdge(fileRef(c.b), "CHANGED_WITH", fileRef(c.a), metadata);
+      this.addEdge(fileRef(c.a), "CHANGED_WITH", fileRef(c.b), "git-history", metadata);
+      this.addEdge(fileRef(c.b), "CHANGED_WITH", fileRef(c.a), "git-history", metadata);
     }
   }
 
@@ -575,7 +684,11 @@ class Builder {
   }
 }
 
-/** Plans the full Project Graph from facts. Does not write; see applyGraphPlan(). */
-export function buildGraphPlan(input: GraphBuildInput): GraphBuildPlan {
-  return new Builder(input).build();
+/**
+ * Plans the Project Graph from facts. Does not write; see applyGraphPlan(). Without a memo every
+ * resolution is computed (full build). With a memo, valid stored resolutions are reused and the plan
+ * is the same as the full build's.
+ */
+export function buildGraphPlan(input: GraphBuildInput, memo?: ResolutionMemo): GraphBuildPlan {
+  return new Builder(input, memo).build();
 }

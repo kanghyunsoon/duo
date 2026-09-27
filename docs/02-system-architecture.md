@@ -91,7 +91,7 @@ Human: duoctl decision confirm|reject <id>  또는  UI Confirm/Reject ─▶ cor
 
 ## Freshness
 
-CLI 명령과 MCP Tool은 실행 전 증분 인덱싱을 한 번 한다. 변경 탐지는 Scanner의 현재 파일 목록과 `contentHash`를 이전 `generated/fingerprints.json`과 비교해서 한다(TASK-004 `compareFingerprints`). stat(size, mtime)은 이후 hash 계산을 줄이는 hint로만 쓸 수 있고, 내용이 같은지는 `contentHash`로만 판단한다(C33). 변경이 없으면 parse하지 않는다(REQ-INDEX-002).
+CLI 명령과 MCP Tool은 실행 전 증분 인덱싱을 한 번 한다. 변경 탐지는 Scanner의 현재 파일 목록과 `contentHash`를 이전 `generated/index-state.json`의 fingerprint와 비교해서 한다(TASK-004 `compareFingerprints`, TASK-008 Indexer). stat(size, mtime)은 이후 hash 계산을 줄이는 hint로만 쓸 수 있고, 내용이 같은지는 `contentHash`로만 판단한다(C33). 변경이 없으면 parse하지 않는다(REQ-INDEX-002).
 
 ## 실행 형태와 동시성
 

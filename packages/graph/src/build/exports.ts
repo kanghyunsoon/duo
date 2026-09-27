@@ -2,22 +2,32 @@
  * Minimal per-module export index for CALLS resolution (TASK-007). Only what T05 syntax facts show:
  * local exports, explicit re-exports and "export *" chains, bounded by MAX_REEXPORT_DEPTH and a
  * visited set. This is not a TypeScript symbol system.
+ *
+ * Every lookup also reports the files it consulted (TASK-008). A stored call resolution stays valid
+ * while none of those files changed, so dependency invalidation needs no traversal of its own: the
+ * bounded lookup already defines how far a change can reach.
  */
 import type { AnalyzedSymbol, ModuleReference, SourceAnalysis } from "@duo-director/analyzer";
 import { nodeId, type RepoPath } from "@duo-director/core";
 import type { ModuleResolution } from "./resolve/module-resolver.js";
 
-/** Longest re-export chain followed; deeper chains are unresolved. */
+/** Longest re-export chain followed by export resolution; deeper chains are unresolved. */
 export const MAX_REEXPORT_DEPTH = 4;
 
 export type ExportLookup =
   | { readonly status: "symbol"; readonly file: RepoPath; readonly symbol: AnalyzedSymbol }
   | { readonly status: "not-symbol" | "ambiguous" | "unresolved" };
 
+export interface ExportLookupWithDependencies {
+  readonly result: ExportLookup;
+  /** Files whose analysis or module resolution the lookup read (re-export dependencies). */
+  readonly dependencies: ReadonlySet<RepoPath>;
+}
+
 const DECLARATION_FILE = /\.d\.[cm]?ts$/u;
 
 export class ExportIndex {
-  private readonly cache = new Map<string, ExportLookup>();
+  private readonly cache = new Map<string, ExportLookupWithDependencies>();
 
   constructor(
     private readonly analyses: ReadonlyMap<RepoPath, SourceAnalysis>,
@@ -26,13 +36,18 @@ export class ExportIndex {
 
   /** What "import { name } from file" (or default when name is "default") refers to. */
   lookup(file: RepoPath, name: string): ExportLookup {
+    return this.lookupWithDependencies(file, name).result;
+  }
+
+  lookupWithDependencies(file: RepoPath, name: string): ExportLookupWithDependencies {
     const key = `${file}\u0000${name}`;
-    let result = this.cache.get(key);
-    if (result === undefined) {
-      result = this.find(file, name, 0, new Set());
-      this.cache.set(key, result);
+    let entry = this.cache.get(key);
+    if (entry === undefined) {
+      const dependencies = new Set<RepoPath>();
+      entry = { result: this.find(file, name, 0, new Set(), dependencies), dependencies };
+      this.cache.set(key, entry);
     }
-    return result;
+    return entry;
   }
 
   private target(from: RepoPath, ref: ModuleReference): RepoPath | undefined {
@@ -40,10 +55,11 @@ export class ExportIndex {
     return r.status === "resolved" ? r.path : undefined;
   }
 
-  private find(file: RepoPath, name: string, depth: number, visited: Set<string>): ExportLookup {
+  private find(file: RepoPath, name: string, depth: number, visited: Set<string>, deps: Set<RepoPath>): ExportLookup {
     const key = `${file}\u0000${name}`;
     if (depth > MAX_REEXPORT_DEPTH || visited.has(key)) return { status: "unresolved" };
     visited.add(key);
+    deps.add(file);
     const analysis = this.analyses.get(file);
     if (analysis === undefined) return { status: "unresolved" };
 
@@ -60,7 +76,7 @@ export class ExportIndex {
         const binding = ref.bindings.find((b) => b.local === local && !b.typeOnly);
         if (binding === undefined) continue;
         const target = ref.kind === "import" && binding.imported !== "*" ? this.target(file, ref) : undefined;
-        return target === undefined ? { status: "unresolved" } : this.find(target, binding.imported, depth + 1, visited);
+        return target === undefined ? { status: "unresolved" } : this.find(target, binding.imported, depth + 1, visited, deps);
       }
       return { status: "not-symbol" };
     }
@@ -72,7 +88,7 @@ export class ExportIndex {
     if (only !== undefined) {
       if (only.r.imported === "*") return { status: "not-symbol" };
       const target = this.target(file, only.ref);
-      return target === undefined ? { status: "unresolved" } : this.find(target, only.r.imported, depth + 1, visited);
+      return target === undefined ? { status: "unresolved" } : this.find(target, only.r.imported, depth + 1, visited, deps);
     }
 
     // 3. export * from "./m" (never forwards "default").
@@ -83,7 +99,7 @@ export class ExportIndex {
       if (!ref.reexports.some((r) => r.exported === "*" && !r.typeOnly)) continue;
       const target = this.target(file, ref);
       if (target === undefined) continue;
-      const r = this.find(target, name, depth + 1, new Set(visited));
+      const r = this.find(target, name, depth + 1, new Set(visited), deps);
       if (r.status === "symbol") found.set(nodeId(r.symbol.ref), { file: r.file, symbol: r.symbol });
       else if (r.status === "ambiguous") ambiguous = true;
     }

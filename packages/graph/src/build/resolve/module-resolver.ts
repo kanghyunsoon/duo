@@ -38,7 +38,17 @@ export type ModuleResolution =
 export type ModuleResolutionStatus = ModuleResolution["status"];
 
 export interface ModuleResolver {
+  /**
+   * Version of the resolution rules (adapter rules and engine version). Stored results with another
+   * version are recomputed even when no file changed (TASK-008).
+   */
+  readonly version: string;
   resolve(request: ModuleResolutionRequest): ModuleResolution;
+  /**
+   * Repository config files that decide how specifiers in fromPath resolve: the nearest
+   * tsconfig.json/jsconfig.json and the files it extends (inside the repository). Empty without a config.
+   */
+  configFiles(fromPath: RepoPath): readonly RepoPath[];
   /** Problems found while reading configuration (tsconfig.json / jsconfig.json). */
   readonly diagnostics: readonly Diagnostic[];
 }

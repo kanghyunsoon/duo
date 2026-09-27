@@ -60,6 +60,7 @@ interface LanguageAnalyzer {
 - resolved 결과의 `claim`은 `typescript-resolution`이다. "TypeScript가 이 파일로 해석했다"는 뜻이며 runtime이 그 파일을 실행한다는 주장과 구분한다(`extensionSubstituted`, `declarationOnly`).
 - **격리**: `typescript` import는 `packages/graph/src/build/resolve/typescript/` 안에서만 허용한다(`scripts/boundaries.json` `typescriptApi`, ESLint, `tests/workspace/boundaries.test.ts`). `typescript` 6.0.3과 `zod` 4.6.5는 graph 패키지의 runtime dependency로 정확히 고정한다.
 - **TypeScript 7 위험**: TypeScript 7(native)은 Compiler API가 바뀔 수 있다. 그때는 `TypeScriptModuleResolver`만 교체한다. adapter 계약은 `typescript-module-resolver.test.ts`가 TypeScript 6 기준으로 고정하므로 upgrade 시 차이가 그 테스트에서 드러난다.
+- **version과 config dependency(TASK-008)**: `ModuleResolver.version`은 adapter 규칙 번호와 TypeScript 버전(`1+typescript-6.0.3`)이다. 저장된 module 결과는 version이 다르면 다시 계산한다. `configFiles(fromPath)`는 가장 가까운 tsconfig/jsconfig와 그 `extends` 파일(`readJsonConfigFile` + `parseJsonSourceFileConfigFileContent`의 `extendedSourceFiles`, Repository 안만)을 돌려주고, Indexer가 이 목록으로 config 변경의 영향 범위를 정한다. syntax 오류 보고는 계속 `readConfigFile`이 한다. Windows에서는 TypeScript가 파일 이름을 `/`로 비교하므로 경로를 정규화해 넘긴다.
 - **Type Checker 금지**: TypeScript Program 생성, type checking, symbol 해석은 쓰지 않는다. Compiler API는 module resolution에만 쓴다.
 
 ## CALLS 한계

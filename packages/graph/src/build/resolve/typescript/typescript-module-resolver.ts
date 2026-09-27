@@ -22,6 +22,8 @@ interface Config {
   readonly path?: RepoPath;
   readonly options: ts.CompilerOptions;
   readonly cache: ts.ModuleResolutionCache;
+  /** The config and the repository files it extends (config dependencies, TASK-008). */
+  readonly files: readonly RepoPath[];
 }
 
 const BUILTINS = new Set(builtinModules);
@@ -35,6 +37,8 @@ const NO_CONFIG_OPTIONS: ts.CompilerOptions = {
 };
 
 export const TYPESCRIPT_VERSION: string = ts.version;
+/** DUO adapter rules (1) + TypeScript engine version. A change recomputes stored resolutions. */
+export const TYPESCRIPT_MODULE_RESOLUTION_VERSION = `1+typescript-${ts.version}`;
 
 const isRelative = (s: string) => s === "." || s === ".." || s.startsWith("./") || s.startsWith("../");
 const posix = (p: string) => p.replace(/\\/g, "/");
@@ -65,6 +69,7 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
   const loadConfig = (file: string, isJs: boolean): Config => {
     const cached = configs.get(file);
     if (cached !== undefined) return cached;
+    // readConfigFile reports syntax errors; readJsonConfigFile + parse also records the extends chain.
     const read = ts.readConfigFile(file, (f) => ts.sys.readFile(f));
     const repoPath = toRepoPath(file);
     const report = (d: ts.Diagnostic) => {
@@ -72,14 +77,19 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
       diagnostics.push(createDiagnostic("TSCONFIG_INVALID", `${repoPath ?? file}: ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`, repoPath === undefined ? undefined : { path: repoPath }));
     };
     if (read.error !== undefined) report(read.error);
-    const parsed = ts.parseJsonConfigFileContent(
-      read.config ?? {}, ts.sys, nodePath.dirname(file), isJs ? { allowJs: true } : undefined, file,
+    const source = ts.readJsonConfigFile(posix(file), (f) => ts.sys.readFile(f));
+    const parsed = ts.parseJsonSourceFileConfigFileContent(
+      source, ts.sys, nodePath.dirname(file), isJs ? { allowJs: true } : undefined, posix(file),
     );
     // "No inputs were found" (18003) only concerns compilation, not resolution.
     parsed.errors.filter((d) => d.code !== 18003).forEach(report);
+    const extended = (source.extendedSourceFiles ?? [])
+      .map((f) => toRepoPath(nodePath.resolve(f)))
+      .filter((p): p is RepoPath => p !== undefined && !p.split("/").includes("node_modules"));
     const config: Config = {
       key: file, ...(repoPath === undefined ? {} : { path: repoPath }), options: parsed.options,
       cache: ts.createModuleResolutionCache(root, (f) => f, parsed.options),
+      files: [...new Set([...(repoPath === undefined ? [] : [repoPath]), ...extended])],
     };
     configs.set(file, config);
     return config;
@@ -100,7 +110,7 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     nearest.set(dir, found);
     return found;
   };
-  const noConfig: Config = { key: "", options: NO_CONFIG_OPTIONS, cache: ts.createModuleResolutionCache(root, (f) => f, NO_CONFIG_OPTIONS) };
+  const noConfig: Config = { key: "", options: NO_CONFIG_OPTIONS, cache: ts.createModuleResolutionCache(root, (f) => f, NO_CONFIG_OPTIONS), files: [] };
 
   const resolveUncached = (request: ModuleResolutionRequest): ModuleResolution => {
     const { specifier } = request;
@@ -133,7 +143,11 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
   };
 
   return {
+    version: TYPESCRIPT_MODULE_RESOLUTION_VERSION,
     diagnostics,
+    configFiles(fromPath) {
+      return configFor(nodePath.dirname(nodePath.join(root, fromPath)))?.files ?? [];
+    },
     resolve(request) {
       const key = `${request.fromPath}\u0000${request.kind}\u0000${request.specifier}`;
       let result = results.get(key);

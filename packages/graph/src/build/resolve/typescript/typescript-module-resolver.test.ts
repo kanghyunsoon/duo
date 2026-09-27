@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { RepoPath } from "@duo-director/core";
 import { afterAll, describe, expect, it } from "vitest";
-import { createTypeScriptModuleResolver, TYPESCRIPT_VERSION } from "./typescript-module-resolver.js";
+import { createTypeScriptModuleResolver, TYPESCRIPT_MODULE_RESOLUTION_VERSION, TYPESCRIPT_VERSION } from "./typescript-module-resolver.js";
 
 const temps: string[] = [];
 afterAll(() => temps.forEach((t) => fs.rmSync(t, { recursive: true, force: true })));
@@ -33,6 +33,8 @@ const NODE_NEXT = {
 describe("TypeScriptModuleResolver on TypeScript 6 (contract fixed here; upgrades must show up)", () => {
   it("runs on TypeScript 6.0", () => {
     expect(TYPESCRIPT_VERSION).toMatch(/^6\.0\./);
+    // Stored resolutions are recomputed when the adapter rules or the TypeScript version change (TASK-008).
+    expect(TYPESCRIPT_MODULE_RESOLUTION_VERSION).toBe(`1+typescript-${TYPESCRIPT_VERSION}`);
   });
 
   it("NodeNext: .js specifier → .ts source, extensionless and directory imports stay unresolved", () => {
@@ -77,7 +79,7 @@ describe("TypeScriptModuleResolver on TypeScript 6 (contract fixed here; upgrade
   });
 
   it("nearest config wins, extends is followed, jsconfig is used for JavaScript projects", () => {
-    const { resolve } = project({
+    const { resolve, resolver } = project({
       "tsconfig.base.json": JSON.stringify({ compilerOptions: { module: "ESNext", moduleResolution: "Bundler", paths: { "~/*": ["./shared/*"] } } }),
       "tsconfig.json": JSON.stringify({ extends: "./tsconfig.base.json" }),
       "shared/s.ts": "", "src/a.ts": "",
@@ -87,10 +89,14 @@ describe("TypeScriptModuleResolver on TypeScript 6 (contract fixed here; upgrade
     expect(resolve("src/a.ts", "~/s")).toMatchObject({ status: "resolved", path: "shared/s.ts", configPath: "tsconfig.json" });
     expect(resolve("web/app.js", "@w/w")).toMatchObject({ status: "resolved", path: "web/lib/w.js", configPath: "web/jsconfig.json" });
     expect(resolve("web/app.js", "~/s")).toEqual({ status: "external", reason: "package" });
+    // Config dependencies: the nearest config and the files it extends.
+    expect(resolver.configFiles("src/a.ts" as RepoPath)).toEqual(["tsconfig.json", "tsconfig.base.json"]);
+    expect(resolver.configFiles("web/app.js" as RepoPath)).toEqual(["web/jsconfig.json"]);
   });
 
   it("without any config resolves relative local modules only", () => {
-    const { resolve } = project({ "src/a.js": "", "src/b.js": "", "src/dir/index.js": "" });
+    const { resolve, resolver } = project({ "src/a.js": "", "src/b.js": "", "src/dir/index.js": "" });
+    expect(resolver.configFiles("src/a.js" as RepoPath)).toEqual([]);
     expect(resolve("src/a.js", "./b")).toMatchObject({ status: "resolved", path: "src/b.js" });
     expect(resolve("src/a.js", "./dir")).toMatchObject({ status: "resolved", path: "src/dir/index.js" });
     expect(resolve("src/a.js", "react")).toEqual({ status: "external", reason: "package" });

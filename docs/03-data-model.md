@@ -37,8 +37,8 @@ MCP Tool 이름(`duo_get_context` 등, [06](06-mcp-interface.md))은 서버 이�
 │  └─ *.md                   Project Truth · tracked · Issue와 Milestone의 Markdown 정의
 ├─ integrations/             Project Truth · tracked · (Post-MVP) jira.yaml
 ├─ reviews/*.json            Human-approved History · tracked · Human이 보존·승인한 Review만
-├─ generated/                Regenerable · ignored · graph.db, fingerprints.json, gaps.json, inferred.json, index.json
-├─ cache/                    Regenerable · ignored · tokenizer, Packet, llm/
+├─ generated/                Regenerable · ignored · graph.db, fingerprints.json, index-state.json, gaps.json, inferred.json
+├─ cache/                    Regenerable · ignored · analysis/(SourceAnalysis cache), tokenizer, Packet, llm/
 └─ runtime/                  Runtime · ignored · reviews/(매 실행), metrics.jsonl, backup/
 ```
 
@@ -215,8 +215,8 @@ glob 패턴(`implements.paths`, `index.include/exclude` 등)은 구분자만 바
 |---|---|
 | GraphStore (TASK-003) | Node의 `contentHash`와 `source`를 손실 없이 저장하고 돌려준다. freshness를 판정하지 않는다 |
 | Scanner (TASK-004) | 현재 파일 목록과 fingerprint를 계산하고 파일 단위 비교 primitive를 제공한다 |
-| Indexer (TASK-008) | 저장된 fingerprint와 현재 fingerprint를 비교해 바뀐 파일만 다시 분석한다 |
-| Freshness (TASK-008, 표시는 TASK-015/016) | Node마다 fresh / changed / deleted / unknown을 정한다. 인덱싱하지 못한 경우는 unknown |
+| Indexer (TASK-008) | 저장된 state의 fingerprint·version·dependency와 현재 값을 비교해 바뀐 부분만 다시 분석·해석하고, 결과가 clean full rebuild와 같게 Graph를 갱신한다([증분 인덱싱](#증분-인덱싱)) |
+| Freshness (TASK-008, 표시는 TASK-015/016) | 파일(fresh / changed / added / deleted / unknown), analysis(fresh / stale-content / stale-analyzer / missing / failed), resolution 수준으로 따로 정한다. 인덱싱하지 못한 경우는 unknown |
 
 WAL에서 다른 연결이 쓰는 동안 마지막 commit 상태를 읽는 것은 snapshot visibility이며 freshness 판정과 다르다(C31).
 
@@ -258,12 +258,37 @@ collectGraphFacts(root)      ProjectTruth + TraceModel, Scan/fingerprint, Source
 
 - **Plan**: nodes는 Node ID, edges는 (from, type, to)의 UTF-8 순서다. 입력 순서나 파일 시스템 순회 순서가 결과를 바꾸지 않는다. 같은 입력이면 같은 plan이다.
 - **Validation**: 모든 Edge의 endpoint 존재와 04 endpoint matrix, Node payload schema, 같은 Node ID의 서로 다른 내용을 검사한다. 오류(`EDGE_ENDPOINT_INVALID`, `GRAPH_PAYLOAD_INVALID`, `GRAPH_NODE_CONFLICT`)가 하나라도 있으면 `valid: false`다.
-- **Transaction**: `applyGraphPlan`은 invalid plan을 쓰지 않는다(`GRAPH_WRITE_REFUSED`). 쓰기는 한 transaction에서 기존 Node 전체 삭제(Edge는 cascade) 후 Node, Edge upsert이며 도중 실패는 rollback되어 DB가 반쯤 바뀐 상태로 남지 않는다. T07은 전체 재구축만 하고 증분은 TASK-008이다.
-- **상태**: ExportIndex, module resolution cache, tsconfig cache는 build 호출 단위이며 전역 가변 상태가 없다.
+- **Transaction**: `applyGraphPlan`은 invalid plan을 쓰지 않는다(`GRAPH_WRITE_REFUSED`). 쓰기는 한 transaction에서 기존 Node 전체 삭제(Edge는 cascade) 후 Node, Edge upsert이며 도중 실패는 rollback되어 DB가 반쯤 바뀐 상태로 남지 않는다. 이것이 clean full rebuild이고, 증분 갱신은 바뀐 scope만 고친다([증분 인덱싱](#증분-인덱싱)).
+- **상태**: ExportIndex, module resolution cache, tsconfig cache는 build 호출 단위이며 전역 가변 상태가 없다. 증분 build는 이전 resolution 결과를 `ResolutionMemo`로 넘기고, memo가 없으면 모두 계산한다(같은 builder).
+- **소유(T08)**: Symbol과 Test Node는 `ownerFile`(추출된 파일의 RepoPath, graph `owner_file` 칼럼)을 가진다. Project, Milestone, Requirement, Decision, Issue, File Node는 소유 파일이 없다. File Node가 자기 자신을 소유하지 않으며 Project Truth는 `source.path`로 원문을 찾는다.
+- **Edge category(T08)**: Edge metadata `categories`는 그 Edge를 만든 입력의 종류다. `project-truth`(trace link, Project → Milestone, implements·tests·governs 참조), `source-analysis`(Project/File/class CONTAINS), `module-resolution`(IMPORTS), `call-resolution`(CALLS), `annotation`, `test`(test 안 exact 호출의 VALIDATED_BY), `git-history`(CHANGED_WITH). 여러 입력이 같은 Edge를 만들면 합집합이다.
+- **History 입력(T08)**: builder는 commit 목록 대신 `HistorySummary`(window commit 수, window fingerprint, co-change 후보, Issue key 후보 → commit OID)를 받는다. commit message는 builder로 가지 않는다.
 - **Node payload**: 종류별 zod strict schema(`NODE_PAYLOAD_SCHEMAS`)다. 목록은 [04 Node](04-project-graph.md#node). payload는 lookup record라 제목, 상태, 종류만 두고 본문을 복사하지 않는다. 위치는 Node `source`(`SourceLocation`), 내용 hash는 `contentHash` 칼럼이다(File은 fingerprint, Symbol·Test는 SourceAnalysis `contentHash`).
 - **File Node 범위**: T04 fingerprint가 있는 파일 중 `.duo-project/` 밖의 파일이다. Project Truth 문서는 Requirement·Decision Node의 `source.path`로 찾으며 IMPORTS·CALLS graph에 섞지 않는다(C47).
 - **Symbol 이름 참조**: `implements.symbols`, `governs.symbols`는 같은 정의의 `paths`에 맞는 파일 안에서 qualifiedName으로 찾는다. 후보가 없거나 둘 이상이면 `DECLARED_SYMBOL_UNRESOLVED`(warning)이고 Edge가 없다(C55).
 - **Stats**: Node·Edge 종류별 수, module 결과(resolved, external, unresolved, ambiguous, unsupported), call 결과(exact, heuristic, ambiguous, unresolved, exactWithoutSourceSymbol), annotation 결과(symbol, test, file, unknownId, unsupportedId). Graph 품질 benchmark의 입력이다.
+
+## 증분 인덱싱
+
+`indexRepository(root, { store })`의 계약이다(TASK-008, 관계 규칙은 [04 증분 갱신](04-project-graph.md#증분-갱신)).
+
+- **불변식**: **Incremental Result == Clean Full Rebuild Result.** 같은 Repository 상태에서 증분 결과는 `collectGraphFacts` → `buildGraphPlan` → `applyGraphPlan`으로 빈 DB에 만든 결과와 canonical Node/Edge 행(`dumpGraph`)이 같다. 속도를 위해 이 조건을 느슨하게 하지 않는다.
+- **구조**: plan은 언제나 full builder(`buildGraphPlan`)가 만든다. Indexer는 비싼 결과만 재사용하고, 나머지(Project Truth 관계, annotation, VALIDATED_BY, CHANGED_WITH 필터, payload)는 매번 다시 계산한다.
+
+| 재사용 대상 | 유효 조건 | 저장 위치 |
+|---|---|---|
+| SourceAnalysis(AST parse) | contentHash 같음 AND analyzer id·version 같음 AND cache 항목 있음 | `cache/analysis/<key>.json` |
+| module resolution | analysis 재사용 AND indexed 파일 집합 변화 없음 AND config 범위 변화 없음 AND `ModuleResolver.version` 같음 | index-state `files[].resolution.modules` |
+| call resolution | analysis 재사용 AND module 결과 같음 AND export dependency 파일의 analysis·module 결과 변화 없음 AND `CALL_RESOLUTION_VERSION` 같음 | `files[].resolution.calls`, `exportDependencies` |
+| Git history window | HEAD OID와 shallow 여부 같음 | `history.summary` |
+
+- **state**: `generated/index-state.json`(`duo-index-state` version 1). `token`, `graphSchemaVersion`, `moduleResolutionVersion`, `callResolutionVersion`, `historyWindow`, `files[]`(fingerprint 필드, `analysis` {analyzer, version, status ok·failed}, `resolution` {modules, calls, exportDependencies, configFiles}, scope digest), `configs`(resolver가 읽은 config 파일 → contentHash), `truthScope`, `history` {headOid, shallow, summary}. 원문, SourceAnalysis, commit message는 넣지 않는다. zod strict schema로 읽고 `token`(내용의 sha256)이 맞는지 확인한다.
+- **analysis cache**: key는 sha256(path, contentHash, analyzer, analyzerVersion)이다. 항목은 불변이고 읽을 때 key 값을 다시 확인하며, 없거나 다르면 cache miss(analysis `missing`)로 다시 parse한다. syntax 사실과 그 diagnostics만 있고 원문은 없다. 성공한 실행 뒤 현재 파일이 쓰지 않는 항목을 지운다. 실패한 analysis는 cache하지 않고 매 실행 다시 시도한다(C58).
+- **Scope와 diff**: Node와 Edge는 scope 하나에 속한다. File·Symbol·Test는 그 파일 scope(`file:<path>`)이고, Edge는 source 쪽 code Node의 파일, 없으면 target 쪽, 둘 다 아니면 Project Truth scope다. state는 scope마다 canonical 행의 sha256을 둔다. digest가 바뀐 scope만 DB에서 읽어(`listNodes({ ownerFile })`, 인접 Edge) 행 단위로 비교하고 추가·갱신·삭제를 계산한다(`diffScopes`). 바뀌지 않은 scope는 읽지도 쓰지도 않는다.
+- **Atomicity**: Graph 변경과 `meta.index_state_token`(새 state의 token)을 한 transaction에 쓰고 commit 뒤 state 파일을 임시 파일 + rename으로 바꾼다. transaction 안에서 이전 token을 다시 확인해 다른 writer의 변경 위에 쓰지 않는다. Graph가 바뀌면 `meta.graph_revision`을 1 올린다. 그다음 `fingerprints.json`을 쓴다. 변경이 없으면 아무것도 쓰지 않는다(C59).
+- **Recovery**: state 없음(`no-state`), 손상 또는 token이 내용과 다름(`state-invalid`, `INDEX_STATE_INVALID`), 다른 format·version(`state-unsupported`), DB token과 다름(`state-mismatch`: commit과 state 쓰기 사이의 중단), graph schema나 history window가 다름(`incompatible`), 요청(`requested`)이면 전체 재구축한다. 전체 재구축은 analysis cache를 쓰지 않는다. transaction이 실패하면 Graph와 state 모두 이전 그대로이고 다음 실행이 이어서 갱신한다. graph DB의 schema version이 다르면 `onUnsupportedSchema: "recreate"`로 다시 만든다.
+- **Freshness**: 파일 `fresh | changed | added | deleted | unknown`, analysis `fresh | stale-content | stale-analyzer | missing | failed`, module `fresh | missing | stale-version | stale-source | stale-file-set | stale-config`, call `fresh | missing | stale-version | stale-source | stale-modules | stale-dependency`. 결과의 `freshness`는 실행 전 상태, 곧 무엇을 왜 다시 계산했는지다.
+- **Metrics**: mode, fullRebuildReason, files(total, unchanged, changed, added, deleted, analyzed = parse 횟수, analysisReused, analysisFailed), resolution(module·call 재계산/재사용 수와 파일 수), history(recomputed, commits), graph(scopes, scopesChanged, Node·Edge 추가/갱신/삭제, written).
 
 ## SourceLocation
 
@@ -296,6 +321,7 @@ Parser와 loader는 예외를 던지지 않고 모든 문제를 모은다. 일�
 | 정의 구조 | `METADATA_BLOCK_WITHOUT_HEADING`, `METADATA_BLOCK_MISSING`(warning) |
 | 추적성 | `DUPLICATE_ID`, `BROKEN_REFERENCE`, `REFERENCE_TYPE_MISMATCH`, `DECISION_SUPERSEDES_SELF`, `DECISION_SUPERSEDE_CYCLE`, `TRACE_MILESTONE_MISMATCH`(warning), `TRACE_DECISION_UNRELATED`(warning), `TRACE_REQUIREMENT_UNTRACKED`(info) |
 | Graph DB | `GRAPH_SCHEMA_UNSUPPORTED`, `GRAPH_OPEN_FAILED` |
+| Indexer(T08) | `INDEX_STATE_INVALID`(warning, 전체 재구축) |
 | Graph build(T07) | `TSCONFIG_INVALID`(warning), `MODULE_UNRESOLVED`(warning), `MODULE_AMBIGUOUS`(warning), `CALL_AMBIGUOUS`(info), `CALL_UNRESOLVED`(info, 통계로만), `ANNOTATION_TARGET_UNKNOWN`(warning), `ANNOTATION_TARGET_UNSUPPORTED`(info), `TEST_ID_CONFLICT`(warning), `DECLARED_SYMBOL_UNRESOLVED`(warning), `EDGE_ENDPOINT_INVALID`, `GRAPH_NODE_CONFLICT`, `GRAPH_PAYLOAD_INVALID`, `GRAPH_WRITE_REFUSED`, `GRAPH_INVARIANT_VIOLATED` |
 
 ## 추적 관계
@@ -436,7 +462,9 @@ EvidencePointer 필드: `kind`(requirement, decision, constraint, issue, milesto
 |---|---|---|
 | `generated/graph.db` | Project Graph(ADR-002, [04](04-project-graph.md)) | TASK-003, 007 |
 | `generated/gaps.json` | Knowledge Gap | TASK-011 |
-| `generated/inferred.json`, `index.json` | 구현 상태 추론, 마지막 인덱싱 상태 | TASK-008, 014 |
+| `generated/index-state.json` | 증분 인덱싱 state([증분 인덱싱](#증분-인덱싱)) | TASK-008 |
+| `generated/inferred.json` | 구현 상태 추론 | TASK-014 |
+| `cache/analysis/*.json` | SourceAnalysis cache(content-addressed) | TASK-008 |
 | `runtime/metrics.jsonl` | Context, Review, LLM 지표([09](09-token-strategy.md#지표)) | TASK-010 |
 
 Graph DB 스키마와 transaction·제약·index 정책은 [ADR-002](adr/ADR-002-graph-storage.md#sqlite-스키마)에 있다.

@@ -4,10 +4,17 @@
  * half-built.
  */
 import { createDiagnostic, failure, success, type ParseResult } from "@duo-director/core";
-import { GraphStoreError, type GraphStore } from "../store/types.js";
+import { GraphStoreError, type GraphReader, type GraphStore, type GraphWriter } from "../store/types.js";
 import type { GraphBuildPlan } from "./types.js";
 
 const PAGE = 1000;
+
+/** Deletes every node (and so every edge) and writes the plan, inside the caller's transaction. */
+export function replaceGraph(tx: GraphReader & GraphWriter, plan: Pick<GraphBuildPlan, "nodes" | "edges">): void {
+  for (let page = tx.listNodes({ limit: PAGE }); page.length > 0; page = tx.listNodes({ limit: PAGE })) tx.deleteNodes(page.map((n) => n.ref));
+  tx.upsertNodes(plan.nodes);
+  tx.upsertEdges(plan.edges);
+}
 
 /** Replaces the whole graph with the plan (full build). */
 export function applyGraphPlan(store: GraphStore, plan: GraphBuildPlan): ParseResult<{ readonly nodes: number; readonly edges: number }> {
@@ -18,11 +25,7 @@ export function applyGraphPlan(store: GraphStore, plan: GraphBuildPlan): ParseRe
     ]);
   }
   try {
-    store.transaction((tx) => {
-      for (let page = tx.listNodes({ limit: PAGE }); page.length > 0; page = tx.listNodes({ limit: PAGE })) tx.deleteNodes(page.map((n) => n.ref));
-      tx.upsertNodes(plan.nodes);
-      tx.upsertEdges(plan.edges);
-    });
+    store.transaction((tx) => replaceGraph(tx, plan));
   } catch (error) {
     const code = error instanceof GraphStoreError ? error.code : "INTERNAL";
     return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Graph write rolled back (${code}): ${(error as Error).message}`)]);

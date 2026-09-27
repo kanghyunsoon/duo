@@ -34,8 +34,8 @@ const NODES: GraphNodeInput[] = [
   { ref: req("AUTH-01"), source: { path: ".duo-project/specs/auth.md", startLine: 3, startColumn: 1, endLine: 16, endColumn: 2 }, payload: { title: "Login", status: "done" } },
   { ref: dec("D-004"), contentHash: "sha256:3f1c", payload: { state: "confirmed" } },
   { ref: file("src/auth/AuthService.ts"), contentHash: "sha256:aaa" },
-  { ref: sym("src/auth/AuthService.ts", "AuthService.login"), source: { path: "src/auth/AuthService.ts", startLine: 10 } },
-  { ref: sym("src/auth/AuthService.ts", "AuthService.#secret") },
+  { ref: sym("src/auth/AuthService.ts", "AuthService.login"), source: { path: "src/auth/AuthService.ts", startLine: 10 }, ownerFile: p("src/auth/AuthService.ts") },
+  { ref: sym("src/auth/AuthService.ts", "AuthService.#secret"), ownerFile: p("src/auth/AuthService.ts") },
 ];
 const EDGES: GraphEdgeInput[] = [
   { from: dec("D-004"), type: "GOVERNS", to: req("AUTH-01") },
@@ -62,9 +62,9 @@ const code = (fn: () => unknown) => {
 };
 
 describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 NodeSqliteGraphStore (%s)", (_kind, location) => {
-  it("creates an empty graph with graph_schema_version 1", () => {
+  it("creates an empty graph with graph_schema_version 2", () => {
     const store = openStore(location());
-    expect(store.graphSchemaVersion).toBe(1);
+    expect(store.graphSchemaVersion).toBe(2);
     expect(store.counts()).toEqual({ nodes: 0, edges: 0 });
   });
 
@@ -75,11 +75,27 @@ describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 Nod
     expect(node).toEqual({
       id: "req:AUTH-01", type: "requirement", ref: req("AUTH-01"),
       source: { path: ".duo-project/specs/auth.md", startLine: 3, startColumn: 1, endLine: 16, endColumn: 2 },
-      contentHash: undefined, payload: { status: "done", title: "Login" },
+      contentHash: undefined, payload: { status: "done", title: "Login" }, ownerFile: undefined,
     });
     expect(store.getNode(sym("src/auth/AuthService.ts", "AuthService.#secret"))?.id).toBe("sym:src/auth/AuthService.ts#AuthService.%23secret");
     expect(store.getNode(req("AUTH-99"))).toBeUndefined();
     expect(store.counts()).toEqual({ nodes: 5, edges: 5 });
+  });
+
+  it("lists the nodes a file owns and keeps graph metadata (schema 2, TASK-008)", () => {
+    const store = openStore(location());
+    seed(store);
+    const owned = store.listNodes({ ownerFile: p("src/auth/AuthService.ts"), limit: 10 }).map((n) => n.id);
+    expect(owned).toEqual(["sym:src/auth/AuthService.ts#AuthService.%23secret", "sym:src/auth/AuthService.ts#AuthService.login"]);
+    expect(store.listNodes({ ownerFile: p("src/auth/AuthService.ts"), afterId: owned[0]!, limit: 10 }).map((n) => n.id)).toEqual([owned[1]]);
+    expect(store.listNodes({ ownerFile: p("src/other.ts"), limit: 10 })).toEqual([]);
+    expect(store.getNode(file("src/auth/AuthService.ts"))?.ownerFile).toBeUndefined();
+    expect(store.readMeta("graph_schema_version")).toBe("2");
+    expect(store.readMeta("graph_revision")).toBeUndefined();
+    store.transaction((tx) => tx.writeMeta("graph_revision", "3"));
+    expect(store.readMeta("graph_revision")).toBe("3");
+    expect(code(() => store.writeMeta("graph_schema_version", "9"))).toBe("INVALID_INPUT");
+    expect(code(() => store.writeMeta("Bad Key", "x"))).toBe("INVALID_INPUT");
   });
 
   it("upserts nodes by id and edges idempotently", () => {

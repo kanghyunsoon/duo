@@ -5,7 +5,7 @@
  */
 import fs from "node:fs";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import { createDiagnostic, nodeId, parseNodeId, withSeverity, type Diagnostic, type EntityRef, type EntityType, type SourceLocation } from "@duo-director/core";
+import { createDiagnostic, nodeId, parseNodeId, withSeverity, type Diagnostic, type EntityRef, type EntityType, type RepoPath, type SourceLocation } from "@duo-director/core";
 import { canonicalJson } from "../json.js";
 import {
   GRAPH_EDGE_TYPES, GraphStoreError,
@@ -53,11 +53,13 @@ function toStoreError(error: unknown): unknown {
 interface NodeRow {
   id: string; type: string; source_path: string | null;
   source_start_line: number | null; source_start_column: number | null; source_end_line: number | null; source_end_column: number | null;
-  content_hash: string | null; payload: string;
+  content_hash: string | null; payload: string; owner_file: string | null;
 }
 interface EdgeRow { from_id: string; type: string; to_id: string; metadata: string }
 
-const NODE_COLUMNS = "id, type, source_path, source_start_line, source_start_column, source_end_line, source_end_column, content_hash, payload";
+const NODE_COLUMNS = "id, type, source_path, source_start_line, source_start_column, source_end_line, source_end_column, content_hash, payload, owner_file";
+const META_KEY = /^[a-z][a-z0-9_]*$/u;
+const RESERVED_META = new Set(["graph_schema_version"]);
 
 function toNode(row: NodeRow): GraphNode {
   const ref = parseNodeId(row.id);
@@ -71,7 +73,10 @@ function toNode(row: NodeRow): GraphNode {
     if (row.source_end_column !== null) s.endColumn = row.source_end_column;
     source = s;
   }
-  return { id: row.id, type: ref.type, ref, source, contentHash: row.content_hash ?? undefined, payload: JSON.parse(row.payload) as JsonObject };
+  return {
+    id: row.id, type: ref.type, ref, source, contentHash: row.content_hash ?? undefined, payload: JSON.parse(row.payload) as JsonObject,
+    ownerFile: (row.owner_file ?? undefined) as RepoPath | undefined,
+  };
 }
 
 function toEdge(row: EdgeRow): GraphEdge {
@@ -96,15 +101,16 @@ class NodeSqliteGraphStore implements GraphStore {
   constructor(private readonly db: DatabaseSync) {
     const p = (sql: string) => db.prepare(sql);
     this.stmt = {
-      upsertNode: p(`INSERT INTO graph_nodes (${NODE_COLUMNS}) VALUES ($id, $type, $source_path, $source_start_line, $source_start_column, $source_end_line, $source_end_column, $content_hash, $payload)
+      upsertNode: p(`INSERT INTO graph_nodes (${NODE_COLUMNS}) VALUES ($id, $type, $source_path, $source_start_line, $source_start_column, $source_end_line, $source_end_column, $content_hash, $payload, $owner_file)
         ON CONFLICT (id) DO UPDATE SET type = excluded.type, source_path = excluded.source_path, source_start_line = excluded.source_start_line,
         source_start_column = excluded.source_start_column, source_end_line = excluded.source_end_line, source_end_column = excluded.source_end_column,
-        content_hash = excluded.content_hash, payload = excluded.payload`),
+        content_hash = excluded.content_hash, payload = excluded.payload, owner_file = excluded.owner_file`),
       upsertEdge: p(`INSERT INTO graph_edges (from_id, type, to_id, metadata) VALUES ($from, $type, $to, $metadata)
         ON CONFLICT (from_id, type, to_id) DO UPDATE SET metadata = excluded.metadata`),
       getNodes: p(`SELECT ${NODE_COLUMNS} FROM graph_nodes WHERE id IN (SELECT value FROM json_each($ids)) ORDER BY id`),
       listAll: p(`SELECT ${NODE_COLUMNS} FROM graph_nodes WHERE id > $after ORDER BY id LIMIT $limit`),
       listByType: p(`SELECT ${NODE_COLUMNS} FROM graph_nodes WHERE type = $type AND id > $after ORDER BY id LIMIT $limit`),
+      listByOwner: p(`SELECT ${NODE_COLUMNS} FROM graph_nodes WHERE owner_file = $owner AND ($type IS NULL OR type = $type) AND id > $after ORDER BY id LIMIT $limit`),
       outgoing: p(`SELECT from_id, type, to_id, metadata FROM graph_edges
         WHERE from_id IN (SELECT value FROM json_each($ids)) AND ($types IS NULL OR type IN (SELECT value FROM json_each($types)))
         ORDER BY from_id, type, to_id LIMIT $limit`),
@@ -120,6 +126,8 @@ class NodeSqliteGraphStore implements GraphStore {
       deleteEdge: p(`DELETE FROM graph_edges WHERE from_id = $from AND type = $type AND to_id = $to`),
       countNodes: p(`SELECT count(*) AS n FROM graph_nodes`),
       countEdges: p(`SELECT count(*) AS n FROM graph_edges`),
+      readMeta: p(`SELECT value FROM graph_meta WHERE key = $key`),
+      writeMeta: p(`INSERT INTO graph_meta (key, value) VALUES ($key, $value) ON CONFLICT (key) DO UPDATE SET value = excluded.value`),
     };
     const reader: GraphReader = {
       getNode: (ref) => this.getNodes([ref])[0],
@@ -127,12 +135,14 @@ class NodeSqliteGraphStore implements GraphStore {
       listNodes: (q) => this.listNodes(q),
       adjacentEdges: (refs, q) => this.adjacentEdges(refs, q),
       counts: () => this.counts(),
+      readMeta: (key) => this.readMeta(key),
     };
     const writer: GraphWriter = {
       upsertNodes: (nodes) => this.write(() => this.doUpsertNodes(nodes)),
       upsertEdges: (edges) => this.write(() => this.doUpsertEdges(edges)),
       deleteNodes: (refs) => this.write(() => this.doDeleteNodes(refs)),
       deleteEdges: (keys) => this.write(() => this.doDeleteEdges(keys)),
+      writeMeta: (key, value) => this.write(() => this.doWriteMeta(key, value)),
     };
     this.view = { ...reader, ...writer };
   }
@@ -199,6 +209,7 @@ class NodeSqliteGraphStore implements GraphStore {
         source_end_column: s?.endColumn ?? null,
         content_hash: node.contentHash ?? null,
         payload: canonicalJson(node.payload, `${id}.payload`),
+        owner_file: node.ownerFile ?? null,
       });
     }
   }
@@ -222,6 +233,15 @@ class NodeSqliteGraphStore implements GraphStore {
     return n;
   }
 
+  private doWriteMeta(key: string, value: string): void {
+    if (!META_KEY.test(key) || RESERVED_META.has(key)) throw new GraphStoreError("INVALID_INPUT", `Graph metadata key "${key}" cannot be written`);
+    this.stmt.writeMeta!.run({ key, value });
+  }
+
+  readMeta(key: string): string | undefined {
+    return this.run(() => (this.stmt.readMeta!.get({ key }) as { value: string } | undefined)?.value);
+  }
+
   getNode(ref: EntityRef): GraphNode | undefined {
     return this.getNodes([ref])[0];
   }
@@ -234,9 +254,11 @@ class NodeSqliteGraphStore implements GraphStore {
     checkLimit(query.limit);
     return this.run(() => {
       const params = { after: query.afterId ?? "", limit: query.limit };
-      const rows = query.type === undefined
-        ? this.stmt.listAll!.all(params)
-        : this.stmt.listByType!.all({ ...params, type: query.type satisfies EntityType });
+      const rows = query.ownerFile !== undefined
+        ? this.stmt.listByOwner!.all({ ...params, owner: query.ownerFile, type: query.type ?? null })
+        : query.type === undefined
+          ? this.stmt.listAll!.all(params)
+          : this.stmt.listByType!.all({ ...params, type: query.type satisfies EntityType });
       return (rows as unknown as NodeRow[]).map(toNode);
     });
   }
@@ -266,6 +288,7 @@ class NodeSqliteGraphStore implements GraphStore {
   upsertEdges(edges: readonly GraphEdgeInput[]): void { this.view.upsertEdges(edges); }
   deleteNodes(refs: readonly EntityRef[]): number { return this.view.deleteNodes(refs); }
   deleteEdges(keys: readonly EdgeKey[]): number { return this.view.deleteEdges(keys); }
+  writeMeta(key: string, value: string): void { this.view.writeMeta(key, value); }
 
   close(): void {
     if (this.closed) return;

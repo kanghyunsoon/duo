@@ -19,7 +19,7 @@ Node ID는 core의 `nodeId(EntityRef)`만 만든다. 경로와 Symbol 구성 요
 | Symbol | `sym:src/auth/a.ts#AuthService.refresh` | LanguageAnalyzer | name, qualifiedName, kind(`SymbolKind`), exported, memberScope, parent, additionalLocations, analyzerVersion |
 | Test | `test:src/auth/a.test.ts#AuthService > refresh` | LanguageAnalyzer `tests`(T05.1)의 `kind: "test"`. ID는 RepoPath + fullName이며 위치를 넣지 않음 | name, fullName, frameworkHint, confidence, modifier, enclosingSuite, analyzerVersion |
 
-payload는 종류별 zod strict schema(`NODE_PAYLOAD_SCHEMAS`, `packages/graph/src/build/payload.ts`)로 검증하는 lookup record다. 본문(Requirement text, Decision answer, acceptance)은 복사하지 않는다. 위치는 Node의 `source`, 내용 hash는 `contentHash` 칼럼에 두고 원문은 Source of Truth에서 다시 읽는다([03 Graph Build](03-data-model.md#graph-build)).
+payload는 종류별 zod strict schema(`NODE_PAYLOAD_SCHEMAS`, `packages/graph/src/build/payload.ts`)로 검증하는 lookup record다. 본문(Requirement text, Decision answer, acceptance)은 복사하지 않는다. 위치는 Node의 `source`, 내용 hash는 `contentHash` 칼럼에 두고 원문은 Source of Truth에서 다시 읽는다([03 Graph Build](03-data-model.md#graph-build)). Symbol과 Test Node는 추출된 파일을 `ownerFile`로 가지며(graph schema 2), 증분 갱신은 이 값으로 한 파일의 파생 Node를 찾는다. 다른 Node에는 소유 파일이 없다.
 
 Proposal(P-*)은 Graph Node로 만들지 않는다. `duo_search_evidence`와 UI가 파일로 조회한다.
 
@@ -56,6 +56,18 @@ T07부터 원칙은 **Evidence로 설명할 수 있는 관계만 저장한다**�
 - `heuristic`: T07은 만들지 않는다. CALLS의 heuristic 해석 단계가 없어 통계의 heuristic 수는 항상 0이다.
 - 같은 (src, type, dst)가 여러 근거에서 나오면 한 Edge로 합친다. 가장 강한 provenance(declared > static > git > heuristic)를 남기고 `basis` 목록(`implements.paths`, `annotation`, `exact-call` 등)을 합친다.
 - 해석되지 않은 사실(unresolved, ambiguous, external module, unresolved call)은 Edge가 아니라 build plan의 `moduleResolutions`, `callResolutions`, `stats`에 남는다.
+
+Edge metadata의 `categories`(T08)는 그 Edge를 만든 입력의 종류이며, 입력이 바뀔 때 어떤 Edge가 다시 계산되는지를 나타낸다. 여러 입력이 같은 Edge를 만들면 합집합이다.
+
+| category | Edge | 다시 계산하게 만드는 입력 |
+|---|---|---|
+| `project-truth` | trace link(REQUIRES, TRACKED_BY, GOVERNS, SUPERSEDES), Project → Milestone, implements·tests·governs 참조의 IMPLEMENTS·VALIDATED_BY·GOVERNS | Project Truth 문서, 참조 대상 파일·Symbol·Test의 존재 |
+| `source-analysis` | CONTAINS(Project → File, File → Symbol·Test, class → member) | scan 결과, 파일의 SourceAnalysis |
+| `module-resolution` | IMPORTS | 파일의 module reference, indexed 파일 집합, config(tsconfig·jsconfig·package.json·lockfile), resolver version |
+| `call-resolution` | CALLS | 파일의 call site, module 결과, export lookup이 읽은 파일(re-export dependency), call resolution version |
+| `annotation` | annotation의 IMPLEMENTS·VALIDATED_BY | 파일의 annotation과 Symbol·Test 위치, Project Truth ID |
+| `test` | test 안 exact 호출의 VALIDATED_BY | 위 call-resolution 입력, 대상 파일이 test를 정의하는지 |
+| `git-history` | CHANGED_WITH | history window(HEAD), indexed 파일 집합 |
 
 ## SourceAnalysis
 
@@ -141,7 +153,7 @@ ID는 Project Truth에 있는 것만 쓰고 annotation으로 정의를 만들지
 
 ### Git 사실(TASK-007)
 
-- CHANGED_WITH는 `computeCoChangeCandidates` 후보 중 두 파일이 모두 indexed File일 때만 양방향으로 만들고 metadata는 `{ provenance: "git", correlation: "historical", count }`다. Context Compiler는 낮은 weight로 다룬다.
+- CHANGED_WITH는 `computeCoChangeCandidates` 후보 중 두 파일이 모두 indexed File일 때만 양방향으로 만들고 metadata는 `{ provenance: "git", correlation: "historical", count }`다. Context Compiler는 낮은 weight로 다룬다. window(최근 500 commit)는 HEAD가 바뀌면 전체를 다시 계산한다(H-25, [증분 갱신](#증분-갱신)).
 - 커밋 메시지와 branch 이름의 Issue key는 candidate다. Project Truth Issue ID와의 교집합만 Issue payload `commits`와 Project payload `git.branchIssueIds`에 provenance로 남긴다. Issue Node나 새 Edge Type은 만들지 않는다(C46).
 - Git rename은 heuristic 사실이다. Node identity를 옮기거나 두 Symbol을 같은 개체로 확정하지 않는다(C45).
 
@@ -161,23 +173,32 @@ Context Compiler(TASK-010)는 traverse 결과에 아래 Edge weight를 적용해
 
 Node 순위 값 = seed 값 × Π(경로의 edge weight). 경로가 여럿이면 최댓값을 쓴다.
 
-- `trace(node, depth = 2)`: 상위(Requirement, Decision, Issue, Milestone)와 하위(Symbol, Test) 방향 경로를 모두 반환한다.
-- `impact(symbol, depth = 2)`: CALLS 역방향(호출자), VALIDATED_BY, IMPLEMENTS, GOVERNS, CHANGED_WITH를 따라 영향 범위를 반환한다.
+- `trace(node, depth = 2)`(T08 구현): 추적 관계 REQUIRES, TRACKED_BY, GOVERNS, IMPLEMENTS, VALIDATED_BY, SUPERSEDES를 양방향으로 따라가는 bounded traverse다. 상위(Requirement, Decision, Issue, Milestone)와 하위(Symbol, File, Test)를 돌려준다. CONTAINS, CALLS, IMPORTS, CHANGED_WITH는 따라가지 않는다.
+- `impact(seeds, depth = 2)`(T08 구현): 바뀐 File·Symbol에서 **DUO Graph에 기록된 영향 관계**를 돌려준다. 영향받는 모든 코드를 주장하지 않는다(CALLS는 exact만 있고 instance 호출은 unresolved, C53). 관계는 direct(역방향 CALLS·IMPORTS, VALIDATED_BY와 그 Requirement, IMPLEMENTS, GOVERNS), structural(CONTAINS: seed 파일의 Symbol, Symbol의 class와 파일), historical(CHANGED_WITH) 세 가지이고, 경로에서 가장 약한 관계를 붙여 (관계, depth, id) 순으로 정렬한다. 점수는 없고 `nodeLimit`을 넘으면 `truncated`다. 결과에 `evidence: "graph"`를 둔다.
 
 ## 증분 갱신
 
+TASK-008의 불변식은 **Incremental Result == Clean Full Rebuild Result**다(불변식 5). 계약 세부는 [03 증분 인덱싱](03-data-model.md#증분-인덱싱)에 있다.
+
 ```text
-변경 탐지(compareFingerprints: CHANGED, ADDED, DELETED) ─▶ 변경 파일 집합 F
-  ─▶ owner_file ∈ F 인 Node/Edge/unresolved_refs 삭제
-  ─▶ F 재분석 ─▶ Node/Edge 추가
-  ─▶ 재연결: F를 import하던 파일과 F의 Symbol 이름을 가진 unresolved_refs 재해석
-  ─▶ 정의 파일(.duo-project, sources.markdown)이 바뀌었으면 그 파일의 declared Node/Edge 재생성
-  ─▶ 경로 패턴 기반 Edge(GOVERNS, IMPLEMENTS paths)는 패턴이 바뀌었거나 F가 새로 매칭될 때 재계산
-  ─▶ CHANGED_WITH는 새 커밋분만 누적
-  ─▶ meta.graph_revision 증가
+Previous state(index-state.json) + 현재 Repository
+  ─▶ scan + fingerprint(항상, contentHash) ─▶ compareFingerprints: UNCHANGED / CHANGED / ADDED / DELETED
+  ─▶ analysis: fresh(contentHash·analyzer version 같음 + cache)면 재사용, 아니면 parse
+  ─▶ module resolution: 파일·파일 집합·config 범위·version이 그대로면 재사용
+  ─▶ buildGraphPlan(facts, memo): call은 module 결과와 export dependency가 그대로면 재사용, 나머지 관계는 다시 계산
+  ─▶ scope digest 비교 ─▶ 바뀐 scope만 읽어 diff ─▶ 한 transaction(diff + index_state_token + graph_revision)
+  ─▶ state 파일 교체(임시 파일 + rename), fingerprints.json
 ```
 
-Node의 freshness(fresh, changed, deleted, unknown)는 이 비교 결과로 Indexer가 정한다. GraphStore는 판정하지 않는다([03 Freshness 책임](03-data-model.md#freshness-책임)). 삭제된 파일은 삭제 단계만 수행하고, rename은 삭제와 추가로 처리한다. Analyzer의 `version`이 바뀌면 그 Analyzer가 담당하는 파일 전체를 다시 분석한다.
+- **Full builder가 oracle**: plan을 만드는 코드는 full build와 같다. 증분은 비싼 결과(parse, module resolution, call resolution, history window)만 명시적 dependency로 재사용한다. 테스트는 mutation마다 증분 결과를 빈 DB의 clean full rebuild와 행 단위로 비교한다.
+- **소스 변경**: ADDED는 parse·해석·build, CHANGED는 다시 parse·해석, DELETED는 그 파일 scope(File, 소유 Symbol·Test, 그 Edge)를 지우고, UNCHANGED는 parse하지 않는다. analysis 재사용 조건은 contentHash AND analyzer version이 같은 것이다.
+- **import/export dependency**: call 결과는 그 export lookup이 읽은 파일(대상 module, re-export chain)을 dependency로 저장한다. 그 파일의 analysis나 module 결과가 바뀌면 호출하는 파일의 call을 다시 해석한다. export resolution의 깊이 제한(`MAX_REEXPORT_DEPTH = 4`)은 lookup이 따라가는 chain 길이이고, dependency invalidation은 별도 traversal 없이 lookup이 실제로 읽은 파일 집합을 쓴다. export surface hash는 두지 않았다(C62).
+- **파일 집합 변경**: 파일이 추가되거나 삭제되면 TypeScript가 다른 파일을 고를 수 있으므로 모든 파일의 module resolution을 다시 계산한다(parse 없음). 결과가 같은 파일의 call은 재사용한다(C60).
+- **config 변경**: `tsconfig*.json`, `jsconfig*.json`, `package.json`, lockfile이 추가·변경·삭제되면 그 디렉터리 아래 파일의 module resolution을 다시 계산한다. resolver가 읽은 config chain(가장 가까운 config와 `extends` 파일)은 state에 hash로 두고, 바뀌면 그 chain을 쓴 파일을 다시 계산한다. field 단위 비교는 하지 않는다(C61).
+- **Project Truth 변경**: Project Truth는 매번 읽고 관련 Node와 Edge(IMPLEMENTS, GOVERNS, TRACKED_BY, VALIDATED_BY, SUPERSEDES 등)를 다시 계산한다. source는 parse하지 않는다.
+- **rename**: 삭제 + 추가다. Symbol ID가 경로를 포함하므로 새 ID가 되고 이전 Symbol과 같다고 주장하지 않는다. Project Truth의 `implements.symbols`, `governs.symbols`가 이전 이름을 가리키면 `DECLARED_SYMBOL_UNRESOLVED`로 남고 Project Truth를 자동으로 고치지 않는다(C45).
+- **CHANGED_WITH**: 최근 500 commit window 전체로 매번 다시 계산한다. HEAD(와 shallow 여부)가 그대로면 저장된 window 요약을 쓰고, 바뀌면 window를 다시 읽는다. 새 commit만 누적하면 window에서 빠진 commit의 count가 남아 전체 재구축과 달라지기 때문이다(H-25). rolling window 최적화는 benchmark에서 비용이 확인되면 Post-MVP에서 검토한다.
+- **freshness**는 Indexer가 정하고 GraphStore는 판정하지 않는다([03 Freshness 책임](03-data-model.md#freshness-책임)). Analyzer나 resolver의 version이 바뀌면 그 결과 전체를 다시 계산한다.
 
 ## 일관성 불변식
 
@@ -186,10 +207,10 @@ Node의 freshness(fresh, changed, deleted, unknown)는 이 비교 결과로 Inde
 1. 모든 Edge의 src와 dst Node가 존재한다.
 2. Edge type별 src/dst Node type이 위 표와 일치한다.
 3. 모든 File Node는 `generated/fingerprints.json`에 항목이 있고, 그 역도 성립한다. `.duo-project/` 파일은 File Node가 아니므로 대응에서 뺀다(C47).
-4. Symbol과 Test Node는 자신을 CONTAINS하는 File이 정확히 하나다.
-5. **증분 결과와 전체 재구축 결과가 같다**(Node/Edge 집합 비교).
+4. Symbol과 Test Node는 자신을 CONTAINS하는 File이 정확히 하나이고, 그 파일이 `ownerFile`이다. 다른 Node에는 `ownerFile`이 없다.
+5. **Incremental Result == Clean Full Rebuild Result**: 같은 Repository 상태에서 증분 갱신한 Graph와 빈 DB에 전체 재구축한 Graph의 canonical Node/Edge 행(`dumpGraph`)이 같다. 삽입 순서는 비교하지 않는다.
 6. 정의 ID(Requirement, Decision, Issue, Milestone)는 전역에서 유일하다. 중복이면 두 정의를 모두 Knowledge Gap으로 보고한다.
 7. SUPERSEDES Edge에는 자기 자신을 가리키는 Edge와 순환(직접, 여러 단계)이 없다.
 
-T07 `checkGraph(store, { fingerprints })`가 1, 2(class가 아닌 Symbol의 CONTAINS 금지 포함), 3, 4, 6, 7을 검사하고 위반은 `GRAPH_INVARIANT_VIOLATED`(error)다. 5는 TASK-008이다.
+T07 `checkGraph(store, { fingerprints })`가 1, 2(class가 아닌 Symbol의 CONTAINS 금지 포함), 3, 4, 6, 7을 검사하고 위반은 `GRAPH_INVARIANT_VIOLATED`(error)다. 5는 두 Graph를 비교해야 하므로 `dumpGraph`와 테스트(mutation 시퀀스, seed 고정 random 시퀀스)가 강제한다.
 

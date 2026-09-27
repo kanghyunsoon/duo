@@ -153,7 +153,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-005](#task-005-languageanalyzer와-tsjs-analyzer) | LanguageAnalyzer와 TS/JS Analyzer | analyzer | M1 | TASK-004 | done |
 | [TASK-006](#task-006-git-evidence-provider) | Git Evidence Provider | analyzer | M1 | TASK-002 | done |
 | [TASK-007](#task-007-graph-builder와-일관성-검사) | Graph builder와 일관성 검사 | graph | M1 | TASK-003, TASK-005, TASK-006 | done |
-| [TASK-008](#task-008-증분-인덱싱-trace-impact) | 증분 인덱싱, trace, impact | graph | M1 | TASK-007 | todo |
+| [TASK-008](#task-008-증분-인덱싱-trace-impact) | 증분 인덱싱, trace, impact | graph | M1 | TASK-007 | done |
 | [TASK-009](#task-009-decision-생명주기) | Decision 생명주기 | core | M2 | TASK-002 | todo |
 | [TASK-010](#task-010-context-compiler) | Context Compiler | director | M2 | TASK-008, TASK-009 | todo |
 | [TASK-011](#task-011-knowledge-gap) | Knowledge Gap | director | M2 | TASK-008 | todo |
@@ -399,7 +399,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M1
 package: graph
 requirements: [REQ-INDEX-002, REQ-GRAPH-002, REQ-GRAPH-003]
@@ -407,12 +407,12 @@ decisions: [ADR-002]
 depends_on: [TASK-007]
 ```
 
-- **Goal**: 변경 파일만 다시 분석하고 trace/impact를 제공한다.
+- **Goal**: 변경된 부분만 다시 분석·해석하고, 결과가 clean full rebuild와 같은 Graph를 유지한다(Incremental Result == Clean Full Rebuild Result). trace/impact를 제공한다.
 - **Input**: 04 증분 갱신 절차
-- **Output**: incremental updater(TASK-004 `compareFingerprints` 결과로 Node freshness fresh/changed/deleted/unknown 판정), trace(), impact()
+- **Output**: `indexRepository`(analysis cache, module/call resolution memo와 dependency, history window 재사용, scope digest diff, 한 transaction + state token, 전체 재구축 fallback, freshness와 metrics), graph schema 2(`owner_file`, meta), Edge `categories`, `dumpGraph`, `trace()`, `impact()`
 - **Dependencies**: [TASK-007](#task-007-graph-builder와-일관성-검사)
-- **Files expected to change**: `packages/graph/src/incremental/**`, `packages/graph/src/query/**`
-- **Status**: todo
+- **Files expected to change**: `packages/graph/src/incremental/**`, `packages/graph/src/query/**`, `packages/graph/src/store/**`(schema 2), `packages/graph/src/build/**`(memo, categories, ownerFile, history, scope), `packages/graph/src/check.ts`, `packages/core/src/diagnostics.ts`
+- **Status**: done (T08)
 - **검증 대상 Requirement**: [REQ-INDEX-002](../01-requirements.md#req-index-002-fingerprint-기반-증분-인덱싱), [REQ-GRAPH-002](../01-requirements.md#req-graph-002-결정적-bounded-traversal-trace-impact), [REQ-GRAPH-003](../01-requirements.md#req-graph-003-graph-일관성-불변식)
 - **관련 ADR**: [ADR-002](../adr/ADR-002-graph-storage.md)
 
