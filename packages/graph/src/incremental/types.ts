@@ -53,6 +53,11 @@ export interface IndexMetrics {
     readonly filesCallsRecomputed: number; readonly callsRecomputed: number; readonly callsReused: number;
   };
   readonly history: { readonly recomputed: boolean; readonly commits: number };
+  /**
+   * Per language (analyzer language, "file-only" for files without an analyzer): files in the index,
+   * parses in this run, reused analyses, failed analyses, parse time in ms (T18.0; measurement, not identity).
+   */
+  readonly languages: Readonly<Record<string, { readonly files: number; readonly parsed: number; readonly reused: number; readonly failed: number; readonly parseMs: number }>>;
   readonly graph: {
     readonly scopes: number; readonly scopesChanged: number;
     readonly nodesAdded: number; readonly nodesRemoved: number; readonly nodesUpdated: number;

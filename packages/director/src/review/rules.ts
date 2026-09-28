@@ -8,7 +8,7 @@ import {
   canonicalSourceText, compareUtf8, compileRepoPattern, decisionLockDigest, fileRef, nodeId, parseDecisionFile, parseDefinitionMarkdown, readSourceFile,
   STATE_DIR_NAME, testRef, verifyDecisionLock, type Decision, type RepoPath,
 } from "@duo-director/core";
-import type { GitBlobSource, GitDiffEnd } from "@duo-director/analyzer";
+import { languageProfile, type GitBlobSource, type GitDiffEnd } from "@duo-director/analyzer";
 import type { GraphNode } from "@duo-director/graph";
 import { truthEvidence, truthEvidenceFromText, testRunEvidence } from "../evidence/sources.js";
 import { matchConstraint, wildcard, type ScopeEntry } from "../relevance/policy.js";
@@ -160,8 +160,9 @@ export async function decisionForbids(ctx: RuleContext): Promise<ReviewClaim[]> 
     for (const s of ctx.seeds.filter((x) => x.entity.type === "symbol")) {
       const qn = String(ctx.graph.getNode(s.entity)?.payload.qualifiedName ?? "");
       if (!symbols.some((re) => re.test(qn))) continue;
+      const language = ctx.graph.getNode(fileRef(s.path))?.payload.language;
       const c = makeClaim(ctx, { rule: "decision-forbids", subject, key: `symbol:${s.id}`, alignment: "CONFLICT", reason: "forbidden-symbol", enforced,
-        violation: { key: violationKey("decision-forbids", d.id, s.id), touched: true },
+        violation: { key: violationKey("decision-forbids", d.id, s.id), touched: true, ...(typeof language === "string" ? { language } : {}) },
         expected: `no symbol matching ${d.forbids.symbols.join(", ")} (${d.id})`, observed: `${qn} changed in ${s.path}`, evidence: [truth, ...seedEvidence(ctx, s)] });
       if (c !== undefined) out.push(c);
     }
@@ -255,11 +256,16 @@ export function testCoverage(ctx: RuleContext): ReviewClaim[] {
   const out: ReviewClaim[] = [];
   for (const [id, seeds] of [...implemented(ctx)].sort(([a], [b]) => compareUtf8(a, b))) {
     const tests = relatedTests(ctx, id, seeds);
+    // T18.0: when no changed implementation is in a language whose tests DUO can detect, "no related
+    // test" is an analysis limit (plain UNKNOWN, never a warning), not a finding about the change.
+    const detectable = seeds.some((s) => languageProfile(ctx.graph.getNode(fileRef(s.path))?.payload.language)?.capabilities.tests === "structural");
+    const reason = tests.length > 0 ? "related-test-exists" : detectable ? "no-related-test" : "tests-not-analyzable";
     const c = makeClaim(ctx, {
-      rule: "test-coverage", subject: { kind: "requirement", id }, alignment: tests.length === 0 ? "PARTIAL" : "ALIGNED",
-      reason: tests.length === 0 ? "no-related-test" : "related-test-exists",
+      rule: "test-coverage", subject: { kind: "requirement", id }, alignment: tests.length > 0 ? "ALIGNED" : detectable ? "PARTIAL" : "UNKNOWN",
+      reason,
       expected: `a Test validates ${id} or the changed code`,
-      observed: tests.length === 0 ? "no VALIDATED_BY test" : `${tests.length} related test(s) in the graph (existence, not a run result)`,
+      observed: tests.length > 0 ? `${tests.length} related test(s) in the graph (existence, not a run result)`
+        : detectable ? "no VALIDATED_BY test" : "no VALIDATED_BY test; the changed files have no test analyzer, so tests in their language cannot be seen",
       evidence: [requirementEvidence(ctx, id), ...tests.slice(0, 5).map((t) => nodeEvidence(ctx, t)), ...seeds.flatMap((s) => s.evidenceIds)],
     });
     if (c !== undefined) out.push(c);

@@ -198,6 +198,8 @@ export const DIAGNOSTIC_SEVERITY = {
   AGENT_VERIFY_FAILED: "error",
   /** Agent integration: a warning in the plan (a non-portable launcher, a project needing trust or approval). */
   AGENT_INTEGRATION_WARNING: "warning",
+  /** Graph (T18.0): a Truth declaration names a symbol in files without a structural analyzer; it is not checked (not a missing symbol). */
+  DECLARED_SYMBOL_UNVERIFIABLE: "info",
 } as const satisfies Record<string, DiagnosticSeverity>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_SEVERITY;
@@ -248,6 +250,7 @@ export const DIAGNOSTIC_PERSISTENCE = {
   CLI_USAGE_INVALID: T, CLI_TTY_REQUIRED: T, METRICS_WRITE_FAILED: T,
   MCP_INTERNAL_ERROR: T, MCP_ROOT_UNRESOLVED: T,
   AGENT_NOT_INITIALIZED: T, AGENT_LAUNCHER_UNAVAILABLE: T, AGENT_INTEGRATION_CONFLICT: T, AGENT_PLAN_STALE: T, AGENT_VERIFY_FAILED: T, AGENT_INTEGRATION_WARNING: T,
+  DECLARED_SYMBOL_UNVERIFIABLE: P,
 } as const satisfies Record<DiagnosticCode, DiagnosticPersistence>;
 
 export function isPersistentDiagnostic(diagnostic: Diagnostic): boolean {

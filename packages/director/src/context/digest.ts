@@ -55,5 +55,6 @@ export function packetDependencyDigest(input: DigestInput): string {
     signals: plan.signals,
     traversalTruncated: plan.traversalTruncated,
     keywordOnly: plan.keywordOnly,
+    analysisLimits: plan.analysisLimits,
   }));
 }

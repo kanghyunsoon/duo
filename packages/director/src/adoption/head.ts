@@ -76,14 +76,16 @@ export async function headBaselineFindings(input: HeadFindingsInput): Promise<{ 
       if (page.length < 1000) break;
       afterId = page[page.length - 1]?.id;
     }
+    const selection = input.registry.scope(headFiles);
     for (const p of headFiles.filter((f) => input.divergent.has(f)).sort(compareUtf8)) {
-      if (input.registry.analyzerFor(p) === undefined) {
+      const analyzer = selection.analyzerFor(p);
+      if (analyzer === undefined) {
         if (/\.[A-Za-z0-9]+$/u.test(p) && !/\.(?:md|json|ya?ml|txt|lock)$/iu.test(p)) limitations.add("head-symbols-unsupported-language");
         continue;
       }
       const blob = await input.git.readBlob("HEAD", p);
       if (blob.value === undefined) continue;
-      const analysis = input.registry.analyze({ path: p, content: blob.value });
+      const analysis = analyzer.analyze({ path: p, content: blob.value });
       for (const s of analysis.value?.symbols ?? []) symbols.push({ id: nodeId(s.ref), path: p, qualifiedName: s.qualifiedName });
     }
   }

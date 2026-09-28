@@ -36,6 +36,8 @@ export interface RuleContext {
   readonly testResults?: TestRunEvidence;
   /** Violation keys of the Adoption Baseline; undefined when there is no usable baseline (T14.1). */
   readonly baselineKeys?: ReadonlySet<string>;
+  /** Languages that had structural symbols when the baseline was captured (T18.0). */
+  readonly baselineStructuralLanguages?: ReadonlySet<string>;
 }
 
 export interface ClaimInput {
@@ -51,8 +53,11 @@ export interface ClaimInput {
   readonly enforced?: boolean;
   readonly drift?: boolean;
   readonly semantic?: boolean;
-  /** Baseline rules: the stable violation key and whether this diff changed the offending or governing entity. */
-  readonly violation?: { readonly key: string; readonly touched: boolean };
+  /**
+   * Baseline rules: the stable violation key and whether this diff changed the offending or governing
+   * entity. language: for a symbol violation, the language of the symbol's file (T18.0).
+   */
+  readonly violation?: { readonly key: string; readonly touched: boolean; readonly language?: string };
 }
 
 const BASIS_ORDER: readonly EvidenceBasis[] = ["project-truth", "repository", "git", "test", "llm"];
@@ -69,14 +74,17 @@ export function makeClaim(ctx: RuleContext, input: ClaimInput): ReviewClaim | un
   const enforced = input.enforced ?? false;
   // T14.1: a violation that existed at adoption never blocks; touched by this diff it still warns, untouched it is history.
   const v = input.violation;
+  // T18.0: the baseline could not record a symbol in a language it had no structural analyzer for.
+  const unverifiable = v?.language !== undefined && ctx.baselineStructuralLanguages !== undefined && !ctx.baselineStructuralLanguages.has(v.language);
   const provenance = v === undefined || ctx.baselineKeys === undefined || input.alignment === "ALIGNED" ? undefined
-    : !ctx.baselineKeys.has(v.key) ? "introduced" as const : v.touched ? "pre-existing-touched" as const : "pre-existing" as const;
+    : !ctx.baselineKeys.has(v.key) ? (unverifiable ? "unverified-at-adoption" as const : "introduced" as const)
+      : v.touched ? "pre-existing-touched" as const : "pre-existing" as const;
   const preExisting = provenance === "pre-existing" || provenance === "pre-existing-touched";
   return {
     id: claimId(input.rule, `${input.subject.kind}:${input.subject.id}`, input.key ?? "", ctx.identity),
     rule: input.rule, subject: input.subject, expected: input.expected, observed: input.observed, alignment: input.alignment,
     evidenceIds, basis, reason: input.reason, enforced,
-    blockEligible: input.alignment === "CONFLICT" && enforced && blockEligible(basis) && !preExisting,
+    blockEligible: input.alignment === "CONFLICT" && enforced && blockEligible(basis) && !preExisting && provenance !== "unverified-at-adoption",
     drift: input.drift ?? false, semanticCandidate: input.semantic ?? false,
     ...(v === undefined ? {} : { violationKey: v.key }), ...(provenance === undefined ? {} : { provenance }),
   };

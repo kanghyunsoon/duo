@@ -10,6 +10,18 @@ DUO는 Codex, Claude Code 같은 AI Coding Agent가 프로젝트의 목표와 �
 
 CLI(`duoctl`), MCP 서버(`duoctl mcp`), Agent 연결(`duoctl install`), 배포용 package(`@duo-director/cli`, T17.1)까지 구현했습니다. **npm에는 아직 publish하지 않았습니다.** OpenAI Provider(TASK-012B), Web UI(TASK-018), Benchmark(TASK-019)는 아직입니다. 진행 순서는 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)를 따릅니다.
 
+## 지원 범위
+
+DUO는 stack-agnostic repository support 위에 언어별 Analyzer를 점점 깊게 얹는 구조입니다. 모든 언어를 의미 수준으로 이해한다는 뜻은 아닙니다.
+
+| 수준 | 대상 | 하는 일 |
+|---|---|---|
+| Universal repository support (L0) | 모든 Git repository의 모든 파일 | 파일, fingerprint, Git history와 diff, Project Truth 참조, 파일 수준 Context와 Review |
+| Structural analyzers (L1) | TypeScript / JavaScript / Java / C# / C++ / Python | Symbol, Test, import·include·using, call site, 정확한 source 위치 |
+| Deep semantic resolution (L2 일부) | 현재 TypeScript / JavaScript가 가장 강함 | 모든 import의 module resolution, binding으로 확실한 CALLS |
+
+Analyzer가 없거나 얕은 언어에서는 확신이 낮아질 뿐 DUO가 실패하거나 WARN·BLOCK이 생기지 않습니다. 언어별 범위와 한계는 [docs/language-support.md](docs/language-support.md)에 있습니다.
+
 ## 설치
 
 세 단계는 서로 다른 일입니다.

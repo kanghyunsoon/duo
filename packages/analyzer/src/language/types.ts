@@ -5,7 +5,7 @@
 import type { ParseResult, RepoPath, SourceLocation, SymbolRef } from "@duo-director/core";
 
 /** Language of an analysis. Open-ended so a new analyzer needs no change to this package. */
-export type SourceLanguage = "typescript" | "tsx" | "javascript" | (string & {});
+export type SourceLanguage = "typescript" | "tsx" | "javascript" | "java" | "csharp" | "cpp" | "python" | (string & {});
 
 export interface SourceInput {
   readonly path: RepoPath;
@@ -17,7 +17,12 @@ export type SymbolKind =
   | "class" | "interface" | "type-alias" | "enum" | "function"
   | "method" | "constructor" | "getter" | "setter"
   /** A getter and a setter with the same name in the same member scope: one property symbol. */
-  | "accessor";
+  | "accessor"
+  /** Cross-language structural kinds (T18.0): C#/C++ struct, Java/C# record, C# delegate, C++ namespace, C# property, C++ destructor. */
+  | "struct" | "record" | "delegate" | "namespace" | "property" | "destructor";
+
+/** Kinds whose members are symbols (CONTAINS parent → member). */
+export const CONTAINER_SYMBOL_KINDS: ReadonlySet<SymbolKind> = new Set<SymbolKind>(["class", "interface", "enum", "struct", "record", "namespace"]);
 
 /** Class members only: static and instance members with the same name are different symbols. */
 export type MemberScope = "static" | "instance";
@@ -45,7 +50,24 @@ export interface AnalyzedSymbol {
   readonly additionalLocations?: readonly SourceLocation[];
 }
 
-export type ModuleReferenceKind = "import" | "export-from" | "dynamic-import" | "require";
+/** import/export-from/dynamic-import/require: TypeScript/JavaScript; import: also Java and Python; using: C#; include: C++. */
+export type ModuleReferenceKind = "import" | "export-from" | "dynamic-import" | "require" | "using" | "include";
+
+/** Language syntax details of a reference, as written (T18.0). Never resolution facts. */
+export interface ModuleReferenceSyntax {
+  /** Java "import static", C# "using static". */
+  readonly static?: true;
+  /** Java "import a.b.*", Python "from m import *". */
+  readonly wildcard?: true;
+  /** C# "global using". */
+  readonly global?: true;
+  /** C# "using Alias = A.B". */
+  readonly alias?: string;
+  /** C++ "#include <x>" (system search path) vs "#include \"x\"". */
+  readonly system?: true;
+  /** Python relative import depth (the number of leading dots). */
+  readonly relativeLevel?: number;
+}
 
 /**
  * A local name bound by an import. imported is the exported name, "default", or "*" (namespace
@@ -74,6 +96,8 @@ export interface ModuleReference {
   readonly bindings: readonly ImportBinding[];
   /** Re-exported names (export-from only). */
   readonly reexports: readonly ReExportBinding[];
+  /** Language syntax details (Java, C#, C++, Python). */
+  readonly syntax?: ModuleReferenceSyntax;
   /** The import/export statement, or the import()/require() call. */
   readonly location: SourceLocation;
 }
@@ -106,6 +130,8 @@ export interface CallSite {
   readonly rootLocal?: true;
   /** For "this" callees: "member" when "this" belongs to the enclosing class member, "other" inside a nested function or elsewhere. */
   readonly thisBinding?: "member" | "other";
+  /** A bare name inside a member function (C++): it can name a member of the class, so it is not linked to a same-file function (T18.0). */
+  readonly mayBeMember?: true;
   /** Innermost extracted symbol containing the call; absent at module level. */
   readonly enclosingSymbol?: SymbolRef;
   readonly location: SourceLocation;
@@ -118,7 +144,10 @@ export interface DuoAnnotation {
 }
 
 export type TestKind = "test" | "suite";
-export type TestFrameworkHint = "vitest" | "jest" | "node-test" | "unknown";
+export type TestFrameworkHint =
+  | "vitest" | "jest" | "node-test"
+  | "junit4" | "junit5" | "nunit" | "xunit" | "mstest" | "googletest" | "catch2" | "unreal-automation" | "pytest" | "unittest"
+  | "unknown";
 /**
  * explicit: the test function was imported from vitest, @jest/globals or node:test.
  * heuristic: a global test/it/describe/suite call in a *.test.* or *.spec.* file.
@@ -171,9 +200,71 @@ export interface LanguageAnalyzer {
   readonly id: string;
   /** Changes when extraction output changes; files of this analyzer are then re-analyzed (04). */
   readonly version: string;
+  /** Languages it produces (SourceAnalysis.language values). */
+  readonly languages: readonly SourceLanguage[];
+  /** File extensions it claims (lowercase, without the dot); contextual extensions (.h) are decided by the registry. */
+  readonly extensions: readonly string[];
+  /** Extensions it analyzes only when the registry decides the file is its language (C++ ".h", T18.0). */
+  readonly contextualExtensions?: readonly string[];
+  /** What its analysis can establish (T18.0). A missing relation is only evidence of absence where the capability says so. */
+  readonly capabilities: AnalyzerCapabilities;
+  /** How the Graph Builder resolves this analyzer's call sites (a strategy the builder already has). */
+  readonly callResolution: CallResolutionStrategy;
+  /**
+   * Stable identity of what the analyzer produces: sha256 of id, version, languages, extensions,
+   * capability contract version, capabilities and the grammar files' sha256. A different identity
+   * re-analyzes exactly this analyzer's files (a new analyzer re-analyzes files that had none).
+   */
+  readonly identity: string;
   /** Path-based and cheap; unsupported files are never parsed. */
   supports(path: RepoPath): boolean;
   analyze(input: SourceInput): ParseResult<SourceAnalysis>;
   /** Releases parser resources. analyze() must not be called afterwards. */
   dispose(): void;
 }
+
+/**
+ * Analysis levels (T18.0): L0 universal repository analysis (files, fingerprints, Git, diff, Truth,
+ * evidence: every file), L1 structural language analysis (symbols, declarations, imports as written,
+ * tests, syntactic calls, exact source locations), L2 semantic analysis (resolved modules, exact calls,
+ * types, frameworks). Capabilities say, per analyzer, how far each relation goes. No scores.
+ */
+export interface AnalyzerCapabilities {
+  readonly files: true;
+  readonly symbols: "none" | "structural";
+  readonly tests: "none" | "structural";
+  /** syntactic: references as written only; partial: some repository-local references resolve to files; resolved: a module resolver decides every reference. */
+  readonly imports: "none" | "syntactic" | "partial" | "resolved";
+  /** syntactic: call sites as written, no CALLS edges; partial: CALLS only where the target is certain from syntax; exact: every CALLS edge claim is type-checked. */
+  readonly calls: "none" | "syntactic" | "partial" | "exact";
+  readonly typeResolution: "none" | "partial" | "full";
+}
+
+/** Bump when the meaning of a capability value changes. Part of every analyzer identity. */
+export const CAPABILITY_CONTRACT_VERSION = "1";
+
+/** Files without an analyzer (L0 only): generic file analysis. */
+export const FILE_ONLY_CAPABILITIES: AnalyzerCapabilities = { files: true, symbols: "none", tests: "none", imports: "none", calls: "none", typeResolution: "none" };
+
+/**
+ * Analysis levels (T18.0), derived from capabilities, never declared separately:
+ *   L0  files: path, fingerprint, Git history and diff, Truth references (every file in a Git repository)
+ *   L1  structure: symbols, tests, imports and call sites as written (some references may resolve)
+ *   L2  partial semantics: every import resolved by a module resolver, CALLS where bindings make the target certain
+ *   L3  type resolution (no analyzer has it yet)
+ */
+export type AnalysisLevel = "L0" | "L1" | "L2" | "L3";
+
+export function analysisLevelOf(c: AnalyzerCapabilities): AnalysisLevel {
+  if (c.symbols === "none") return "L0";
+  if (c.typeResolution !== "none") return "L3";
+  if (c.imports === "resolved" && (c.calls === "partial" || c.calls === "exact")) return "L2";
+  return "L1";
+}
+
+/**
+ * module-bindings: the TypeScript/JavaScript rules (import bindings, export index, this-members).
+ * same-file-functions: a bare-name call to the only callable top-level symbol of the same file.
+ * none: call sites are kept as syntax; no CALLS edges.
+ */
+export type CallResolutionStrategy = "module-bindings" | "same-file-functions" | "none";

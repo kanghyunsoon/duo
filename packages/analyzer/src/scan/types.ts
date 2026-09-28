@@ -37,6 +37,8 @@ export type ExclusionReason =
   | "secret"
   /** Matches project.yaml index.exclude. */
   | "index-exclude"
+  /** Inside a build output or tool cache directory, with evidence (T18.0, scan/build-output.ts). */
+  | "build-output"
   /** index.include is set and the path matches none of it. */
   | "not-included"
   /** A symlink, or a path below a symlinked directory. The target is never followed. */

@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "module": "nodenext",
+    "target": "es2022"
+  },
+  "include": [
+    "src"
+  ]
+}

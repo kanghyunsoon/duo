@@ -2,7 +2,7 @@
  * Graph Builder contract (TASK-007): facts in, a validated plan out. Building never writes; the
  * plan is applied in one GraphStore transaction (apply.ts).
  */
-import type { CoChangeCandidate, FileFingerprint, GitRepositoryState, ModuleReferenceKind, SourceAnalysis } from "@duo-director/analyzer";
+import type { AnalyzerCapabilities, CallResolutionStrategy, CoChangeCandidate, FileFingerprint, GitRepositoryState, ModuleReferenceKind, SourceAnalysis } from "@duo-director/analyzer";
 import type { Diagnostic, EntityType, ProjectTruth, RepoPath, SourceLocation, SymbolRef, TraceModel } from "@duo-director/core";
 import type { GraphEdgeInput, GraphEdgeType, GraphNodeInput } from "../store/types.js";
 import type { ModuleResolution, ModuleResolutionStatus, ModuleResolver } from "./resolve/module-resolver.js";
@@ -10,6 +10,10 @@ import type { ModuleResolution, ModuleResolutionStatus, ModuleResolver } from ".
 export interface AnalyzedFile {
   readonly analysis: SourceAnalysis;
   readonly analyzerVersion: string;
+  /** The analyzer's call resolution strategy (default module-bindings: TypeScript/JavaScript). */
+  readonly callResolution?: CallResolutionStrategy;
+  /** The analyzer's capabilities (reported, not used for building). */
+  readonly capabilities?: AnalyzerCapabilities;
 }
 
 /**

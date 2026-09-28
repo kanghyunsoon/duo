@@ -1,6 +1,6 @@
 /**
  * SourceAnalysis cache (TASK-008): .duo-project/cache/analysis/<key>.json, regenerable (ADR-006).
- * Entries are content-addressed by (path, contentHash, analyzer, analyzerVersion) and immutable, so
+ * Entries are content-addressed by (path, contentHash, analyzer, analyzer identity) and immutable, so
  * they need no coordination with the graph: a missing, foreign or corrupt entry is a cache miss and
  * the file is parsed again. Entries hold syntax facts only, never source text.
  */
@@ -11,13 +11,14 @@ import { pruneRegenerableDirectory, readRegenerable, writeRegenerable } from "./
 
 export const ANALYSIS_CACHE_DIR = `${STATE_DIR_NAME}/cache/analysis`;
 const FORMAT = "duo-analysis-cache";
-const VERSION = 1;
+/** 2 (T18.0): keyed by the analyzer identity (grammar digests included). */
+const VERSION = 2;
 
 export interface AnalysisCacheKey {
   readonly path: RepoPath;
   readonly contentHash: string;
   readonly analyzer: string;
-  readonly analyzerVersion: string;
+  readonly analyzerIdentity: string;
 }
 
 export interface CachedAnalysis {
@@ -26,7 +27,7 @@ export interface CachedAnalysis {
 }
 
 export function analysisCacheFileName(key: AnalysisCacheKey): string {
-  const digest = createHash("sha256").update([key.path, key.contentHash, key.analyzer, key.analyzerVersion].join("\u0000")).digest("hex");
+  const digest = createHash("sha256").update([key.path, key.contentHash, key.analyzer, key.analyzerIdentity].join("\u0000")).digest("hex");
   return `${digest}.json`;
 }
 
@@ -37,7 +38,7 @@ export function readCachedAnalysis(root: string, key: AnalysisCacheKey): CachedA
     const entry = JSON.parse(read.text) as Record<string, unknown>;
     const analysis = entry.analysis as SourceAnalysis | undefined;
     const matches = entry.format === FORMAT && entry.version === VERSION && entry.path === key.path && entry.contentHash === key.contentHash
-      && entry.analyzer === key.analyzer && entry.analyzerVersion === key.analyzerVersion
+      && entry.analyzer === key.analyzer && entry.analyzerIdentity === key.analyzerIdentity
       && analysis?.path === key.path && analysis.contentHash === key.contentHash && Array.isArray(entry.diagnostics);
     return matches ? { analysis, diagnostics: entry.diagnostics as Diagnostic[] } : undefined;
   } catch {

@@ -133,6 +133,10 @@ export async function captureAdoptionBaseline(root: string, options: CaptureBase
   const own = options.registry === undefined ? await createDefaultAnalyzerRegistry() : undefined;
   const registry = options.registry ?? own?.value;
   if (registry === undefined) return failure(own?.diagnostics ?? []);
+  const analysis = {
+    analyzerRegistryDigest: registry.digest(),
+    structuralLanguages: [...new Set(registry.analyzers.filter((a) => a.capabilities.symbols === "structural").flatMap((a) => a.languages))].sort(compareUtf8),
+  };
   let evaluated;
   try {
     evaluated = await headBaselineFindings({ root, truth, graph: options.graph, git: git.value, registry, stateDiagnostics: indexState.diagnostics, divergent });
@@ -154,7 +158,7 @@ export async function captureAdoptionBaseline(root: string, options: CaptureBase
       untracked: wt.untracked.map((p) => { const h = fileHash(root, p); return { path: p, ...(h === undefined ? {} : { contentHash: h }) }; }),
       conflicted: wt.conflicted, counts: wt.counts, excludedSecrets: wt.excludedSecrets, truncated: wt.truncated,
     },
-    bootstrapTruth, findingsAt: "HEAD", findings: evaluated.findings, limitations,
+    bootstrapTruth, findingsAt: "HEAD", findings: evaluated.findings, limitations, analysis,
   };
   const id = historyRecordId("adoption", body);
   const existing = loadAdoptionBaseline(root);

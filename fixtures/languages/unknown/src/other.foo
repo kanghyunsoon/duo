@@ -1,0 +1,4 @@
+rule shipping
+  when cart.total < 20
+  then cart.shipping = 5
+end

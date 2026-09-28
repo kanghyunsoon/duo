@@ -2,7 +2,7 @@ import fs from "node:fs";
 import type { RepoPath } from "@duo-director/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AnalyzerRegistry } from "../registry.js";
-import { createDefaultAnalyzerRegistry } from "./ts-js-analyzer.js";
+import { createDefaultAnalyzerRegistry } from "../default-registry.js";
 
 const FIXTURES = new URL("../../../../../fixtures/analyzer/", import.meta.url);
 let registry: AnalyzerRegistry;

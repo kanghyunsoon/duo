@@ -13,19 +13,20 @@ export interface AnnotationResult {
 
 /**
  * Parses one comment. startLine/startColumn are the comment's 1-based position (UTF-16 columns).
- * Supported: "// duo: ...", "/* duo: ... *\/", and block comment lines " * duo: ...".
+ * Supported: "// duo: ...", "/* duo: ... *\/", block comment lines " * duo: ...", and "# duo: ..." (Python, T18.0).
  * A "duo:" must start the comment line (after the comment marker, spaces and a leading "*").
  */
 export function parseDuoAnnotations(path: RepoPath, comment: string, startLine: number, startColumn: number): AnnotationResult {
   const annotations: DuoAnnotation[] = [];
   const diagnostics: Diagnostic[] = [];
   const block = comment.startsWith("/*");
-  if (!block && !comment.startsWith("//")) return { annotations, diagnostics };
+  const hash = comment.startsWith("#");
+  if (!block && !hash && !comment.startsWith("//")) return { annotations, diagnostics };
   const lines = comment.split("\n");
   lines.forEach((raw, k) => {
     let offset = 0;
     if (k === 0) {
-      offset = 2;
+      offset = hash ? 1 : 2;
       while (block && raw[offset] === "*") offset++;
     } else {
       while (raw[offset] === " " || raw[offset] === "\t") offset++;

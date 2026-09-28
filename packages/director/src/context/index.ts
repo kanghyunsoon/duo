@@ -4,6 +4,7 @@ export { packetDependencyDigest, PACKET_DEPENDENCY_FORMAT } from "./digest.js";
 export { PACKET_CACHE_DIR } from "./cache.js";
 export { TOKEN_COUNT_CACHE_PATH } from "./metrics.js";
 export { redactSecrets, REDACTED } from "./redact.js";
-export { CONTEXT_POLICY_VERSION, EDGE_WEIGHTS, MAX_BUDGET, MIN_BUDGET, TIER_ORDER, TIER_SHARE } from "./policy.js";
+export { CONTEXT_POLICY_VERSION, EDGE_WEIGHTS, GENERIC_FILE_WINDOW, MAX_BUDGET, MIN_BUDGET, TIER_ORDER, TIER_SHARE } from "./policy.js";
+export { analysisLimitations } from "./candidates.js";
 export { SEED_PROVENANCE } from "./types.js";
 export type * from "./types.js";

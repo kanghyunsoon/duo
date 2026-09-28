@@ -11,6 +11,7 @@ interface GraphPayload {
   nodes?: { id: string; depth: number }[];
   edges?: { from: string; type: string; to: string }[];
   items?: { id: string; depth: number; relation: string; via: { edge: string } }[];
+  limitations?: { code: string; message: string }[];
 }
 
 export async function graphCommand(env: Env, kind: "trace" | "impact", node: string, depthArg: string | undefined): Promise<Outcome> {
@@ -23,7 +24,10 @@ export async function graphCommand(env: Env, kind: "trace" | "impact", node: str
   const human: string[] = [];
   if (p.index !== "current") human.push(t(env.locale, "index.required", { status: p.index }));
   if (kind === "trace") human.push(...(p.nodes ?? []).map((n) => `${"  ".repeat(n.depth)}${n.id}`), ...(p.edges ?? []).map((e) => `  ${e.from} -${e.type}-> ${e.to}`));
-  else human.push(...(p.items ?? []).map((i) => `  ${i.relation.padEnd(10)} d${i.depth}  ${i.id}  (via ${i.via.edge})`), t(env.locale, "graph.impact-note"));
+  else {
+    human.push(...(p.items ?? []).map((i) => `  ${i.relation.padEnd(10)} d${i.depth}  ${i.id}  (via ${i.via.edge})`), t(env.locale, "graph.impact-note"));
+    human.push(...(p.limitations ?? []).map((l) => `  - ${l.message}`));
+  }
   if (p.truncated === true) human.push(t(env.locale, "graph.truncated"));
   return { command: kind, exitCode: EXIT.OK, diagnostics: [], human, result: op.payload };
 }

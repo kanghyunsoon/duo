@@ -38,7 +38,7 @@ interface Slot<T> {
 
 const STATIC_LIMITATIONS: readonly ContextLimitation[] = [
   { code: "calls-exact-only", message: "CALLS edges exist only for exactly resolved calls; instance, dynamic and injected calls are not in the graph." },
-  { code: "files-by-path", message: "Files are listed by path; whole files are never included. Symbols and tests show their own source range." },
+  { code: "files-by-path", message: "Files are listed by path; whole files are never included. Symbols and tests show their own source range; a file without a structural analyzer shows at most its first lines." },
   { code: "no-diff", message: "The working-tree diff is not part of this packet." },
 ];
 
@@ -50,6 +50,7 @@ function limitations(plan: ContextPlan, taskTruncated: boolean, omitted: number,
   if (plan.keywordOnly) out.push({ code: "keyword-seeds", message: "seeds: found by keyword matching only; name the target ID for a precise packet." });
   if (plan.signals.some((s) => s.kind === "no-confirmed-intent")) out.push({ code: "no-confirmed-intent", message: "intent: no confirmed Requirement or Decision relates to this task." });
   if (taskTruncated) out.push({ code: "task-truncated", message: "task: the task text was cut to 200 tokens." });
+  out.push(...plan.analysisLimits);
   return out;
 }
 

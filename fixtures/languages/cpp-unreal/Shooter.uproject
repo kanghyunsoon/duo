@@ -1,0 +1,11 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.3",
+  "Modules": [
+    {
+      "Name": "Shooter",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ]
+}

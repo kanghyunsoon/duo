@@ -7,7 +7,7 @@
  * it, and no other node has an owner. Invariant 5 (incremental = clean full rebuild) compares two
  * graphs: dumpGraph() gives the canonical rows to compare.
  */
-import type { FileFingerprint } from "@duo-director/analyzer";
+import { CONTAINER_SYMBOL_KINDS, type FileFingerprint } from "@duo-director/analyzer";
 import { compareUtf8, createDiagnostic, nodeId, STATE_DIR_NAME, type Diagnostic } from "@duo-director/core";
 import type { GraphEdge, GraphNode, GraphReader } from "./store/types.js";
 import { isEdgeEndpointAllowed } from "./build/endpoints.js";
@@ -52,8 +52,8 @@ export function checkGraph(store: GraphReader, options: GraphCheckOptions = {}):
       continue;
     }
     if (!isEdgeEndpointAllowed(e.type, from.type, to.type)) diagnostics.push(violation(2, `${e.from} -${e.type}-> ${e.to} is not allowed by 04`));
-    else if (e.type === "CONTAINS" && from.type === "symbol" && from.payload.kind !== "class") {
-      diagnostics.push(violation(2, `${e.from} contains ${e.to} but is not a class`));
+    else if (e.type === "CONTAINS" && from.type === "symbol" && !CONTAINER_SYMBOL_KINDS.has(from.payload.kind as never)) {
+      diagnostics.push(violation(2, `${e.from} contains ${e.to} but is not a container symbol (class, interface, enum, struct, record, namespace)`));
     }
   }
   if (options.fingerprints !== undefined) {

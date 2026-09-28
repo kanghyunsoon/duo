@@ -4,18 +4,23 @@
  * files shipped in the official tree-sitter-typescript and tree-sitter-javascript packages.
  */
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createDiagnostic, failure, success, type Diagnostic, type ParseResult } from "@duo-director/core";
 import { Language, LANGUAGE_VERSION, MIN_COMPATIBLE_VERSION, Parser } from "web-tree-sitter";
 
-export type GrammarId = "typescript" | "tsx" | "javascript";
+export type GrammarId = "typescript" | "tsx" | "javascript" | "java" | "csharp" | "cpp" | "python";
 
 /** Package-relative WASM file of each grammar. */
 export const GRAMMAR_FILES: Readonly<Record<GrammarId, string>> = {
   typescript: "tree-sitter-typescript/tree-sitter-typescript.wasm",
   tsx: "tree-sitter-typescript/tree-sitter-tsx.wasm",
   javascript: "tree-sitter-javascript/tree-sitter-javascript.wasm",
+  java: "tree-sitter-java/tree-sitter-java.wasm",
+  csharp: "tree-sitter-c-sharp/tree-sitter-c_sharp.wasm",
+  cpp: "tree-sitter-cpp/tree-sitter-cpp.wasm",
+  python: "tree-sitter-python/tree-sitter-python.wasm",
 };
 
 /** Returns the WASM file path (or bytes) of a grammar. Tests pass their own to exercise failures. */
@@ -64,17 +69,30 @@ export function runtimeAbiRange(): { readonly min: number; readonly max: number 
 
 /** Initializes the runtime (once) and loads each grammar. Any failure is ANALYZER_INIT_FAILED. */
 export async function loadGrammars(ids: readonly GrammarId[], locate: GrammarLocator = defaultGrammarLocator): Promise<ParseResult<Map<GrammarId, Language>>> {
+  const r = await loadGrammarSet(ids, locate);
+  return r.value === undefined ? failure(r.diagnostics) : success(r.value.languages);
+}
+
+export interface LoadedGrammars {
+  readonly languages: Map<GrammarId, Language>;
+  /** sha256 of each grammar's WASM bytes: part of the analyzer identity (a new grammar build re-analyzes its files). */
+  readonly digests: Map<GrammarId, string>;
+}
+
+export async function loadGrammarSet(ids: readonly GrammarId[], locate: GrammarLocator = defaultGrammarLocator): Promise<ParseResult<LoadedGrammars>> {
   try {
     await initRuntime();
   } catch (error) {
     return failure([createDiagnostic("ANALYZER_INIT_FAILED", `web-tree-sitter runtime failed to initialize: ${message(error)}`)]);
   }
   const languages = new Map<GrammarId, Language>();
+  const digests = new Map<GrammarId, string>();
   const diagnostics: Diagnostic[] = [];
   for (const id of ids) {
-    let source: string | Uint8Array;
+    let source: Uint8Array;
     try {
-      source = locate(id);
+      const located = locate(id);
+      source = typeof located === "string" ? new Uint8Array(fs.readFileSync(located)) : located;
     } catch (error) {
       diagnostics.push(createDiagnostic("ANALYZER_INIT_FAILED", `Grammar "${id}" (${GRAMMAR_FILES[id]}) not found: ${message(error)}`));
       continue;
@@ -88,12 +106,13 @@ export async function loadGrammars(ids: readonly GrammarId[], locate: GrammarLoc
         continue;
       }
       languages.set(id, language);
+      digests.set(id, createHash("sha256").update(source).digest("hex"));
     } catch (error) {
       diagnostics.push(createDiagnostic("ANALYZER_INIT_FAILED",
         `Grammar "${id}" could not be loaded (web-tree-sitter ABI ${MIN_COMPATIBLE_VERSION}..${LANGUAGE_VERSION}): ${message(error)}`));
     }
   }
-  return diagnostics.length > 0 ? failure(diagnostics) : success(languages);
+  return diagnostics.length > 0 ? failure(diagnostics) : success({ languages, digests });
 }
 
 /** A parser bound to one language. The caller deletes it. */

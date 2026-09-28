@@ -77,7 +77,8 @@ Proposal ID(`P-018`)는 seed가 아니라 그 proposal을 PENDING HUMAN DECISION
 - `maxDepth = context.max_depth`(기본 2, 최대 3), nodeLimit 200, 확장한 Node마다 Edge 2000개까지. 한도에 걸리면 `traversal-truncated` limitation이다.
 - Project Node는 지나가지 않는다. Milestone, Decision, Issue는 자기 seed 항목(depth 0)일 때만 확장한다. Decision 하나가 여러 Requirement를 governs하거나 Milestone이 모든 Requirement를 requires해도 형제 Requirement가 최고 weight로 끌려오지 않는다.
 - SUPERSEDES는 따라가지 않는다. 활성 Decision은 Project Truth의 `superseded_by`로 찾는다.
-- weight는 비교 순서로만 쓰고 Packet에 노출하지 않는다. Packet의 `rank`는 순서다. 정책을 바꾸면 `CONTEXT_POLICY_VERSION`(현재 "1")을 올린다.
+- **언어 친화(T18.0)**: code 후보(File, Symbol, Test)가 자기를 데려온 code seed와 다른 언어 계열이면 순서 값에 `CROSS_LANGUAGE_FACTOR`(0.5)를 곱한다. Java Symbol이 seed면 Java subgraph가 먼저이고, 같은 Requirement를 구현한 Python·TypeScript 코드는 그 뒤에 남는다. TypeScript·TSX·JavaScript는 한 계열이고 Truth seed와 Analyzer 없는 파일은 언어가 없어 곱하지 않는다(TS만 있는 저장소의 순서는 그대로).
+- weight는 비교 순서로만 쓰고 Packet에 노출하지 않는다. Packet의 `rank`는 순서다. 정책을 바꾸면 `CONTEXT_POLICY_VERSION`(현재 "2", T18.0)을 올린다.
 
 ## 후보 분류
 
@@ -157,10 +158,12 @@ TASK-011. Compiler는 무엇을 보여줄지 고르고, 무엇이 아직 정해�
 | Test | fullName 경로:줄 | - | + test 호출 범위와 바로 위 주석 |
 | Issue | ID 제목 (status, milestone) | + AC 목록 | + 정의 slice와 관련 커밋 3개(12자) |
 | Milestone | ID 제목 (state) | - | - |
-| File | 경로 (language) | - | - |
+| File | 경로 (language) | Analyzer 없는 파일만(T18.0): head window. 처음 40줄과 2,000자 중 먼저 닿는 곳까지의 온전한 줄(한 줄이 더 길면 그 줄을 자름) | - |
 
 - 모든 원문은 `readSourceFile`/`sliceSource`(T09.1)로 읽어 저장소 경계와 symlink를 다시 확인하고, 맞지 않는 위치는 잘라 맞추지 않는다(`SOURCE_LOCATION_INVALID`). slice가 실패한 후보는 L1만 남는다.
 - 파일 전체는 기본으로 넣지 않는다. 멤버가 후보인 class는 L3를 빼고, Symbol이나 Test가 후보인 File은 따로 나열하지 않는다(정확한 seed인 File은 예외, C89).
+- **Generic file(T18.0)**: Symbol이 없다고 파일 전체를 넣지 않는다. L2 head window가 상한이고 텍스트를 읽을 수 없으면(binary, UTF-8 아님) L1만 남는다. Python은 `#` 주석 줄도 바로 위 주석으로 센다.
+- **Capability limitation(T18.0)**: 후보 코드의 언어가 가진 한계를 limitation으로 알린다. `structural-analysis-unavailable`(Analyzer 없는 파일: 경로와 head window만), `imports-syntactic`(Java, C#: import가 파일을 잇지 않음), `imports-partial`(C++, Python: 확실한 대상만), `calls-unresolved`(Java, C#: CALLS 없음), `calls-same-file`(C++, Python: 같은 파일의 유일한 함수만). CALLS Edge가 없다는 것이 호출이 없다는 뜻이 아님을 Agent가 알 수 있게 한다. 언어의 capability는 File payload의 language와 기본 Analyzer profile(analyzer `DEFAULT_LANGUAGE_PROFILES`)에서 읽는다.
 - 알려진 비밀 형식은 측정 전에 `[REDACTED]`로 바꾼다([10](10-security.md)). Task 텍스트도 같고 200 token까지 인용한다.
 
 ## Budget 배분

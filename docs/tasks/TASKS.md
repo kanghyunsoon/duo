@@ -328,7 +328,7 @@ depends_on: [TASK-004]
 - **Output**: LanguageAnalyzer, AnalyzerRegistry, TypeScriptAnalyzer, JavaScriptAnalyzer, grammar smoke test, core `sliceSourceLocation`/`compareSourceLocations`
 - **Dependencies**: [TASK-004](#task-004-파일-스캔과-fingerprint)
 - **Files expected to change**: `packages/analyzer/src/language/**`. grammar WASM은 공식 패키지 파일을 쓰므로 `packages/analyzer/grammars/`는 없다(C38)
-- **Status**: done (T05)
+- **Status**: done (T05; T18.0 Cross-language Analysis: AnalyzerCapabilities와 Analysis Level, 공통 Tree-sitter analyzer, Java·C#·C++·Python L1, analyzer identity·registry digest 기반 무효화, `.h` header rule, 언어별 ModuleResolver(Python, C++ quoted include), `same-file-functions` CALLS, stack profile, build output 제외, capability-aware Context·Review·Impact·status, baseline `unverified-at-adoption`, grammar 7개 vendoring과 `grammars.json`, `fixtures/languages/`와 CLI·배포 E2E. [language-support.md](../language-support.md))
 - **검증 대상 Requirement**: [REQ-INDEX-001](../01-requirements.md#req-index-001-언어-비종속-languageanalyzer)
 - **관련 ADR**: [ADR-003](../adr/ADR-003-language-analysis.md)
 

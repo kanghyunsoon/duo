@@ -94,6 +94,18 @@
         "value": "pnpm@11.25.0"
       }
     ],
+    "stack": {
+      "provenance": "observed",
+      "ecosystems": [
+        {
+          "ecosystem": "npm",
+          "manifests": [
+            "package.json"
+          ]
+        }
+      ],
+      "frameworks": []
+    },
     "sourceRoots": [
       {
         "path": "src",
@@ -275,5 +287,5 @@
   "warnings": [],
   "indexRequired": true,
   "basis": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-  "digest": "sha256:764ea54a3e97dff84f6224564cff89fbcf9b5429fcb5f543242e30343cdcd851"
+  "digest": "sha256:9c26d9635e0e55138c8dc8c69e04802315ae690e1c7be7c5c3426a4337ad74e0"
 }

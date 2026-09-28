@@ -11,6 +11,7 @@ import {
 } from "@duo-director/core";
 import { gitWorkTreePrefix, listIndexEntries, listTypeChangedPaths, listUntrackedPaths, type GitIndexEntry } from "./git-index.js";
 import { createPathPolicy } from "./policy.js";
+import { buildOutputMatcher } from "./build-output.js";
 import type {
   ExcludedFile, ExclusionReason, FileTypeChange, RepositoryFile, RepositoryFileState, RepositoryScan, ScanOptions,
 } from "./types.js";
@@ -149,8 +150,9 @@ export async function scanRepository(root: string, options: ScanOptions = {}): P
     return kind;
   };
 
+  const buildOutput = buildOutputMatcher(candidates.map((c) => c.path));
   for (const candidate of candidates) {
-    const reason = policy.exclusionOf(candidate.path);
+    const reason = policy.exclusionOf(candidate.path) ?? (buildOutput(candidate.path) ? "build-output" : undefined);
     if (reason !== undefined) {
       exclude(candidate, reason);
       continue;

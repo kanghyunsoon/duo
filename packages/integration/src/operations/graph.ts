@@ -3,6 +3,7 @@
  * bounded, with truncated. Impact is what the DUO Graph records, not every affected line of code.
  */
 import { definitionRef, fileRef, isDefinitionId, normalizeRepoPath, parseNodeId, type EntityRef } from "@duo-director/core";
+import { analysisLimitations } from "@duo-director/director";
 import { impact, inspectIndex, trace, type GraphReader } from "@duo-director/graph";
 import { guarded, project, withGraphReader, withRegistry, type Operation, type OperationOptions, type Failure } from "./common.js";
 
@@ -50,7 +51,17 @@ export function projectGraphQuery(root: string, kind: "trace" | "impact", node: 
         } };
       }
       const r = impact(graph, [ref], { maxDepth: depth });
-      return { kind: "ok" as const, diagnostics: [], payload: { format, status: "found", index, node: ref, depth, truncated: r.truncated, seeds: r.seeds, items: r.items, evidence: r.evidence, notice: IMPACT_NOTICE } };
+      // T18.0 (additive): what the analyzers of the files involved cannot record (file-only files, syntactic imports, limited CALLS).
+      const languages = new Map<string, string | undefined>();
+      for (const e of [ref, ...r.items.map((x) => x.ref)]) {
+        if ((e.type !== "file" && e.type !== "symbol" && e.type !== "test") || languages.has(e.path)) continue;
+        const language = graph.getNode(fileRef(e.path))?.payload.language;
+        languages.set(e.path, typeof language === "string" ? language : undefined);
+      }
+      return { kind: "ok" as const, diagnostics: [], payload: {
+        format, status: "found", index, node: ref, depth, truncated: r.truncated, seeds: r.seeds, items: r.items, evidence: r.evidence, notice: IMPACT_NOTICE,
+        limitations: analysisLimitations(languages),
+      } };
     }));
   });
 }

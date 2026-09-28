@@ -8,26 +8,33 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { JAVASCRIPT_EXTENSIONS, TYPESCRIPT_EXTENSIONS, type GitRepositoryState, type RepositoryScan } from "@duo-director/analyzer";
+import {
+  CPP_SPEC, CSHARP_SPEC, headerContext, isCppHeader, JAVA_SPEC, JAVASCRIPT_EXTENSIONS, PYTHON_SPEC, TYPESCRIPT_EXTENSIONS,
+  type GitRepositoryState, type RepositoryScan,
+} from "@duo-director/analyzer";
 import { compareUtf8, parseYaml, readSourceFile, STATE_DIR_NAME, type RepoPath } from "@duo-director/core";
 import { nonApplicationReason } from "../review/scope.js";
 import type { WorkingTreeObservation } from "../adoption/types.js";
+import { observeStack, stackManifestKind } from "./stack.js";
 import type { RepositoryObservation } from "./types.js";
 
 const LANGUAGES: Readonly<Record<string, string>> = {
   ".ts": "typescript", ".tsx": "typescript", ".mts": "typescript", ".cts": "typescript",
   ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
   ".py": "python", ".go": "go", ".rs": "rust", ".java": "java", ".kt": "kotlin", ".kts": "kotlin", ".rb": "ruby", ".php": "php",
-  ".cs": "csharp", ".c": "c", ".h": "c", ".cc": "cpp", ".cpp": "cpp", ".hpp": "cpp", ".swift": "swift", ".scala": "scala",
+  ".cs": "csharp", ".c": "c", ".h": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".hpp": "cpp", ".hh": "cpp", ".hxx": "cpp", ".swift": "swift", ".scala": "scala",
   ".dart": "dart", ".lua": "lua", ".sh": "shell",
 };
-const ANALYZED = new Set<string>([...Object.keys(TYPESCRIPT_EXTENSIONS), ...Object.keys(JAVASCRIPT_EXTENSIONS)].map((e) => `.${e}`));
+/** Extensions the default registry parses (a ".h" header only under the header rule). */
+const ANALYZED = new Set<string>([
+  TYPESCRIPT_EXTENSIONS, JAVASCRIPT_EXTENSIONS, JAVA_SPEC.extensions, CSHARP_SPEC.extensions, CPP_SPEC.extensions, PYTHON_SPEC.extensions,
+].flatMap((m) => Object.keys(m)).map((e) => `.${e}`));
 
 const MANIFESTS: Readonly<Record<string, string>> = {
   "package.json": "npm", "pnpm-workspace.yaml": "pnpm-workspace", "pnpm-lock.yaml": "lockfile", "package-lock.json": "lockfile", "yarn.lock": "lockfile",
   "bun.lockb": "lockfile", "tsconfig.json": "tsconfig", "deno.json": "deno", "deno.jsonc": "deno", "Cargo.toml": "cargo", "go.mod": "go",
   "pyproject.toml": "python", "setup.py": "python", "requirements.txt": "python", "pom.xml": "maven", "build.gradle": "gradle",
-  "build.gradle.kts": "gradle", "settings.gradle": "gradle", "Gemfile": "bundler", "composer.json": "composer",
+  "build.gradle.kts": "gradle", "settings.gradle": "gradle", "settings.gradle.kts": "gradle", "Gemfile": "bundler", "composer.json": "composer",
 };
 const MANIFEST_MAX_DEPTH = 4;
 const LIST_CAP = 50;
@@ -88,15 +95,17 @@ export function observeRepository(root: string, scan: RepositoryScan, git: GitRe
   for (const e of scan.excluded) excluded[e.reason] = (excluded[e.reason] ?? 0) + 1;
 
   const langCounts = new Map<string, { files: number; analyzed: boolean }>();
+  const headers = headerContext(files);
   const sources: string[] = [];
   const tests: string[] = [];
   let colocatedTests = 0;
   for (const p of files) {
     const ext = extensionOf(p);
-    const language = LANGUAGES[ext];
+    const cppHeader = isCppHeader(p, headers);
+    const language = cppHeader ? "cpp" : LANGUAGES[ext];
     if (language === undefined) continue;
     const entry = langCounts.get(language) ?? { files: 0, analyzed: false };
-    langCounts.set(language, { files: entry.files + 1, analyzed: entry.analyzed || ANALYZED.has(ext) });
+    langCounts.set(language, { files: entry.files + 1, analyzed: entry.analyzed || ANALYZED.has(ext) || cppHeader });
     const reason = nonApplicationReason(p);
     if (reason === "test") {
       const r = testRootOf(p);
@@ -110,7 +119,7 @@ export function observeRepository(root: string, scan: RepositoryScan, git: GitRe
     .sort((a, b) => b.files - a.files || compareUtf8(a.language, b.language));
 
   const manifests = files.flatMap((p) => {
-    const kind = MANIFESTS[baseName(p)] ?? (/\.(?:csproj|sln)$/u.test(p) ? "dotnet" : undefined);
+    const kind = MANIFESTS[baseName(p)] ?? stackManifestKind(p);
     return kind !== undefined && p.split("/").length <= MANIFEST_MAX_DEPTH ? [{ path: p, kind }] : [];
   }).slice(0, LIST_CAP * 2);
 
@@ -169,6 +178,7 @@ export function observeRepository(root: string, scan: RepositoryScan, git: GitRe
     },
     files: { indexable: files.length, excluded: Object.fromEntries(Object.entries(excluded).sort(([a], [b]) => compareUtf8(a, b))) },
     languages, manifests, packages, workspaces, ...(packageManager === undefined ? {} : { packageManager }), scripts, technical,
+    stack: observeStack(root, files),
     sourceRoots: count(sources), testRoots: count(tests), colocatedTests,
     workingTree: { workingTreeDirty: workingTree.dirty, ...workingTree },
   };

@@ -9,10 +9,17 @@ const MINIMAL: Record<GrammarId, string> = {
   typescript: "const a: number = 1;\n",
   tsx: "const b = <div id=\"x\">{a}</div>;\n",
   javascript: "const c = () => <span />;\n",
+  java: "class A { void m() { f(); } }\n",
+  csharp: "namespace N { class A { void M() { F(); } } }\n",
+  cpp: "namespace n { class A { void m(); }; }\nvoid f() { g(); }\n",
+  python: "class A:\n    def m(self):\n        return f()\n",
+};
+const ROOT: Record<GrammarId, string> = {
+  typescript: "program", tsx: "program", javascript: "program", java: "program", csharp: "compilation_unit", cpp: "translation_unit", python: "module",
 };
 
-describe("grammar smoke test (AC-005-01)", () => {
-  for (const id of ["typescript", "tsx", "javascript"] as const) {
+describe("grammar smoke test (AC-005-01, T18.0)", () => {
+  for (const id of ["typescript", "tsx", "javascript", "java", "csharp", "cpp", "python"] as const) {
     it(`${id}: Parser.init, Language.load, minimal parse`, async () => {
       const loaded = await loadGrammars([id]);
       expect(loaded.diagnostics).toEqual([]);
@@ -24,7 +31,7 @@ describe("grammar smoke test (AC-005-01)", () => {
       const parser = createParser(language);
       const tree = parser.parse(MINIMAL[id]);
       try {
-        expect(tree?.rootNode.type).toBe("program");
+        expect(tree?.rootNode.type).toBe(ROOT[id]);
         expect(tree?.rootNode.hasError).toBe(false);
       } finally {
         tree?.delete();

@@ -10,8 +10,8 @@
  * from the facts, so the plan equals the plan of a clean full build of the same state.
  */
 import {
-  extractIssueKeys,
-  type AnalyzedSymbol, type AnalyzedTest, type CallSite, type ImportBinding, type ModuleReference, type SourceAnalysis,
+  CONTAINER_SYMBOL_KINDS, extractIssueKeys,
+  type AnalyzedSymbol, type AnalyzedTest, type CallResolutionStrategy, type CallSite, type ImportBinding, type ModuleReference, type SourceAnalysis,
 } from "@duo-director/analyzer";
 import {
   compareSourceLocations, compareUtf8, compileRepoPattern, createDiagnostic, definitionRef, ENTITY_TYPES, fileRef, nodeId,
@@ -72,6 +72,8 @@ interface FileContext {
   readonly topLevel: ReadonlyMap<string, readonly AnalyzedSymbol[]>;
   /** Test Nodes of the file (duplicates removed). */
   readonly tests: readonly AnalyzedTest[];
+  /** How this file's calls are resolved (its analyzer's strategy, T18.0). */
+  readonly strategy: CallResolutionStrategy;
 }
 
 type Target = { readonly file: RepoPath; readonly symbol: AnalyzedSymbol };
@@ -273,11 +275,11 @@ class Builder {
         analyzerVersion: analyzed?.analyzerVersion,
       }), { path: f.path }, f.contentHash);
       this.addEdge(PROJECT_REF, "CONTAINS", ref, "source-analysis", { provenance: "static" });
-      if (analyzed !== undefined) this.code(analyzed.analysis, analyzed.analyzerVersion);
+      if (analyzed !== undefined) this.code(analyzed.analysis, analyzed.analyzerVersion, analyzed.callResolution ?? "module-bindings");
     }
   }
 
-  private code(analysis: SourceAnalysis, analyzerVersion: string): void {
+  private code(analysis: SourceAnalysis, analyzerVersion: string, strategy: CallResolutionStrategy): void {
     const file = fileRef(analysis.path);
     const byIdentity = new Map<string, AnalyzedSymbol>();
     const topLevel = new Map<string, AnalyzedSymbol[]>();
@@ -292,7 +294,7 @@ class Builder {
     }
     for (const s of analysis.symbols) {
       const parent = s.parent === undefined ? undefined : byIdentity.get(s.parent);
-      if (parent?.kind === "class") this.addEdge(parent.ref, "CONTAINS", s.ref, "source-analysis", { provenance: "static" });
+      if (parent !== undefined && CONTAINER_SYMBOL_KINDS.has(parent.kind)) this.addEdge(parent.ref, "CONTAINS", s.ref, "source-analysis", { provenance: "static" });
     }
     const byName = new Map<string, AnalyzedTest[]>();
     for (const t of analysis.tests) if (t.kind === "test") byName.set(t.fullName, [...(byName.get(t.fullName) ?? []), t]);
@@ -313,7 +315,7 @@ class Builder {
     }
     const bindings = new Map<string, { ref: ModuleReference; binding: ImportBinding }>();
     for (const ref of analysis.moduleReferences) for (const binding of ref.bindings) bindings.set(binding.local, { ref, binding });
-    this.contexts.set(analysis.path, { analysis, analyzerVersion, bindings, byIdentity, topLevel, tests });
+    this.contexts.set(analysis.path, { analysis, analyzerVersion, bindings, byIdentity, topLevel, tests, strategy });
   }
 
   // ---- declared code relations (Requirement.implements / tests, Decision.governs) ----
@@ -336,6 +338,15 @@ class Builder {
   private declaredSymbol(owner: EntityRef, name: string, paths: readonly string[], field: string, at: SourceLocation): SymbolRef | undefined {
     const found = this.symbolsNamed(name, paths);
     if (found.length === 1) return found[0]?.symbol.ref;
+    if (found.length === 0 && paths.length > 0) {
+      // The declared files have no structural analyzer (L0): the symbol cannot be checked, which is not "missing" (T18.0).
+      const matched = this.filesMatching(paths);
+      if (matched.length > 0 && matched.every((f) => !this.contexts.has(f))) {
+        this.diagnostics.push(createDiagnostic("DECLARED_SYMBOL_UNVERIFIABLE",
+          `${nodeId(owner)} ${field} "${name}": ${matched.length === 1 ? matched[0] : `${matched.length} files`} have no structural analyzer; the symbol is not checked`, at));
+        return undefined;
+      }
+    }
     if (this.contexts.size > 0) {
       this.diagnostics.push(createDiagnostic("DECLARED_SYMBOL_UNRESOLVED",
         `${nodeId(owner)} ${field} "${name}" matches ${found.length === 0 ? "no symbol" : `${found.length} symbols`}; no edge`, at));
@@ -384,7 +395,12 @@ class Builder {
   /** The module result of one reference (precomputed per file before any call is resolved). */
   private moduleResult(from: RepoPath, ref: ModuleReference): ModuleResolution {
     return this.moduleResults.get(from)?.get(ref)
-      ?? this.input.moduleResolver.resolve({ fromPath: from, specifier: ref.specifier, kind: ref.kind });
+      ?? this.input.moduleResolver.resolve(this.request(from, ref));
+  }
+
+  private request(from: RepoPath, ref: ModuleReference) {
+    const language = this.contexts.get(from)?.analysis.language;
+    return { fromPath: from, specifier: ref.specifier, kind: ref.kind, ...(language === undefined ? {} : { language }), ...(ref.syntax === undefined ? {} : { syntax: ref.syntax }) };
   }
 
   /** Module results for every analyzed file: stored results when the Indexer allows it, else TypeScript resolution. */
@@ -399,7 +415,7 @@ class Builder {
         configFiles = previous.configFiles;
         this.work.modulesReused += refs.length;
       } else {
-        results = refs.map((ref) => this.input.moduleResolver.resolve({ fromPath: path, specifier: ref.specifier, kind: ref.kind }));
+        results = refs.map((ref) => this.input.moduleResolver.resolve(this.request(path, ref)));
         configFiles = this.input.moduleResolver.configFiles(path);
         this.work.modulesRecomputed += refs.length;
         this.work.filesModulesRecomputed++;
@@ -479,7 +495,7 @@ class Builder {
       let exportDependencies = previous?.exportDependencies ?? [];
       if (outcomes === undefined) {
         const deps = new Set<RepoPath>();
-        outcomes = sites.map((call) => this.resolveCall(path, ctx, call, deps));
+        outcomes = sites.map((call) => this.resolveByStrategy(path, ctx, call, deps));
         deps.delete(path);
         exportDependencies = [...deps].sort(compareUtf8);
         this.work.callsRecomputed += sites.length;
@@ -601,6 +617,33 @@ class Builder {
   }
 
   /** Exact resolution from syntax facts only (no type checker). Anything else is unresolved or ambiguous. */
+  private resolveByStrategy(path: RepoPath, ctx: FileContext, call: CallSite, deps: Set<RepoPath>): CallOutcome {
+    if (ctx.strategy === "module-bindings") return this.resolveCall(path, ctx, call, deps);
+    if (ctx.strategy === "none") return { status: "unresolved", reason: "call-resolution-unavailable" };
+    return this.sameFileFunction(path, ctx, call);
+  }
+
+  /**
+   * same-file-functions (T18.0): a bare-name call, not bound locally and not possibly a class member,
+   * to the only function of that name at module or namespace scope in the same file. Everything else
+   * stays unresolved: another file, a member, an overload set or a macro is not guessed.
+   */
+  private sameFileFunction(path: RepoPath, ctx: FileContext, call: CallSite): CallOutcome {
+    const names = call.calleePath;
+    if (call.kind !== "identifier" || names === undefined || names.length !== 1) return { status: "unresolved", reason: "receiver-type-unknown" };
+    if (call.rootLocal === true) return { status: "unresolved", reason: "local-binding" };
+    if (call.mayBeMember === true) return { status: "unresolved", reason: "may-be-member" };
+    const name = names[0] as string;
+    const scopeKind = (s: AnalyzedSymbol) => (s.parent === undefined ? "module" : ctx.byIdentity.get(s.parent)?.kind);
+    const all = ctx.analysis.symbols.filter((s) => s.name === name);
+    const functions = all.filter((s) => s.kind === "function" && (scopeKind(s) === "module" || scopeKind(s) === "namespace"));
+    if (functions.length > 1) return { status: "ambiguous", reason: "same-file-candidates" };
+    const only = functions[0];
+    if (only === undefined) return { status: "unresolved", reason: all.length > 0 ? "target-not-callable" : "no-candidate" };
+    if (all.length > 1) return { status: "ambiguous", reason: "same-file-candidates" };
+    return { status: "exact", target: { file: path, symbol: only } };
+  }
+
   private resolveCall(path: RepoPath, ctx: FileContext, call: CallSite, deps: Set<RepoPath>): CallOutcome {
     const names = call.calleePath;
     if (names === undefined || names.length === 0) return { status: "unresolved", reason: "computed-callee" };

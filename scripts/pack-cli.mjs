@@ -7,16 +7,18 @@
  * Topology (ADR-011, C158): one public package. The internal workspace packages (@duo-director/core,
  * analyzer, graph, director, integration) are bundled into it with esbuild; third-party runtime
  * dependencies stay npm dependencies at the exact versions the workspace declares. The tree-sitter
- * grammar packages are not dependencies (their install scripts build native addons): their three WASM
- * files are vendored into dist/grammars/ with their licenses. The tarball npm pack writes is the
- * artifact oracle; <out>/pack.json describes it.
+ * grammar packages are not dependencies (their install scripts build native addons): the WASM files
+ * the analyzer names (GRAMMAR_FILES, T18.0: TypeScript, TSX, JavaScript, Java, C#, C++, Python) are
+ * vendored into dist/grammars/ with their licenses and dist/grammars/grammars.json (package, version,
+ * repository, license, sha256, bytes, ABI). The tarball npm pack writes is the artifact oracle;
+ * <out>/pack.json describes it.
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { builtinModules, createRequire } from "node:module";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
 const ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -24,8 +26,6 @@ const args = process.argv.slice(2);
 const OUT = path.resolve(args.includes("--out") ? args[args.indexOf("--out") + 1] : path.join(ROOT, ".dist"));
 const STAGE = path.join(OUT, "cli-package");
 const INTERNAL = ["core", "analyzer", "graph", "director", "integration"];
-const GRAMMAR_PACKAGES = new Set(["tree-sitter-typescript", "tree-sitter-javascript"]);
-const GRAMMARS = ["tree-sitter-typescript/tree-sitter-typescript.wasm", "tree-sitter-typescript/tree-sitter-tsx.wasm", "tree-sitter-javascript/tree-sitter-javascript.wasm"];
 
 const readJson = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 const fail = (message) => { console.error(`pack-cli: ${message}`); process.exit(1); };
@@ -34,6 +34,15 @@ const sha256 = (file) => createHash("sha256").update(fs.readFileSync(file)).dige
 const cli = readJson(path.join(ROOT, "apps/cli/package.json"));
 const entry = path.join(ROOT, "apps/cli/dist/bin.js");
 if (!fs.existsSync(entry)) fail("apps/cli/dist/bin.js is missing: run pnpm build first");
+
+// The grammars the analyzer loads: its built GRAMMAR_FILES is the one list ("<package>/<file>.wasm").
+const runtime = path.join(ROOT, "packages/analyzer/dist/language/tree-sitter/runtime.js");
+if (!fs.existsSync(runtime)) fail("packages/analyzer/dist is missing: run pnpm build first");
+const { GRAMMAR_FILES } = await import(pathToFileURL(runtime).href);
+const GRAMMARS = Object.entries(GRAMMAR_FILES).sort(([a], [b]) => (a < b ? -1 : 1));
+const GRAMMAR_PACKAGES = new Set(GRAMMARS.map(([, file]) => file.slice(0, file.indexOf("/"))));
+const analyzerDeps = readJson(path.join(ROOT, "packages/analyzer/package.json")).dependencies ?? {};
+for (const pkg of GRAMMAR_PACKAGES) if (analyzerDeps[pkg] === undefined) fail(`the analyzer loads a grammar from ${pkg}, which it does not declare`);
 
 // Runtime dependencies: every third-party dependency of the bundled workspace packages, exact versions.
 const dependencies = {};
@@ -84,9 +93,25 @@ for (const file of fs.readdirSync(path.join(STAGE, "dist")).filter((f) => f.ends
   for (const p of [ROOT, ROOT.replaceAll("\\", "/"), ROOT.replaceAll("\\", "\\\\")]) if (text.includes(p)) fail(`${file} contains the development path ${p}`);
 }
 
-// Grammar WASM files and their licenses, from the analyzer's own dependency versions.
+// Grammar WASM files, their licenses and grammars.json, from the analyzer's own dependency versions.
 const fromAnalyzer = createRequire(path.join(ROOT, "packages/analyzer/package.json"));
-for (const g of GRAMMARS) fs.copyFileSync(fromAnalyzer.resolve(g), path.join(STAGE, "dist", "grammars", path.basename(g)));
+const { Language, Parser } = await import(pathToFileURL(fromAnalyzer.resolve("web-tree-sitter")).href);
+await Parser.init();
+const grammarManifest = [];
+for (const [id, g] of GRAMMARS) {
+  const source = fromAnalyzer.resolve(g);
+  const target = path.join(STAGE, "dist", "grammars", path.basename(g));
+  fs.copyFileSync(source, target);
+  const pkg = g.slice(0, g.indexOf("/"));
+  const meta = readJson(path.join(path.dirname(fromAnalyzer.resolve(`${pkg}/package.json`)), "package.json"));
+  const repository = typeof meta.repository === "string" ? meta.repository : meta.repository?.url;
+  const language = await Language.load(source);
+  grammarManifest.push({
+    grammar: id, file: path.basename(g), package: pkg, version: meta.version, ...(repository === undefined ? {} : { repository: repository.replace(/^git\+/u, "") }),
+    license: meta.license, sha256: sha256(target), bytes: fs.statSync(target).size, abi: language.abiVersion,
+  });
+}
+fs.writeFileSync(path.join(STAGE, "dist", "grammars", "grammars.json"), `${JSON.stringify(grammarManifest, null, 2)}\n`);
 for (const pkg of GRAMMAR_PACKAGES) {
   const dir = path.dirname(fromAnalyzer.resolve(`${pkg}/package.json`));
   const license = fs.readdirSync(dir).find((f) => /^LICENSE/iu.test(f));

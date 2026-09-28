@@ -59,10 +59,25 @@ beforeAll(() => {
 describe("the packed artifact (npm pack is the oracle)", () => {
   it("holds only the allowlisted files: the executable, the bundle, the grammar WASM and licenses, README, package.json", () => {
     const files = pack.files.map((f) => f.path);
-    for (const f of files) expect(f, f).toMatch(/^(package\.json|README\.md|dist\/duoctl\.js|dist\/cli-[A-Z0-9]+\.js|dist\/grammars\/(tree-sitter-(typescript|tsx|javascript)\.wasm|LICENSE-tree-sitter-(typescript|javascript)))$/u);
-    expect(files).toEqual(expect.arrayContaining(["dist/duoctl.js", "dist/grammars/tree-sitter-typescript.wasm", "dist/grammars/tree-sitter-tsx.wasm", "dist/grammars/tree-sitter-javascript.wasm"]));
+    const grammar = /^dist\/grammars\/(tree-sitter-(typescript|tsx|javascript|java|c_sharp|cpp|python)\.wasm|LICENSE-tree-sitter-(typescript|javascript|java|c-sharp|cpp|python)|grammars\.json)$/u;
+    for (const f of files) expect(f, f).toMatch(/^(package\.json|README\.md|dist\/duoctl\.js|dist\/cli-[A-Z0-9]+\.js)$/u.test(f) ? /./u : grammar);
+    expect(files).toEqual(expect.arrayContaining(["dist/duoctl.js", "dist/grammars/grammars.json", ...["typescript", "tsx", "javascript", "java", "c_sharp", "cpp", "python"].map((g) => `dist/grammars/tree-sitter-${g}.wasm`)]));
     const forbidden = /(^|\/)(\.env|\.worklog|fixtures|coverage|\.duo-project|node_modules|tmp)(\/|$)|credentials|\.pem$|\.key$|id_rsa|\.p12$|metrics\.jsonl|\.map$|\.test\.|\.tgz$/iu;
     expect(files.filter((f) => forbidden.test(f))).toEqual([]);
+  });
+
+  it("grammars.json names every vendored grammar: package, exact version, MIT license, sha256 of the packed file, ABI the runtime loads (T18.0)", () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(REPO, ".dist", "cli-package", "dist", "grammars", "grammars.json"), "utf8")) as { grammar: string; file: string; package: string; version: string; license: string; sha256: string; bytes: number; abi: number }[];
+    expect(manifest.map((g) => g.grammar)).toEqual(["cpp", "csharp", "java", "javascript", "python", "tsx", "typescript"]);
+    const analyzer = JSON.parse(fs.readFileSync(path.join(REPO, "packages", "analyzer", "package.json"), "utf8")).dependencies as Record<string, string>;
+    for (const g of manifest) {
+      expect(g.version, g.grammar).toBe(analyzer[g.package]);
+      expect(g.license, g.grammar).toBe("MIT");
+      expect(g.sha256, g.grammar).toBe(pack.sha256[`dist/grammars/${g.file}`]);
+      expect([14, 15], g.grammar).toContain(g.abi);
+      expect(pack.files.map((f) => f.path)).toContain(`dist/grammars/LICENSE-${g.package}`);
+    }
+    recordMetric("grammars", manifest.map((g) => ({ grammar: g.grammar, package: `${g.package}@${g.version}`, bytes: g.bytes, abi: g.abi })));
   });
 
   it("package.json: public name and bin, Node engine, exact runtime dependencies only, no scripts, no workspace links", () => {
@@ -75,7 +90,7 @@ describe("the packed artifact (npm pack is the oracle)", () => {
     expect(m.private).toBeUndefined();
     for (const [n, v] of Object.entries(m.dependencies as Record<string, string>)) {
       expect(v, n).toMatch(/^\d+\.\d+\.\d+$/u);
-      expect(n).not.toMatch(/^@duo-director\/|^tree-sitter-(typescript|javascript)$/u);
+      expect(n).not.toMatch(/^@duo-director\/|^tree-sitter-/u);
     }
     for (const f of ["dist/duoctl.js", ...pack.files.map((x) => x.path).filter((x) => /^dist\/cli-/u.test(x))]) {
       const text = fs.readFileSync(path.join(REPO, ".dist", "cli-package", f), "utf8");
@@ -102,7 +117,7 @@ describe("global install (temporary npm prefix)", () => {
     const pkgs = installedPackages(path.dirname(path.dirname(pkgDir)));
     const scripted = pkgs.filter((p) => ["preinstall", "install", "postinstall"].some((s) => s in p.scripts) || p.gyp);
     expect(scripted).toEqual([]);
-    expect(pkgs.map((p) => p.name)).not.toEqual(expect.arrayContaining(["node-gyp", "node-gyp-build", "tree-sitter-typescript", "tree-sitter-javascript"]));
+    expect(pkgs.map((p) => p.name).filter((n) => n === "node-gyp" || n === "node-gyp-build" || n.startsWith("tree-sitter-"))).toEqual([]);
     for (const [f, sha] of Object.entries(pack.sha256)) expect(createHash("sha256").update(fs.readFileSync(path.join(pkgDir, f))).digest("hex"), f).toBe(sha);
     recordMetric("globalInstall", { packages: pkgs.length, bytesOnDisk: dirSize(IS_WIN ? path.join(prefix, "node_modules") : path.join(prefix, "lib", "node_modules")), names: pkgs.map((x) => `${x.name}@${x.version}`).sort() });
   });
@@ -194,6 +209,42 @@ describe("global install (temporary npm prefix)", () => {
       expect(duoctl(moved, ["index", "--json"]).code).toBe(0);
       expect(duoctl(moved, ["install", "status", "--json"]).json().result.agents.map((a: { status: string }) => a.status)).toEqual(["configured", "configured"]);
     });
+  });
+
+  it("cross-language (T18.0): Java, C#, C++, Python, TypeScript and an unknown language in one repository parse with the packaged grammars", () => {
+    const root = tmp("duo-poly-");
+    fs.cpSync(path.join(REPO, "fixtures", "languages", "polyglot"), root, { recursive: true });
+    const add = (f: string, text: string) => { fs.mkdirSync(path.dirname(path.join(root, f)), { recursive: true }); fs.writeFileSync(path.join(root, f), text); };
+    add("rules/pricing.foo", "rule discount\nend\n");
+    const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=Dev", "-c", "user.email=dev@duo.invalid", ...args], { cwd: root, windowsHide: true, stdio: "pipe" });
+    git("-c", "init.defaultBranch=main", "init", "-q");
+    git("config", "core.autocrlf", "false");
+    git("add", "-A");
+    git("commit", "-qm", "polyglot");
+    expect(duoctl(root, ["init", "--non-interactive", "--answers", "-", "--json"], "[]").code).toBe(0);
+    const status = duoctl(root, ["status", "--json"]).json().result;
+    expect(status.analysis.languages.map((l: { language: string; level: string }) => `${l.language}:${l.level}`)).toEqual(["cpp:L1", "csharp:L1", "java:L1", "python:L1", "typescript:L2"]);
+    expect(status.analysis.fileOnly.extensions).toEqual(expect.arrayContaining([{ extension: "foo", files: 1 }]));
+    for (const [node, file] of [
+      ["CartService.cartTotal", "api/src/main/java/com/example/api/CartService.java"], ["Storefront.Game.Score.CartTotal", "game/Assets/Scripts/Score.cs"],
+      ["cart_total", "ml/recommender/rank.py"], ["cartTotal", "web/src/cart.ts"], ["sym:native/src/checksum.cpp#checksum", "native/src/checksum.cpp"],
+    ]) {
+      const tr = duoctl(root, ["trace", node as string, "--json"]);
+      expect(tr.code, `${node}: ${tr.stderr}`).toBe(0);
+      expect(tr.json().result.node).toMatchObject({ type: "symbol", path: file });
+    }
+    // The quoted include resolved to the header: the header's impact reaches the including file.
+    const cpp = duoctl(root, ["impact", "native/src/checksum.hpp", "--json"]).json().result;
+    expect(cpp.items.map((i: { id: string }) => i.id)).toContain("file:native/src/checksum.cpp");
+    expect(cpp.limitations.map((l: { code: string }) => l.code)).toEqual(expect.arrayContaining(["imports-partial", "calls-same-file"]));
+    fs.appendFileSync(path.join(root, "rules", "pricing.foo"), "rule shipping\nend\n");
+    expect(duoctl(root, ["index", "--json"]).code).toBe(0);
+    const rv = duoctl(root, ["review", "--json"]).json().result;
+    expect(rv).toMatchObject({ status: "ready", metrics: { llmCalls: 0 } });
+    expect(rv.limitations.map((l: { code: string }) => l.code)).toContain("structural-analysis-unavailable");
+    // The file-only change creates no claim; a WARN here can only be the surfaced gap (this repository has no confirmed Truth).
+    expect(rv.claims).toEqual([]);
+    expect(rv.verdict).not.toBe("BLOCK");
   });
 });
 

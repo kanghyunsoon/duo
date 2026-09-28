@@ -1,0 +1,4 @@
+rule discount
+  when cart.total > 100
+  then cart.total = cart.total * 0.9
+end

@@ -8,12 +8,13 @@
  */
 import path from "node:path";
 import {
-  compareFingerprints, createDefaultAnalyzerRegistry, fingerprintRepositoryFiles, openGitProvider, scanRepository, type AnalyzerRegistry, type FileFingerprint,
+  analysisLevelOf, compareFingerprints, createDefaultAnalyzerRegistry, fingerprintRepositoryFiles, openGitProvider, scanRepository,
+  type AnalysisLevel, type AnalyzerCapabilities, type AnalyzerRegistry, type FileFingerprint,
 } from "@duo-director/analyzer";
 import { canonicalDiagnostics, compareUtf8, failure, loadProjectTruth, success, type Diagnostic, type ParseResult, type RepoPath } from "@duo-director/core";
 import { CALL_RESOLUTION_VERSION } from "../build/builder.js";
 import { HISTORY_WINDOW } from "../build/history.js";
-import { TYPESCRIPT_MODULE_RESOLUTION_VERSION } from "../build/resolve/typescript/typescript-module-resolver.js";
+import { MODULE_RESOLUTION_VERSION } from "../build/resolve/languages.js";
 import type { CallResolutionFreshness } from "../build/types.js";
 import { readCachedAnalysis } from "./analysis-cache.js";
 import {
@@ -29,9 +30,22 @@ import type { AnalysisFreshness, FileFreshnessRecord, FullRebuildReason, ModuleR
  */
 export type IndexStatus = "current" | "stale" | "missing" | "incompatible";
 
+/**
+ * Facts about how deep the current files are analyzed (T18.0): counts per language and the analyzer's
+ * capabilities. No score. fileOnly files still have L0 (file, Git, diff, Truth references, evidence).
+ */
+export interface AnalysisCoverage {
+  readonly analyzerRegistryDigest: string;
+  readonly files: { readonly total: number; readonly structural: number; readonly fileOnly: number };
+  readonly languages: readonly { readonly language: string; readonly files: number; readonly analyzer: string; readonly level: AnalysisLevel; readonly capabilities: AnalyzerCapabilities }[];
+  /** Extensions of file-only files (most frequent first, at most 20; "" for no extension). */
+  readonly fileOnlyExtensions: readonly { readonly extension: string; readonly files: number }[];
+}
+
 export interface IndexInspection {
   readonly status: IndexStatus;
   readonly fullRebuildReason?: FullRebuildReason;
+  readonly coverage: AnalysisCoverage;
   /**
    * Per current or deleted path (UTF-8 order): file, analysis and module freshness exactly as the
    * Indexer decides them. predictedCalls is a prediction and an upper bound: call results that may be
@@ -92,13 +106,26 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
   }
   const analysis = new Map<RepoPath, AnalysisFreshness>();
   const changedFiles = new Set<string>(changes.filter((c) => c.status === "DELETED").map((c) => c.path));
+  const indexed = current.map((f) => f.path).filter((p) => !p.startsWith(STATE_PREFIX));
+  const selection = registry.scope(indexed);
+  const byLanguage = new Map<string, { files: number; analyzer: string; capabilities: AnalyzerCapabilities }>();
+  const fileOnly = new Map<string, number>();
+  const analyzerRegistryDigest = registry.digest();
   try {
     for (const f of current) {
       if (f.path.startsWith(STATE_PREFIX)) continue;
-      const analyzer = registry.analyzerFor(f.path);
-      if (analyzer === undefined) continue;
+      const analyzer = selection.analyzerFor(f.path);
+      if (analyzer === undefined) {
+        const name = f.path.slice(f.path.lastIndexOf("/") + 1);
+        const ext = name.lastIndexOf(".") > 0 ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
+        fileOnly.set(ext, (fileOnly.get(ext) ?? 0) + 1);
+        continue;
+      }
+      const language = selection.languageFor(f.path) ?? analyzer.id;
+      const entry = byLanguage.get(language) ?? { files: 0, analyzer: analyzer.id, capabilities: analyzer.capabilities };
+      byLanguage.set(language, { ...entry, files: entry.files + 1 });
       let freshness = analysisFreshnessOf(previous, prevFiles.get(f.path), f, analyzer);
-      if (freshness === "fresh" && readCachedAnalysis(rootDir, { path: f.path, contentHash: f.contentHash, analyzer: analyzer.id, analyzerVersion: analyzer.version }) === undefined) {
+      if (freshness === "fresh" && readCachedAnalysis(rootDir, { path: f.path, contentHash: f.contentHash, analyzer: analyzer.id, analyzerIdentity: analyzer.identity }) === undefined) {
         freshness = "missing";
       }
       analysis.set(f.path, freshness);
@@ -112,7 +139,7 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
   const signals = resolutionSignals(rootDir, changes, previous);
   const modules = new Map<RepoPath, ModuleResolutionFreshness>();
   for (const p of analysis.keys()) {
-    modules.set(p, moduleFreshnessOf(p, prevFiles.get(p)?.resolution, previous, TYPESCRIPT_MODULE_RESOLUTION_VERSION, changedFiles, signals));
+    modules.set(p, moduleFreshnessOf(p, prevFiles.get(p)?.resolution, previous, MODULE_RESOLUTION_VERSION, changedFiles, signals));
   }
   const moduleWillChange = (p: string) => changedFiles.has(p) || (modules.get(p as RepoPath) ?? "fresh") !== "fresh";
   const calls = new Map<RepoPath, CallResolutionFreshness>();
@@ -159,8 +186,15 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
       ...(a === undefined ? {} : { analysis: a }), ...(m === undefined ? {} : { modules: m }), ...(k === undefined ? {} : { predictedCalls: k }),
     };
   });
+  const structural = [...byLanguage.values()].reduce((n, l) => n + l.files, 0);
+  const coverage: AnalysisCoverage = {
+    analyzerRegistryDigest,
+    files: { total: indexed.length, structural, fileOnly: indexed.length - structural },
+    languages: [...byLanguage].sort(([a], [b]) => compareUtf8(a, b)).map(([language, l]) => ({ language, files: l.files, analyzer: l.analyzer, level: analysisLevelOf(l.capabilities), capabilities: l.capabilities })),
+    fileOnlyExtensions: [...fileOnly].sort(([a, x], [b, y]) => y - x || compareUtf8(a, b)).slice(0, 20).map(([extension, files]) => ({ extension, files })),
+  };
   return success({
-    status, ...(fullRebuildReason === undefined ? {} : { fullRebuildReason }),
+    status, ...(fullRebuildReason === undefined ? {} : { fullRebuildReason }), coverage,
     freshness,
     projectTruth: { changed: truthChanged },
     configs: { changed: [...signals.changedConfigs].sort(compareUtf8) },

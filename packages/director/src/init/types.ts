@@ -11,6 +11,7 @@
  */
 import type { Diagnostic, RepoPath, WriteKind } from "@duo-director/core";
 import type { WorkingTreeObservation } from "../adoption/types.js";
+import type { ProjectStackProfile } from "./stack.js";
 
 /**
  * not-initialized: no .duo-project, or one with no Truth or history file in it.
@@ -43,6 +44,8 @@ export interface RepositoryObservation {
   readonly scripts: readonly { readonly manifest: RepoPath; readonly name: string; readonly run: string }[];
   /** Technical metadata (engines, packageManager), kept as observations: never Product Constraints. */
   readonly technical: readonly { readonly manifest: RepoPath; readonly field: string; readonly value: string }[];
+  /** Build systems, engines and frameworks from manifests (T18.0): observations, never Truth. */
+  readonly stack: ProjectStackProfile;
   readonly sourceRoots: readonly { readonly path: string; readonly files: number }[];
   readonly testRoots: readonly { readonly path: string; readonly files: number }[];
   /** Test files next to source files (e.g. src/a.test.ts), not under a test root. */

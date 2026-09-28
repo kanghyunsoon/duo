@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { AnalyzerRegistry } from "@duo-director/analyzer";
-import { openProjectGraphStore, type GraphStore } from "@duo-director/graph";
+import { createAnalyzerRegistry, type AnalyzerRegistry } from "@duo-director/analyzer";
+import { indexRepository, openProjectGraphStore, type GraphStore } from "@duo-director/graph";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { contextRegistry, HISTORY, INIT_FIXTURE, makeContextRepo, REVIEW_FIXTURE, type ContextRepo } from "../context/testing.js";
 import { applyInitPlan } from "../init/apply.js";
@@ -133,10 +133,10 @@ describe("HEAD_BASELINE evaluates the HEAD tree (T15.1, C136)", () => {
     repo.edit("src/auth/legacy-session-store.ts", "this.sessions.set(token, userId);", "this.sessions.set(token, userId.trim());");
     fs.rmSync(path.join(repo.root, "src/auth/old-session-store.ts"));
     repo.write("src/auth/server-session-store.ts", SERVER);
-    repo.write("src/legacy/Report.java", "class Report {}\n");
-    repo.git("add", "src/legacy/Report.java");
+    repo.write("src/legacy/Report.kt", "class Report\n");
+    repo.git("add", "src/legacy/Report.kt");
     repo.git("commit", "-qm", "java");
-    repo.write("src/legacy/Report.java", "class Report { int x; }\n");
+    repo.write("src/legacy/Report.kt", "class Report(val x: Int)\n");
     await repo.index();
     const r = await capture(repo.root, { policy: "HEAD_BASELINE" });
     const b = r.value?.status === "captured" ? r.value.baseline : undefined;
@@ -145,7 +145,7 @@ describe("HEAD_BASELINE evaluates the HEAD tree (T15.1, C136)", () => {
       "sym:src/auth/legacy-session-store.ts#LegacySessionStore", "sym:src/auth/legacy-session-store.ts#LegacySessionStore.save",
       "sym:src/auth/old-session-store.ts#OldSessionStore", // deleted in the working tree, but in HEAD
     ]); // server-session-store.ts is untracked: not in HEAD, not a baseline finding
-    expect(b?.limitations).toContain("head-symbols-unsupported-language"); // the changed Java file: file-level only
+    expect(b?.limitations).toContain("head-symbols-unsupported-language"); // the changed Kotlin file (no analyzer): file-level only
     const res = await review(repo.root, "AUTH-03");
     const byFile = (p: string) => res.claims.filter((c) => c.rule === "decision-forbids" && c.observed.includes(p));
     expect(byFile("legacy-session-store.ts").map((c) => [c.provenance, c.blockEligible])).toEqual([["pre-existing-touched", false]]);
@@ -266,5 +266,33 @@ describe("pre-existing vs introduced violations (T14.1)", () => {
     expect(res.limitations.map((l) => l.code)).toContain("adoption-baseline-unusable");
     expect(res.claims.find((x) => x.rule === "decision-forbids")?.provenance).toBeUndefined();
     fs.writeFileSync(abs, original);
+  });
+});
+
+describe("an analyzer added after adoption (T18.0)", () => {
+  it("a forbidden symbol in a language the baseline could not analyze is unverified-at-adoption: it warns and never blocks", async () => {
+    // The baseline is captured by a DUO without the Java analyzer (its analyzers are shared, not disposed here).
+    const noJava = createAnalyzerRegistry(registry.analyzers.filter((a) => a.id !== "java"));
+    const repo = makeContextRepo(temps, noJava, REVIEW_FIXTURE);
+    repo.write("src/legacy/LegacySessionStore.java", "public class LegacySessionStore {\n  void save(String token) {\n  }\n}\n");
+    repo.git("add", "-A");
+    repo.git("commit", "-qm", "legacy java store");
+    await repo.index();
+    const r = await withGraph(repo.root, (graph) => captureAdoptionBaseline(repo.root, { graph, registry: noJava, historyWindow: HISTORY, actor: human, clock }));
+    const b = r.value?.status === "captured" ? r.value.baseline : undefined;
+    expect(b?.analysis).toEqual({ analyzerRegistryDigest: noJava.digest(), structuralLanguages: ["cpp", "csharp", "javascript", "python", "tsx", "typescript"] });
+    expect(b?.findings.filter((f) => f.offending.includes(".java"))).toEqual([]);
+
+    // Upgraded DUO: Java is analyzed now, and the Java store that existed at adoption is edited.
+    repo.edit("src/legacy/LegacySessionStore.java", "void save(String token) {", "void save(String token, int ttl) {");
+    await withGraph(repo.root, async (store) => {
+      const x = await indexRepository(repo.root, { store, registry, historyWindow: HISTORY });
+      if (x.value === undefined) throw new Error(JSON.stringify(x.diagnostics));
+    });
+    const res = await review(repo.root);
+    const java = res.claims.filter((c) => c.rule === "decision-forbids" && c.observed.includes("LegacySessionStore.java"));
+    expect(java.length).toBeGreaterThan(0);
+    for (const c of java) expect([c.provenance, c.blockEligible]).toEqual(["unverified-at-adoption", false]);
+    expect(res.verdict).toBe("WARN");
   });
 });

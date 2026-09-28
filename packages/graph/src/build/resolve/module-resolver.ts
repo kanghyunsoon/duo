@@ -3,7 +3,7 @@
  * the TypeScript Compiler API stays inside TypeScriptModuleResolver (./typescript/), so a future
  * TypeScript 7 API change replaces that one adapter.
  */
-import type { ModuleReferenceKind } from "@duo-director/analyzer";
+import type { ModuleReferenceKind, ModuleReferenceSyntax } from "@duo-director/analyzer";
 import type { Diagnostic, RepoPath } from "@duo-director/core";
 
 export interface ModuleResolutionRequest {
@@ -11,6 +11,10 @@ export interface ModuleResolutionRequest {
   readonly fromPath: RepoPath;
   readonly specifier: string;
   readonly kind: ModuleReferenceKind;
+  /** SourceAnalysis.language of fromPath (T18.0): picks the language's resolver. Absent: TypeScript/JavaScript. */
+  readonly language?: string;
+  /** ModuleReference.syntax (C++ system include, Python relative level). */
+  readonly syntax?: ModuleReferenceSyntax;
 }
 
 export type ModuleResolution =
@@ -21,8 +25,10 @@ export type ModuleResolution =
       /**
        * What the result claims: TypeScript's module resolution picked this file. It is not a claim
        * about what Node.js loads at runtime (for "./foo.js" TypeScript resolves the source "foo.ts").
+       * python-local: a relative or same-repository module file (not the interpreter's import system);
+       * cpp-quoted-include: a quoted include found next to the including file (no include paths).
        */
-      readonly claim: "typescript-resolution";
+      readonly claim: "typescript-resolution" | "python-local" | "cpp-quoted-include";
       /** Resolved to a declaration file (.d.ts, .d.mts, .d.cts). */
       readonly declarationOnly: boolean;
       /** The specifier's extension differs from the resolved file's (e.g. ".js" → ".ts"). */
@@ -30,7 +36,7 @@ export type ModuleResolution =
       /** Config that set the resolution options; absent when the no-config fallback was used. */
       readonly configPath?: RepoPath;
     }
-  | { readonly status: "external"; readonly reason: "package" | "builtin" | "outside-repository" }
+  | { readonly status: "external"; readonly reason: "package" | "builtin" | "outside-repository" | "system-include" | "include-path" }
   | { readonly status: "unresolved"; readonly reason: "not-found" | "not-indexed" }
   | { readonly status: "ambiguous"; readonly candidates: readonly RepoPath[] }
   | { readonly status: "unsupported"; readonly reason: string };

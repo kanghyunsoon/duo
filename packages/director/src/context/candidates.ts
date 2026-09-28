@@ -12,14 +12,18 @@ import {
   compareUtf8, pendingDecisionProposals, type Constraint, type Decision, type Diagnostic, type Issue, type Milestone,
   type ProjectTruth, type Proposal, type Requirement, type SourceLocation,
 } from "@duo-director/core";
+import { DEFAULT_EXTENSION_LANGUAGES, languageProfile } from "@duo-director/analyzer";
 import type { GraphNode } from "@duo-director/graph";
 import { matchConstraint, type RelevanceScope, type ScopeEntry } from "../relevance/policy.js";
 import { displayRef, type Candidate, type Expansion } from "./expand.js";
-import { TIER_ORDER } from "./policy.js";
+import { CROSS_LANGUAGE_FACTOR, GENERIC_FILE_WINDOW, TIER_ORDER } from "./policy.js";
 import { redactSecrets } from "./redact.js";
 import type { SourceReader } from "./retrieve.js";
 import type { SeedResult } from "./seeds.js";
-import { SEED_PROVENANCE, type ContextSeed, type ContextTier, type DecisionHistoryItem, type EvidenceStep, type KnowledgeSignal, type PacketItem, type Representation } from "./types.js";
+import {
+  SEED_PROVENANCE, type ContextLimitation, type ContextSeed, type ContextTier, type DecisionHistoryItem, type EvidenceStep, type KnowledgeSignal, type PacketItem,
+  type Representation,
+} from "./types.js";
 
 export interface LevelText {
   readonly level: Representation;
@@ -61,6 +65,8 @@ export interface ContextPlan {
   readonly signals: readonly KnowledgeSignal[];
   readonly traversalTruncated: boolean;
   readonly keywordOnly: boolean;
+  /** What the analyzers could not see for the code in this plan (T18.0): file-only files, syntactic imports, limited CALLS. */
+  readonly analysisLimits: readonly ContextLimitation[];
   readonly diagnostics: readonly Diagnostic[];
 }
 
@@ -81,10 +87,57 @@ interface Draft {
 
 const EXT_LANG: readonly [RegExp, string][] = [
   [/\.(?:ts|mts|cts)$/u, "ts"], [/\.tsx$/u, "tsx"], [/\.(?:js|mjs|cjs)$/u, "js"], [/\.jsx$/u, "jsx"], [/\.md$/u, "md"], [/\.ya?ml$/u, "yaml"], [/\.json$/u, "json"],
+  [/\.java$/u, "java"], [/\.cs$/u, "csharp"], [/\.(?:cpp|cc|cxx|hpp|hh|hxx|h)$/u, "cpp"], [/\.py$/u, "python"],
 ];
 
 function langOf(path: string): string {
   return EXT_LANG.find(([re]) => re.test(path))?.[1] ?? "";
+}
+
+const extensionOf = (path: string): string => {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+};
+
+const FAMILY: Readonly<Record<string, string>> = { typescript: "ts-js", tsx: "ts-js", javascript: "ts-js" };
+/** Language family of a code node ID ("file:…", "sym:…#…", "test:…#…"); undefined for Truth and generic files. */
+function familyOf(id: string): string | undefined {
+  const m = /^(?:file|sym|test):([^#]*)/u.exec(id);
+  const language = m === null ? undefined : DEFAULT_EXTENSION_LANGUAGES[extensionOf(m[1] ?? "")];
+  return language === undefined ? undefined : (FAMILY[language] ?? language);
+}
+
+/** CROSS_LANGUAGE_FACTOR when the candidate's language family differs from its code seed's. */
+function languageAffinity(c: Candidate): number {
+  const seed = familyOf(c.seed);
+  const own = familyOf(c.node.id);
+  return seed !== undefined && own !== undefined && seed !== own ? CROSS_LANGUAGE_FACTOR : 1;
+}
+
+/**
+ * Capability limitations of the code in a plan (T18.0), from each file's language and the default
+ * analyzer profile of that language. Deterministic order; languages sorted.
+ */
+export function analysisLimitations(fileLanguages: ReadonlyMap<string, string | undefined>): ContextLimitation[] {
+  const out: ContextLimitation[] = [];
+  const fileOnly = [...fileLanguages].filter(([, l]) => l === undefined || languageProfile(l) === undefined).map(([p]) => p);
+  if (fileOnly.length > 0) {
+    const exts = [...new Set(fileOnly.map((p) => (extensionOf(p) === "" ? "(none)" : `.${extensionOf(p)}`)))].sort(compareUtf8).slice(0, 8);
+    out.push({
+      code: "structural-analysis-unavailable",
+      message: `structure: ${fileOnly.length} file(s) here have no structural analyzer (${exts.join(", ")}): path and at most their first ${GENERIC_FILE_WINDOW.lines} lines, no symbols, tests, imports or calls.`,
+    });
+  }
+  const languages = [...new Set([...fileLanguages.values()].filter((l): l is string => l !== undefined && languageProfile(l) !== undefined))].sort(compareUtf8);
+  const where = (pred: (l: string) => boolean) => languages.filter(pred);
+  const imp = (level: string) => where((l) => languageProfile(l)?.capabilities.imports === level);
+  const call = (strategy: string) => where((l) => languageProfile(l)?.callResolution === strategy);
+  if (imp("syntactic").length > 0) out.push({ code: "imports-syntactic", message: `imports: ${imp("syntactic").join(", ")} imports are recorded as written and do not link files.` });
+  if (imp("partial").length > 0) out.push({ code: "imports-partial", message: `imports: ${imp("partial").join(", ")} imports link files only when the target is certain (relative or same-repository modules, quoted includes next to the file).` });
+  if (call("none").length > 0) out.push({ code: "calls-unresolved", message: `calls: ${call("none").join(", ")} call sites have no CALLS edges.` });
+  if (call("same-file-functions").length > 0) out.push({ code: "calls-same-file", message: `calls: ${call("same-file-functions").join(", ")} CALLS edges only join a bare call to the only function of that name in the same file.` });
+  return out;
 }
 
 /** A fenced block whose fence is longer than any backtick run inside (Markdown-inside-Markdown safe). */
@@ -178,6 +231,9 @@ export function planContext(input: PlanInput): ContextPlan {
     if (prev === undefined || d.score > prev.score || (d.score === prev.score && d.depth < prev.depth)) drafts.set(d.id, d);
   };
   const via = (c: Candidate, extra: readonly EvidenceStep[] = []) => ({ seed: displayRef(c.seed), steps: [...c.steps, ...extra] });
+  /** Code files of the candidates → language (undefined: no structural analyzer). */
+  const fileLanguages = new Map<string, string | undefined>();
+  const analyzedPath = (path: string) => { if (!fileLanguages.has(path)) fileLanguages.set(path, DEFAULT_EXTENSION_LANGUAGES[extensionOf(path)]); };
 
   const requirementItem = (r: Requirement, c: Candidate) => {
     const head = `${r.id} ${r.title} (${[r.status, r.milestone, r.priority].filter((x) => x !== null && x !== undefined).join(", ")})`;
@@ -268,6 +324,7 @@ export function planContext(input: PlanInput): ContextPlan {
       }
       case "symbol": {
         const loc = node.source;
+        analyzedPath(ref.path);
         const qn = String(node.payload.qualifiedName ?? ref.symbol);
         const head = `${qn} (${String(node.payload.kind ?? "symbol")}) ${ref.path}${lines(loc)}`;
         let l2: string | undefined, l3: string | undefined;
@@ -280,13 +337,14 @@ export function planContext(input: PlanInput): ContextPlan {
           }
         }
         put({
-          id: node.id, ref: displayRef(node.id), kind: "symbol", tier: codeTier(c), score: c.score, depth: c.depth, mandatory: exactSeeds.has(node.id),
+          id: node.id, ref: displayRef(node.id), kind: "symbol", tier: codeTier(c), score: c.score * languageAffinity(c), depth: c.depth, mandatory: exactSeeds.has(node.id),
           levels: levels([["L1", head], ["L2", l2], ["L3", l3]]), via: via(c), ...(loc === undefined ? {} : { source: loc }), file: ref.path,
         });
         break;
       }
       case "test": {
         const loc = node.source;
+        analyzedPath(ref.path);
         const head = `${String(node.payload.fullName ?? ref.name)} ${ref.path}${lines(loc)}`;
         let l3: string | undefined;
         if (loc !== undefined) {
@@ -295,16 +353,23 @@ export function planContext(input: PlanInput): ContextPlan {
           if (ctx.value !== undefined) l3 = `${head}\n${fence(ctx.value.text, langOf(ref.path))}`;
         }
         put({
-          id: node.id, ref: displayRef(node.id), kind: "test", tier: "test", score: c.score, depth: c.depth, mandatory: exactSeeds.has(node.id),
+          id: node.id, ref: displayRef(node.id), kind: "test", tier: "test", score: c.score * languageAffinity(c), depth: c.depth, mandatory: exactSeeds.has(node.id),
           levels: levels([["L1", head], ["L3", l3]]), via: via(c), ...(loc === undefined ? {} : { source: loc }), file: ref.path,
         });
         break;
       }
       case "file": {
-        const language = typeof node.payload.language === "string" ? ` (${node.payload.language})` : "";
+        const language = typeof node.payload.language === "string" ? node.payload.language : undefined;
+        fileLanguages.set(ref.path, language);
+        // No structural analyzer (T18.0): a bounded head window instead of symbol ranges, never the whole file.
+        let l2: string | undefined;
+        if (language === undefined) {
+          const w = reader.headWindow(ref.path, GENERIC_FILE_WINDOW);
+          if (w !== undefined) l2 = `${ref.path}:1-${w.endLine}${w.truncated ? " (first lines; no structural analyzer)" : " (no structural analyzer)"}\n${fence(w.text, langOf(ref.path))}`;
+        }
         put({
-          id: node.id, ref: ref.path, kind: "file", tier: codeTier(c), score: c.score, depth: c.depth, mandatory: exactSeeds.has(node.id),
-          levels: levels([["L1", `${ref.path}${language}`]]), via: via(c), file: ref.path,
+          id: node.id, ref: ref.path, kind: "file", tier: codeTier(c), score: c.score * languageAffinity(c), depth: c.depth, mandatory: exactSeeds.has(node.id),
+          levels: levels([["L1", `${ref.path}${language === undefined ? "" : ` (${language})`}`], ["L2", l2]]), via: via(c), file: ref.path,
         });
         break;
       }
@@ -366,6 +431,7 @@ export function planContext(input: PlanInput): ContextPlan {
   return {
     items, pending, history: [...history.values()].sort((a, b) => compareUtf8(a.id, b.id)), signals,
     traversalTruncated: expansion.truncated, keywordOnly: input.seeds.seeds.every((s) => s.match === "keyword"),
+    analysisLimits: analysisLimitations(fileLanguages),
     diagnostics,
   };
 }

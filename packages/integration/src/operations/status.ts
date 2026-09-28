@@ -32,6 +32,16 @@ export function projectStatus(root: string, options: OperationOptions = {}): Pro
           },
           wouldRebuild: { full: i.wouldRebuild.full, parse: i.wouldRebuild.parse.length, history: i.wouldRebuild.history, projectTruth: i.wouldRebuild.projectTruth },
         },
+        // T18.0 (additive): how deep the current files are analyzed. Every file has L0; no score.
+        analysis: i === undefined ? null : {
+          analyzerRegistryDigest: i.coverage.analyzerRegistryDigest,
+          files: i.coverage.files,
+          languages: i.coverage.languages.map((l) => ({
+            language: l.language, files: l.files, analyzer: l.analyzer, level: l.level,
+            symbols: l.capabilities.symbols, tests: l.capabilities.tests, imports: l.capabilities.imports, calls: l.capabilities.calls, typeResolution: l.capabilities.typeResolution,
+          })),
+          fileOnly: { level: "L0", files: i.coverage.files.fileOnly, extensions: i.coverage.fileOnlyExtensions },
+        },
         baseline: b === undefined ? null : {
           status: b.status, ...(b.id === undefined ? {} : { id: b.id }), ...(b.reason === undefined ? {} : { reason: b.reason }),
           ...(b.baseline === undefined ? {} : { headOid: b.baseline.git.headOid, dirtyAtAdoption: b.baseline.workingTree.dirty, findings: b.baseline.findings.length }),

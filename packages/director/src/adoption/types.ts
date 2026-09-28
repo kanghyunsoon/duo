@@ -47,8 +47,16 @@ export interface BaselineFinding {
   readonly enforced?: boolean;
 }
 
-/** Where a violation found by Review comes from, relative to the Adoption Baseline. */
-export type ViolationProvenance = "introduced" | "pre-existing" | "pre-existing-touched";
+/**
+ * Where a violation found by Review comes from, relative to the Adoption Baseline.
+ * unverified-at-adoption (T18.0): a symbol violation in a language that had no structural analyzer
+ * when the baseline was captured, so the baseline could not have recorded it. Not introduced (the
+ * baseline is never reinterpreted), not pre-existing (not known either): it warns, it never blocks.
+ */
+export type ViolationProvenance = "introduced" | "pre-existing" | "pre-existing-touched" | "unverified-at-adoption";
+
+/** Languages with structural symbols before T18.0: a baseline without `analysis` was captured with these. */
+export const PRE_T18_STRUCTURAL_LANGUAGES: readonly string[] = ["javascript", "tsx", "typescript"];
 
 export interface AdoptionBaselineBody {
   /** /2 (T15.1): findings evaluated on the HEAD tree, bootstrapTruth. A /1 record is incompatible (not reinterpreted). */
@@ -78,6 +86,11 @@ export interface AdoptionBaselineBody {
   /** Ordered by key. */
   readonly findings: readonly BaselineFinding[];
   readonly limitations: readonly string[];
+  /**
+   * T18.0 (additive): which languages had structural symbols at capture, and the analyzer registry
+   * digest. Absent in a record captured before T18.0 (then PRE_T18_STRUCTURAL_LANGUAGES).
+   */
+  readonly analysis?: { readonly analyzerRegistryDigest: string; readonly structuralLanguages: readonly string[] };
 }
 
 export interface AdoptionBaselineRecord extends AdoptionBaselineBody {

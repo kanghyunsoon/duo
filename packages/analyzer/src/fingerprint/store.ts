@@ -15,7 +15,8 @@ import type { FileFingerprint } from "./fingerprint.js";
 export const FINGERPRINT_FILE_PATH = `${STATE_DIR_NAME}/generated/fingerprints.json` as RepoPath;
 export const FINGERPRINT_FORMAT = "duo-fingerprints";
 /** Bump when the file layout, the hash rules or the normalized-text lists change. 2: kind → fingerprintMode (T04.1). */
-export const FINGERPRINT_FORMAT_VERSION = 2;
+/** 3 (T18.0): ".hxx" is normalized text. */
+export const FINGERPRINT_FORMAT_VERSION = 3;
 
 const ENTRY_KEYS = new Set(["path", "state", "fingerprintMode", "contentHash", "size", "gitBlobOid"]);
 const HASH = /^sha256:[0-9a-f]{64}$/;

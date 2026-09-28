@@ -1,7 +1,7 @@
 import { canonicalSourceText, sliceSource, type RepoPath } from "@duo-director/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AnalyzerRegistry } from "../registry.js";
-import { createDefaultAnalyzerRegistry } from "./ts-js-analyzer.js";
+import { createDefaultAnalyzerRegistry } from "../default-registry.js";
 
 let registry: AnalyzerRegistry;
 beforeAll(async () => {

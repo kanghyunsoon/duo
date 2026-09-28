@@ -23,8 +23,10 @@ export const INDEX_STATE_FORMAT = "duo-index-state";
 /**
  * 2 (T08.1): configs keep the diagnostics of each config file. 3 (T13): the run's persistent
  * diagnostics are kept, so readers (Review) reuse the Indexer's findings instead of recomputing them.
+ * 4 (T18.0): per-file analyzer identity, the registry's analyzer identities and digest, language
+ * module resolution claims.
  */
-export const INDEX_STATE_VERSION = 3;
+export const INDEX_STATE_VERSION = 4;
 /** Graph metadata key that holds the token of the state the graph was written with. */
 export const INDEX_STATE_TOKEN_KEY = "index_state_token";
 export const GRAPH_REVISION_KEY = "graph_revision";
@@ -36,8 +38,8 @@ export interface IndexedFileState {
   readonly contentHash: string;
   readonly size: number;
   readonly gitBlobOid?: string;
-  /** Present for files a LanguageAnalyzer supports. */
-  readonly analysis?: { readonly analyzer: string; readonly version: string; readonly status: "ok" | "failed" };
+  /** Present for files a LanguageAnalyzer supports. identity decides re-analysis (T18.0). */
+  readonly analysis?: { readonly analyzer: string; readonly version: string; readonly identity: string; readonly status: "ok" | "failed" };
   readonly resolution?: FileResolution;
   /** Digest of the file's graph scope (File node, owned nodes, their edges). Absent for Project Truth files. */
   readonly scope?: string;
@@ -51,6 +53,10 @@ export interface IndexState {
   readonly graphSchemaVersion: number;
   readonly moduleResolutionVersion: string;
   readonly callResolutionVersion: number;
+  /** Analyzer ID → identity of the registry that wrote this state (T18.0). */
+  readonly analyzers: Readonly<Record<string, string>>;
+  /** AnalyzerRegistry.digest(): changes whenever an analyzer is added, removed or changed. */
+  readonly analyzerRegistryDigest: string;
   readonly historyWindow: number;
   /** UTF-8 path order. */
   readonly files: readonly IndexedFileState[];
@@ -83,7 +89,11 @@ const moduleResolution = z.union([
     status: z.literal("resolved"), path: repoPath, claim: z.literal("typescript-resolution"),
     declarationOnly: z.boolean(), extensionSubstituted: z.boolean(), configPath: repoPath.optional(),
   }),
-  z.strictObject({ status: z.literal("external"), reason: z.enum(["package", "builtin", "outside-repository"]) }),
+  z.strictObject({
+    status: z.literal("resolved"), path: repoPath, claim: z.enum(["python-local", "cpp-quoted-include"]),
+    declarationOnly: z.boolean(), extensionSubstituted: z.boolean(), configPath: repoPath.optional(),
+  }),
+  z.strictObject({ status: z.literal("external"), reason: z.enum(["package", "builtin", "outside-repository", "system-include", "include-path"]) }),
   z.strictObject({ status: z.literal("unresolved"), reason: z.enum(["not-found", "not-indexed"]) }),
   z.strictObject({ status: z.literal("ambiguous"), candidates: z.array(repoPath) }),
   z.strictObject({ status: z.literal("unsupported"), reason: z.string() }),
@@ -100,7 +110,7 @@ const fileState = z.strictObject({
   contentHash: hash,
   size: z.number().int().nonnegative(),
   gitBlobOid: z.string().optional(),
-  analysis: z.strictObject({ analyzer: z.string().min(1), version: z.string().min(1), status: z.enum(["ok", "failed"]) }).optional(),
+  analysis: z.strictObject({ analyzer: z.string().min(1), version: z.string().min(1), identity: z.string().min(1), status: z.enum(["ok", "failed"]) }).optional(),
   resolution: z.strictObject({
     modules: z.array(moduleResolution), calls: z.array(storedCall), exportDependencies: z.array(repoPath), configFiles: z.array(repoPath),
   }).optional(),
@@ -119,6 +129,8 @@ const indexState = z.strictObject({
   graphSchemaVersion: z.number().int(),
   moduleResolutionVersion: z.string(),
   callResolutionVersion: z.number().int(),
+  analyzers: z.record(z.string(), z.string()),
+  analyzerRegistryDigest: z.string(),
   historyWindow: z.number().int().positive(),
   files: z.array(fileState),
   configs: z.record(z.string(), z.strictObject({ contentHash: hash, diagnostics: z.array(storedDiagnostic).optional() })),

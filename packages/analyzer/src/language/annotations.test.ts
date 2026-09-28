@@ -30,6 +30,12 @@ describe("parseDuoAnnotations", () => {
   it("ignores text where duo: does not start the comment line, and duplicate IDs", () => {
     expect(parseDuoAnnotations(p, "// see duo: AUTH-01", 1, 1)).toEqual({ annotations: [], diagnostics: [] });
     expect(parseDuoAnnotations(p, "//duo:AUTH-01,AUTH-01", 1, 1).annotations[0]?.ids).toEqual(["AUTH-01"]);
-    expect(parseDuoAnnotations(p, "# duo: AUTH-01", 1, 1)).toEqual({ annotations: [], diagnostics: [] });
+    expect(parseDuoAnnotations(p, "# see duo: AUTH-01", 1, 1)).toEqual({ annotations: [], diagnostics: [] });
+  });
+
+  it("reads a Python hash comment (T18.0)", () => {
+    expect(parseDuoAnnotations(p, "# duo: AUTH-01", 2, 5).annotations).toEqual([
+      { ids: ["AUTH-01"], location: { path: p, startLine: 2, startColumn: 7, endLine: 2, endColumn: 19 } },
+    ]);
   });
 });

@@ -4,7 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { computeContentHash } from "../../fingerprint/content-hash.js";
 import type { AnalyzerRegistry } from "../registry.js";
 import type { SourceAnalysis } from "../types.js";
-import { createDefaultAnalyzerRegistry, createTypeScriptAnalyzer } from "./ts-js-analyzer.js";
+import { createDefaultAnalyzerRegistry } from "../default-registry.js";
+import { createTypeScriptAnalyzer } from "./ts-js-analyzer.js";
 
 const FIXTURES = new URL("../../../../../fixtures/analyzer/", import.meta.url);
 const p = (s: string) => s as RepoPath;

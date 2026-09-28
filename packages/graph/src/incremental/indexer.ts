@@ -4,7 +4,8 @@
  *
  * The full builder (buildGraphPlan) is the only plan generator. The Indexer feeds it the same facts a
  * clean build would collect, but reuses the expensive parts whose inputs did not change:
- *   - SourceAnalysis: reused when contentHash and analyzer id/version are the same (no AST parse);
+ *   - SourceAnalysis: reused when contentHash and the analyzer identity are the same (no AST parse);
+ *     a new or changed analyzer re-analyzes exactly the files it (now) claims (T18.0);
  *   - module resolution: reused unless the file, the indexed file set or a config in scope changed;
  *   - call resolution: reused unless the file, its module results or a file its export lookups read
  *     changed (decided inside the builder);
@@ -26,7 +27,7 @@ import {
 import { replaceGraph } from "../build/apply.js";
 import { buildGraphPlan, CALL_RESOLUTION_VERSION } from "../build/builder.js";
 import { HISTORY_WINDOW, summarizeHistory } from "../build/history.js";
-import { createTypeScriptModuleResolver } from "../build/resolve/typescript/typescript-module-resolver.js";
+import { createLanguageModuleResolver } from "../build/resolve/languages.js";
 import { fileScope, scopeDigests, TRUTH_SCOPE } from "../build/scope.js";
 import type { AnalyzedFile, FileResolution, HistorySummary, ResolutionMemo } from "../build/types.js";
 import { openNodeSqliteGraphStore } from "../store/node-sqlite/node-sqlite-graph-store.js";
@@ -119,6 +120,11 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
     if (created.value === undefined) return failure(diagnostics);
     registry = created.value;
   }
+  const selection = registry.scope(current.map((f) => f.path).filter((p) => !p.startsWith(STATE_PREFIX)));
+  const analyzerIdentities = registry.identities();
+  const analyzerRegistryDigest = registry.digest();
+  const languages: Record<string, { files: number; parsed: number; reused: number; failed: number; parseMs: number }> = {};
+  const lang = (key: string) => (languages[key] ??= { files: 0, parsed: 0, reused: 0, failed: 0, parseMs: 0 });
   const analyses: AnalyzedFile[] = [];
   const failedAnalyses: RepoPath[] = [];
   const analysisFreshness = new Map<RepoPath, AnalysisFreshness>();
@@ -131,34 +137,46 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   try {
     for (const f of current) {
       if (f.path.startsWith(STATE_PREFIX)) continue;
-      const analyzer = registry.analyzerFor(f.path);
-      if (analyzer === undefined) continue;
+      const analyzer = selection.analyzerFor(f.path);
+      if (analyzer === undefined) {
+        lang("file-only").files++;
+        continue;
+      }
+      const language = analyzer.languages.length === 1 ? (analyzer.languages[0] as string) : analyzer.id;
+      lang(language).files++;
       const prev = prevFiles.get(f.path);
       let freshness: AnalysisFreshness = analysisFreshnessOf(previous, prev, f, analyzer);
-      const key: AnalysisCacheKey = { path: f.path, contentHash: f.contentHash, analyzer: analyzer.id, analyzerVersion: analyzer.version };
+      const key: AnalysisCacheKey = { path: f.path, contentHash: f.contentHash, analyzer: analyzer.id, analyzerIdentity: analyzer.identity };
+      const facts = { analyzerVersion: analyzer.version, callResolution: analyzer.callResolution, capabilities: analyzer.capabilities };
+      const stateOf = (status: "ok" | "failed") => ({ analyzer: analyzer.id, version: analyzer.version, identity: analyzer.identity, status });
       const cached = freshness === "fresh" ? readCachedAnalysis(rootDir, key) : undefined;
       if (freshness === "fresh" && cached === undefined) freshness = "missing";
       analysisFreshness.set(f.path, freshness);
       if (cached !== undefined) {
         analysisReused++;
+        lang(language).reused++;
         diagnostics.push(...cached.diagnostics);
-        analyses.push({ analysis: cached.analysis, analyzerVersion: analyzer.version });
-        analysisState.set(f.path, { analyzer: analyzer.id, version: analyzer.version, status: "ok" });
+        analyses.push({ analysis: cached.analysis, ...facts });
+        analysisState.set(f.path, stateOf("ok"));
         cacheKeys.push(key);
         continue;
       }
       changedFiles.add(f.path);
       const content = fs.readFileSync(path.join(rootDir, f.path));
       analyzed++;
+      const started = performance.now();
       const r = analyzer.analyze({ path: f.path, content });
+      lang(language).parsed++;
+      lang(language).parseMs += performance.now() - started;
       diagnostics.push(...r.diagnostics);
       if (r.value === undefined) {
         failedAnalyses.push(f.path);
-        analysisState.set(f.path, { analyzer: analyzer.id, version: analyzer.version, status: "failed" });
+        lang(language).failed++;
+        analysisState.set(f.path, stateOf("failed"));
         continue;
       }
-      analyses.push({ analysis: r.value, analyzerVersion: analyzer.version });
-      analysisState.set(f.path, { analyzer: analyzer.id, version: analyzer.version, status: "ok" });
+      analyses.push({ analysis: r.value, ...facts });
+      analysisState.set(f.path, stateOf("ok"));
       texts.set(f.path, content.toString("utf8"));
       diagnostics.push(...writeCachedAnalysis(rootDir, key, { analysis: r.value, diagnostics: r.diagnostics }).map((d) => ({ ...d, severity: "warning" as const })));
       cacheKeys.push(key);
@@ -188,7 +206,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
 
   // ---- module resolution reuse (config scope, file set, versions) ----
   const indexedFiles = new Set(current.map((f) => f.path).filter((p) => !p.startsWith(STATE_PREFIX)));
-  const resolver = createTypeScriptModuleResolver({ root: rootDir, indexedFiles });
+  const resolver = createLanguageModuleResolver({ root: rootDir, indexedFiles });
   const signals = resolutionSignals(rootDir, changes, previous);
   const moduleFreshness = new Map<RepoPath, ModuleResolutionFreshness>();
   const previousResolution = new Map<RepoPath, FileResolution>();
@@ -254,6 +272,8 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
     graphSchemaVersion: store.graphSchemaVersion,
     moduleResolutionVersion: resolver.version,
     callResolutionVersion: CALL_RESOLUTION_VERSION,
+    analyzers: analyzerIdentities,
+    analyzerRegistryDigest,
     historyWindow: window,
     files, configs,
     truthScope: digests.get(TRUTH_SCOPE) ?? EMPTY_DIGEST,
@@ -321,6 +341,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
       filesCallsRecomputed: work.filesCallsRecomputed, callsRecomputed: work.callsRecomputed, callsReused: work.callsReused,
     },
     history: { recomputed: historyRecomputed, commits: history?.commitCount ?? 0 },
+    languages: Object.fromEntries(Object.entries(languages).sort(([a], [b]) => compareUtf8(a, b)).map(([k, v]) => [k, { ...v, parseMs: Math.round(v.parseMs) }])),
     graph: previous === undefined
       ? {
           scopes: after.size, scopesChanged: after.size, nodesAdded: plan.nodes.length, nodesRemoved: counts.nodes, nodesUpdated: 0,

@@ -13,12 +13,20 @@ import type { ReviewClaim } from "./types.js";
 export type NonApplicationReason = "project-truth" | "test" | "configuration" | "tooling" | "generated" | "documentation" | "declaration";
 
 const TEST_NAME = /(?:\.|^)(?:test|spec|e2e|stories|story|bench)\.[cm]?[jt]sx?$/u;
+/**
+ * Test file names in Java, C#, C++ and Python (T18.0): FooTest.java, FooTests.cs, FooIT.java,
+ * foo_test.cpp, foo_unittest.cc, test_foo.py, foo_test.py, conftest.py.
+ */
+const OTHER_TEST_NAME = /^(?:\w+(?:Tests?|IT)\.(?:java|cs|cpp|cc|cxx)|\w+_(?:test|unittest)\.(?:cpp|cc|cxx|py)|test_\w+\.py|conftest\.py)$/u;
 const TEST_DIRS = new Set(["test", "tests", "__tests__", "__mocks__", "spec", "specs", "e2e", "fixtures", "__fixtures__", "testing"]);
 const SETUP_NAME = /^(?:setup-?tests?|test-?setup|[a-z]+\.setup)\.[cm]?[jt]sx?$/iu;
-const CONFIG_NAME = /(?:^|\.)config\.[cm]?[jt]sx?$|^\.[^/]*rc\.[cm]?[jt]sx?$|^(?:gulpfile|gruntfile|jakefile|webpack\.[a-z]+)\.[cm]?[jt]s$/iu;
+const CONFIG_NAME = /(?:^|\.)config\.[cm]?[jt]sx?$|^\.[^/]*rc\.[cm]?[jt]sx?$|^(?:gulpfile|gruntfile|jakefile|webpack\.[a-z]+)\.[cm]?[jt]s$|^setup\.py$|^noxfile\.py$|\.(?:Build|Target)\.cs$/iu;
 const TOOLING_DIRS = new Set(["scripts", "script", "tools", "tooling", ".github", ".husky", ".vscode", ".storybook", ".devcontainer"]);
-const GENERATED_DIRS = new Set(["dist", "build", "out", "coverage", "node_modules", "generated", "__generated__", ".next", ".turbo", "vendor"]);
-const GENERATED_NAME = /\.(?:generated|gen|min)\.[cm]?[jt]sx?$/u;
+const GENERATED_DIRS = new Set([
+  "dist", "build", "out", "coverage", "node_modules", "generated", "__generated__", ".next", ".turbo", "vendor",
+  "target", "obj", "__pycache__", ".venv", "venv", "site-packages", "intermediate", "binaries",
+]);
+const GENERATED_NAME = /\.(?:generated|gen|min)\.[cm]?[jt]sx?$|\.(?:g|g\.i|designer)\.cs$|\.generated\.h$|_pb2(?:_grpc)?\.py$|\.pb\.(?:h|cc)$/iu;
 const DOC_DIRS = new Set(["docs", "doc", "examples", "example"]);
 
 /** Why a path is not application source for R-SCOPE, or undefined when it may be. */
@@ -27,7 +35,7 @@ export function nonApplicationReason(path: RepoPath): NonApplicationReason | und
   const segments = path.split("/");
   const name = segments[segments.length - 1] ?? "";
   const dirs = segments.slice(0, -1).map((s) => s.toLowerCase());
-  if (TEST_NAME.test(name) || SETUP_NAME.test(name) || dirs.some((d) => TEST_DIRS.has(d))) return "test";
+  if (TEST_NAME.test(name) || OTHER_TEST_NAME.test(name) || SETUP_NAME.test(name) || dirs.some((d) => TEST_DIRS.has(d))) return "test";
   if (dirs.some((d) => GENERATED_DIRS.has(d)) || GENERATED_NAME.test(name)) return "generated";
   if (CONFIG_NAME.test(name)) return "configuration";
   if (dirs.some((d) => TOOLING_DIRS.has(d))) return "tooling";

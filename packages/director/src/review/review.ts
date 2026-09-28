@@ -12,18 +12,20 @@
 import { performance } from "node:perf_hooks";
 import { openGitProvider, type AnalyzerRegistry } from "@duo-director/analyzer";
 import {
-  canonicalDiagnostics, canonicalSourceText, compareUtf8, loadProjectTruth, readSourceFile, sha256Text, stableJson, STATE_DIR_NAME, success,
+  canonicalDiagnostics, canonicalSourceText, compareUtf8, fileRef, loadProjectTruth, readSourceFile, sha256Text, stableJson, STATE_DIR_NAME, success,
   type Diagnostic, type EvidenceBasis, type ParseResult,
 } from "@duo-director/core";
 import type { GitDiffEnd, GitProvider } from "@duo-director/analyzer";
 import { inspectIndex, readIndexState, type GraphReader, type IndexedGraph } from "@duo-director/graph";
 import { compileContext } from "../context/compile.js";
+import { analysisLimitations } from "../context/candidates.js";
 import { SourceReader } from "../context/retrieve.js";
 import type { ContextPacket, ContextResult } from "../context/types.js";
 import { EvidenceStore } from "../evidence/store.js";
 import { assessKnowledgeGaps } from "../gap/assess.js";
 import type { LLMProvider } from "../llm/contract/types.js";
 import { loadAdoptionBaseline } from "../adoption/baseline.js";
+import { PRE_T18_STRUCTURAL_LANGUAGES } from "../adoption/types.js";
 import { reviewVerdict } from "./aggregate.js";
 import type { RuleContext } from "./claims.js";
 import { collectDiff } from "./diff.js";
@@ -50,6 +52,27 @@ export interface ReviewOptions {
 
 const packetScopeIds = (p: ContextPacket | undefined): ReadonlySet<string> =>
   new Set(p === undefined ? [] : [...p.intent.requirements, ...p.intent.constraints, ...p.decisions.active, ...p.code, ...p.tests, ...p.issues].map((i) => i.id).concat(p.omittedCandidates.map((o) => o.id)));
+
+/** Documentation and data files: no structural analysis is expected, so they are no limitation. */
+const DATA_FILE = /\.(?:md|markdown|mdx|txt|rst|adoc|json|jsonc|json5|ya?ml|toml|lock|ini|cfg|conf|properties|xml|csv|tsv|svg|env\.example)$|(?:^|\/)(?:\.gitignore|\.gitattributes|\.editorconfig|\.npmrc|LICENSE|NOTICE)$/iu;
+
+/**
+ * What the analyzers could not see in the changed files (T18.0): a changed file without a structural
+ * analyzer is reviewed at file level only (path, diff, Git, Truth references); analyzed files carry
+ * their language's import and call limits. Limitations lower confidence; they never create a claim.
+ */
+function analysisLimitsOf(files: readonly ChangedFile[], graph: GraphReader): ReviewLimitation[] {
+  const languages = new Map<string, string | undefined>();
+  for (const f of files) {
+    if (f.kind === "deleted" || f.binary || f.path.startsWith(`${STATE_DIR_NAME}/`)) continue;
+    const language = graph.getNode(fileRef(f.path))?.payload.language;
+    if (typeof language === "string") languages.set(f.path, language);
+    else if (!DATA_FILE.test(f.path)) languages.set(f.path, undefined);
+  }
+  return analysisLimitations(languages).map((l) => (l.code === "structural-analysis-unavailable"
+    ? { code: l.code, message: `${[...languages.values()].filter((x) => x === undefined).length} changed file(s) have no structural analyzer: they are reviewed at file level (path, diff, Git, Truth references), without symbols, tests, imports or calls.` }
+    : l));
+}
 
 function limitationsOf(files: ReviewResult["diff"], packet: ContextPacket | undefined, hasTask: boolean, taskReady: boolean): ReviewLimitation[] {
   const out: ReviewLimitation[] = [...(packet?.limitations ?? []).filter((l) => l.code === "calls-exact-only" || l.code === "traversal-truncated" || l.code === "omitted")];
@@ -170,6 +193,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
     stateDiagnostics: readIndexState(root).state?.diagnostics ?? [],
     ...(request.testResults === undefined ? {} : { testResults: request.testResults }),
     ...(adoption.baseline === undefined ? {} : { baselineKeys: new Set(adoption.baseline.findings.map((f) => f.key)) }),
+    ...(adoption.baseline === undefined ? {} : { baselineStructuralLanguages: new Set(adoption.baseline.analysis?.structuralLanguages ?? PRE_T18_STRUCTURAL_LANGUAGES) }),
   };
   const integrity = await decisionIntegrity(ctx);
   const forbids = await decisionForbids(ctx);
@@ -206,6 +230,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
     },
     limitations: [
       ...limitationsOf({ identity: diff.value.identity, from: diff.value.from, to: diff.value.to, files }, reviewPacket, task !== "", taskContext?.status === "ready"),
+      ...analysisLimitsOf(files, options.graph),
       ...drift.limitations,
       ...(adoption.status === "incompatible" ? [{ code: "adoption-baseline-unusable", message: "The Adoption Baseline cannot be used (" + (adoption.reason ?? "unreadable") + "); violations are not told apart from pre-existing ones." }] : []),
     ],

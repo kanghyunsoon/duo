@@ -21,7 +21,7 @@ flowchart TD
 | 패키지 | 책임 | Lane Task |
 |---|---|---|
 | core | .duo-project 스키마, loader, Markdown 정의 파서, ID와 추적성 검사, DecisionService, state 경로, Claim/Evidence/Verdict 타입, TokenEstimator, write boundary 정책 | TASK-002, 009 |
-| analyzer | 파일 스캔, fingerprint, LanguageAnalyzer(TS/JS), GitProvider | TASK-004, 005, 006 |
+| analyzer | 파일 스캔(build output 제외 포함), fingerprint, AnalyzerRegistry와 LanguageAnalyzer(TS/JS, Java, C#, C++, Python, T18.0), AnalyzerCapabilities, GitProvider | TASK-004, 005, 006 |
 | graph | GraphStore(node:sqlite), builder, traversal, incremental, trace, impact, check | TASK-003, 007, 008 |
 | director | Context Compiler, Evidence, Review, Knowledge Gap, token budget, LLMProvider, InitService | TASK-010~014 |
 | integration | shared operations(`operations/`: CLI `--json` result와 MCP structuredContent의 공통 payload, C135), MCP stdio 서버(`mcp/`, SDK는 이 계층에서만 import), Agent integration(`agents/`: `duoctl install`의 inspect → plan → apply → verify, codex·claude-code adapter, T17), 로컬 HTTP API, (향후) 외부 EvidenceProvider. analyzer는 Git root 검증과 analyzer registry 때문에 import한다(TASK-016) | TASK-016, 017, 018 |
@@ -32,7 +32,8 @@ flowchart TD
 
 | Interface | 위치 | MVP 구현 | 향후 |
 |---|---|---|---|
-| `LanguageAnalyzer` | analyzer | TypeScriptAnalyzer, JavaScriptAnalyzer | PythonAnalyzer |
+| `LanguageAnalyzer` | analyzer(`AnalyzerRegistry`가 파일마다 고름, capability를 선언) | TypeScript, JavaScript(L2 일부), Java, C#, C++, Python(L1, 공통 `createTreeSitterAnalyzer`), 그 밖은 generic file(L0) | 언어별 semantic resolver(classpath, MSBuild, compile_commands, Python import graph) |
+| `ModuleResolver` | graph(`createLanguageModuleResolver`, 요청의 language로 고름) | TypeScript module resolution, Python 상대·repository module, C++ 옆 파일 quoted include | Java package, C# namespace, include path |
 | `EvidenceProvider` | Evidence 데이터 계약은 core(`Evidence`, `EvidenceBasis`), 수집 조정과 외부 provider 경계는 director(`evidence/`, T13, C44) | 내장 source: Project Truth, repository(Graph), Git(`GitProvider`), 호출자 테스트 결과, 선택 LLM | Jira, GitHub Issues(integration) |
 | `LLMProvider` | director(계약, T12A). adapter는 integration(`packages/integration/src/llm/`) → director 방향. director는 vendor SDK를 import하지 않음(lint) | Noop provider(T12A), OpenAIResponsesProvider(T12B) | OpenAICompatibleChatProvider, AnthropicProvider, LocalProvider |
 | `TokenEstimator` | director/tokens(C79) | o200k_base(gpt-tokenizer 4.0.0), chars/4(UI approx) | - |

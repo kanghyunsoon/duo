@@ -11,7 +11,7 @@ import {
   type AnalyzerRegistry,
 } from "@duo-director/analyzer";
 import { failure, loadProjectTruth, STATE_DIR_NAME, success, type Diagnostic, type ParseResult, type RepoPath } from "@duo-director/core";
-import { createTypeScriptModuleResolver } from "./resolve/typescript/typescript-module-resolver.js";
+import { createLanguageModuleResolver } from "./resolve/languages.js";
 import { HISTORY_WINDOW, summarizeHistory } from "./history.js";
 import type { AnalyzedFile, GraphBuildInput } from "./types.js";
 
@@ -47,9 +47,10 @@ export async function collectGraphFacts(root: string, options: CollectOptions = 
   const failedAnalyses: RepoPath[] = [];
   const texts = new Map<RepoPath, string>();
   try {
+    const selection = registry.scope(fingerprinted.fingerprints.map((f) => f.path).filter((p) => !p.startsWith(`${STATE_DIR_NAME}/`)));
     for (const f of fingerprinted.fingerprints) {
       if (f.path.startsWith(`${STATE_DIR_NAME}/`)) continue;
-      const analyzer = registry.analyzerFor(f.path);
+      const analyzer = selection.analyzerFor(f.path);
       if (analyzer === undefined) continue;
       const content = fs.readFileSync(path.join(rootDir, f.path));
       const r = analyzer.analyze({ path: f.path, content });
@@ -58,7 +59,7 @@ export async function collectGraphFacts(root: string, options: CollectOptions = 
         failedAnalyses.push(f.path);
         continue;
       }
-      analyses.push({ analysis: r.value, analyzerVersion: analyzer.version });
+      analyses.push({ analysis: r.value, analyzerVersion: analyzer.version, callResolution: analyzer.callResolution, capabilities: analyzer.capabilities });
       texts.set(f.path, content.toString("utf8"));
     }
   } finally {
@@ -73,7 +74,7 @@ export async function collectGraphFacts(root: string, options: CollectOptions = 
   diagnostics.push(...(state?.diagnostics ?? []), ...(commits?.diagnostics ?? []));
 
   const indexedFiles = new Set(fingerprinted.fingerprints.map((f) => f.path).filter((p) => !p.startsWith(`${STATE_DIR_NAME}/`)));
-  const moduleResolver = createTypeScriptModuleResolver({ root: rootDir, indexedFiles });
+  const moduleResolver = createLanguageModuleResolver({ root: rootDir, indexedFiles });
   return success({
     truth, trace, files: fingerprinted.fingerprints, analyses, failedAnalyses,
     sourceText: (p) => texts.get(p),

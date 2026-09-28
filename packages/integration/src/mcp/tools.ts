@@ -58,7 +58,7 @@ function payloadSchema(format: string, keys: readonly string[]) {
 }
 
 export const OUTPUT = {
-  duo_get_status: payloadSchema(STATUS_FORMAT, ["initialized", "project", "truth", "index", "baseline", "pendingDecisions", "llm", "message"]),
+  duo_get_status: payloadSchema(STATUS_FORMAT, ["initialized", "project", "truth", "index", "analysis", "baseline", "pendingDecisions", "llm", "message"]),
   duo_get_context: payloadSchema(CONTEXT_FORMAT, ["context", "gaps", "message"]),
   duo_review_changes: payloadSchema("duo.review/1", [
     "request", "baseline", "freshness", "diff", "seeds", "verdict", "verdictBasis", "claims", "evidence", "gaps", "context", "limitations", "semanticAssist", "metrics", "diagnostics", "message",
@@ -66,7 +66,7 @@ export const OUTPUT = {
   duo_get_requirement: payloadSchema(REQUIREMENT_FORMAT, ["id", "requirement", "text", "message"]),
   duo_get_decision: payloadSchema(DECISION_FORMAT, ["id", "decision", "text", "note", "message"]),
   duo_trace: payloadSchema(TRACE_FORMAT, ["index", "node", "depth", "truncated", "nodes", "edges", "message"]),
-  duo_impact: payloadSchema(IMPACT_FORMAT, ["index", "node", "depth", "truncated", "seeds", "items", "evidence", "notice", "message"]),
+  duo_impact: payloadSchema(IMPACT_FORMAT, ["index", "node", "depth", "truncated", "seeds", "items", "evidence", "notice", "limitations", "message"]),
   duo_search_evidence: payloadSchema(EVIDENCE_SEARCH_FORMAT, ["query", "notice", "truncated", "candidates", "message"]),
   duo_propose_decision: payloadSchema(PROPOSAL_FORMAT, ["proposalId", "path", "state", "proposedBy", "confirmed", "indexRequired", "basedOn", "notice", "message"]),
 } as const;

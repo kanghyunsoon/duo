@@ -58,7 +58,7 @@ export const NODE_PAYLOAD_SCHEMAS = {
   symbol: z.strictObject({
     name: z.string(),
     qualifiedName: z.string(),
-    kind: z.enum(["class", "interface", "type-alias", "enum", "function", "method", "constructor", "getter", "setter", "accessor"]),
+    kind: z.enum(["class", "interface", "type-alias", "enum", "function", "method", "constructor", "getter", "setter", "accessor", "struct", "record", "delegate", "namespace", "property", "destructor"]),
     exported: z.boolean(),
     memberScope: z.enum(["static", "instance"]).optional(),
     parent: z.string().optional(),
@@ -68,7 +68,7 @@ export const NODE_PAYLOAD_SCHEMAS = {
   test: z.strictObject({
     name: z.string(),
     fullName: z.string(),
-    frameworkHint: z.enum(["vitest", "jest", "node-test", "unknown"]),
+    frameworkHint: z.enum(["vitest", "jest", "node-test", "junit4", "junit5", "nunit", "xunit", "mstest", "googletest", "catch2", "unreal-automation", "pytest", "unittest", "unknown"]),
     confidence: z.enum(["explicit", "heuristic"]),
     modifier: z.enum(["skip", "only", "todo"]).optional(),
     enclosingSuite: z.string().optional(),

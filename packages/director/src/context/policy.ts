@@ -7,7 +7,8 @@
 import type { GraphEdgeType } from "@duo-director/graph";
 import type { ContextTier } from "./types.js";
 
-export const CONTEXT_POLICY_VERSION = "1";
+/** 2: T18.0, generic-file head window, capability limitations, cross-language factor, Python comment lines as leading context. */
+export const CONTEXT_POLICY_VERSION = "2";
 
 /** Per-hop multiplier. A candidate's order value is seed strength × Π hop weights (best path). */
 export const EDGE_WEIGHTS: Readonly<Record<Exclude<GraphEdgeType, "SUPERSEDES">, number>> = {
@@ -24,6 +25,14 @@ export const EDGE_WEIGHTS: Readonly<Record<Exclude<GraphEdgeType, "SUPERSEDES">,
 
 /** Seed strengths (05). Keyword seeds are normalized to the best keyword score, then scaled. */
 export const SEED_STRENGTH = { id: 1.0, path: 1.0, symbol: 1.0, "symbol-name": 0.9, keyword: 0.6, diff: 1.0 } as const;
+
+/**
+ * T18.0: a code candidate (file, symbol, test) in another language family than the code seed that
+ * brought it in ranks at this fraction of its order value. The same Requirement implemented in another
+ * language stays in the Packet, after the seed language's own code. TypeScript, TSX and JavaScript are
+ * one family; a Truth seed or a file without a structural analyzer has no language and no factor.
+ */
+export const CROSS_LANGUAGE_FACTOR = 0.5;
 
 export const DEFAULT_LIMITS = {
   /** Upper bound; project.yaml context.max_depth (1–3, default 2) replaces it. */
@@ -76,3 +85,9 @@ export const L3_PER_FILE_FIRST_PASS = 2;
 
 /** Lines of comments and decorators kept directly above a symbol or test (surrounding context). */
 export const LEADING_CONTEXT_LINES = 12;
+
+/**
+ * A file no structural analyzer reads (T18.0) has no symbol ranges: its L2 is its first lines, never
+ * the whole file. Both bounds apply; the window ends at the last whole line that fits.
+ */
+export const GENERIC_FILE_WINDOW = { lines: 40, chars: 2000 } as const;

@@ -24,7 +24,7 @@ export const NORMALIZED_TEXT_EXTENSIONS: ReadonlySet<string> = new Set([
   // documentation
   "md", "markdown", "mdx", "txt", "rst", "adoc", "tex", "bib",
   // other languages and scripts
-  "py", "pyi", "rb", "go", "rs", "java", "kt", "kts", "scala", "groovy", "gradle", "c", "h", "cc", "cpp", "cxx", "hpp", "hh",
+  "py", "pyi", "rb", "go", "rs", "java", "kt", "kts", "scala", "groovy", "gradle", "c", "h", "cc", "cpp", "cxx", "hpp", "hh", "hxx",
   "cs", "fs", "swift", "m", "mm", "php", "pl", "lua", "r", "dart", "sh", "bash", "zsh", "fish", "ps1", "psm1", "bat", "cmd",
   "diff", "patch",
 ]);

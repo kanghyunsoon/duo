@@ -33,7 +33,7 @@ Proposal(P-*)은 Graph Node로 만들지 않는다. `duo_search_evidence`와 UI�
 | REQUIRES | Milestone → Requirement, Requirement → Requirement(depends_on), Issue → Issue(depends_on) | declared |
 | IMPLEMENTS | Symbol → Requirement, File → Requirement | declared(`implements.paths`, `implements.symbols`), static(코드 주석 `duo: AUTH-03`). 커밋과 이름 일치 근거는 만들지 않는다(C49) |
 | CALLS | Symbol → Symbol | static, exact 해석만(아래 [CALLS 해석](#calls-해석task-007)). heuristic 결과는 저장하지 않는다(C48) |
-| IMPORTS | File → File | static(TypeScript module resolution이 Repository 안의 indexed File 하나로 해석한 경우만) |
+| IMPORTS | File → File | static(그 언어의 module resolver가 Repository 안의 indexed File 하나로 해석한 경우만: TypeScript module resolution, Python 상대·repository module, C++ 옆 파일 quoted include. Java·C#은 resolver가 없어 IMPORTS 없음, T18.0) |
 | GOVERNS | Decision → Requirement / Issue / File / Symbol | declared(governs, Task의 decisions, `governs.paths` 패턴, `governs.symbols`) |
 | TRACKED_BY | Requirement → Issue | declared(Issue의 requirements) |
 | VALIDATED_BY | Symbol → Test, Requirement → Test | static(test 범위 안 exact 호출의 대상, test에 붙은 annotation), declared(tests 패턴, 테스트 이름의 ID) |
@@ -76,30 +76,37 @@ Edge metadata의 `categories`(T08)는 그 Edge를 만든 입력의 종류이며,
 ```ts
 interface SourceAnalysis {
   path: RepoPath;
-  language: "typescript" | "tsx" | "javascript" | string;
+  language: "typescript" | "tsx" | "javascript" | "java" | "csharp" | "cpp" | "python" | string;
   contentHash: string;                       // FileFingerprint.contentHash와 같음
   parseStatus: "complete" | "partial";
   symbols: { ref: SymbolRef; name: string; qualifiedName: string; kind: SymbolKind; exported: boolean;
              memberScope?: "static" | "instance"; parent?: string;
              location: SourceLocation; additionalLocations?: SourceLocation[] }[];
-  moduleReferences: { specifier: string; kind: "import" | "export-from" | "dynamic-import" | "require";
+  moduleReferences: { specifier: string; kind: "import" | "export-from" | "dynamic-import" | "require" | "using" | "include";
                       typeOnly: boolean;
                       bindings: { local: string; imported: string | "default" | "*"; typeOnly: boolean }[];
                       reexports: { exported: string; imported: string | "*"; typeOnly: boolean }[];
+                      syntax?: { static?: true; wildcard?: true; global?: true; alias?: string; system?: true; relativeLevel?: number };   // T18.0
                       location: SourceLocation }[];
   exports: { exported: string; local?: string; typeOnly: boolean; location: SourceLocation }[];   // v3
   callSites: { kind: "identifier" | "member" | "constructor"; calleeText: string;
                calleePath?: string[]; rootLocal?: true; thisBinding?: "member" | "other";   // v3
+               mayBeMember?: true;                                                           // T18.0: C++/Python, 클래스 안의 bare call
                enclosingSymbol?: SymbolRef; location: SourceLocation }[];
   annotations: { ids: string[]; location: SourceLocation }[];   // "duo: AUTH-03"
   tests: { name: string; fullName: string; kind: "test" | "suite";
-           frameworkHint: "vitest" | "jest" | "node-test" | "unknown"; confidence: "explicit" | "heuristic";
+           frameworkHint: "vitest" | "jest" | "node-test" | "junit4" | "junit5" | "nunit" | "xunit" | "mstest"
+                        | "googletest" | "catch2" | "unreal-automation" | "pytest" | "unittest" | "unknown";
+           confidence: "explicit" | "heuristic";
            modifier?: "skip" | "only" | "todo"; enclosingSuite?: string; enclosingSymbol?: SymbolRef;
            location: SourceLocation }[];
 }
 type SymbolKind = "class" | "interface" | "type-alias" | "enum" | "function"
-                | "method" | "constructor" | "getter" | "setter" | "accessor";
+                | "method" | "constructor" | "getter" | "setter" | "accessor"
+                | "struct" | "record" | "delegate" | "namespace" | "property" | "destructor";   // T18.0
 ```
+
+SourceAnalysis 계약은 언어와 무관하다(T18.0). 아래 규칙은 TypeScript/JavaScript의 것이고, Java·C#·C++·Python의 Symbol·Test·import 범위와 한계는 [language-support.md](language-support.md)에 있다. 언어별 Node type은 없고 language는 File payload다.
 
 - **Symbol 범위**: top-level class, interface, type alias, enum, function 선언, initializer가 arrow function이나 function expression인 top-level 변수, 익명 default export(function, class, arrow), class의 method, constructor, getter, setter. 중첩 함수와 일반 상수(`const TIMEOUT = 5000`)는 Symbol이 아니다.
 - **qualifiedName과 identity**: qualifiedName은 표시용이다. top-level은 이름, class member는 `Class.member`(private은 `AuthService.#refresh`), 익명 default export는 `default`(member는 `default.render`). identity(`ref.symbol`)는 static member만 `Class.static.member`이고 identifier가 아닌 이름은 `Class["a.b"]`다. computed name(`[Symbol.iterator]`)은 Symbol로 만들지 않는다.
@@ -112,11 +119,11 @@ type SymbolKind = "class" | "interface" | "type-alias" | "enum" | "function"
 - **CallSite 구조(v3)**: `calleePath`는 callee가 점으로 이은 이름일 때의 이름 목록(`["Auth", "login"]`, `["this", "#refresh"]`)이고 computed callee면 없다. `rootLocal`은 첫 이름이 감싸는 함수의 parameter나 지역 선언이라 module 수준 이름이 아님을 뜻한다. `thisBinding`은 `this`가 감싸는 class member의 것이면 `member`, 중첩 function 안이나 그 밖이면 `other`다. Builder가 원문을 다시 읽지 않고 해석하기 위한 syntax 사실이다(C51).
 - **LocalExport(v3)**: 자기 선언을 내보내는 이름(`export function f`, `export { a as b }`, `export default X`)이다. `local`은 이름 없는 default expression이면 없다. re-export는 moduleReferences의 `reexports`에 있다.
 - **Test**: literal 이름(문자열, substitution 없는 template literal)의 `test`, `it`, `describe`, `suite` 호출과 `.skip`, `.only`, `.todo`. `vitest`, `@jest/globals`, `node:test`에서 import한 binding(alias와 namespace 포함)이면 `explicit`과 그 framework, import 근거 없이 `*.test.*` / `*.spec.*` 파일의 전역 호출이면 `heuristic`과 `unknown`이다. 일반 source의 전역 `it()`이나 다른 곳에서 import했거나 선언한 같은 이름은 test가 아니다. `fullName`은 suite 이름을 ` > `로 이은 값이며 위치는 쓰지 않는다. 이름이 literal이 아니면 `TEST_NAME_DYNAMIC`(info)이고 기록하지 않으며 그 suite 안의 test도 기록하지 않는다. `enclosingSymbol`은 test 호출이 추출된 Symbol 안에 있을 때만 있다. Test Node와 VALIDATED_BY는 TASK-007이 만든다.
-- **DuoAnnotation**: Tree-sitter comment 노드에서만 찾는다. 줄 주석 `// duo: AUTH-03`, block 주석의 각 줄(` * duo: AUTH-04, AUTH-05`)에서 `duo:`가 주석 줄의 시작에 있어야 한다. 앞쪽의 definition ID들이 ID 후보이고 첫 non-ID token부터는 설명이다(`// duo: AUTH-07 — 로그인 보조` → `["AUTH-07"]`). ID가 없으면 `DUO_ANNOTATION_INVALID`. 문자열 안의 `"duo: AUTH-03"`은 annotation이 아니다.
+- **DuoAnnotation**: Tree-sitter comment 노드에서만 찾는다. 줄 주석 `// duo: AUTH-03`, Python `# duo: AUTH-03`(T18.0), block 주석의 각 줄(` * duo: AUTH-04, AUTH-05`)에서 `duo:`가 주석 줄의 시작에 있어야 한다. 앞쪽의 definition ID들이 ID 후보이고 첫 non-ID token부터는 설명이다(`// duo: AUTH-07 — 로그인 보조` → `["AUTH-07"]`). ID가 없으면 `DUO_ANNOTATION_INVALID`. 문자열 안의 `"duo: AUTH-03"`은 annotation이 아니다.
 
 ### Module resolution과 IMPORTS(TASK-007)
 
-- Builder는 `ModuleResolver` interface만 쓴다. 구현은 `TypeScriptModuleResolver`이고 TypeScript Compiler API의 module resolution을 그대로 따른다(ADR-003). DUO는 NodeNext, 확장자 대체, `paths`, `baseUrl`, package `exports`/`imports` 규칙을 다시 구현하지 않는다.
+- Builder는 `ModuleResolver` interface만 쓴다. 요청은 `language`와 `syntax`를 싣고 `createLanguageModuleResolver`(graph `resolve/languages.ts`)가 언어별로 답한다(T18.0). TypeScript/JavaScript는 `TypeScriptModuleResolver`이고 TypeScript Compiler API의 module resolution을 그대로 따른다(ADR-003). DUO는 NodeNext, 확장자 대체, `paths`, `baseUrl`, package `exports`/`imports` 규칙을 다시 구현하지 않는다. Python은 상대 import와 root 또는 `src/` 아래의 absolute module(`claim: "python-local"`, 없으면 external package), C++은 포함한 파일 옆의 quoted include(`claim: "cpp-quoted-include"`, `<…>`는 external system-include, 못 찾으면 external include-path: include path는 평가하지 않음), Java·C#은 `unsupported`(Edge 없음, diagnostic 없음). `MODULE_RESOLUTION_VERSION`은 언어별 resolver version을 합친 값이다.
 - 결과는 다섯 가지다. `resolved`(path, `claim: "typescript-resolution"`, declarationOnly, extensionSubstituted, configPath), `external`(package, builtin, outside-repository), `unresolved`(not-found, not-indexed), `ambiguous`, `unsupported`(URL, 절대 경로).
 - `resolved`는 "TypeScript가 이 파일로 해석했다"는 주장이다. Node runtime이 그 파일을 실행한다는 주장과 구분하려고 `claim`, `extensionSubstituted`(`./foo.js` → `foo.ts`), `declarationOnly`(`.d.ts`)를 metadata에 둔다.
 - IMPORTS는 결과가 `resolved`이고 대상이 다른 indexed File일 때만 만든다. `node_modules`와 Repository 밖 경로는 File Node가 되지 않는다. re-export(`export ... from`)도 같은 조건이다. 한 파일 쌍의 여러 참조는 한 Edge이며 metadata에 `kinds`(import, export-from, dynamic-import, require), `typeOnly`(모든 참조가 type일 때), declarationOnly, extensionSubstituted, resolution claim을 둔다.
@@ -125,6 +132,8 @@ type SymbolKind = "class" | "interface" | "type-alias" | "enum" | "function"
 ### CALLS 해석(TASK-007)
 
 **CALLS extraction is syntactic (TASK-005). Target resolution happens once, in the Graph Builder, and only exact results become edges.** TypeScript Program과 Type Checker는 쓰지 않는다(ADR-003). 해석 결과는 `exact | heuristic | ambiguous | unresolved`이고 exact만 CALLS Edge가 된다. heuristic 단계는 구현하지 않았다(C48).
+
+해석 전략은 Analyzer의 `callResolution`이다(T18.0). 아래 규칙은 `module-bindings`(TypeScript/JavaScript)다. `same-file-functions`(C++, Python)는 bare identifier call이 지역 binding이 아니고 클래스 member일 수 없을 때(`mayBeMember` 없음) 같은 파일의 module·namespace 수준 유일한 function에만 exact이며, 같은 이름이 둘 이상이면 ambiguous다. `none`(Java, C#)은 CALLS를 만들지 않는다. CallSite가 있다는 것과 CALLS Edge가 있다는 것은 다르다.
 
 exact 규칙(callable은 일반 호출이면 function, member 호출이면 function이나 method, `new`면 class):
 

@@ -1,18 +1,14 @@
 /**
- * TypeScriptAnalyzer and JavaScriptAnalyzer (TASK-005, ADR-003) on web-tree-sitter. Each analyzer
- * loads its grammars once and keeps one Parser per grammar; every file is parsed once and its tree
- * is deleted right after extraction. Unsupported paths are never parsed.
+ * TypeScriptAnalyzer and JavaScriptAnalyzer (TASK-005, ADR-003) on the shared Tree-sitter analyzer
+ * (analyzer-base.ts). Extraction is ts-js-extract.ts.
  */
-import {
-  createDiagnostic, failure, success, type ParseResult, type RepoPath,
-} from "@duo-director/core";
-import type { Parser } from "web-tree-sitter";
-import { canonicalContent, computeContentHash } from "../../fingerprint/content-hash.js";
-import { fingerprintModeOf } from "../../fingerprint/fingerprint-mode.js";
-import { createAnalyzerRegistry, type AnalyzerRegistry } from "../registry.js";
-import type { LanguageAnalyzer, SourceAnalysis, SourceInput } from "../types.js";
-import { createParser, defaultGrammarLocator, loadGrammars, type GrammarId, type GrammarLocator } from "./runtime.js";
+import type { ParseResult } from "@duo-director/core";
+import type { AnalyzerCapabilities, LanguageAnalyzer } from "../types.js";
+import { createTreeSitterAnalyzer, DEFAULT_PARSE_TIMEOUT_MS, type TreeSitterAnalyzerOptions } from "./analyzer-base.js";
+import type { GrammarId } from "./runtime.js";
 import { extractTypeScriptJavaScript } from "./ts-js-extract.js";
+
+export { DEFAULT_PARSE_TIMEOUT_MS, type TreeSitterAnalyzerOptions };
 
 /** Extension (lowercase, without the dot) → grammar. */
 export const TYPESCRIPT_EXTENSIONS: Readonly<Record<string, GrammarId>> = { ts: "typescript", mts: "typescript", cts: "typescript", tsx: "tsx" };
@@ -23,123 +19,24 @@ export const JAVASCRIPT_EXTENSIONS: Readonly<Record<string, GrammarId>> = { js: 
  * 2: T05.1 static member identity, import bindings, tests. 3: T07 local exports and call structure.
  */
 export const TS_JS_ANALYZER_VERSION = "4";
-/** Per-file parse limit (docs/10-security.md). */
-export const DEFAULT_PARSE_TIMEOUT_MS = 2000;
 
-export interface TreeSitterAnalyzerOptions {
-  /** Where to load grammar WASM from. Default: the official grammar packages. */
-  readonly locateGrammar?: GrammarLocator;
-  readonly parseTimeoutMs?: number;
-}
+/**
+ * L1 plus the L2 parts DUO has: every module specifier is decided by TypeScript's module resolution;
+ * CALLS edges exist where import bindings, the export index or this-members make the target certain
+ * (partial: receiver types are not checked, so an unresolved call is not an absent call).
+ */
+export const TS_JS_CAPABILITIES: AnalyzerCapabilities = { files: true, symbols: "structural", tests: "structural", imports: "resolved", calls: "partial", typeResolution: "none" };
 
-const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
-
-function extensionOf(path: RepoPath): string {
-  const name = path.slice(path.lastIndexOf("/") + 1);
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-}
-
-class TreeSitterAnalyzer implements LanguageAnalyzer {
-  private disposed = false;
-
-  constructor(
-    readonly id: string,
-    readonly version: string,
-    private readonly extensions: Readonly<Record<string, GrammarId>>,
-    private readonly parsers: ReadonlyMap<GrammarId, Parser>,
-    private readonly parseTimeoutMs: number,
-  ) {}
-
-  private grammarOf(path: RepoPath): GrammarId | undefined {
-    return Object.hasOwn(this.extensions, extensionOf(path)) ? this.extensions[extensionOf(path)] : undefined;
-  }
-
-  supports(path: RepoPath): boolean {
-    return this.grammarOf(path) !== undefined;
-  }
-
-  analyze(input: SourceInput): ParseResult<SourceAnalysis> {
-    if (this.disposed) throw new Error(`LanguageAnalyzer "${this.id}" was disposed`);
-    const { path } = input;
-    const grammar = this.grammarOf(path);
-    const parser = grammar === undefined ? undefined : this.parsers.get(grammar);
-    if (grammar === undefined || parser === undefined) {
-      return failure([createDiagnostic("LANGUAGE_UNSUPPORTED", `"${path}" is not a ${this.id} source file`, { path })]);
-    }
-    // Same canonical bytes and hash as the fingerprint: source extensions are normalized-text.
-    const mode = fingerprintModeOf(path);
-    const { contentHash } = computeContentHash(input.content, mode);
-    let text: string;
-    try {
-      // Canonical source text (T09.1): CRLF is already LF in the canonical bytes; a leading BOM is removed so
-      // every location addresses the same text as sliceSource().
-      text = decoder.decode(canonicalContent(input.content, mode));
-      if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
-    } catch {
-      return failure([createDiagnostic("SOURCE_DECODE_ERROR", `"${path}" is not valid UTF-8`, { path })]);
-    }
-    const deadline = performance.now() + this.parseTimeoutMs;
-    const tree = parser.parse(text, null, { progressCallback: () => performance.now() > deadline });
-    if (tree === null) {
-      parser.reset();
-      return failure([createDiagnostic("AST_PARSE_TIMEOUT", `Parsing "${path}" took longer than ${this.parseTimeoutMs} ms`, { path })]);
-    }
-    try {
-      const x = extractTypeScriptJavaScript(path, tree);
-      return success({
-        path,
-        language: grammar,
-        contentHash,
-        parseStatus: x.partial ? "partial" : "complete",
-        symbols: x.symbols,
-        moduleReferences: x.moduleReferences,
-        exports: x.exports,
-        callSites: x.callSites,
-        annotations: x.annotations,
-        tests: x.tests,
-      }, x.diagnostics);
-    } finally {
-      tree.delete();
-    }
-  }
-
-  dispose(): void {
-    if (this.disposed) return;
-    this.disposed = true;
-    for (const parser of this.parsers.values()) parser.delete();
-  }
-}
-
-async function createAnalyzer(
-  id: string,
-  extensions: Readonly<Record<string, GrammarId>>,
-  options: TreeSitterAnalyzerOptions,
-): Promise<ParseResult<LanguageAnalyzer>> {
-  const grammars = [...new Set(Object.values(extensions))].sort();
-  const loaded = await loadGrammars(grammars, options.locateGrammar ?? defaultGrammarLocator);
-  if (loaded.value === undefined) return failure(loaded.diagnostics);
-  const parsers = new Map([...loaded.value].map(([g, language]) => [g, createParser(language)] as const));
-  return success(new TreeSitterAnalyzer(id, TS_JS_ANALYZER_VERSION, extensions, parsers, options.parseTimeoutMs ?? DEFAULT_PARSE_TIMEOUT_MS));
+function spec(id: string, extensions: Readonly<Record<string, GrammarId>>) {
+  return { id, version: TS_JS_ANALYZER_VERSION, extensions, capabilities: TS_JS_CAPABILITIES, callResolution: "module-bindings" as const, extract: extractTypeScriptJavaScript };
 }
 
 /** .ts .mts .cts (TypeScript grammar) and .tsx (TSX grammar). */
 export function createTypeScriptAnalyzer(options: TreeSitterAnalyzerOptions = {}): Promise<ParseResult<LanguageAnalyzer>> {
-  return createAnalyzer("typescript", TYPESCRIPT_EXTENSIONS, options);
+  return createTreeSitterAnalyzer(spec("typescript", TYPESCRIPT_EXTENSIONS), options);
 }
 
 /** .js .mjs .cjs .jsx (JavaScript grammar, which includes JSX). */
 export function createJavaScriptAnalyzer(options: TreeSitterAnalyzerOptions = {}): Promise<ParseResult<LanguageAnalyzer>> {
-  return createAnalyzer("javascript", JAVASCRIPT_EXTENSIONS, options);
-}
-
-/** Registry with the MVP analyzers (TypeScript, JavaScript). The caller disposes it. */
-export async function createDefaultAnalyzerRegistry(options: TreeSitterAnalyzerOptions = {}): Promise<ParseResult<AnalyzerRegistry>> {
-  const [ts, js] = await Promise.all([createTypeScriptAnalyzer(options), createJavaScriptAnalyzer(options)]);
-  if (ts.value === undefined || js.value === undefined) {
-    ts.value?.dispose();
-    js.value?.dispose();
-    return failure([...ts.diagnostics, ...js.diagnostics]);
-  }
-  return success(createAnalyzerRegistry([ts.value, js.value]));
+  return createTreeSitterAnalyzer(spec("javascript", JAVASCRIPT_EXTENSIONS), options);
 }

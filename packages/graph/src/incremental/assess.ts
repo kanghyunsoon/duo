@@ -39,13 +39,13 @@ export function loadPreviousState(root: string, graph: IndexedGraph, historyWind
 
 export const FILE_FRESHNESS = { UNCHANGED: "fresh", CHANGED: "changed", ADDED: "added", DELETED: "deleted" } as const satisfies Record<string, FileFreshness>;
 
-/** Analysis freshness before looking at the cache: fresh = same contentHash AND same analyzer id and version. */
+/** Analysis freshness before looking at the cache: fresh = same contentHash AND same analyzer id and identity (T18.0). */
 export function analysisFreshnessOf(
-  previous: IndexState | undefined, prev: IndexedFileState | undefined, file: FileFingerprint, analyzer: { readonly id: string; readonly version: string },
+  previous: IndexState | undefined, prev: IndexedFileState | undefined, file: FileFingerprint, analyzer: { readonly id: string; readonly identity: string },
 ): AnalysisFreshness {
   if (previous === undefined || prev?.analysis === undefined) return "missing";
   if (prev.contentHash !== file.contentHash || prev.fingerprintMode !== file.fingerprintMode) return "stale-content";
-  if (prev.analysis.analyzer !== analyzer.id || prev.analysis.version !== analyzer.version) return "stale-analyzer";
+  if (prev.analysis.analyzer !== analyzer.id || prev.analysis.identity !== analyzer.identity) return "stale-analyzer";
   if (prev.analysis.status === "failed") return "failed";
   return "fresh";
 }

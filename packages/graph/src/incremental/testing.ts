@@ -74,6 +74,13 @@ export function countingRegistry(base: AnalyzerRegistry, version?: string): Coun
   const analyzers: LanguageAnalyzer[] = base.analyzers.map((a) => ({
     id: a.id,
     version: version ?? a.version,
+    languages: a.languages,
+    extensions: a.extensions,
+    ...(a.contextualExtensions === undefined ? {} : { contextualExtensions: a.contextualExtensions }),
+    capabilities: a.capabilities,
+    callResolution: a.callResolution,
+    // A different version is a different analyzer identity (its files are analyzed again).
+    identity: version === undefined || version === a.version ? a.identity : `${a.identity}+version=${version}`,
     supports: (p) => a.supports(p),
     analyze: (input) => {
       out.parses++;
