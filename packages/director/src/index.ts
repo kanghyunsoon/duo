@@ -14,7 +14,7 @@ export * from "./init/index.js";
 export * from "./llm/index.js";
 export * from "./relevance/index.js";
 export * from "./review/index.js";
-export { appendRuntimeMetric, METRICS_PATH, readRuntimeMetrics, type RuntimeMetric } from "./runtime/metrics.js";
+export { appendRuntimeMetric, METRICS_PATH, readRuntimeMetrics, reviewLlmMetric, type RuntimeMetric } from "./runtime/metrics.js";
 export * from "./tokens/index.js";
 
 export const packageInfo: PackageInfo = {

@@ -34,7 +34,7 @@ Tool은 9개로 고정한다(H-10). 새 Tool이 필요하면 별도 Spec과 ADR�
 
 | Tool | Shared operation → service | payload format | 쓰기 | readOnlyHint |
 |---|---|---|---|---|
-| duo_get_status | `projectStatus` → core loader, graph `inspectIndex`, director `getAdoptionBaselineStatus`, core `listDecisionProposals`, `llmProviderState` | `duo.status/1` | runtime metric 없음 | true |
+| duo_get_status | `projectStatus` → core loader, graph `inspectIndex`, director `getAdoptionBaselineStatus`, core `listDecisionProposals`, integration LLM factory(`LLMProviderPool`, 네트워크 없음) | `duo.status/1` | runtime metric 없음 | true |
 | duo_get_context | `projectContext` → director `compileContext`, Knowledge Gap assessment·renderer | `duo.context/1` | runtime/metrics.jsonl | true |
 | duo_review_changes | `projectReview` → director `reviewChanges` | `duo.review/1`(ReviewResult) | runtime/metrics.jsonl | true |
 | duo_get_requirement | `getRequirement` → core loader, `readSourceSlice` | `duo.requirement/1` | 없음 | true |
@@ -53,7 +53,7 @@ Tool은 9개로 고정한다(H-10). 새 Tool이 필요하면 별도 Spec과 ADR�
 ### duo_get_status
 
 - 입력: `{}`
-- 출력: CLI `duoctl status --json`의 `result`와 같다. `initialized`, `project`, `truth` 개수, `index`(status, fullRebuildReason, changes, wouldRebuild), `baseline`(status, id, headOid, dirtyAtAdoption, findings), `pendingDecisions`, `llm`. 쓰기 0.
+- 출력: CLI `duoctl status --json`의 `result`와 같다. `initialized`, `project`, `truth` 개수, `index`(status, fullRebuildReason, changes, wouldRebuild), `baseline`(status, id, headOid, dirtyAtAdoption, findings), `pendingDecisions`, `llm`(disabled, configured, unavailable), `llmProvider`(T12B: provider, status, model?, reason?; key는 없음). 쓰기 0, 네트워크 0.
 
 ### duo_get_context
 
@@ -66,7 +66,7 @@ Tool은 9개로 고정한다(H-10). 새 Tool이 필요하면 별도 Spec과 ADR�
 - 입력: `{ task?, from? = "HEAD", to? = "WORKTREE", files?: RepoPath[], budget?, includeSemanticAssist?: boolean }`
 - 출력: `ReviewResult`(`duo.review/1`): request, baseline, freshness, diff(파일별 `provenance: "adoption-bootstrap"` 포함), seeds, verdict, verdictBasis, claims(`provenance`, `violationKey`, `blockEligible`), evidence, gaps, limitations, semanticAssist, metrics(`llmCalls`).
 - index-required는 정상 결과다. Review Record를 쓰지 않는다. PASS는 사용 가능한 evidence에서 방향 위반을 찾지 못했다는 뜻이다.
-- LLM Provider는 TASK-012B 전까지 Noop이며 `llmCalls = 0`이다. MCP는 LLM SDK를 추가하지 않는다.
+- **의미 보조(T12B)**: `includeSemanticAssist`의 기본값은 false이고, 켜지 않으면 OpenAI 호출이 없다(`llmCalls = 0`). 켜면 project.yaml의 provider(`openai-responses`)가 configured일 때만 한 번 호출하고, 결과는 `semanticAssist`에 따로 둔다. 결정적 claims·verdict는 바뀌지 않고 LLM만의 결과는 BLOCK·ASK를 만들지 않는다(최대 PASS → WARN). CLI `duoctl review --semantic --json`과 같은 shared operation이다. MCP 서버는 시작할 때 환경(API key)을 snapshot하고 provider를 서버 수명 동안 재사용한다: key를 바꾸면 서버를 다시 시작한다(C192). SDK는 integration의 llm 계층에만 있고 mcp 계층은 import하지 않는다. summary 텍스트에 의미 보조 상태와 LLM claim이 따로 붙는다.
 
 ### duo_get_requirement / duo_get_decision
 
@@ -114,7 +114,7 @@ MCP 요청 취소(client의 `notifications/cancelled`)는 SDK의 `ctx.mcpReq.sig
 
 ## Metrics
 
-context, review, propose 호출은 `runtime/metrics.jsonl`에 `duo.metric/1` 한 줄을 덧붙인다: `surface: "mcp"`, `command`(Tool 이름), `status`, `exitCode`(실패 1, 그 외 0), `durationMs`, `at`, 해당하면 `contextTokens`·`contextBudget`, `reviewVerdict`·`reviewClaims`, `llmCalls`. task 원문, 소스, diff, proposal 본문은 쓰지 않는다. 읽기 전용 Tool(status, requirement, decision, trace, impact, search)은 쓰지 않는다. metric 쓰기 실패는 stderr 경고일 뿐 Tool 결과를 바꾸지 않는다.
+context, review, propose 호출은 `runtime/metrics.jsonl`에 `duo.metric/1` 한 줄을 덧붙인다: `surface: "mcp"`, `command`(Tool 이름), `status`, `exitCode`(실패 1, 그 외 0), `durationMs`, `at`, 해당하면 `contextTokens`·`contextBudget`, `reviewVerdict`·`reviewClaims`, `llmCalls`, 의미 보조를 요청했으면 `llmCacheHits`·`semanticStatus`·`llmProvider`·`llmModel`·Provider가 보고한 `llmInputTokens`·`llmOutputTokens`·`llmCachedInputTokens`(비용 계산 없음). task 원문, 소스, diff, proposal 본문은 쓰지 않는다. 읽기 전용 Tool(status, requirement, decision, trace, impact, search)은 쓰지 않는다. metric 쓰기 실패는 stderr 경고일 뿐 Tool 결과를 바꾸지 않는다.
 
 ## CLI parity (C135)
 

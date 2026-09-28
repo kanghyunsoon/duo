@@ -10,6 +10,7 @@ import { appendRuntimeMetric } from "@duo-director/director";
 import { McpServer, type CallToolResult, type ServerContext } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { NOT_INITIALIZED_FORMAT } from "../operations/common.js";
+import { LLMProviderPool } from "../llm/factory.js";
 import { INPUT, OUTPUT, TOOLS, type ToolContext, type ToolName, type ToolRun } from "./tools.js";
 
 /**
@@ -38,6 +39,11 @@ export interface DuoMcpOptions {
   readonly log?: (line: string) => void;
   /** Test injection: replaces the operation behind a tool. The tool list and schemas stay the same. */
   readonly toolOverrides?: Partial<Record<ToolName, ToolOverride>>;
+  /**
+   * LLM providers (T12B). Default: one pool over the environment as it is when the server starts,
+   * kept for the server's lifetime (a new API key needs a restart). Tests inject a fake transport here.
+   */
+  readonly llm?: LLMProviderPool;
 }
 
 const METERED = new Set<ToolName>(["duo_get_context", "duo_review_changes", "duo_propose_decision"]);
@@ -45,6 +51,7 @@ const METERED = new Set<ToolName>(["duo_get_context", "duo_review_changes", "duo
 export function createDuoMcpServer(options: DuoMcpOptions): McpServer {
   const server = new McpServer({ name: MCP_SERVER_NAME, version: options.version }, { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS });
   const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`));
+  const llm = options.llm ?? new LLMProviderPool(process.env);
   for (const name of Object.keys(TOOLS) as ToolName[]) {
     const tool = TOOLS[name];
     // The SDK's registerTool overloads are generic per schema; this loop registers heterogeneous tools through
@@ -57,7 +64,7 @@ export function createDuoMcpServer(options: DuoMcpOptions): McpServer {
       annotations: { readOnlyHint: tool.readOnly, destructiveHint: false, idempotentHint: tool.readOnly, openWorldHint: false },
     }, async (args: unknown, ctx: ServerContext): Promise<CallToolResult> => {
       const started = Date.now();
-      const toolCtx: ToolContext = { root: options.root, agentName: options.agentName ?? "agent", signal: ctx.mcpReq.signal };
+      const toolCtx: ToolContext = { root: options.root, agentName: options.agentName ?? "agent", signal: ctx.mcpReq.signal, llm };
       const operation = options.toolOverrides?.[name] ?? (tool.run as ToolOverride);
       let run: ToolRun;
       try {
@@ -105,7 +112,9 @@ export async function serveDuoMcp(options: DuoMcpOptions): Promise<ParseResult<D
     return failure(git.diagnostics.length > 0 ? git.diagnostics : [createDiagnostic("GIT_REPOSITORY_REQUIRED", `${options.root} is not a Git repository`)]);
   }
   const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`));
-  const handle = serveStdio(() => createDuoMcpServer(options), { onerror: (e) => log(`${MCP_SERVER_NAME}: ${e.message}`) });
+  // One environment snapshot and provider pool for the server's lifetime (T12B, C192).
+  const serverOptions = { ...options, llm: options.llm ?? new LLMProviderPool(process.env) };
+  const handle = serveStdio(() => createDuoMcpServer(serverOptions), { onerror: (e) => log(`${MCP_SERVER_NAME}: ${e.message}`) });
   let finish = () => {};
   const closed = new Promise<void>((resolve) => { finish = resolve; });
   let closing: Promise<void> | undefined;

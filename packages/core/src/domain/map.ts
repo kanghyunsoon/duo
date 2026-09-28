@@ -110,6 +110,7 @@ export function mapProjectConfig(d: ProjectConfigData, ctx: MapContext): Project
       maxCallsPerReview: d.llm?.max_calls_per_review ?? 1,
       maxInputTokens: d.llm?.max_input_tokens ?? 4000,
       timeoutMs: d.llm?.timeout_ms ?? 30000,
+      cache: d.llm?.cache ?? true,
     },
     location: ctx.fallback,
     references: ctx.references,

@@ -148,6 +148,8 @@ export interface SemanticAssist {
   readonly verdict?: Verdict;
   readonly calls: number;
   readonly cacheHits: number;
+  /** Token usage the provider reported for a call made now (T12B); absent for a cache hit or no call. Never estimated. */
+  readonly usage?: { readonly inputTokens?: number; readonly outputTokens?: number; readonly cachedInputTokens?: number };
 }
 
 export interface ReviewMetrics {

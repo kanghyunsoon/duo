@@ -12,6 +12,7 @@ interface StatusPayload {
   analysis: { languages: { language: string; files: number; level: string }[]; fileOnly: { files: number; extensions: { extension: string; files: number }[] } } | null;
   pendingDecisions: { id: string; title: string }[];
   llm: string;
+  llmProvider?: { provider: string; status: string; model?: string; reason?: string };
 }
 
 export async function statusCommand(env: Env): Promise<Outcome> {
@@ -35,7 +36,7 @@ export async function statusCommand(env: Env): Promise<Outcome> {
     ...(analysis === undefined || analysis === "" ? [] : [t(L, "status.analysis", { languages: analysis })]),
     t(L, "status.baseline", { status: b?.status ?? "unknown", detail: b?.headOid === undefined ? "" : ` · ${b.headOid.slice(0, 12)}${b.dirtyAtAdoption === true ? " · dirty at adoption" : ""} · ${b.findings ?? 0} findings` }),
     t(L, "status.pending", { n: s.pendingDecisions.length }), ...s.pendingDecisions.map((p) => `  ${p.id}  ${p.title}`),
-    t(L, "status.llm", { state: s.llm }),
+    t(L, "status.llm", { state: [s.llm, ...(s.llmProvider === undefined || s.llmProvider.provider === "none" ? [] : [`${s.llmProvider.provider}${s.llmProvider.model === undefined ? "" : ` ${s.llmProvider.model}`}`]), ...(s.llmProvider?.reason === undefined ? [] : [s.llmProvider.reason])].join(" · ") }),
   ];
   return { command: "status", exitCode: EXIT.OK, result: op.payload, diagnostics: op.diagnostics, human };
 }

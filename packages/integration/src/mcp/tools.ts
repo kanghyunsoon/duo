@@ -8,8 +8,9 @@
  * a Decision, write Truth, record a Review, index or capture the Adoption Baseline.
  */
 import { DEFINITION_ID_PATTERN, MCP_SERVER_NAME, normalizeRepoPath, normalizeRepoPattern, type RepoPath } from "@duo-director/core";
-import { MAX_BUDGET, MIN_BUDGET, renderContextMarkdown, type ReviewResult } from "@duo-director/director";
+import { MAX_BUDGET, MIN_BUDGET, renderContextMarkdown, reviewLlmMetric, type ReviewResult } from "@duo-director/director";
 import { z } from "zod";
+import type { LLMProviderPool } from "../llm/factory.js";
 import { NOT_INITIALIZED_FORMAT, type Operation } from "../operations/common.js";
 import { CONTEXT_FORMAT, projectContext, type ContextPayload } from "../operations/context.js";
 import { IMPACT_FORMAT, projectGraphQuery, TRACE_FORMAT } from "../operations/graph.js";
@@ -58,7 +59,7 @@ function payloadSchema(format: string, keys: readonly string[]) {
 }
 
 export const OUTPUT = {
-  duo_get_status: payloadSchema(STATUS_FORMAT, ["initialized", "project", "truth", "index", "analysis", "baseline", "pendingDecisions", "llm", "message"]),
+  duo_get_status: payloadSchema(STATUS_FORMAT, ["initialized", "project", "truth", "index", "analysis", "baseline", "pendingDecisions", "llm", "llmProvider", "message"]),
   duo_get_context: payloadSchema(CONTEXT_FORMAT, ["context", "gaps", "message"]),
   duo_review_changes: payloadSchema("duo.review/1", [
     "request", "baseline", "freshness", "diff", "seeds", "verdict", "verdictBasis", "claims", "evidence", "gaps", "context", "limitations", "semanticAssist", "metrics", "diagnostics", "message",
@@ -84,6 +85,8 @@ export interface ToolContext {
   readonly root: string;
   readonly agentName: string;
   readonly signal: AbortSignal;
+  /** The server's LLM provider pool (T12B): only duo_review_changes with includeSemanticAssist can call a provider. */
+  readonly llm: LLMProviderPool;
 }
 
 export interface ToolDefinition<N extends ToolName> {
@@ -102,7 +105,7 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
   duo_get_status: {
     name: "duo_get_status", title: "DUO project status", readOnly: true,
     description: "Returns the DUO project status: initialized, index freshness and what a re-index would redo, adoption baseline, pending decision proposals, LLM provider state. Read-only: it never indexes or writes.",
-    run: async (_args, ctx) => ({ op: await projectStatus(ctx.root) }),
+    run: async (_args, ctx) => ({ op: await projectStatus(ctx.root, { llm: ctx.llm }) }),
     summarize: (p) => {
       const i = p.index as { status?: string } | null;
       const b = p.baseline as { status?: string } | null;
@@ -126,21 +129,26 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
   },
   duo_review_changes: {
     name: "duo_review_changes", title: "Review changes against confirmed project direction", readOnly: true,
-    description: "Reviews changes (default HEAD → WORKTREE) against confirmed project direction and returns claims, evidence, Knowledge Gaps and a verdict (PASS, WARN, BLOCK, ASK). Does not modify code or project truth, does not index (a stale index returns status index-required) and does not record the review. PASS means no direction violation found in the available evidence, not bug-free code.",
+    description: "Reviews changes (default HEAD → WORKTREE) against confirmed project direction and returns claims, evidence, Knowledge Gaps and a verdict (PASS, WARN, BLOCK, ASK). Does not modify code or project truth, does not index (a stale index returns status index-required) and does not record the review. PASS means no direction violation found in the available evidence, not bug-free code. includeSemanticAssist (default false) asks the LLM provider configured in project.yaml for supplemental semantic checks, returned separately in semanticAssist; they never change the deterministic claims and never block.",
     run: async (args, ctx) => {
       const op = await projectReview(ctx.root, {
         diff: { from: args.from === undefined ? "HEAD" : diffEnd(args.from), to: args.to === undefined ? "WORKTREE" : diffEnd(args.to), ...(args.files === undefined ? {} : { files: args.files as RepoPath[] }) },
         ...(args.task === undefined ? {} : { task: args.task }), ...(args.budget === undefined ? {} : { budget: args.budget }),
         ...(args.includeSemanticAssist === undefined ? {} : { includeSemanticAssist: args.includeSemanticAssist }),
-      }, { signal: ctx.signal });
+      }, { signal: ctx.signal, llm: ctx.llm });
       const r = op.kind === "ok" ? op.payload : undefined;
-      return { op, metric: { status: r?.status ?? op.kind, ...(r?.verdict === undefined ? {} : { reviewVerdict: r.verdict }), ...(r === undefined ? {} : { reviewClaims: r.claims.length, llmCalls: r.metrics.llmCalls }) } };
+      return { op, metric: { status: r?.status ?? op.kind, ...(r?.verdict === undefined ? {} : { reviewVerdict: r.verdict }), ...(r === undefined ? {} : { reviewClaims: r.claims.length, ...reviewLlmMetric(r) }) } };
     },
     summarize: (p) => {
       const r = p as unknown as ReviewResult;
       if (r.status === "index-required") return "INDEX_REQUIRED: the DUO index is not current. Run duoctl index, then review again.";
       const lines = r.claims.filter((c) => c.alignment !== "ALIGNED").map((c) => `- ${c.alignment} ${c.rule} ${c.subject.id}: ${c.reason}${c.provenance === undefined ? "" : ` (${c.provenance})`}${c.blockEligible ? " [blocking]" : ""}`);
-      return [`Verdict ${r.verdict ?? "-"} · ${r.claims.length} claims · llm calls ${r.metrics.llmCalls}`, ...lines].join("\n");
+      const a = r.semanticAssist;
+      const semantic = a.status === "not-requested" ? [] : [
+        `Semantic assistance (supplemental, never blocks): ${a.status}${a.failure === undefined ? "" : ` (${a.failure})`}`,
+        ...a.claims.filter((c) => c.alignment !== "ALIGNED").map((c) => `- semantic ${c.alignment} ${c.claimId}: ${c.reason}`),
+      ];
+      return [`Verdict ${r.verdict ?? "-"} · ${r.claims.length} claims · llm calls ${r.metrics.llmCalls}`, ...lines, ...semantic].join("\n");
     },
   },
   duo_get_requirement: {

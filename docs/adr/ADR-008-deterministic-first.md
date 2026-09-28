@@ -60,6 +60,13 @@ Deterministic Finding → Semantic Assistance(선택) → 추가 해석
 - **BLOCK 안전 규칙**(TASK-013에서 적용): Review 수준 BLOCK에는 명시적 Project Truth와 관찰 가능한 저장소 근거(repository, git, test)가 함께 있어야 한다. LLM·추론 근거만으로, 또는 Truth와 LLM 근거만으로는 BLOCK이 되지 않는다(`blockEligible`). LLM은 의미적 충돌을 보조하거나 ASK를 올릴 수 있지만 Human이 소유한 Truth를 대신하지 않는다.
 - **Knowledge Gap 의미 보조는 예약만 한다**: 위 표의 "Gap 중요도"는 향후 `gap-semantic-assist` 용도가 될 수 있다. T12A는 related gap에 대해 LLM을 호출하지 않으며 T11의 결정적 결과가 항상 기본 결과다.
 
+### T12B: 실제 Provider와 연결
+
+- 의미 보조는 Review에서만, 요청이 명시할 때만 실행한다(`duoctl review --semantic`, MCP `includeSemanticAssist: true`, 기본 false). status, init, index, context, trace, impact, search, requirement, decision, propose는 flag와 관계없이 Provider를 부르지 않는다(테스트로 확인).
+- 순서: 결정적 Review 완료 → Knowledge Gap → 의미 후보(`semanticCandidate`) 한 batch → structured 응답 → DUO 검증(schema, claim ID, Evidence ID). 보내는 것은 후보 claim(ID, rule, expected, observed)과 이미 수집한 Evidence 발췌(Truth slice, 바뀐 코드 slice, diff hunk)뿐이고 파일 전체, 저장소, Graph는 보내지 않는다. 언어별 분기가 없고, Analyzer가 없는 파일에 대해 Symbol이나 호출 관계를 추측하게 하지 않는다.
+- 결과는 `semanticAssist`로 따로 둔다. 결정적 claim, verdict, Evidence, Review Record ID는 바뀌지 않는다. LLM만의 결과는 BLOCK이나 ASK를 만들지 않고 `semanticAssist.verdict`로 PASS를 WARN까지만 올린다. 이 ADR의 "LLM은 ASK를 올릴 수 있다"는 MVP에서 쓰지 않는다(C194).
+- 실패(인증, rate limit, timeout, 잘못된 응답)는 `semanticAssist.status: failed`와 분류만 남기고 결정적 Review는 그대로다.
+
 ### LLM unavailable ≠ DUO unavailable
 
 Provider가 설정되지 않았거나, API Key가 없거나, 네트워크나 응답에 오류가 나면 NoneProvider와 같게 동작한다. 결정적 기능은 모두 그대로 동작한다. 의미 판단은 추측하지 않고 UNKNOWN으로 두거나(ask 조건이면 ASK), 실행하지 않은 검사로 기록한다.

@@ -4,7 +4,7 @@
  * index-required (--refresh indexes first); only --record writes, through recordReview(). A verdict
  * is not a process error: the exit code follows it only with --fail-on (or --strict).
  */
-import { recordReview, renderGapQuestions, type ReviewResult, type Verdict } from "@duo-director/director";
+import { recordReview, renderGapQuestions, reviewLlmMetric, type ReviewResult, type Verdict } from "@duo-director/director";
 import { normalizeRepoPath, type RepoPath } from "@duo-director/core";
 import { indexRepository } from "@duo-director/graph";
 import { diffEnd, projectReview, withGraphWriter } from "@duo-director/integration";
@@ -22,6 +22,8 @@ export interface ReviewOptions {
   readonly record: boolean;
   readonly refresh: boolean;
   readonly failOn?: "block" | "ask" | "warn";
+  /** --semantic (T12B): ask the configured LLM provider for supplemental semantic checks. Off by default. */
+  readonly semantic?: boolean;
 }
 
 const SEVERITY: Readonly<Record<Verdict, number>> = { PASS: 0, WARN: 1, ASK: 2, BLOCK: 3 };
@@ -53,6 +55,13 @@ function renderReview(env: Env, r: ReviewResult): string[] {
     }
   }
   if (r.limitations.length > 0) out.push(t(L, "review.limitations"), ...r.limitations.map((l) => `  ${l.code}`));
+  const a = r.semanticAssist;
+  if (a.status !== "not-requested") {
+    const who = a.provider === undefined ? "" : ` · ${a.provider.id}${a.provider.model === undefined ? "" : ` ${a.provider.model}`}`;
+    out.push(t(L, "review.semantic", { status: a.status + (a.failure === undefined ? "" : ` (${a.failure})`) + who + (a.cacheHits > 0 ? " · cached" : "") }));
+    out.push(...a.claims.filter((c) => env.verbose || c.alignment !== "ALIGNED").map((c) => `  ${c.alignment.padEnd(9)} ${c.claimId} · ${c.reason}`));
+    if (a.verdict !== undefined && a.verdict !== r.verdict) out.push(t(L, "review.semantic-verdict", { verdict: a.verdict }));
+  }
   if (r.baseline.status === "missing") out.push(t(L, "review.baseline-missing"));
   if (r.verdict === "PASS") out.push(t(L, "review.pass"));
   return out;
@@ -81,10 +90,11 @@ export async function reviewCommand(env: Env, options: ReviewOptions): Promise<O
     const op = await projectReview(env.root, {
       diff: { from, to, ...(files === undefined ? {} : { files }) },
       ...(options.task === undefined ? {} : { task: options.task }), ...(options.budget === undefined ? {} : { budget: options.budget }),
+      ...(options.semantic === true ? { includeSemanticAssist: true } : {}),
     }, { registry });
     if (op.kind !== "ok") return operationFailure(env, "review", op);
     const r = op.payload;
-    const metric = { status: r.status, ...(r.verdict === undefined ? {} : { reviewVerdict: r.verdict }), reviewClaims: r.claims.length, llmCalls: r.metrics.llmCalls };
+    const metric = { status: r.status, ...(r.verdict === undefined ? {} : { reviewVerdict: r.verdict }), reviewClaims: r.claims.length, ...reviewLlmMetric(r) };
     if (r.status === "index-required") {
       return { command: "review", exitCode: EXIT.ACTION_REQUIRED, result: r, meta: { performance: op.performance }, diagnostics: [], human: renderReview(env, r), metric };
     }

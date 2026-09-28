@@ -65,6 +65,7 @@ export const ProjectConfigSchema = z.strictObject({
     max_calls_per_review: z.number().int().min(0).optional(),
     max_input_tokens: z.number().int().positive().optional(),
     timeout_ms: z.number().int().positive().optional(),
+    cache: z.boolean().optional(),
   }).optional(),
   extensions,
 });

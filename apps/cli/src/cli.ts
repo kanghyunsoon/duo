@@ -49,7 +49,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, Options>> = {
   context: { budget: { type: "string" }, refresh: { type: "boolean" } },
   review: {
     staged: { type: "boolean" }, from: { type: "string" }, to: { type: "string" }, files: { type: "string" }, task: { type: "string" }, budget: { type: "string" },
-    record: { type: "boolean" }, refresh: { type: "boolean" }, "fail-on": { type: "string" }, strict: { type: "boolean" },
+    record: { type: "boolean" }, refresh: { type: "boolean" }, "fail-on": { type: "string" }, strict: { type: "boolean" }, semantic: { type: "boolean" },
   },
   trace: { depth: { type: "string" } },
   impact: { depth: { type: "string" } },
@@ -69,7 +69,7 @@ const HELP = [
   "  status      Truth, index freshness, adoption baseline, pending decisions (read-only)",
   "  index       update the Project Graph (--full: clean rebuild)",
   "  context     Context Packet for a task (--budget, --refresh)",
-  "  review      review changes (--staged, --from, --to, --files, --task, --record, --fail-on)",
+  "  review      review changes (--staged, --from, --to, --files, --task, --record, --fail-on, --semantic: optional LLM assistance)",
   "  trace       trace a node (--depth 1-3)",
   "  impact      Graph-recorded impact of a node (--depth 1-3)",
   "  decision    list | confirm <id> | reject <id> (terminal only)",
@@ -116,7 +116,7 @@ async function dispatch(env: Env, command: string, positionals: readonly string[
       if (budget !== undefined && !Number.isInteger(budget)) return usage("review", "--budget must be an integer");
       const from = str(v.from); const to = str(v.to); const files = str(v.files); const task = str(v.task);
       return reviewCommand(env, {
-        staged: bool(v.staged), record: bool(v.record), refresh: bool(v.refresh),
+        staged: bool(v.staged), record: bool(v.record), refresh: bool(v.refresh), semantic: bool(v.semantic),
         ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }), ...(files === undefined ? {} : { files }), ...(task === undefined ? {} : { task }),
         ...(budget === undefined ? {} : { budget }), ...(failOn === undefined ? {} : { failOn }),
       });

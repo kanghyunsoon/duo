@@ -158,7 +158,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-010](#task-010-context-compiler) | Context Compiler | director | M2 | TASK-008, TASK-009 | done |
 | [TASK-011](#task-011-knowledge-gap) | Knowledge Gap | director | M2 | TASK-008 | done |
 | [TASK-012A](#task-012a-llmprovider-계약과-no-op) | LLMProvider 계약과 no-op | director | M2 | TASK-002 | done |
-| [TASK-012B](#task-012b-openai-responses-provider) | OpenAI Responses Provider | director | M2 | TASK-010, TASK-013 | todo |
+| [TASK-012B](#task-012b-openai-responses-provider) | OpenAI Responses Provider | director | M2 | TASK-010, TASK-013 | done |
 | [TASK-013](#task-013-review-엔진) | Review 엔진 | director | M2 | TASK-008, TASK-009, TASK-010, TASK-011, TASK-012A | done |
 | [TASK-014](#task-014-init-파이프라인) | init 파이프라인 | director | M2 | TASK-008, TASK-011 | done |
 | [TASK-015](#task-015-cli) | CLI | apps/cli | M3 | TASK-009, TASK-010, TASK-013, TASK-014 | done |
@@ -544,9 +544,9 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M2
-package: director
+package: integration
 requirements: [REQ-LLM-002, REQ-NFR-002]
 decisions: [ADR-012]
 depends_on: [TASK-010, TASK-013]
@@ -554,10 +554,10 @@ depends_on: [TASK-010, TASK-013]
 
 - **Goal**: 안정된 Context Compiler와 Review 계약 위에 OpenAI Responses API Adapter를 구현한다.
 - **Input**: ADR-012, TASK-010과 TASK-013의 입출력 계약, OpenAI 공식 문서
-- **Output**: OpenAIResponsesProvider
+- **Output**: OpenAIResponsesProvider, LLM provider factory(`createConfiguredLLMProvider`, `LLMProviderPool`), `duoctl review --semantic`, MCP `includeSemanticAssist` 연결, status `llmProvider`, `llm.cache`, opt-in `pnpm test:openai-smoke`
 - **Dependencies**: [TASK-010](#task-010-context-compiler), [TASK-013](#task-013-review-엔진)
-- **Files expected to change**: `packages/director/src/llm/openai-responses/**`
-- **Status**: todo
+- **Files expected to change**: `packages/integration/src/llm/**`(adapter는 integration, 계약은 director: ADR-012 T12A 경계, C188)
+- **Status**: done (T12B: 공식 OpenAI Responses API 전용, `store: false`, SDK retry 0, 가짜 transport로 SDK 요청·오류·timeout·검증 실패 테스트, CI에서 실제 호출 0)
 - **검증 대상 Requirement**: [REQ-LLM-002](../01-requirements.md#req-llm-002-llmprovider와-동작하는-provider-1종), [REQ-NFR-002](../01-requirements.md#req-nfr-002-local-first)
 - **관련 ADR**: [ADR-012](../adr/ADR-012-llm-provider.md)
 

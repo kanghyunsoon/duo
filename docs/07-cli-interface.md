@@ -16,7 +16,7 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 | `duoctl status` | 초기화 여부, Truth 개수, index freshness(변경 파일, 분석 stale, module resolution, call 재계산 후보, full rebuild 이유), adoption baseline, pending decision, LLM 상태 | | core loader, graph inspectIndex, director baseline status, core listDecisionProposals | 없음 |
 | `duoctl index` | Indexer 실행 | `--full`(저장된 state를 쓰지 않는 clean rebuild) | graph indexRepository | generated, cache |
 | `duoctl context <task>` | Context Packet(기본 Markdown, `--json`은 ContextResult) | `--budget <n>`, `--refresh` | director compileContext | 없음(`--refresh`만 index) |
-| `duoctl review` | 변경 검수 | `--staged`, `--from <ref>`, `--to <ref>`, `--files a,b`, `--task`, `--budget`, `--record`, `--refresh`, `--fail-on block\|ask\|warn`, `--strict` | director reviewChanges, recordReview | 없음(`--record`만 reviews/) |
+| `duoctl review` | 변경 검수 | `--staged`, `--from <ref>`, `--to <ref>`, `--files a,b`, `--task`, `--budget`, `--record`, `--refresh`, `--fail-on block\|ask\|warn`, `--strict`, `--semantic` | director reviewChanges, recordReview, integration LLM factory(`--semantic`만) | 없음(`--record`만 reviews/) |
 | `duoctl trace <node>` | 추적 관계 | `--depth <1-3>` | graph trace | 없음 |
 | `duoctl impact <node>` | Graph에 기록된 영향 | `--depth <1-3>` | graph impact | 없음 |
 | `duoctl decision list\|confirm <id>\|reject <id>` | proposal 목록, 확정, 거절 | `--reason <text>`(reject) | core DecisionService, listDecisionProposals | decisions/ |
@@ -29,7 +29,7 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 
 - `<node>`는 node ID(`sym:src/a.ts#A.b`), 정의 ID(`AUTH-03`), RepoPath, 유일한 qualified Symbol 이름을 받는다.
 - `review` 기본 diff는 HEAD → WORKTREE, `--staged`는 HEAD → INDEX다. `--from`/`--to`는 `HEAD`, `INDEX`, `WORKTREE` 또는 commit·branch 이름이며 해석은 Git provider가 한다. CLI는 diff parser를 갖지 않는다.
-- `--run-tests`와 `--no-llm`(T00 초안)은 구현하지 않았다: 테스트 실행은 CLI가 프로세스를 띄워야 하고, LLM Provider(TASK-012B)가 아직 없어 기본이 LLM 0회다(C134).
+- `--run-tests`와 `--no-llm`(T00 초안)은 구현하지 않았다: 테스트 실행은 CLI가 프로세스를 띄워야 하고(C134), LLM은 기본이 꺼져 있어 `--no-llm`이 필요 없다. 반대로 `duoctl review --semantic`(T12B)이 선택적 의미 보조를 명시적으로 켠다. `duoctl review`는 계속 결정적 판정만 한다.
 - `init --reindex`(T00 초안)는 두지 않는다. Index는 `duoctl index`, clean rebuild는 `duoctl index --full`이다(C133).
 
 ## 출력과 JSON
@@ -117,6 +117,8 @@ Pending decisions: 0
 LLM: disabled
 ```
 
+`LLM` 줄은 disabled, configured, unavailable과 provider·model, unavailable이면 이유(예: `LLM: unavailable · openai-responses gpt-… · OPENAI_API_KEY is not set`)를 보인다. 설정과 환경만 보고 네트워크를 쓰지 않는다. key 값은 보이지 않는다.
+
 쓰기 0이다. Graph는 read-only로 연다(`openProjectGraphReader`: graph.db가 없으면 아무것도 만들지 않고 빈 in-memory graph로 missing을 보고). SQLite는 WAL 데이터베이스의 read-only 연결에 `graph.db-wal`/`graph.db-shm` sidecar를 만들 수 있으며 이는 regenerable 영역의 SQLite 관리 파일이고 graph.db 내용은 바뀌지 않는다(C131). baseline status는 missing, current, advanced, repository-diverged, incompatible이다.
 
 `Analysis` 줄과 JSON `result.analysis`(T18.0, `duo.status/1`에 더한 필드, MCP `duo_get_status`와 같음)는 분석 coverage 사실이다: `analyzerRegistryDigest`, `files` {total, structural, fileOnly}, 언어별 {language, files, analyzer, level, symbols, tests, imports, calls, typeResolution}, `fileOnly` {level: "L0", files, extensions}. 점수가 아니다. level과 capability의 뜻은 [language-support.md](language-support.md). `duoctl impact`와 `duo_impact`는 관련 파일 언어의 limitation을 `limitations`로 더한다.
@@ -126,7 +128,8 @@ LLM: disabled
 - `index`는 결과 mode와 full rebuild 이유를 보인다: `incremental`, `full because no-state`, `full because requested`(`--full`) 등.
 - `context`와 `review`는 index가 current가 아니면 자동으로 index하지 않고 `INDEX_REQUIRED`(종료 코드 6)를 보인다. `--refresh`를 줄 때만 index → compile/review를 명시적으로 이어서 한다. Review 도메인 계약(읽기 전용)은 그대로다.
 - `review` 출력은 verdict 줄, ALIGNED가 아닌 claim(규칙, subject, reason, blocking·provenance·drift 표시, Evidence pointer 최대 3개), ALIGNED 개수(`--verbose`면 목록), Knowledge Gap, limitation, baseline이 없을 때의 안내, PASS의 의미("현재 Evidence 범위에서 프로젝트 방향 위반을 찾지 못함, 버그 없음이 아님")다. Adoption Baseline이 있으면 `introduced`, `pre-existing`, `pre-existing-touched`를 표시해 기존 기술 부채와 새 위반을 구분한다.
-- `review --record`만 `recordReview()`(Human 명시 행동)로 `reviews/review-*.json`을 쓴다. 기본 review는 기록하지 않는다.
+- `review --record`만 `recordReview()`(Human 명시 행동)로 `reviews/review-*.json`을 쓴다. 기본 review는 기록하지 않는다. 의미 보조가 성공한 review는 같은 결정적 record(같은 ID)에 별도 supplement `review-<id>.assist-<id>.json`을 더한다: claim ID, alignment, Evidence ID, provider(id, model, cache identity)뿐이고 LLM 문장, 소스, prompt는 없다.
+- **`--semantic`(T12B)**: `project.yaml`의 `llm.provider: openai-responses`와 `llm.model`, 환경의 API key(`llm.api_key_env`, 기본 `OPENAI_API_KEY`)가 있을 때만 의미 후보 claim을 한 번의 structured 요청으로 확인한다. 선택한 Evidence 발췌(Truth slice, 바뀐 코드 slice, diff hunk)가 OpenAI API로 전송되며 `store: false`로 보낸다. 결과는 사람 출력의 별도 절("Semantic assistance …")과 JSON `result.semanticAssist`에 있고 결정적 claim과 verdict는 그대로다. 같은 요청은 로컬 cache(`.duo-project/cache/llm/`, `llm.cache: false`로 끔)로 다시 호출하지 않는다. Provider가 disabled, unavailable, 실패여도 review는 결정적 결과로 끝나고 종료 코드도 결정적 verdict를 따른다.
 
 ```text
 $ duoctl review
@@ -160,7 +163,7 @@ confirmed as D-005 · .duo-project/decisions/D-005.yaml
 
 ## runtime/metrics.jsonl
 
-`init`, `index`, `context`, `review`, `decision`은 명령이 끝난 뒤 `.duo-project/runtime/metrics.jsonl`에 한 줄(`duo.metric/1`)을 덧붙인다: command, status, exitCode, durationMs, at, 그리고 해당하는 것만 indexMode, fullRebuildReason, contextStatus, contextTokens, contextBudget, reviewVerdict, reviewClaims, llmCalls. secret, 소스·diff 본문, task 원문은 기록하지 않는다. `status`, `trace`, `impact`, `stats`는 쓰기 0이라 기록하지 않는다. writer는 stdout renderer와 분리되어 있고, 쓰기 실패는 경고(`METRICS_WRITE_FAILED`)로 보이며 명령 결과를 바꾸지 않는다. write boundary 위반은 조용히 넘기지 않고 오류로 보인다. 초기화되지 않은 저장소에는 쓰지 않는다. 이 파일은 Git이 무시하는 로컬 관찰이며 Review Record가 아니다(C83).
+`init`, `index`, `context`, `review`, `decision`은 명령이 끝난 뒤 `.duo-project/runtime/metrics.jsonl`에 한 줄(`duo.metric/1`)을 덧붙인다: command, status, exitCode, durationMs, at, 그리고 해당하는 것만 indexMode, fullRebuildReason, contextStatus, contextTokens, contextBudget, reviewVerdict, reviewClaims, llmCalls, llmCacheHits, 그리고 `--semantic`이면 semanticStatus, llmProvider, llmModel, Provider가 보고한 llmInputTokens·llmOutputTokens·llmCachedInputTokens(달러 비용은 계산·기록하지 않음). secret, 소스·diff 본문, task 원문은 기록하지 않는다. `status`, `trace`, `impact`, `stats`는 쓰기 0이라 기록하지 않는다. writer는 stdout renderer와 분리되어 있고, 쓰기 실패는 경고(`METRICS_WRITE_FAILED`)로 보이며 명령 결과를 바꾸지 않는다. write boundary 위반은 조용히 넘기지 않고 오류로 보인다. 초기화되지 않은 저장소에는 쓰지 않는다. 이 파일은 Git이 무시하는 로컬 관찰이며 Review Record가 아니다(C83).
 
 ```text
 $ duoctl stats --last 20
@@ -179,7 +182,7 @@ DUO 실행 파일 설치, 저장소 초기화, Agent 연결은 서로 다른 단
 3. Coding Agent 연결          duoctl install codex | claude-code
 ```
 
-- **공개 package**: `@duo-director/cli` 하나, bin `duoctl`. 내부 package(`@duo-director/core`, analyzer, graph, director, integration)는 esbuild로 bundle되어 사용자가 따로 설치하지 않는다(C158). 외부 runtime 의존성은 exact version: `@modelcontextprotocol/client`·`server` 2.1.0, `gpt-tokenizer` 4.0.0, `mdast-util-from-markdown` 2.0.3, `mdast-util-frontmatter` 2.0.1, `micromark-extension-frontmatter` 2.0.0, `smol-toml` 1.9.0, `typescript` 6.0.3, `web-tree-sitter` 0.27.0, `yaml` 2.9.1, `zod` 4.6.5.
+- **공개 package**: `@duo-director/cli` 하나, bin `duoctl`. 내부 package(`@duo-director/core`, analyzer, graph, director, integration)는 esbuild로 bundle되어 사용자가 따로 설치하지 않는다(C158). 외부 runtime 의존성은 exact version: `@modelcontextprotocol/client`·`server` 2.1.0, `gpt-tokenizer` 4.0.0, `mdast-util-from-markdown` 2.0.3, `mdast-util-frontmatter` 2.0.1, `micromark-extension-frontmatter` 2.0.0, `openai` 7.23.0(T12B, bundle하지 않고 `--semantic`의 첫 호출에서만 불러옴, C193), `smol-toml` 1.9.0, `typescript` 6.0.3, `web-tree-sitter` 0.27.0, `yaml` 2.9.1, `zod` 4.6.5.
 - **포함**: `dist/duoctl.js`(Node 확인 후 CLI를 부르는 실행 파일, shebang), `dist/cli-*.js`(bundle), `dist/grammars/` WASM 일곱 개(typescript, tsx, javascript, java, c_sharp, cpp, python)와 grammar package별 MIT license, `grammars.json`(package, version, repository, license, sha256, bytes, ABI; grammar npm package는 native install script 때문에 의존성이 아님, C159, T18.0), README, package.json. grammar 목록은 analyzer의 `GRAMMAR_FILES` 하나에서 온다. `files` allowlist이며 테스트가 금지 경로(`.env`, credentials, key, `.worklog`, fixtures, `.duo-project`, metrics, coverage, source map)를 검사한다.
 - **요구 사항**: Node.js `>=24.15.0`(package.json `engines`, 실행 파일이 먼저 확인). native build, install script, postinstall, 실행 중 network 없음. pnpm은 개발에만 쓴다.
 - **version**: `apps/cli/package.json` 하나(0.1.0). `duoctl --version`은 같은 값, `--version --json`은 graph·project schema version과 Node version도 보인다.
@@ -191,4 +194,4 @@ DUO 실행 파일 설치, 저장소 초기화, Agent 연결은 서로 다른 단
 |---|---|---|
 | tarball | 500,057 B | 1,247,988 B |
 | unpacked | 3,930,557 B(WASM 약 3.27 MB, bundle 약 652 KB) | 13,676,280 B(WASM 12,929,293 B, bundle 약 734 KB, 19 files) |
-| global 설치 | package 70개, 약 83.8 MB(대부분 `typescript`, `gpt-tokenizer`) | package 70개, 약 93.6 MB |
+| global 설치 | package 70개, 약 83.8 MB(대부분 `typescript`, `gpt-tokenizer`) | package 70개, 약 93.6 MB; T12B: 71개, 약 113.5 MB(`openai` 7.23.0 약 20 MB, tarball 1,250,899 B) |

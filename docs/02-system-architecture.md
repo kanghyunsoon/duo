@@ -35,7 +35,7 @@ flowchart TD
 | `LanguageAnalyzer` | analyzer(`AnalyzerRegistry`가 파일마다 고름, capability를 선언) | TypeScript, JavaScript(L2 일부), Java, C#, C++, Python(L1, 공통 `createTreeSitterAnalyzer`), 그 밖은 generic file(L0) | 언어별 semantic resolver(classpath, MSBuild, compile_commands, Python import graph) |
 | `ModuleResolver` | graph(`createLanguageModuleResolver`, 요청의 language로 고름) | TypeScript module resolution, Python 상대·repository module, C++ 옆 파일 quoted include | Java package, C# namespace, include path |
 | `EvidenceProvider` | Evidence 데이터 계약은 core(`Evidence`, `EvidenceBasis`), 수집 조정과 외부 provider 경계는 director(`evidence/`, T13, C44) | 내장 source: Project Truth, repository(Graph), Git(`GitProvider`), 호출자 테스트 결과, 선택 LLM | Jira, GitHub Issues(integration) |
-| `LLMProvider` | director(계약, T12A). adapter는 integration(`packages/integration/src/llm/`) → director 방향. director는 vendor SDK를 import하지 않음(lint) | Noop provider(T12A), OpenAIResponsesProvider(T12B) | OpenAICompatibleChatProvider, AnthropicProvider, LocalProvider |
+| `LLMProvider` | director(계약, T12A). adapter와 factory는 integration(`packages/integration/src/llm/`: `OpenAIResponsesProvider`, `createConfiguredLLMProvider`, `LLMProviderPool`) → director 방향. director는 vendor SDK를 import하지 않음(lint) | Noop provider(T12A), OpenAIResponsesProvider(T12B, 공식 OpenAI Responses API 전용, Review `--semantic`에서만 호출) | OpenAICompatibleChatProvider, AnthropicProvider, LocalProvider |
 | `TokenEstimator` | director/tokens(C79) | o200k_base(gpt-tokenizer 4.0.0), chars/4(UI approx) | - |
 | `GraphStore` | graph | NodeSqliteGraphStore(`node:sqlite`는 이 구현 안에서만 import) | better-sqlite3 기반 구현 |
 | `AgentIntegrationAdapter` | integration(`agents/`) | codex(`.codex/config.toml` 관리 블록 + AGENTS.md), claude-code(`.mcp.json` + CLAUDE.md) | 다른 MCP Agent, Codex plugin distribution |
@@ -48,7 +48,7 @@ Rule → Static Analysis → Git → Test → Project Graph → Evidence Retriev
 
 LLM을 쓸 수 없으면 의미 판단은 UNKNOWN이나 ASK로 남고 나머지 기능은 그대로 동작한다([ADR-008](adr/ADR-008-deterministic-first.md)).
 
-**Deterministic First, LLM Optional**(T12A): Index, Graph, Context Compiler, Knowledge Gap 평가, Decision 생명주기는 LLMProvider를 받지 않고 호출하지도 않는다(`llmCalls: 0`). Provider가 없거나 꺼져 있거나 실패해도 application 오류가 아니다. LLM 결과는 결정적 결과 옆의 추가 해석일 뿐이며 Project Truth를 고치거나 Decision을 확정하지 않는다([ADR-012](adr/ADR-012-llm-provider.md#구현-t12a)).
+**Deterministic First, LLM Optional**(T12A): Index, Graph, Context Compiler, Knowledge Gap 평가, Decision 생명주기는 LLMProvider를 받지 않고 호출하지도 않는다(`llmCalls: 0`). Provider가 없거나 꺼져 있거나 실패해도 application 오류가 아니다. LLM 결과는 결정적 결과 옆의 추가 해석일 뿐이며 Project Truth를 고치거나 Decision을 확정하지 않는다([ADR-012](adr/ADR-012-llm-provider.md#구현-t12a)). T12B: Provider는 `project.yaml llm` + 환경 credential → integration의 LLM factory 하나에서 만들어 CLI(호출마다)와 MCP(서버 수명 동안)가 같이 쓴다. production에서 Provider를 부르는 경로는 요청이 켠 Review 의미 보조 하나다([ADR-012](adr/ADR-012-llm-provider.md#구현-t12b)).
 
 ## 주요 흐름
 

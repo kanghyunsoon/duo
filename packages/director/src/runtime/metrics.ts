@@ -8,6 +8,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { createDiagnostic, failure, guardWrite, PROJECT_FILE_NAME, STATE_DIR_NAME, success, type ParseResult } from "@duo-director/core";
+import type { ReviewResult } from "../review/types.js";
 
 export const METRICS_PATH = `${STATE_DIR_NAME}/runtime/metrics.jsonl`;
 
@@ -30,8 +31,31 @@ export interface RuntimeMetric {
   readonly reviewVerdict?: string;
   readonly reviewClaims?: number;
   readonly llmCalls?: number;
+  /** T12B: semantic assistance of a review. Provider-reported tokens only; never cost, prompt, source or task text. */
+  readonly llmCacheHits?: number;
+  readonly semanticStatus?: string;
+  readonly llmProvider?: string;
+  readonly llmModel?: string;
+  readonly llmInputTokens?: number;
+  readonly llmOutputTokens?: number;
+  readonly llmCachedInputTokens?: number;
   /** duoctl install (T17): which agent; no paths or configuration contents. */
   readonly agent?: string;
+}
+
+type LlmMetricFields = Pick<RuntimeMetric, "llmCalls" | "llmCacheHits" | "semanticStatus" | "llmProvider" | "llmModel" | "llmInputTokens" | "llmOutputTokens" | "llmCachedInputTokens">;
+
+/** The LLM fields of a review metric (CLI and MCP write the same ones, T12B). */
+export function reviewLlmMetric(r: ReviewResult): LlmMetricFields {
+  const a = r.semanticAssist;
+  return {
+    llmCalls: r.metrics.llmCalls, llmCacheHits: r.metrics.llmCacheHits,
+    ...(a.status === "not-requested" ? {} : { semanticStatus: a.status }),
+    ...(a.provider === undefined ? {} : { llmProvider: a.provider.id, ...(a.provider.model === undefined ? {} : { llmModel: a.provider.model }) }),
+    ...(a.usage?.inputTokens === undefined ? {} : { llmInputTokens: a.usage.inputTokens }),
+    ...(a.usage?.outputTokens === undefined ? {} : { llmOutputTokens: a.usage.outputTokens }),
+    ...(a.usage?.cachedInputTokens === undefined ? {} : { llmCachedInputTokens: a.usage.cachedInputTokens }),
+  };
 }
 
 /** Appends one metric. "skipped" when the repository is not initialized; a boundary violation is an error. */

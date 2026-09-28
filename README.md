@@ -8,7 +8,7 @@ DUO는 Codex, Claude Code 같은 AI Coding Agent가 프로젝트의 목표와 �
 
 ## 상태
 
-CLI(`duoctl`), MCP 서버(`duoctl mcp`), Agent 연결(`duoctl install`), 배포용 package(`@duo-director/cli`, T17.1)까지 구현했습니다. **npm에는 아직 publish하지 않았습니다.** OpenAI Provider(TASK-012B), Web UI(TASK-018), Benchmark(TASK-019)는 아직입니다. 진행 순서는 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)를 따릅니다.
+CLI(`duoctl`), MCP 서버(`duoctl mcp`), Agent 연결(`duoctl install`), 배포용 package(`@duo-director/cli`, T17.1)까지 구현했습니다. **npm에는 아직 publish하지 않았습니다.** 선택적 OpenAI 의미 보조(TASK-012B)까지 구현했고, Web UI(TASK-018)와 Benchmark(TASK-019)는 아직입니다. 진행 순서는 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)를 따릅니다.
 
 ## 지원 범위
 
@@ -64,6 +64,22 @@ duoctl context "작업 설명"
 duoctl index        # 코드를 바꾼 뒤
 duoctl review
 ```
+
+### LLM은 선택 사항입니다
+
+LLM is optional. DUO's indexing, context selection and deterministic review work without an API key. 기본값은 꺼짐(`llm.provider: none`)이고, 켜지 않으면 네트워크 호출이 없습니다. 켜려면 `.duo-project/project.yaml`에 provider와 model을 명시하고 key는 환경 변수로만 줍니다(파일에 쓰지 않음).
+
+```yaml
+llm:
+  provider: openai-responses   # 공식 OpenAI Responses API
+  model: <사용할 model ID>      # DUO는 model을 고르지 않습니다
+```
+
+```bash
+OPENAI_API_KEY=... duoctl review --semantic
+```
+
+`--semantic`(MCP `includeSemanticAssist: true`)을 줄 때만 Review의 의미 후보를 한 번 확인합니다. 이때 **선택된 Evidence 발췌(관련 Truth 문단, 바뀐 코드 부분, diff hunk)가 OpenAI API로 전송됩니다**. 파일 전체나 저장소는 보내지 않고, `store: false`로 요청합니다. 결과는 별도 `semanticAssist`로 붙고 결정적 판정을 바꾸거나 BLOCK을 만들지 않습니다. 같은 요청의 검증된 응답은 로컬 `.duo-project/cache/llm/`에 저장되며(`llm.cache: false`로 끔), 이것은 OpenAI 서버 저장과 별개입니다.
 
 Agent는 MCP Tool 9개(`duo_get_status`, `duo_get_context`, `duo_review_changes`, `duo_get_requirement`, `duo_get_decision`, `duo_trace`, `duo_impact`, `duo_search_evidence`, `duo_propose_decision`)를 씁니다. Agent는 Decision을 제안만 할 수 있고 확정과 거절은 사람이 `duoctl decision`으로 합니다. Tool은 인덱싱하지 않으므로 `index-required`를 받으면 `duoctl index`를 실행합니다. 명령은 [07-cli-interface.md](docs/07-cli-interface.md), MCP와 설치 계약은 [06-mcp-interface.md](docs/06-mcp-interface.md)에 있습니다.
 

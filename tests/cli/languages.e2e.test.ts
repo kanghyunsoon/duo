@@ -133,6 +133,7 @@ describe.each(CASES.map((c) => [c.name, c] as const))("%s through the CLI (T18.0
     for (const ref of c.contextRefs) expect(refs).toContain(ref);
     const codes = packet.limitations.map((l: { code: string }) => l.code);
     for (const code of c.contextLimits) expect(codes).toContain(code);
+    expect(packet.metrics.llmCalls).toBe(0); // T12B: no provider configured, no semantic call
 
     p.edit(...c.edit);
     expect(duoctl(p.root, ["index", "--json"]).code).toBe(0);
@@ -168,6 +169,7 @@ describe("a language DUO has no analyzer for (T18.0)", () => {
     const item = ctx.context.packet.code.find((i: { ref: string }) => i.ref === "src/example.foo");
     expect(item).toBeDefined();
     expect(item.text.length).toBeLessThan(2500); // a bounded window, never an unbounded file
+    expect(ctx.context.packet.metrics.llmCalls).toBe(0);
     expect(ctx.context.packet.limitations.map((l: { code: string }) => l.code)).toContain("structural-analysis-unavailable");
 
     p.edit("src/example.foo", "0.9", "0.85");
@@ -176,6 +178,7 @@ describe("a language DUO has no analyzer for (T18.0)", () => {
     expect(review.status).toBe("ready");
     expect(review.limitations.map((l: { code: string }) => l.code)).toContain("structural-analysis-unavailable");
     expect(["PASS", "ASK"]).toContain(review.verdict);
+    expect(review.metrics.llmCalls).toBe(0);
     expect(review.claims.filter((c: { drift?: boolean; blockEligible?: boolean }) => c.blockEligible === true)).toEqual([]);
 
     const impact = duoctl(p.root, ["impact", "src/example.foo", "--json"]).json().result;

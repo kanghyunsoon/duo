@@ -95,6 +95,22 @@ llm:
 - 하지 않은 것: 실제 API 호출, API key 읽기, 의미 판정, retry·backoff, model routing, Provider registry·fallback chain.
 - **T13 추가**: 선택 메서드 `cacheIdentity?(): string | undefined`(secret 없음, 없으면 cache 안 함)와 `invokeLLM` 옵션 `timeoutMs`(wrapper가 강제, `AbortSignal.any`로 호출자 signal과 결합), `cache: { root }`(`.duo-project/cache/llm/`, 성공만, 읽을 때 재검증). usage 기록에 `cached`가 붙는다. Packet cache(`cache/packets/`)와 섞지 않는다.
 
+## 구현 (T12B)
+
+`OpenAIResponsesProvider`(`packages/integration/src/llm/openai/responses.ts`)와 factory(`llm/factory.ts`). 공식 문서로 확인한 요청·응답 형식을 따른다([Create a model response](https://developers.openai.com/api/reference/cli/resources/responses/methods/create), [Structured model outputs](https://developers.openai.com/api/docs/guides/structured-outputs), [Data controls](https://developers.openai.com/api/docs/guides/your-data)).
+
+- **SDK**: `openai` 7.23.0(exact, Apache-2.0, 의존성 없음). integration의 llm 계층에서만 import하고, 처음 호출할 때 dynamic import한다(`--version`, init, index, status는 SDK를 불러오지 않는다). 공개 package의 일반 runtime dependency이며 bundle하지 않는다(C193).
+- **공식 endpoint 전용**: client는 `baseURL: https://api.openai.com/v1`, `maxRetries: 0`, `logLevel: "off"`, `organization/project/adminAPIKey/webhookSecret: null`로 만든다. SDK가 환경 변수에서 읽는 값(`OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID`, `OPENAI_LOG` 등)을 쓰지 않는다. `llm.base_url`이나 `OPENAI_BASE_URL`이 공식 endpoint가 아니거나 `OPENAI_CUSTOM_HEADERS`가 있으면 provider는 `unavailable`이고 요청하지 않는다(무시하고 공식 API로 보내지 않음). 호환·사용자 endpoint는 별도 Provider다(C189).
+- **활성화**: `llm.provider: openai-responses`와 비어 있지 않은 `llm.model`이 둘 다 있어야 한다. model은 문자열이며 DUO는 catalog를 갖지 않고 `/models`를 호출하지 않는다. key는 `llm.api_key_env`(기본 `OPENAI_API_KEY`)에서만 읽고 provider 안에만 둔다. 환경에 key가 있어도 `provider: none`이면 disabled다.
+- **요청**: `responses.create({ model, instructions, input, max_output_tokens, store: false, text? })`. structured는 `text.format = { type: "json_schema", name, strict: true, schema }`이고 strict가 받지 않는 `maxLength`/`minLength`만 뺀다(DUO validator는 그대로 검사). tools, `previous_response_id`, conversation, background, stream은 쓰지 않는다. 한 요청은 독립이다.
+- **응답**: `status`가 completed가 아니면(incomplete 등), refusal, 빈 출력, JSON이 아닌 structured 출력은 `invalid-response`. 그 뒤 schema와 Evidence ID 검증은 `invokeLLM`과 호출자(T13 `validateAnswer`)가 한다. model text는 failure message에 넣지 않는다.
+- **failure**: 401·403 → `authentication`, 429 → `rate-limit`(retryable), 400·404·422 → `provider-error`(retryable 아님: 요청·model·schema 불일치), 408·409·5xx·연결 실패 → `unavailable`(retryable), 연결 timeout → `timeout`, 사용자 abort → `cancelled`. message는 DUO가 status와 분류로 만든다. SDK message, header, 요청은 복사하지 않는다(C191).
+- **timeout·retry**: DUO 수준 retry 없음. SDK retry는 끈다(기본 2회는 429·5xx를 반복해 설정한 시간보다 길어진다). 시간 제한은 `invokeLLM`의 `llm.timeout_ms`와 호출자 signal이고 SDK의 시도당 timeout은 그보다 크게 둔다(C190).
+- **usage**: `usage.input_tokens`, `output_tokens`, `input_tokens_details.cached_tokens`와 응답의 `model`(요청 model보다 우선). 추정하지 않고 비용을 계산하지 않는다.
+- **cache identity**: `openai-responses;endpoint=responses;base=official;adapter=1;structured=strict-1;model=<model>`. key 없음. model이 바뀌면 miss. local 검증 cache(`llm.cache`, 기본 true)는 OpenAI 서버 저장(`store: false`)과 별개다.
+- **factory**(`createConfiguredLLMProvider`, `LLMProviderPool`): 설정 + 환경 → `{ provider, status, kind, model?, reason? }`. CLI는 호출마다 환경을 읽고, MCP 서버는 시작할 때 환경을 snapshot하고 provider를 서버 수명 동안 재사용한다(새 key는 재시작, C192). provider는 review나 대화 상태를 쌓지 않는다.
+- **연결**: production 경로는 Review의 `review-semantic-check` 하나다(`duoctl review --semantic`, MCP `duo_review_changes`의 `includeSemanticAssist`). `gap-semantic-assist`는 연결하지 않았다.
+
 ## 결과
 
 - 추가 Adapter는 REQ-POST-004로 다룬다. 추가할 때 `LLMProvider` 계약은 바뀌지 않아야 한다.

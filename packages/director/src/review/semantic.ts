@@ -105,13 +105,20 @@ export async function semanticAssist(input: SemanticInput): Promise<{ assist: Se
   });
   const counts = { calls: invocation.called ? 1 : 0, cacheHits: invocation.cached ? 1 : 0 };
   const r = invocation.response;
+  const u = invocation.called ? r.usage : undefined;
+  const usage = u === undefined || (u.inputTokens === undefined && u.outputTokens === undefined && u.cachedInputTokens === undefined) ? {} : {
+    usage: {
+      ...(u.inputTokens === undefined ? {} : { inputTokens: u.inputTokens }), ...(u.outputTokens === undefined ? {} : { outputTokens: u.outputTokens }),
+      ...(u.cachedInputTokens === undefined ? {} : { cachedInputTokens: u.cachedInputTokens }),
+    },
+  };
   const cacheIdentity = input.provider?.cacheIdentity?.();
   const provider = (model: string | undefined) => ({
     id: input.provider?.id ?? "unknown", ...(model === undefined ? {} : { model }), ...(cacheIdentity === undefined ? {} : { cacheIdentity }),
   });
   if (r.status !== "success" || r.output.mode !== "structured") {
     const failure = r.status === "failed" ? r.failure.category : "invalid-response";
-    return { assist: { ...base, ...counts, status: "failed", failure, provider: provider(undefined), skippedChecks: skipped(candidates, `llm-${failure}`) }, invocation };
+    return { assist: { ...base, ...counts, ...usage, status: "failed", failure, provider: provider(r.usage?.model), skippedChecks: skipped(candidates, `llm-${failure}`) }, invocation };
   }
   const llm: Evidence = {
     id: evidenceId("llm", "llm", sha256Text(r.output.text)), basis: "llm", kind: "llm", contentHash: sha256Text(r.output.text),
@@ -129,7 +136,7 @@ export async function semanticAssist(input: SemanticInput): Promise<{ assist: Se
   const answered = new Set(claims.map((c) => c.claimId));
   return {
     assist: {
-      ...base, ...counts, status: "success", provider: provider(r.usage.model), claims, evidence: [llm], verdict: raised,
+      ...base, ...counts, ...usage, status: "success", provider: provider(r.usage.model), claims, evidence: [llm], verdict: raised,
       skippedChecks: skipped(candidates.filter((c) => !answered.has(c.id)), "llm-no-answer"),
     },
     invocation,

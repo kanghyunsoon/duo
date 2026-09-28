@@ -190,6 +190,8 @@ export interface ProjectConfig {
     readonly maxCallsPerReview: number;
     readonly maxInputTokens: number;
     readonly timeoutMs: number;
+    /** Local validated-answer cache under .duo-project/cache/llm/ (T12B, default true). Not provider-side storage. */
+    readonly cache: boolean;
   };
   readonly location: SourceLocation;
   readonly references: readonly DeclaredReference[];

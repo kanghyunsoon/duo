@@ -8,6 +8,7 @@
 import { createDefaultAnalyzerRegistry, type AnalyzerRegistry } from "@duo-director/analyzer";
 import { loadProjectTruth, type Diagnostic, type LoadedProject } from "@duo-director/core";
 import { openProjectGraphReader, openProjectGraphStore, type GraphStore } from "@duo-director/graph";
+import { LLMProviderPool } from "../llm/factory.js";
 
 export type Failure = { readonly kind: "not-initialized" | "failed"; readonly diagnostics: readonly Diagnostic[] };
 
@@ -17,7 +18,15 @@ export interface OperationOptions {
   /** Reused when given (the caller disposes it); otherwise one is created and disposed per call. */
   readonly registry?: AnalyzerRegistry;
   readonly signal?: AbortSignal;
+  /**
+   * LLM providers by project configuration (T12B). Default: a pool over this process's environment,
+   * made per call (CLI). The MCP server passes one pool for its lifetime (environment snapshot at startup).
+   */
+  readonly llm?: LLMProviderPool;
 }
+
+/** The pool of the options, or one over the current environment. */
+export const llmPoolOf = (options: OperationOptions): LLMProviderPool => options.llm ?? new LLMProviderPool(process.env);
 
 export const NOT_INITIALIZED_FORMAT = "duo.not-initialized/1";
 

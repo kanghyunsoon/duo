@@ -1,8 +1,8 @@
 /** duo status (CLI status, MCP duo_get_status): write 0. */
-import { getAdoptionBaselineStatus, llmProviderState } from "@duo-director/director";
+import { getAdoptionBaselineStatus } from "@duo-director/director";
 import { listDecisionProposals } from "@duo-director/core";
 import { inspectIndex } from "@duo-director/graph";
-import { errorsOf, guarded, project, withGraphReader, withRegistry, type Operation, type OperationOptions, type Failure } from "./common.js";
+import { errorsOf, guarded, llmPoolOf, project, withGraphReader, withRegistry, type Operation, type OperationOptions, type Failure } from "./common.js";
 
 export const STATUS_FORMAT = "duo.status/1";
 
@@ -16,6 +16,8 @@ export function projectStatus(root: string, options: OperationOptions = {}): Pro
     const pending = listDecisionProposals(truth).filter((e) => e.status === "pending");
     const i = inspection.value;
     const b = baseline.value;
+    // Local only (T12B): configuration and environment, never a network call.
+    const llm = llmPoolOf(options).forConfig(truth.config.llm);
     return {
       kind: "ok", diagnostics: errorsOf([...inspection.diagnostics, ...baseline.diagnostics]),
       payload: {
@@ -47,7 +49,8 @@ export function projectStatus(root: string, options: OperationOptions = {}): Pro
           ...(b.baseline === undefined ? {} : { headOid: b.baseline.git.headOid, dirtyAtAdoption: b.baseline.workingTree.dirty, findings: b.baseline.findings.length }),
         },
         pendingDecisions: pending.map((e) => ({ id: e.id, title: e.proposal.title, question: e.proposal.question, answer: e.proposal.answer })),
-        llm: llmProviderState(truth.config.llm),
+        llm: llm.status,
+        llmProvider: { provider: llm.kind, status: llm.status, ...(llm.model === undefined ? {} : { model: llm.model }), ...(llm.reason === undefined ? {} : { reason: llm.reason }) },
       },
     };
   });

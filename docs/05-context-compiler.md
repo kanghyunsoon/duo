@@ -259,4 +259,4 @@ Packet 안(`packet.metrics`)은 그 Packet에 대한 값만 둔다: budget(total
 
 ## Review용 소형 Packet
 
-Review의 의미 판정 escalation([ADR-008](adr/ADR-008-deterministic-first.md))은 같은 Compiler로 Claim 전용 Packet을 만든다. seed는 Claim의 Evidence Node, budget은 `llm.max_input_tokens`, 표현은 L2까지다(TASK-013에서 profile로 추가).
+Review의 의미 판정([ADR-008](adr/ADR-008-deterministic-first.md), T13·T12B)은 Context Packet을 LLM에 보내지 않는다. 의미 후보 claim(ID, rule, expected, observed)과 Review가 이미 수집한 Evidence 발췌(Truth slice, 바뀐 코드 slice, diff hunk)를 `llm.max_input_tokens` 안에서 발췌당 잘라 한 batch로 보낸다. 파일 전체, 저장소, Graph는 보내지 않는다. Context Compiler와 Knowledge Gap 평가는 T12B 뒤에도 Provider를 받지 않는다(`llmCalls: 0`).

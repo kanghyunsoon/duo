@@ -246,6 +246,24 @@ describe("global install (temporary npm prefix)", () => {
     expect(rv.claims).toEqual([]);
     expect(rv.verdict).not.toBe("BLOCK");
   });
+
+  it("OpenAI SDK (T12B): an exact runtime dependency, not bundled; nothing needs a key; status reports the provider without a request", () => {
+    const m = JSON.parse(fs.readFileSync(path.join(REPO, ".dist", "cli-package", "package.json"), "utf8"));
+    expect(m.dependencies.openai).toBe("7.23.0");
+    const bundle = pack.files.map((f) => f.path).filter((f) => /^dist\/.*\.js$/u.test(f)).map((f) => fs.readFileSync(path.join(REPO, ".dist", "cli-package", f), "utf8")).join("\n");
+    expect(bundle).not.toMatch(/class OpenAIError|class APIConnectionTimeoutError/u); // the SDK is not in the bundle
+    expect(bundle).toMatch(/import\(\s*["']openai["']\s*\)/u); // it is loaded on the first semantic call only
+    expect(fs.existsSync(path.join(path.dirname(path.dirname(pkgDir)), "openai", "package.json")) || fs.existsSync(path.join(pkgDir, "node_modules", "openai", "package.json"))).toBe(true);
+    const noKey = Object.fromEntries(Object.entries(env).filter(([k]) => !k.toUpperCase().startsWith("OPENAI_")));
+    const p = project();
+    expect(runOnPath("duoctl", ["init", "--non-interactive", "--answers", "-", "--json"], p.root, noKey, "[]").code).toBe(0);
+    fs.appendFileSync(path.join(p.root, ".duo-project", "project.yaml"), "llm:\n  provider: openai-responses\n  model: gpt-test-model\n");
+    expect(runOnPath("duoctl", ["index", "--json"], p.root, noKey).code).toBe(0);
+    const status = runOnPath("duoctl", ["status", "--json"], p.root, noKey).json().result;
+    expect(status).toMatchObject({ llm: "unavailable", llmProvider: { provider: "openai-responses", model: "gpt-test-model", reason: "OPENAI_API_KEY is not set" } });
+    const review = runOnPath("duoctl", ["review", "--semantic", "--json"], p.root, noKey).json().result;
+    expect(review).toMatchObject({ status: "ready", metrics: { llmCalls: 0 } });
+  });
 });
 
 describe("project-local install (npx --no-install duoctl)", () => {
