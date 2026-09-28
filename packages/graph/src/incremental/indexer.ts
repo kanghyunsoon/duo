@@ -59,6 +59,17 @@ export function openProjectGraphStore(root: string): GraphOpenResult {
   return openNodeSqliteGraphStore({ path: file, onUnsupportedSchema: "recreate" });
 }
 
+/**
+ * Opens the project's graph for reading only (T15: status, context, review, trace, impact write
+ * nothing). Without a graph.db nothing is created: an empty in-memory graph stands in, which
+ * inspectIndex() reports as missing. An incompatible database is reported, never recreated.
+ */
+export function openProjectGraphReader(root: string): GraphOpenResult {
+  const file = path.join(path.resolve(root), GRAPH_DB_FILE_PATH);
+  if (!fs.existsSync(file)) return openNodeSqliteGraphStore({ path: ":memory:" });
+  return openNodeSqliteGraphStore({ path: file, readOnly: true });
+}
+
 export interface IndexOptions {
   readonly store: GraphStore;
   /** Analyzers; default: the TypeScript/JavaScript registry (disposed after the run). */

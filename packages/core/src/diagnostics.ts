@@ -166,6 +166,22 @@ export const DIAGNOSTIC_SEVERITY = {
   INIT_VALIDATION_FAILED: "error",
   /** Init: writing failed; every file and directory the apply created was removed again. */
   INIT_APPLY_FAILED: "error",
+  /** Adoption Baseline (T14.1): only a human confirms adoption. */
+  ADOPTION_FORBIDDEN: "error",
+  /** Adoption Baseline: the index is not current; index first (capture never indexes). */
+  ADOPTION_INDEX_REQUIRED: "error",
+  /** Adoption Baseline: an unborn repository has no commit to baseline. */
+  ADOPTION_HEAD_REQUIRED: "error",
+  /** Adoption Baseline: the working tree is dirty and no policy (HEAD_BASELINE, ABORT_AND_CLEAN) was chosen. */
+  ADOPTION_DIRTY_POLICY_REQUIRED: "error",
+  /** Adoption Baseline: another baseline exists (or an unreadable one); it is never replaced. */
+  ADOPTION_BASELINE_EXISTS: "error",
+  /** CLI (T15): the command line does not fit the command. */
+  CLI_USAGE_INVALID: "error",
+  /** CLI: the command needs an interactive terminal (decision confirm/reject, answering init questions). */
+  CLI_TTY_REQUIRED: "error",
+  /** CLI: runtime/metrics.jsonl could not be appended; the command result stands. */
+  METRICS_WRITE_FAILED: "warning",
 } as const satisfies Record<string, DiagnosticSeverity>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_SEVERITY;
@@ -212,6 +228,8 @@ export const DIAGNOSTIC_PERSISTENCE = {
   REVIEW_RECORD_FORBIDDEN: T, REVIEW_NOT_RECORDABLE: T, REVIEW_RECORD_INTEGRITY: T,
   INIT_ALREADY_INITIALIZED: T, INIT_REPAIR_REQUIRED: T, INIT_INCOMPATIBLE: T, INIT_CONFLICT: T, INIT_PLAN_INVALID: T, INIT_PLAN_STALE: T,
   INIT_ANSWER_INVALID: T, INIT_VALIDATION_FAILED: T, INIT_APPLY_FAILED: T,
+  ADOPTION_FORBIDDEN: T, ADOPTION_INDEX_REQUIRED: T, ADOPTION_HEAD_REQUIRED: T, ADOPTION_DIRTY_POLICY_REQUIRED: T, ADOPTION_BASELINE_EXISTS: T,
+  CLI_USAGE_INVALID: T, CLI_TTY_REQUIRED: T, METRICS_WRITE_FAILED: T,
 } as const satisfies Record<DiagnosticCode, DiagnosticPersistence>;
 
 export function isPersistentDiagnostic(diagnostic: Diagnostic): boolean {

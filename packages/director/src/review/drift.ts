@@ -15,6 +15,7 @@ import {
   compareSourceHash, compareUtf8, externalSourceSlice, isRemoteSourcePath, normalizeRepoPath, type SourceLocation, type SourceRef,
 } from "@duo-director/core";
 import { documentEvidence } from "../evidence/sources.js";
+import { sourceOffending, violationKey } from "../adoption/key.js";
 import { decisionEvidence, isActive, makeClaim, requirementEvidence, type RuleContext } from "./claims.js";
 import { sideText } from "./rules.js";
 import type { ReviewClaim, ReviewLimitation } from "./types.js";
@@ -68,10 +69,12 @@ export async function externalSourceDrift(ctx: RuleContext): Promise<DriftResult
       if (slice.status === "section-unsupported") { unavailable.add(item.subject.id); continue; }
       const file = ctx.files.find((f) => f.path === repoPath);
       const key = `${repoPath}#${src.section ?? ""}`;
+      const violation = { key: violationKey("external-source-drift", item.subject.id, sourceOffending(repoPath, src.section)), touched: file !== undefined || changed.has(item.location.path) };
       const where = `${repoPath}${src.section === undefined ? "" : ` § ${src.section}`}`;
       if (slice.status === "section-missing") {
         const c = makeClaim(ctx, {
           rule: "external-source-drift", subject: item.subject, key, alignment: "PARTIAL", reason: "external-section-missing",
+          violation,
           expected: `${where} still exists as confirmed for ${item.subject.id}`, observed: `section "${src.section ?? ""}" not found in ${repoPath}`,
           evidence: [item.truth(), documentEvidence(ctx.store, { basis: "repository", path: repoPath, text, commit: ctx.toLabel }), ...(file?.evidenceIds ?? [])],
         });
@@ -84,6 +87,7 @@ export async function externalSourceDrift(ctx: RuleContext): Promise<DriftResult
       const evidence = documentEvidence(ctx.store, { basis: "repository", path: repoPath, text: slice.text, location: slice.location, commit: ctx.toLabel, ...(src.section === undefined ? {} : { section: src.section }) });
       const c = makeClaim(ctx, {
         rule: "external-source-drift", subject: item.subject, key, alignment: compared === "match" ? "ALIGNED" : "PARTIAL",
+        ...(compared === "match" ? {} : { violation }),
         reason: compared === "match" ? "external-source-unchanged" : "external-source-changed",
         expected: `${where} has hash ${src.hash} as confirmed for ${item.subject.id}`,
         observed: compared === "match" ? `${where} is unchanged` : `${where} now has hash ${slice.hash} (the confirmed Truth is not changed; a human decides)`,

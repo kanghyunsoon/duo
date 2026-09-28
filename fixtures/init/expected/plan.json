@@ -106,7 +106,23 @@
         "files": 1
       }
     ],
-    "colocatedTests": 0
+    "colocatedTests": 0,
+    "workingTree": {
+      "workingTreeDirty": false,
+      "dirty": false,
+      "staged": [],
+      "unstaged": [],
+      "untracked": [],
+      "conflicted": [],
+      "counts": {
+        "staged": 0,
+        "unstaged": 0,
+        "untracked": 0,
+        "conflicted": 0
+      },
+      "excludedSecrets": 0,
+      "truncated": false
+    }
   },
   "documents": [
     {
@@ -259,5 +275,5 @@
   "warnings": [],
   "indexRequired": true,
   "basis": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-  "digest": "sha256:97e8894ab3ab7d812387ace82336891116221537a03391e3d6ff5355e65d120e"
+  "digest": "sha256:764ea54a3e97dff84f6224564cff89fbcf9b5429fcb5f543242e30343cdcd851"
 }

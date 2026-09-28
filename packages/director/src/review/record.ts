@@ -24,7 +24,13 @@ import type { ReviewResult } from "./types.js";
 
 export const REVIEW_RECORD_FORMAT = "duo.review-record/1";
 export const REVIEW_ASSIST_FORMAT = "duo.review-assist/1";
+/** T14.1: the Adoption Baseline is human-approved history too, with its own format and ID prefix. */
+export const ADOPTION_BASELINE_FORMAT = "duo.adoption-baseline/1";
 export const REVIEWS_DIR = `${STATE_DIR_NAME}/reviews`;
+
+const ID_PREFIX: Readonly<Record<string, string>> = {
+  [REVIEW_RECORD_FORMAT]: "review", [REVIEW_ASSIST_FORMAT]: "assist", [ADOPTION_BASELINE_FORMAT]: "adoption",
+};
 
 export interface RecordReviewOptions {
   readonly root: string;
@@ -46,7 +52,9 @@ export interface RecordReviewResult extends RecordedFile {
   readonly assist?: RecordedFile;
 }
 
-const hexId = (prefix: string, body: unknown) => `${prefix}-${sha256Text(stableJson(body)).slice(7, 23)}`;
+/** Content-addressed ID of a history record body: prefix + 16 hex of sha256(stable JSON). */
+export const historyRecordId = (prefix: string, body: unknown) => `${prefix}-${sha256Text(stableJson(body)).slice(7, 23)}`;
+const hexId = historyRecordId;
 
 /** The deterministic content of a record: pointers and structured fields only. */
 export function reviewRecordBody(result: ReviewResult): Record<string, unknown> | undefined {
@@ -56,6 +64,7 @@ export function reviewRecordBody(result: ReviewResult): Record<string, unknown> 
     format: REVIEW_RECORD_FORMAT,
     review: { format: result.format, verdict: result.verdict, verdictBasis: result.verdictBasis },
     request: result.request,
+    baseline: result.baseline,
     diff: {
       identity: diff.identity, from: diff.from, to: diff.to,
       files: diff.files.map((f) => ({
@@ -68,6 +77,7 @@ export function reviewRecordBody(result: ReviewResult): Record<string, unknown> 
     claims: result.claims.map((c) => ({
       id: c.id, rule: c.rule, subject: c.subject, alignment: c.alignment, reason: c.reason, evidenceIds: c.evidenceIds, basis: c.basis,
       enforced: c.enforced, blockEligible: c.blockEligible, drift: c.drift, semanticCandidate: c.semanticCandidate,
+      ...(c.violationKey === undefined ? {} : { violationKey: c.violationKey }), ...(c.provenance === undefined ? {} : { provenance: c.provenance }),
     })),
     evidence: result.evidence.map((e) => ({
       id: e.id, basis: e.basis, kind: e.kind, ...(e.contentHash === undefined ? {} : { contentHash: e.contentHash }), pointer: e.pointer,
@@ -114,13 +124,19 @@ export function verifyReviewRecord(text: string, path = "record"): ParseResult<{
   delete body.id;
   delete body.recorded;
   const format = body.format;
-  if (format !== REVIEW_RECORD_FORMAT && format !== REVIEW_ASSIST_FORMAT) return failure([createDiagnostic("REVIEW_RECORD_INTEGRITY", `${path} has format ${String(format)}`, { path })]);
-  const expected = hexId(format === REVIEW_RECORD_FORMAT ? "review" : "assist", body);
+  const prefix = typeof format === "string" ? ID_PREFIX[format] : undefined;
+  if (prefix === undefined) return failure([createDiagnostic("REVIEW_RECORD_INTEGRITY", `${path} has format ${String(format)}`, { path })]);
+  const expected = hexId(prefix, body);
   if (id !== expected) return failure([createDiagnostic("REVIEW_RECORD_INTEGRITY", `${path}: id ${String(id)} does not match its content (${expected})`, { path })]);
   return success({ id: expected, body });
 }
 
-async function writeRecord(root: string, path: RepoPath, file: Record<string, unknown>, id: string, body: Record<string, unknown>): Promise<ParseResult<RecordedFile>> {
+/**
+ * Writes a content-addressed history record under reviews/ (human-history boundary, no symlink,
+ * exclusive create). An existing file with the same body is "unchanged"; any other content under the
+ * same name is an integrity error and is never overwritten.
+ */
+export async function writeHistoryRecord(root: string, path: RepoPath, file: Record<string, unknown>, id: string, body: Record<string, unknown>): Promise<ParseResult<RecordedFile>> {
   const guarded = guardWrite(root, path, "human-history", { restrictTo: [`${REVIEWS_DIR}/`] });
   if (guarded.value === undefined) return failure(guarded.diagnostics);
   try {
@@ -145,12 +161,12 @@ export async function recordReview(result: ReviewResult, options: RecordReviewOp
   if (body === undefined) return failure([createDiagnostic("REVIEW_NOT_RECORDABLE", `Only a ready Review with a diff and a verdict is recorded (status ${result.status})`)]);
   const id = hexId("review", body);
   const recorded = { by: options.actor.name, at: (options.clock ?? (() => new Date()))().toISOString() };
-  const main = await writeRecord(options.root, `${REVIEWS_DIR}/${id}.json` as RepoPath, { id, recorded, ...body }, id, body);
+  const main = await writeHistoryRecord(options.root, `${REVIEWS_DIR}/${id}.json` as RepoPath, { id, recorded, ...body }, id, body);
   if (main.value === undefined) return failure(main.diagnostics);
   const supplement = assistBody(id, result);
   if (supplement === undefined) return success(main.value);
   const assistId = hexId("assist", supplement);
-  const assist = await writeRecord(options.root, `${REVIEWS_DIR}/${id}.${assistId}.json` as RepoPath, { id: assistId, recorded, ...supplement }, assistId, supplement);
+  const assist = await writeHistoryRecord(options.root, `${REVIEWS_DIR}/${id}.${assistId}.json` as RepoPath, { id: assistId, recorded, ...supplement }, assistId, supplement);
   const diagnostics: Diagnostic[] = [...assist.diagnostics];
   return assist.value === undefined ? failure(diagnostics) : success({ ...main.value, assist: assist.value }, diagnostics);
 }

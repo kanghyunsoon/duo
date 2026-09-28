@@ -11,6 +11,7 @@ import path from "node:path";
 import { JAVASCRIPT_EXTENSIONS, TYPESCRIPT_EXTENSIONS, type GitRepositoryState, type RepositoryScan } from "@duo-director/analyzer";
 import { compareUtf8, parseYaml, readSourceFile, STATE_DIR_NAME, type RepoPath } from "@duo-director/core";
 import { nonApplicationReason } from "../review/scope.js";
+import type { WorkingTreeObservation } from "../adoption/types.js";
 import type { RepositoryObservation } from "./types.js";
 
 const LANGUAGES: Readonly<Record<string, string>> = {
@@ -81,7 +82,7 @@ function testRootOf(p: string): string | undefined {
   return i >= 0 ? segs.slice(0, i + 1).join("/") : undefined;
 }
 
-export function observeRepository(root: string, scan: RepositoryScan, git: GitRepositoryState): RepositoryObservation {
+export function observeRepository(root: string, scan: RepositoryScan, git: GitRepositoryState, workingTree: WorkingTreeObservation): RepositoryObservation {
   const files = scan.files.map((f) => f.path).filter((p) => !p.startsWith(`${STATE_DIR_NAME}/`));
   const excluded: Record<string, number> = {};
   for (const e of scan.excluded) excluded[e.reason] = (excluded[e.reason] ?? 0) + 1;
@@ -169,6 +170,7 @@ export function observeRepository(root: string, scan: RepositoryScan, git: GitRe
     files: { indexable: files.length, excluded: Object.fromEntries(Object.entries(excluded).sort(([a], [b]) => compareUtf8(a, b))) },
     languages, manifests, packages, workspaces, ...(packageManager === undefined ? {} : { packageManager }), scripts, technical,
     sourceRoots: count(sources), testRoots: count(tests), colocatedTests,
+    workingTree: { workingTreeDirty: workingTree.dirty, ...workingTree },
   };
 }
 

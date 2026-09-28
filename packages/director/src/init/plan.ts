@@ -8,6 +8,7 @@ import { openGitProvider, scanRepository } from "@duo-director/analyzer";
 import {
   compareUtf8, createDiagnostic, failure, hasErrors, sha256Text, stableJson, success, type Diagnostic, type ParseResult, type RepoPath,
 } from "@duo-director/core";
+import { observeWorkingTree } from "../adoption/worktree.js";
 import { discoverDocuments, type DiscoveryOptions } from "./documents.js";
 import { inspectStateDirectory } from "./inspect.js";
 import { INIT_DIRECTORIES, INIT_FILES, milestoneFile } from "./layout.js";
@@ -19,6 +20,7 @@ export interface PlanInitOptions {
 }
 
 const MAX_WARNINGS = 20;
+const MAX_LISTED_PATHS = 50;
 
 /** sha256 of the plan without its digest field. */
 export function initPlanDigest(plan: Omit<InitPlan, "digest"> | InitPlan): string {
@@ -40,8 +42,10 @@ export async function planInit(root: string, options: PlanInitOptions = {}): Pro
   const scan = await scanRepository(root);
   if (hasErrors(scan.diagnostics)) return failure(scan.diagnostics.filter((d) => d.severity === "error"));
 
+  const tree = await observeWorkingTree(git.value, MAX_LISTED_PATHS);
+  if (tree.value === undefined) return failure(tree.diagnostics);
   const inspection = inspectStateDirectory(root);
-  const observed = observeRepository(root, scan, repoState.value);
+  const observed = observeRepository(root, scan, repoState.value, tree.value);
   const discovery = discoverDocuments(root, scan.files.map((f) => f.path), observed.description?.value, options.discovery);
 
   const planning = inspection.state === "not-initialized" || inspection.state === "partial";

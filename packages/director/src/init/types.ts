@@ -10,6 +10,7 @@
  * - confirmed: what a human answered. Only this becomes Project Truth.
  */
 import type { Diagnostic, RepoPath, WriteKind } from "@duo-director/core";
+import type { WorkingTreeObservation } from "../adoption/types.js";
 
 /**
  * not-initialized: no .duo-project, or one with no Truth or history file in it.
@@ -46,6 +47,11 @@ export interface RepositoryObservation {
   readonly testRoots: readonly { readonly path: string; readonly files: number }[];
   /** Test files next to source files (e.g. src/a.test.ts), not under a test root. */
   readonly colocatedTests: number;
+  /**
+   * Staged, unstaged, untracked changes outside .duo-project (T14.1). Dirty is not an init failure;
+   * capturing the Adoption Baseline then needs an explicit policy (HEAD_BASELINE or ABORT_AND_CLEAN).
+   */
+  readonly workingTree: WorkingTreeObservation & { readonly workingTreeDirty: boolean };
 }
 
 export type DocumentKind = "readme" | "contributing" | "design" | "docs" | "package-readme" | "other";

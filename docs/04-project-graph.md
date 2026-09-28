@@ -166,6 +166,8 @@ Context Compiler(TASK-010)는 `traverse()`가 아니라 자체 best-first 탐색
 - `trace(node, depth = 2)`(T08 구현): 추적 관계 REQUIRES, TRACKED_BY, GOVERNS, IMPLEMENTS, VALIDATED_BY, SUPERSEDES를 양방향으로 따라가는 bounded traverse다. 상위(Requirement, Decision, Issue, Milestone)와 하위(Symbol, File, Test)를 돌려준다. CONTAINS, CALLS, IMPORTS, CHANGED_WITH는 따라가지 않는다.
 - `impact(seeds, depth = 2)`(T08 구현): 바뀐 File·Symbol에서 **DUO Graph에 기록된 영향 관계**를 돌려준다. 영향받는 모든 코드를 주장하지 않는다(CALLS는 exact만 있고 instance 호출은 unresolved, C53). 관계는 direct(역방향 CALLS·IMPORTS, VALIDATED_BY와 그 Requirement, IMPLEMENTS, GOVERNS), structural(CONTAINS: seed 파일의 Symbol, Symbol의 class와 파일), historical(CHANGED_WITH) 세 가지이고, 경로에서 가장 약한 관계를 붙여 (관계, depth, id) 순으로 정렬한다. 점수는 없고 `nodeLimit`을 넘으면 `truncated`다. 결과에 `evidence: "graph"`를 둔다.
 
+읽기 전용 호출자(CLI `status`, `context`, `review`, `trace`, `impact`)는 `openProjectGraphReader(root)`로 연다(T15): graph.db가 없으면 아무것도 만들지 않고 빈 in-memory graph를 쓰며(inspectIndex는 missing), 있으면 read-only로 연다. WAL 데이터베이스의 read-only 연결은 SQLite가 `-wal`/`-shm` sidecar를 만들 수 있으나 graph.db 내용은 바뀌지 않는다(C131). CLI `trace`·`impact`는 이 primitive를 그대로 보이고 bounded·`truncated`를 표시한다.
+
 ## 증분 갱신
 
 TASK-008의 불변식은 **Incremental Result == Clean Full Rebuild Result**다(불변식 5). 계약 세부는 [03 증분 인덱싱](03-data-model.md#증분-인덱싱)에 있다.

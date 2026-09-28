@@ -4,7 +4,8 @@
  * - ASK: the Knowledge Gap assessment requires human input (C100: the assessment is the authority,
  *   not the Packet flag).
  * - WARN: a PARTIAL, a non-blocking CONFLICT, an UNKNOWN drift signal, or a surfaced gap. Plain
- *   UNKNOWN (a semantic question, a known analysis limit) does not warn.
+ *   UNKNOWN (a semantic question, a known analysis limit) does not warn, and neither does a violation
+ *   that already existed at adoption and this diff did not touch (provenance pre-existing, T14.1).
  * - PASS: none of the above. PASS means DUO found no direction conflict in the evidence it had;
  *   it does not mean the code has no bugs.
  */
@@ -21,7 +22,7 @@ export function reviewVerdict(claims: readonly ReviewClaim[], gaps: KnowledgeGap
   const blocking = claims.filter((c) => c.blockEligible).map((c) => c.id).sort(compareUtf8);
   const ask = gaps?.requiresHumanInput === true ? gaps.gaps.filter((g) => g.action === "ask").map((g) => g.id) : [];
   const warn = [
-    ...claims.filter((c) => !c.blockEligible && (c.alignment === "PARTIAL" || c.alignment === "CONFLICT" || (c.alignment === "UNKNOWN" && c.drift))).map((c) => c.id).sort(compareUtf8),
+    ...claims.filter((c) => !c.blockEligible && c.provenance !== "pre-existing" && (c.alignment === "PARTIAL" || c.alignment === "CONFLICT" || (c.alignment === "UNKNOWN" && c.drift))).map((c) => c.id).sort(compareUtf8),
     ...(gaps?.gaps ?? []).filter((g) => g.action === "surface").map((g) => g.id),
   ];
   const verdict: Verdict = blocking.length > 0 ? "BLOCK" : ask.length > 0 ? "ASK" : warn.length > 0 ? "WARN" : "PASS";

@@ -16,6 +16,7 @@ import {
   decisionEvidence, isActive, makeClaim, nodeEvidence, requirementEvidence, seedEvidence, type RuleContext,
 } from "./claims.js";
 import { nonApplicationReason } from "./scope.js";
+import { declaredReferenceParts, dependencyOffending, violationKey } from "../adoption/key.js";
 import type { ChangedFile, DiffSeed, ReviewClaim } from "./types.js";
 
 const DECISIONS = `${STATE_DIR_NAME}/decisions/`;
@@ -114,7 +115,7 @@ export function supersedeIntegrity(ctx: RuleContext): ReviewClaim[] {
 
 // ---- R-DECISION: decision-forbids, decision-governance ----
 
-function dependencyNames(text: string | undefined): Set<string> {
+export function dependencyNames(text: string | undefined): Set<string> {
   if (text === undefined) return new Set();
   try {
     const pkg = JSON.parse(text) as Record<string, unknown>;
@@ -150,6 +151,7 @@ export async function decisionForbids(ctx: RuleContext): Promise<ReviewClaim[]> 
     for (const f of live) {
       if (!paths.some((m) => m(f.path))) continue;
       const c = makeClaim(ctx, { rule: "decision-forbids", subject, key: `path:${f.path}`, alignment: "CONFLICT", reason: "forbidden-path", enforced,
+        violation: { key: violationKey("decision-forbids", d.id, nodeId(fileRef(f.path))), touched: true },
         expected: `no change under ${d.forbids.paths.join(", ")} (${d.id})`, observed: `${f.kind} ${f.path}`,
         evidence: [truth, nodeEvidence(ctx, ctx.graph.getNode(fileRef(f.path))), ...f.evidenceIds] });
       if (c !== undefined) out.push(c);
@@ -159,6 +161,7 @@ export async function decisionForbids(ctx: RuleContext): Promise<ReviewClaim[]> 
       const qn = String(ctx.graph.getNode(s.entity)?.payload.qualifiedName ?? "");
       if (!symbols.some((re) => re.test(qn))) continue;
       const c = makeClaim(ctx, { rule: "decision-forbids", subject, key: `symbol:${s.id}`, alignment: "CONFLICT", reason: "forbidden-symbol", enforced,
+        violation: { key: violationKey("decision-forbids", d.id, s.id), touched: true },
         expected: `no symbol matching ${d.forbids.symbols.join(", ")} (${d.id})`, observed: `${qn} changed in ${s.path}`, evidence: [truth, ...seedEvidence(ctx, s)] });
       if (c !== undefined) out.push(c);
     }
@@ -166,6 +169,7 @@ export async function decisionForbids(ctx: RuleContext): Promise<ReviewClaim[]> 
       for (const dep of [...names].filter((n) => d.forbids.dependencies.includes(n)).sort(compareUtf8)) {
         const f = manifests.find((m) => m.path === manifest);
         const c = makeClaim(ctx, { rule: "decision-forbids", subject, key: `dependency:${manifest}:${dep}`, alignment: "CONFLICT", reason: "forbidden-dependency", enforced,
+          violation: { key: violationKey("decision-forbids", d.id, dependencyOffending(manifest, dep)), touched: true },
           expected: `no dependency ${dep} (${d.id})`, observed: `${dep} added to ${manifest}`, evidence: [truth, ...(f?.evidenceIds ?? [])] });
         if (c !== undefined) out.push(c);
       }
@@ -336,8 +340,10 @@ export function declaredReferences(ctx: RuleContext): ReviewClaim[] {
     const line = diag.source?.startLine ?? 0;
     const def = defs.find((d) => d.location.path === diag.source?.path && (d.location.startLine ?? 0) <= line && line <= (d.location.endLine ?? 0));
     if (def === undefined || !(inPacket.has(def.id) || changed.has(def.location.path))) continue;
+    const parts = declaredReferenceParts(diag.message);
     const c = makeClaim(ctx, {
       rule: "declared-reference", subject: { kind: def.kind, id: def.id }, key: diag.message, alignment: "PARTIAL", reason: "declared-symbol-unresolved",
+      ...(parts === undefined ? {} : { violation: { key: violationKey("declared-reference", parts.governing, parts.offending), touched: changed.has(def.location.path) } }),
       expected: `every symbol ${def.id} names exists`, observed: diag.message,
       evidence: [def.kind === "requirement" ? requirementEvidence(ctx, def.id) : decisionEvidence(ctx, def.id)],
     });

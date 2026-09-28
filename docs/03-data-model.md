@@ -67,7 +67,7 @@ DUO가 어디에 쓸 수 있는지는 core의 순수 정책 함수 `checkWriteBo
 | project.yaml, intent/, specs/, milestones/, integrations/ | init 시 초안 생성만 | 금지 | 수정 |
 | decisions/D-*.yaml | DecisionService의 confirm/reject/supersede(Human 명령으로 실행) | 금지 | 명령 또는 수동 수정(fallback) |
 | decisions/proposals/ | 새 파일 생성 | `duo_propose_decision`으로만 | 수정 가능 |
-| reviews/ | `duoctl review --record` | 금지 | 삭제 가능 |
+| reviews/ | `duoctl review --record`, Adoption Baseline(`duoctl init`) | 금지 | 삭제 가능 |
 | generated/, cache/, runtime/ | 자유 | 금지 | 삭제 가능 |
 
 ## 스키마 공통 규칙
@@ -525,6 +525,7 @@ ReviewRequest { task?, diff: { from, to, files? }, budget?, includeSemanticAssis
 ReviewResult {
   format: "duo.review/1"; status: "ready" | "index-required"; freshness
   request: { identity, task, from, to, files?, budget?, testRun? }   // T13.1: 결정적 결과를 정하는 요청 입력과 그 sha256. includeSemanticAssist는 제외
+  baseline: { status: "missing" | "present" | "incompatible", id? }  // T14.1 Adoption Baseline
   diff?: { identity, from, to, files: ChangedFile[] }          // identity: endpoint(HEAD는 commit), 경로별 kind·blob·hunk hash
   seeds: DiffSeed[]                                            // hunk-overlap | file-changed | truth-changed
   verdict?: "PASS" | "WARN" | "BLOCK" | "ASK"; verdictBasis: { blocking, ask, warn }
@@ -532,7 +533,7 @@ ReviewResult {
   gaps?: KnowledgeGapAssessment; context?: { review?, task?, profile: "review", seeds }
   limitations; semanticAssist; metrics; diagnostics
 }
-ReviewClaim { id, rule, subject, expected, observed, alignment, evidenceIds(≥1), basis[], reason, enforced, blockEligible, drift, semanticCandidate }
+ReviewClaim { id, rule, subject, expected, observed, alignment, evidenceIds(≥1), basis[], reason, enforced, blockEligible, drift, semanticCandidate, violationKey?, provenance? }   // T14.1: baseline 규칙(decision-forbids, declared-reference, external-source-drift)
 ```
 
 - Claim ID는 `claim-` + hash(rule, subject, 구분 key, diff identity)이며 실행 시각이나 발견 순서를 쓰지 않는다.
@@ -593,6 +594,20 @@ core `Evidence { id, basis, kind, entity?, source?, contentHash?, summary?, poin
 
 EvidencePointer 필드: `kind`(requirement, decision, constraint, issue, milestone, file, symbol, test, commit, diff, document, review, llm), `id`, `path`, `symbol`, `lines`, `commit`, `content_hash`, `change`.
 
+## Adoption Baseline (T14.1)
+
+기존 저장소에 DUO를 중간 설치할 때 "DUO가 이 프로젝트를 관리하기 시작한 시점의 저장소 상태"를 남기는 provenance다. 기존 코드가 옳다거나 Human Intent와 맞다거나 기술 부채를 승인한다는 뜻이 아니다. 목적은 DUO 이전부터 있던 것과 이후에 생긴 것을 가르는 것이다.
+
+- **시점**: init apply → Truth → 첫 Index → index current 확인 → `captureAdoptionBaseline(root, { graph, actor, policy?, clock? })`(director, 별도 Domain Service). `applyInitPlan()`과 읽기 호출은 baseline을 만들지 않는다. CLI `duoctl init`이 순서대로 orchestrate한다([07](07-cli-interface.md#duoctl-init)).
+- **저장**: `.duo-project/reviews/adoption-<16 hex>.json`, format `duo.adoption-baseline/1`, human-history(tracked), Review Record와 같은 content-addressed writer(`writeHistoryRecord`: exclusive create, 같으면 `unchanged`, 다르면 integrity error). ID는 body(`id`·`recorded` 제외)의 sha256이며 `recorded: {by, at}`(injectable clock)는 identity 밖이다. 같은 저장소·Truth·Index 상태의 재캡처는 같은 ID(no-op)이고, 다른 baseline이 이미 있으면 `ADOPTION_BASELINE_EXISTS`로 거부한다(나중 캡처가 새 위반을 pre-existing으로 바꾸지 못하게).
+- **내용**: `project {name, rootCommits}`, `git {headOid, branch?, detached}`, `truth {digest}`(truthDigest), `index {graphSchemaVersion, stateToken}`, `workingTree {dirty, policy: HEAD_BASELINE, staged[{path, indexBlob?}], unstaged[{path, contentHash?}], untracked[{path, contentHash?}], conflicted, counts, excludedSecrets, truncated}`(경로와 hash만, 내용·diff 없음, 목록 1,000개 상한), `findings[]`, `limitations[]`.
+- **거부**: actor가 human이 아님(`ADOPTION_FORBIDDEN`), index가 current가 아님(`ADOPTION_INDEX_REQUIRED`), commit 없음(`ADOPTION_HEAD_REQUIRED`), dirty인데 정책 없음(`ADOPTION_DIRTY_POLICY_REQUIRED`).
+- **Dirty policy**: `HEAD_BASELINE`(baseline commit = HEAD, staged·unstaged·untracked 변경은 adoption 이후 Review 대상으로 남음), `ABORT_AND_CLEAN`(아무것도 쓰지 않고 `aborted`). dirty working tree 전체를 snapshot으로 삼는 정책(`ADOPT_CURRENT_DIRTY`)은 MVP에 없다. working tree 관찰(`observeWorkingTree`)은 `.duo-project/`와 secret 파일(개수만)을 뺀다. `InitPlan.observed.workingTree`에도 같은 값(`workingTreeDirty`, 목록 50개 상한)이 있다.
+- **Findings**(결정적, LLM 없음, task가 필요한 R-SCOPE 제외): 활성 Decision의 `forbids` 일치(File, Symbol, package.json dependency), `DECLARED_SYMBOL_UNRESOLVED`, 로컬 External Source drift. dirty 경로의 finding은 baseline에 넣지 않는다(`dirty-paths-not-baselined`).
+- **Violation key**: `vk-` + 16 hex of sha256(rule, governing Truth entity, offending). offending은 node ID, `dep:<manifest>#<name>`, `ref:<field>:<name>`, `src:<path>#<section>`. 줄 번호·diff·시각을 넣지 않는다. Review의 baseline 규칙 claim은 `violationKey`를 가진다.
+- **Provenance**(Review): baseline에 key가 없으면 `introduced`(기존 BLOCK 정책), 있고 이번 diff가 위반 entity를 직접 바꿨으면 `pre-existing-touched`(blockEligible 아님, WARN), 있고 바꾸지 않았으면 `pre-existing`(historical, BLOCK·WARN 없음). 기존 forbidden Symbol의 내부가 바뀌었다고 "위반이 커졌다"고 추측하지 않는다. baseline이 없거나(`missing`) 읽을 수 없으면(`incompatible`, limitation `adoption-baseline-unusable`) provenance를 붙이지 않는다. `ReviewResult.baseline = { status: missing|present|incompatible, id? }`.
+- **Read model**: `getAdoptionBaselineStatus(root)` → `missing`(T14.1 이전 project 포함, 자동 캡처하지 않음), `current`(HEAD = baseline commit), `advanced`(baseline commit이 HEAD history에 있음), `repository-diverged`(history에 없거나 root commit이 다름), `incompatible`(손상, 변조, 여러 개). `loadAdoptionBaseline(root)`는 Git 없이 파일만 검증한다. 둘 다 쓰기 0이며 repair·재캡처를 하지 않는다.
+
 ## generated/, runtime/
 
 | 파일 | 내용 | Task |
@@ -604,6 +619,6 @@ EvidencePointer 필드: `kind`(requirement, decision, constraint, issue, milesto
 | `cache/packets/<digest>.json` | Context Packet cache. key는 Packet Dependency Digest([05](05-context-compiler.md#packet-dependency-digest와-cache)) | TASK-010 |
 | `cache/llm/<key>.json` | 검증된 성공 LLM 답변. key = hash(provider cacheIdentity, purpose, instructions, input, output spec, maxOutputTokens). identity가 없으면 쓰지 않음(C113) | TASK-013 |
 | `cache/token-counts.json` | 파일 content hash → o200k_base token 수와 code point 수. tokenizer identity가 다르면 버림 | TASK-010 |
-| `runtime/metrics.jsonl` | Context, Review, LLM 지표([09](09-token-strategy.md#지표)). Compiler는 값을 돌려주고 기록은 호출자가 한다(C83) | TASK-015, TASK-016 |
+| `runtime/metrics.jsonl` | CLI(와 이후 MCP)가 명령마다 덧붙이는 `duo.metric/1` 한 줄: command, status, exitCode, durationMs, at과 해당 필드(indexMode, contextTokens, reviewVerdict, llmCalls 등). secret·본문·task 원문 없음. director `appendRuntimeMetric`·`readRuntimeMetrics`([07](07-cli-interface.md#runtimemetricsjsonl), C83) | TASK-015 |
 
 Graph DB 스키마와 transaction·제약·index 정책은 [ADR-002](adr/ADR-002-graph-storage.md#sqlite-스키마)에 있다.

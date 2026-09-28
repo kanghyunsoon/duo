@@ -58,8 +58,11 @@ Git root 확인(work tree 최상위만, nested Truth 금지) ─▶ .duo-project
   ─▶ 스캔(.gitignore, 기본 제외, 비밀 파일 제외) ─▶ 관찰: manifest, workspace, 언어, source·test root, script 이름, Git branch·HEAD
   ─▶ 후보 문서(경로 순위, 상한) · 기존 DUO 정의의 import 후보 ─▶ InitPlan(질문, willCreate, conflicts; 쓰기 0)
   ─▶ Human 답(TTY 대화형 또는 ASK 목록) ─▶ applyInitPlan: runtime/ staging → core loader 검증 → 배치(project.yaml 마지막), 실패 시 rollback
-  ─▶ 호출자(CLI)가 Indexer 실행(generated/graph.db) ─▶ 요약 출력
+  ─▶ 호출자(CLI)가 Indexer 실행(generated/graph.db) ─▶ index current 확인 ─▶ captureAdoptionBaseline(dirty면 HEAD_BASELINE 또는 ABORT_AND_CLEAN)
+  ─▶ 요약 출력 ─▶ 일반 workflow(증분 Index + Context + Review)
 ```
+
+DUO로 처음부터 만든 프로젝트와 이미 개발 중인 저장소(Existing Project Adoption, T14.1)는 같은 Runtime 구조로 수렴한다. Truth가 sparse해도(Requirement·Decision 0개) 정상이며, Adoption Baseline이 DUO 이전부터 있던 위반과 이후 생긴 위반을 가른다([03](03-data-model.md#adoption-baseline-t141), [07](07-cli-interface.md#existing-project-adoption)).
 
 LLM을 호출하지 않는다(TASK-014). 관찰한 사실은 observed, 그로부터 만든 값은 suggestion이고, Human이 답한 것만 confirmed Truth가 된다. 기존 문서의 DUO 정의는 import 후보로만 보이며 Human 확인 없이 Truth가 되지 않는다. Requirement를 지어내지 않고, 답하지 않은 질문은 Truth의 `UNKNOWN(<id>):` 줄(Declared Gap)로 남는다(C123).
 
@@ -99,7 +102,7 @@ CLI 명령과 MCP Tool은 실행 전 증분 인덱싱을 한 번 한다. 변경 
 
 | 프로세스 | 수명 | 쓰기 |
 |---|---|---|
-| CLI | 명령 1회 | generated/, cache/, runtime/, reviews/(--record), decisions/(confirm/reject) |
+| CLI | 명령 1회 | generated/, cache/, runtime/(metrics.jsonl), reviews/(--record, adoption baseline), decisions/(confirm/reject), init의 Truth |
 | MCP 서버 | Agent 세션 동안 | generated/, cache/, runtime/, decisions/proposals/(새 파일) |
 | UI 서버 | 사용자가 종료할 때까지 | decisions/(Confirm/Reject만) |
 

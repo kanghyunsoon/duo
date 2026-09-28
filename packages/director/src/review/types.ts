@@ -13,6 +13,7 @@ import type { Diagnostic, EntityRef, Evidence, EvidenceBasis, RepoPath } from "@
 import type { IndexStatus } from "@duo-director/graph";
 import type { KnowledgeGapAssessment } from "../gap/types.js";
 import type { LLMFailureCategory } from "../llm/contract/types.js";
+import type { ViolationProvenance } from "../adoption/types.js";
 
 export interface TestRunEvidence {
   readonly command?: string;
@@ -76,6 +77,10 @@ export interface ReviewClaim {
   readonly drift: boolean;
   /** Needs a semantic judgement DUO cannot make deterministically. */
   readonly semanticCandidate: boolean;
+  /** Baseline rules (decision-forbids, declared-reference, external-source-drift): stable identity, no diff or line (T14.1). */
+  readonly violationKey?: string;
+  /** Relative to the Adoption Baseline; absent without a usable baseline or for ALIGNED claims. */
+  readonly provenance?: ViolationProvenance;
 }
 
 export interface ChangedHunk {
@@ -157,6 +162,8 @@ export interface ReviewResult {
   readonly format: "duo.review/1";
   readonly status: "ready" | "index-required";
   readonly request: ReviewRequestIdentity;
+  /** The Adoption Baseline the provenance was judged against (T14.1). */
+  readonly baseline: { readonly status: "missing" | "present" | "incompatible"; readonly id?: string };
   readonly freshness: { readonly status: IndexStatus; readonly fullRebuildRequired: boolean };
   readonly diff?: { readonly identity: string; readonly from: string; readonly to: string; readonly files: readonly ChangedFile[] };
   readonly seeds: readonly DiffSeed[];

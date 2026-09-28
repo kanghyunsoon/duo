@@ -250,7 +250,7 @@ cache는 `.duo-project/cache/packets/<digest>.json`(`duo.packet-cache/1`)이고 
 
 Packet 안(`packet.metrics`)은 그 Packet에 대한 값만 둔다: budget(total, reserved, used, remaining), 후보·선택·생략 수, candidateTokens(모든 후보의 최대 표현 비용 합, frame 제외), selectedTokens(= used), 렌더링 텍스트의 bytes·chars, 치환 수, `llmCalls: 0`.
 
-요청 단위 값(`result.metrics`)은 Packet 밖에 둔다(C82): Repository files·tokens·bytes·chars, Files Considered, rawCandidateTokens(후보가 있는 파일 전체의 token 합), Files Loaded, reduction(vsRepository, vsRawCandidates, 소수 둘째 자리). Repository 합계는 관계없는 파일에도 바뀌므로 Packet에 넣으면 모든 cache가 무효가 된다. 정의는 [09](09-token-strategy.md#지표)다. 요청마다 `runtime/metrics.jsonl`에 기록하는 일은 호출자(TASK-015 CLI, TASK-016 MCP)가 한다.
+요청 단위 값(`result.metrics`)은 Packet 밖에 둔다(C82): Repository files·tokens·bytes·chars, Files Considered, rawCandidateTokens(후보가 있는 파일 전체의 token 합), Files Loaded, reduction(vsRepository, vsRawCandidates, 소수 둘째 자리). Repository 합계는 관계없는 파일에도 바뀌므로 Packet에 넣으면 모든 cache가 무효가 된다. 정의는 [09](09-token-strategy.md#지표)다. 요청마다 `runtime/metrics.jsonl`에 기록하는 일은 호출자가 한다: CLI `duoctl context`는 status, Packet token 수와 budget, llmCalls, 소요 시간만 덧붙이고 task 원문은 쓰지 않는다(T15, C83). CLI는 index가 current가 아니면 자동으로 index하지 않고 `INDEX_REQUIRED`(종료 코드 6)를 보이며 `--refresh`일 때만 index 후 compile한다. 기본 출력은 `renderContextMarkdown`, `--json`은 `ContextResult` 그대로다([07](07-cli-interface.md)).
 
 `performance`는 freshness, seed, traversal, ranking, retrieval, tokenization, packing, metrics, total의 ms다.
 

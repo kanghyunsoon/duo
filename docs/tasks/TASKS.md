@@ -609,7 +609,7 @@ depends_on: [TASK-008, TASK-011]
 
 - **Goal**: 최초 분석, 초안, Human 확인 질문을 만든다.
 - **Input**: 02 init 흐름, 07 init 대화
-- **Output**: InitService: `planInit`(읽기 전용 InitPlan: 상태, 관찰, 후보 문서, import 후보, 질문, willCreate, conflicts, basis, digest), `applyInitPlan`(runtime/ staging, core loader 검증, 배치, rollback, repair), `InitQuestion`·`InitAnswer`. TTY 대화, `--yes`, `--reindex`, init 뒤 Indexer 호출은 TASK-015(C123)
+- **Output**: InitService: `planInit`(읽기 전용 InitPlan: 상태, 관찰, 후보 문서, import 후보, 질문, willCreate, conflicts, basis, digest), `applyInitPlan`(runtime/ staging, core loader 검증, 배치, rollback, repair), `InitQuestion`·`InitAnswer`. TTY 대화, `--yes`, `--reindex`, init 뒤 Indexer 호출은 TASK-015(C123). T14.1: Existing Project Adoption: `observeWorkingTree`(InitPlan `observed.workingTree`), `captureAdoptionBaseline`(`reviews/adoption-*.json`, HEAD_BASELINE·ABORT_AND_CLEAN), `getAdoptionBaselineStatus`, baseline findings와 `violationKey`, Review provenance(introduced, pre-existing, pre-existing-touched)
 - **Dependencies**: [TASK-008](#task-008-증분-인덱싱-trace-impact), [TASK-011](#task-011-knowledge-gap)
 - **Files expected to change**: `packages/director/src/init/**`, `packages/core/src/source/markdown.ts`(paragraph), `fixtures/init/**`
 - **Status**: done (T14)
@@ -628,7 +628,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M3
 package: cli
 requirements: [REQ-CLI-001, REQ-DECISION-002, REQ-NFR-006]
@@ -638,10 +638,10 @@ depends_on: [TASK-009, TASK-010, TASK-013, TASK-014]
 
 - **Goal**: 명령을 packages의 서비스에 연결한다.
 - **Input**: 07 명령 표
-- **Output**: apps/cli 명령, 대화형 입력, 출력 형식, 종료 코드
+- **Output**: apps/cli 명령(init, status, index, context, review, trace, impact, decision, stats), 대화형 입력(prompt는 stderr), en/ko renderer, `duo.cli.<command>/1` JSON envelope, 종료 코드(verdict는 `--fail-on`일 때만), director `appendRuntimeMetric`·`readRuntimeMetrics`, graph `openProjectGraphReader`, analyzer `readGitUserName`, subprocess E2E(`tests/cli/`). ui, install, mcp는 TASK-016~018
 - **Dependencies**: [TASK-009](#task-009-decision-생명주기), [TASK-010](#task-010-context-compiler), [TASK-013](#task-013-review-엔진), [TASK-014](#task-014-init-파이프라인)
-- **Files expected to change**: `apps/cli/src/**`
-- **Status**: todo
+- **Files expected to change**: `apps/cli/src/**`, `tests/cli/**`, `packages/director/src/{adoption,runtime}/**`
+- **Status**: done (T14.1, T15)
 - **검증 대상 Requirement**: [REQ-CLI-001](../01-requirements.md#req-cli-001-얇은-cli), [REQ-DECISION-002](../01-requirements.md#req-decision-002-human-confirmreject), [REQ-NFR-006](../01-requirements.md#req-nfr-006-간결한-기본-출력)
 - **관련 ADR**: [ADR-010](../adr/ADR-010-package-structure.md), [ADR-013](../adr/ADR-013-decision-lifecycle.md)
 

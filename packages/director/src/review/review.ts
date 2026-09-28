@@ -20,6 +20,7 @@ import type { ContextPacket, ContextResult } from "../context/types.js";
 import { EvidenceStore } from "../evidence/store.js";
 import { assessKnowledgeGaps } from "../gap/assess.js";
 import type { LLMProvider } from "../llm/contract/types.js";
+import { loadAdoptionBaseline } from "../adoption/baseline.js";
 import { reviewVerdict } from "./aggregate.js";
 import type { RuleContext } from "./claims.js";
 import { collectDiff } from "./diff.js";
@@ -84,6 +85,9 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   const perf = (): ReviewPerformance => ({ totalMs: Math.round(performance.now() - t0), diffMs: Math.round(time.diffMs), contextMs: Math.round(time.contextMs), rulesMs: Math.round(time.rulesMs), semanticMs: Math.round(time.semanticMs) });
   const shared = { graph: options.graph, ...(options.registry === undefined ? {} : { registry: options.registry }), ...(options.historyWindow === undefined ? {} : { historyWindow: options.historyWindow }) };
   const requestIdentity = reviewRequestIdentity(request);
+  // T14.1: provenance against the Adoption Baseline (read-only; missing or unreadable → no provenance).
+  const adoption = loadAdoptionBaseline(root);
+  const baseline = { status: adoption.status, ...(adoption.baseline === undefined ? {} : { id: adoption.baseline.id }) };
 
   // 1. Freshness: a Review never uses a stale graph and never indexes.
   const inspected = await inspectIndex(root, shared);
@@ -91,7 +95,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   const freshness = { status: inspected.value.status, fullRebuildRequired: inspected.value.status === "missing" || inspected.value.status === "incompatible" };
   const noAssist = { status: "not-requested" as const, candidates: [], skippedChecks: [], claims: [], evidence: [], calls: 0, cacheHits: 0 };
   if (inspected.value.status !== "current") {
-    return success({ result: { format: "duo.review/1", status: "index-required", request: requestIdentity, freshness, seeds: [], verdictBasis: { blocking: [], ask: [], warn: [] }, claims: [], evidence: [], limitations: [], semanticAssist: noAssist, metrics: zeroMetrics, diagnostics: [] }, performance: perf() });
+    return success({ result: { format: "duo.review/1", status: "index-required", request: requestIdentity, baseline, freshness, seeds: [], verdictBasis: { blocking: [], ask: [], warn: [] }, claims: [], evidence: [], limitations: [], semanticAssist: noAssist, metrics: zeroMetrics, diagnostics: [] }, performance: perf() });
   }
   const loaded = loadProjectTruth(root);
   if (loaded.value === undefined) return { diagnostics: loaded.diagnostics };
@@ -140,6 +144,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
     ...(taskContext?.status === "ready" && taskContext.packet !== undefined ? { taskScope: packetScopeIds(taskContext.packet) } : {}),
     stateDiagnostics: readIndexState(root).state?.diagnostics ?? [],
     ...(request.testResults === undefined ? {} : { testResults: request.testResults }),
+    ...(adoption.baseline === undefined ? {} : { baselineKeys: new Set(adoption.baseline.findings.map((f) => f.key)) }),
   };
   const integrity = await decisionIntegrity(ctx);
   const forbids = await decisionForbids(ctx);
@@ -165,7 +170,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   const evidence = store.list();
   const count = <K extends string>(keys: readonly K[], values: readonly K[]) => Object.fromEntries(keys.map((k) => [k, values.filter((v) => v === k).length])) as Record<K, number>;
   const result: ReviewResult = {
-    format: "duo.review/1", status: "ready", request: requestIdentity, freshness,
+    format: "duo.review/1", status: "ready", request: requestIdentity, baseline, freshness,
     diff: { identity: diff.value.identity, from: diff.value.from, to: diff.value.to, files: diff.value.files },
     seeds, verdict: verdict.verdict, verdictBasis: verdict.basis, claims, evidence,
     ...(gaps === undefined ? {} : { gaps }),
@@ -177,6 +182,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
     limitations: [
       ...limitationsOf({ identity: diff.value.identity, from: diff.value.from, to: diff.value.to, files: diff.value.files }, reviewPacket, task !== "", taskContext?.status === "ready"),
       ...drift.limitations,
+      ...(adoption.status === "incompatible" ? [{ code: "adoption-baseline-unusable", message: "The Adoption Baseline cannot be used (" + (adoption.reason ?? "unreadable") + "); violations are not told apart from pre-existing ones." }] : []),
     ],
     semanticAssist: semantic.assist,
     metrics: {
