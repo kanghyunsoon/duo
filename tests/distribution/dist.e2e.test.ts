@@ -206,7 +206,10 @@ describe("project-local install (npx --no-install duoctl)", () => {
     p.git("add", "-A");
     p.git("commit", "-qm", "add duoctl as a devDependency");
     const npx = (args: string[], input = "") => runOnPath("npx", ["--no-install", "duoctl", ...args], p.root, local, input);
-    expect(npx(["--version"]).stdout.trim()).toBe(`duoctl ${pack.version}`);
+    const bins = fs.readdirSync(path.join(p.root, "node_modules", ".bin"));
+    expect(bins.filter((b) => b.startsWith("duoctl"))).not.toEqual([]);
+    const version = npx(["--version"]);
+    expect(version.stdout.trim(), `code ${version.code} · stderr: ${version.stderr} · bins: ${bins.join(",")} · npx: ${which("npx", local.PATH ?? "")}`).toBe(`duoctl ${pack.version}`);
     expect(npx(["init", "--non-interactive", "--answers", "-", "--json"], "[]").code).toBe(0);
     const r = npx(["install", "codex", "--launcher", "npx", "--non-interactive", "--yes", "--json"]);
     expect(r.code, r.stderr).toBe(0);
