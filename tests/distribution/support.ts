@@ -46,7 +46,10 @@ export function which(name: string, pathValue: string): string | undefined {
 
 const hostPath = () => Object.entries(process.env).find(([k]) => k.toUpperCase() === "PATH")?.[1] ?? "";
 
-/** The isolated environment: PATH = dirs + Node + Git only; no NODE_PATH, npm_*, PNPM_* or workspace hints. */
+/**
+ * The isolated environment: PATH = dirs + Node + Git + the OS base directories (POSIX /usr/bin, /bin:
+ * npm exec runs bins through sh, as on any user machine); no NODE_PATH, npm_*, PNPM_* or workspace hints.
+ */
 export function isolatedEnv(dirs: readonly string[], extra: Record<string, string> = {}): Record<string, string> {
   const git = which("git", hostPath());
   if (git === undefined) throw new Error("git is not on PATH");
@@ -56,7 +59,8 @@ export function isolatedEnv(dirs: readonly string[], extra: Record<string, strin
     if (v === undefined || K === "PATH" || K === "NODE_PATH" || K === "NODE_OPTIONS" || K.startsWith("NPM_") || K.startsWith("PNPM") || K === "VITEST" || K.startsWith("VITEST_")) continue;
     out[k] = v;
   }
-  out.PATH = [...dirs, path.dirname(process.execPath), path.dirname(git)].join(path.delimiter);
+  const system = IS_WIN ? [] : ["/usr/bin", "/bin"].filter((d) => fs.existsSync(d));
+  out.PATH = [...new Set([...dirs, path.dirname(process.execPath), path.dirname(git), ...system])].join(path.delimiter);
   out.DUO_LOCALE = "";
   return { ...out, ...extra };
 }
