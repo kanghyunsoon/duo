@@ -75,7 +75,7 @@ const RULE = "@typescript-eslint/no-restricted-imports";
 
 export default defineConfig(
   // fixtures/ holds analyzer inputs (including deliberate syntax errors), not project code.
-  { ignores: ["**/dist/**", "**/coverage/**", "tmp/**", ".worklog/**", "fixtures/**"] },
+  { ignores: ["**/dist/**", "**/coverage/**", "tmp/**", ".worklog/**", "fixtures/**", ".dist/**"] },
   js.configs.recommended,
   tseslint.configs.recommended,
   { files: ["**/*.{js,mjs,cjs}"], languageOptions: { globals: globals.node } },

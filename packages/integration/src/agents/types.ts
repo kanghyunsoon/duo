@@ -122,6 +122,15 @@ export interface AgentIntegrationVerification {
   readonly agent: AgentId;
   readonly ok: boolean;
   readonly checks: readonly VerifyCheck[];
+  /** Launcher provenance: what the configuration starts on this machine, and the version that answered. */
+  readonly launcher: {
+    readonly kind: DuoLauncher["kind"];
+    readonly command: string;
+    readonly argsPrefix: readonly string[];
+    readonly resolved?: string;
+    readonly localBin?: string;
+    readonly version?: string;
+  };
   /** From duo_get_status through the configured launch, when it ran. */
   readonly server?: { readonly name: string; readonly tools: readonly string[]; readonly index: string | null; readonly baseline: string | null };
   readonly nextActions: readonly string[];

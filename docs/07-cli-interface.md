@@ -165,3 +165,27 @@ context  20 requests · avg loaded 4,310 · estimator o200k_base
 review   6 runs · PASS 2 · WARN 3 · BLOCK 1 · ASK 0
 llm      calls 0
 ```
+
+## 배포 (T17.1, 아직 publish하지 않음)
+
+DUO 실행 파일 설치, 저장소 초기화, Agent 연결은 서로 다른 단계다.
+
+```text
+1. duoctl 실행 파일 설치      npm install -g @duo-director/cli   (publish 뒤. 지금은 pnpm pack:cli로 만든 tarball)
+2. 저장소에 DUO 초기화        duoctl init
+3. Coding Agent 연결          duoctl install codex | claude-code
+```
+
+- **공개 package**: `@duo-director/cli` 하나, bin `duoctl`. 내부 package(`@duo-director/core`, analyzer, graph, director, integration)는 esbuild로 bundle되어 사용자가 따로 설치하지 않는다(C158). 외부 runtime 의존성은 exact version: `@modelcontextprotocol/client`·`server` 2.1.0, `gpt-tokenizer` 4.0.0, `mdast-util-from-markdown` 2.0.3, `mdast-util-frontmatter` 2.0.1, `micromark-extension-frontmatter` 2.0.0, `smol-toml` 1.9.0, `typescript` 6.0.3, `web-tree-sitter` 0.27.0, `yaml` 2.9.1, `zod` 4.6.5.
+- **포함**: `dist/duoctl.js`(Node 확인 후 CLI를 부르는 실행 파일, shebang), `dist/cli-*.js`(bundle), `dist/grammars/` WASM 세 개와 MIT license(grammar npm package는 native install script 때문에 의존성이 아님, C159), README, package.json. `files` allowlist이며 테스트가 금지 경로(`.env`, credentials, key, `.worklog`, fixtures, `.duo-project`, metrics, coverage, source map)를 검사한다.
+- **요구 사항**: Node.js `>=24.15.0`(package.json `engines`, 실행 파일이 먼저 확인). native build, install script, postinstall, 실행 중 network 없음. pnpm은 개발에만 쓴다.
+- **version**: `apps/cli/package.json` 하나(0.1.0). `duoctl --version`은 같은 값, `--version --json`은 graph·project schema version과 Node version도 보인다.
+- **launcher**: global 설치면 Agent 설정은 `duoctl`. project에 `npm install -D`로 설치했으면 `--launcher npx`가 `npx --no-install duoctl`을 기록하며, `node_modules/.bin/duoctl`이 없으면 installer가 unavailable로 막는다(download하지 않음, C162). `duoctl install`의 verify는 `launcher: {kind, resolved, localBin, version}`을 보인다.
+- **실패 메시지**: Node가 낮음(요구 범위와 현재 version), 설치가 불완전함(빠진 모듈, 재설치 안내), grammar 자산 없음·로드 실패(`ANALYZER_INIT_FAILED`, 자산 이름), launcher 없음(`AGENT_LAUNCHER_UNAVAILABLE`), project schema 불일치(`UNSUPPORTED_SCHEMA_VERSION`, migration 없음). monorepo build를 안내하지 않는다.
+- **만들기와 검증**: `pnpm build` 뒤 `pnpm pack:cli`가 `.dist/cli-package/`와 `.dist/duo-director-cli-<version>.tgz`, `.dist/pack.json`을 만든다. `pnpm test:dist`는 그 tarball을 임시 npm prefix(global)와 임시 project(`npm install -D`)에 설치하고, 저장소와 workspace가 보이지 않는 환경에서 init → index → status → context → review → install codex·claude-code → 생성된 설정으로 MCP 서버 실행, clone 이동, 실패 메시지를 확인한다. 3 OS CI에서 실행한다.
+
+| 크기(0.1.0) | 값 |
+|---|---|
+| tarball | 500,057 B |
+| unpacked | 3,930,557 B(WASM 약 3.27 MB, bundle 약 652 KB) |
+| global 설치 | package 70개, 약 83.8 MB(대부분 `typescript`, `gpt-tokenizer`) |

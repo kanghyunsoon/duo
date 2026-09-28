@@ -8,31 +8,41 @@ DUO는 Codex, Claude Code 같은 AI Coding Agent가 프로젝트의 목표와 �
 
 ## 상태
 
-CLI(`duoctl`), MCP 서버(`duoctl mcp`), Agent 연결(`duoctl install`)까지 구현했습니다(TASK-017). OpenAI Provider(TASK-012B), Web UI(TASK-018), Benchmark(TASK-019)는 아직입니다. 진행 순서는 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)를 따릅니다.
+CLI(`duoctl`), MCP 서버(`duoctl mcp`), Agent 연결(`duoctl install`), 배포용 package(`@duo-director/cli`, T17.1)까지 구현했습니다. **npm에는 아직 publish하지 않았습니다.** OpenAI Provider(TASK-012B), Web UI(TASK-018), Benchmark(TASK-019)는 아직입니다. 진행 순서는 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)를 따릅니다.
 
-## 설치 (기존 프로젝트)
+## 설치
 
-```text
-기존 Git 저장소 → duoctl 설치 → duoctl init → duoctl install codex | claude-code
+세 단계는 서로 다른 일입니다.
+
+| 단계 | 명령 | 하는 일 |
+|---|---|---|
+| 1. 실행 파일 설치 | 아래 참고 | 컴퓨터에 `duoctl`을 설치합니다 |
+| 2. 저장소 초기화 | `duoctl init` | 저장소를 관찰하고 `.duo-project/`, 첫 Index, Adoption Baseline을 만듭니다 |
+| 3. Agent 연결 | `duoctl install codex` 또는 `duoctl install claude-code` | MCP 설정과 짧은 안내 블록을 추가합니다 |
+
+Node.js 24.15 이상이 필요합니다. native build나 install script는 없습니다.
+
+### 1. 실행 파일 설치
+
+지금은 이 저장소에서 배포 tarball을 만들어 설치합니다.
+
+```bash
+pnpm install && pnpm build && pnpm pack:cli
+npm install -g .dist/duo-director-cli-0.1.0.tgz
+duoctl --version
 ```
 
-1. **duoctl 설치**: 아직 배포 패키지가 없습니다. 이 저장소에서 `pnpm install && pnpm build` 한 뒤, `apps/cli/dist/main.js`를 실행하는 `duoctl` 실행 파일을 PATH에 둡니다. Agent가 PATH에서 `duoctl`을 찾아 실행하므로 이 단계가 필요합니다.
+npm에 publish한 뒤에는 `npm install -g @duo-director/cli` 한 줄이 됩니다(아직 사용할 수 없음). project 안에만 설치하려면 `npm install -D <tarball>` 뒤 `npx --no-install duoctl …`로 실행하고, Agent 연결 때 `--launcher npx`를 줍니다.
 
-   ```sh
-   # macOS / Linux: PATH에 있는 디렉터리에
-   printf '#!/bin/sh\nexec node "<duo>/apps/cli/dist/main.js" "$@"\n' > duoctl && chmod +x duoctl
-   ```
+### 2. 저장소 초기화
 
-   ```bat
-   :: Windows: PATH에 있는 디렉터리에 duoctl.cmd
-   @node "<duo>\apps\cli\dist\main.js" %*
-   ```
+저장소 최상위에서 `duoctl init`. 작업 중인 변경이 있으면 `--baseline-policy head|abort` 중 하나를 고릅니다.
 
-2. **초기화**: 저장소 최상위에서 `duoctl init`. 저장소를 관찰하고 최소 Truth, 첫 Index, Adoption Baseline을 만듭니다(작업 중인 변경이 있으면 `--baseline-policy head|abort` 중 하나를 고릅니다).
-3. **Agent 연결**: `duoctl install codex` 또는 `duoctl install claude-code`. 바꿀 파일을 먼저 보여 주고, 확인하면 MCP 설정(`.codex/config.toml` 또는 `.mcp.json`)과 짧은 안내 블록(`AGENTS.md` 또는 `CLAUDE.md`)을 추가한 뒤 DUO 서버가 실제로 뜨는지 확인합니다. 기존 설정과 사람이 쓴 글은 그대로 두고, commit은 직접 합니다.
-4. **Agent 쪽 확인**: Codex는 이 project를 trust해야 `.codex/config.toml`을 읽습니다. Claude Code는 `.mcp.json`의 `duo-director` 서버를 승인하라고 묻습니다. DUO는 둘 다 대신하지 않습니다.
+### 3. Agent 연결
 
-`duoctl install status`로 연결 상태를, `duoctl install remove <agent>`로 DUO가 추가한 항목만 제거합니다. Agent가 비대화형으로 설치할 때는 `--non-interactive --yes --json`을 씁니다(`--yes`는 충돌을 덮어쓰지 않습니다).
+`duoctl install codex` 또는 `duoctl install claude-code`. 바꿀 파일을 먼저 보여 주고, 확인하면 MCP 설정(`.codex/config.toml` 또는 `.mcp.json`)과 안내 블록(`AGENTS.md` 또는 `CLAUDE.md`)을 추가한 뒤 DUO 서버가 실제로 뜨는지 확인합니다. 기존 설정과 사람이 쓴 글은 그대로 두고, commit은 직접 합니다. Codex는 이 project를 trust해야 하고, Claude Code는 `duo-director` 서버 승인을 묻습니다. DUO는 둘 다 대신하지 않습니다.
+
+`duoctl install status`로 연결 상태를, `duoctl install remove <agent>`로 DUO가 추가한 항목만 제거합니다. Agent가 비대화형으로 연결할 때는 `--non-interactive --yes --json`을 씁니다(`--yes`는 충돌을 덮어쓰지 않습니다).
 
 ## 사용
 
@@ -63,6 +73,8 @@ pnpm duoctl --version
 | `pnpm build` | `tsc -b` project references 빌드 |
 | `pnpm test` | Vitest |
 | `pnpm docs:validate` | Requirement/ADR/Task/AC 추적성 검사 |
+| `pnpm pack:cli` | 배포 package(`.dist/cli-package/`)와 tarball 생성, publish하지 않음 |
+| `pnpm test:dist` | tarball을 임시 prefix·project에 설치해 배포본만으로 E2E(npm registry 접근 필요) |
 
 ## 문서
 
@@ -75,4 +87,5 @@ pnpm duoctl --version
 
 - [Duo 기획서.md](Duo%20기획서.md): 제품 기획서
 - [docs/references/development-directive.md](docs/references/development-directive.md): 개발 지시문
+
 

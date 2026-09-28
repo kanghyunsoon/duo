@@ -699,7 +699,7 @@ depends_on: [TASK-015, TASK-016]
 - **Output**: AgentIntegrationAdapter(codex, claude-code), inspect → plan(쓰기 0) → apply → verify, remove, `duoctl install <agent>|status|remove`, launcher(`DuoLauncher`: PATH duoctl, npx), `duoctl mcp --root-from git-cwd|env:<NAME>`, bridge 관리 블록, 백업, core writeKind `agent-integration`, scan 제외 duo-agent-integration, MCP server instructions, T16.1 cancellation·예외 격리 wire test
 - **Dependencies**: [TASK-015](#task-015-cli), [TASK-016](#task-016-mcp-서버)
 - **Files expected to change**: `packages/integration/src/{agents,mcp}/**`, `apps/cli/src/commands/{install,mcp}.ts`, `packages/core/src/write-boundary.ts`, `packages/analyzer/src/scan/policy.ts`, `tests/{install,mcp}/**`
-- **Status**: done (T16.1, T17)
+- **Status**: done (T16.1, T17, T17.1: 배포 package `@duo-director/cli`, `pnpm pack:cli`, `pnpm test:dist`, 아직 publish하지 않음)
 - **검증 대상 Requirement**: [REQ-AGENT-001](../01-requirements.md#req-agent-001-duoctl-install-codexclaude)
 - **관련 ADR**: [ADR-011](../adr/ADR-011-agent-integration.md)
 

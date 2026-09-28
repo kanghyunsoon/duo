@@ -29,10 +29,19 @@ describe("CLI entry (T15)", () => {
   it("AC-001-03 --version --json resolves every runtime workspace package", async () => {
     const { code, out } = await capture(["--version", "--json"]);
     expect(code).toBe(0);
-    expect(JSON.parse(out[0] ?? "")).toEqual({
+    expect(JSON.parse(out[0] ?? "")).toMatchObject({
       name: CLI_NAME, version: VERSION,
       packages: ["@duo-director/core", "@duo-director/analyzer", "@duo-director/graph", "@duo-director/director", "@duo-director/integration"],
+      graphSchemaVersion: expect.any(Number), projectSchemaVersions: [1], node: process.version,
     });
+  });
+
+  it("T17.1 the Node.js gate accepts the engines range and names the problem below it", async () => {
+    const { nodeVersionProblem } = await import("./node-version.js");
+    expect(nodeVersionProblem("v24.15.0", ">=24.15.0")).toBeUndefined();
+    expect(nodeVersionProblem("v25.0.0", ">=24.15.0")).toBeUndefined();
+    expect(nodeVersionProblem("v24.14.9", ">=24.15.0")).toMatch(/requires Node\.js >=24\.15\.0 \(this is v24\.14\.9\)/u);
+    expect(nodeVersionProblem("v22.12.0", ">=24.15.0")).toMatch(/does not bundle Node\.js/u);
   });
 
   it("prints help, rejects unknown commands and options, and names the Task of unimplemented commands", async () => {

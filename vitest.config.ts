@@ -12,6 +12,8 @@ export default defineConfig({
   },
   test: {
     include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts", "tests/**/*.test.ts"],
+    // Distribution E2E (packed artifact, npm installs) runs separately: pnpm test:dist.
+    exclude: ["**/node_modules/**", "tests/dist/**"],
     environment: "node",
   },
 });

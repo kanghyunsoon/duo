@@ -16,7 +16,7 @@ export interface McpLaunchProbe {
 }
 
 export type McpProbeResult =
-  | { readonly ok: true; readonly serverName: string; readonly tools: readonly string[]; readonly status: Record<string, unknown> | null }
+  | { readonly ok: true; readonly serverName: string; readonly serverVersion: string; readonly tools: readonly string[]; readonly status: Record<string, unknown> | null }
   | { readonly ok: false; readonly error: string; readonly stderr: string };
 
 export async function probeMcpLaunch(probe: McpLaunchProbe): Promise<McpProbeResult> {
@@ -35,7 +35,7 @@ export async function probeMcpLaunch(probe: McpLaunchProbe): Promise<McpProbeRes
       const { tools } = await client.listTools();
       const status = await client.callTool({ name: "duo_get_status", arguments: {} });
       return {
-        ok: true as const, serverName: client.getServerVersion()?.name ?? "", tools: tools.map((t) => t.name).sort(),
+        ok: true as const, serverName: client.getServerVersion()?.name ?? "", serverVersion: client.getServerVersion()?.version ?? "", tools: tools.map((t) => t.name).sort(),
         status: status.isError === true ? null : (status.structuredContent as Record<string, unknown> | undefined) ?? null,
       };
     })(), timeout]);

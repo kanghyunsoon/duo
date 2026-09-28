@@ -68,6 +68,8 @@ export interface LauncherCheck {
   readonly available: boolean;
   /** Where it resolved on this machine (reported, never written into a configuration). */
   readonly resolved?: string;
+  /** npx launcher: the project-local duoctl it runs (node_modules/.bin). */
+  readonly localBin?: string;
   readonly diagnostics: readonly Diagnostic[];
   readonly warnings: readonly string[];
 }
@@ -93,11 +95,13 @@ export function checkLauncher(root: string, launcher: DuoLauncher, host: HostEnv
   if (resolved === undefined) {
     diagnostics.push(createDiagnostic("AGENT_LAUNCHER_UNAVAILABLE", `"${command}" is not on PATH, so the agent could not start DUO; install duoctl or choose another launcher`));
   }
+  let localBin: string | undefined;
   if (launcher.kind === "npx") {
     const bin = ["duoctl", "duoctl.cmd"].map((n) => path.join(root, "node_modules", ".bin", n));
-    if (!bin.some((b) => fs.existsSync(b))) diagnostics.push(createDiagnostic("AGENT_LAUNCHER_UNAVAILABLE", "node_modules/.bin/duoctl is missing: the project-local launcher needs duoctl installed in this project"));
+    localBin = bin.find((b) => fs.existsSync(b));
+    if (localBin === undefined) diagnostics.push(createDiagnostic("AGENT_LAUNCHER_UNAVAILABLE", "node_modules/.bin/duoctl is missing: the npx launcher needs @duo-director/cli installed in this project (npx --no-install never downloads it)"));
   }
-  return { available: diagnostics.length === 0, ...(resolved === undefined ? {} : { resolved }), diagnostics, warnings };
+  return { available: diagnostics.length === 0, ...(resolved === undefined ? {} : { resolved }), ...(localBin === undefined ? {} : { localBin }), diagnostics, warnings };
 }
 
 export const launcherDisplay = (launcher: DuoLauncher): string => [launcher.command, ...launcher.argsPrefix].join(" ");

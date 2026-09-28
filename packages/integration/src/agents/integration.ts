@@ -299,10 +299,12 @@ export async function verifyAgentIntegration(root: string, agent: AgentId, optio
   const launch = checkLauncher(root, launcher, host);
   checks.push({ name: "launcher", ok: launch.available, ...(launch.available ? {} : { detail: launch.diagnostics.map((d) => d.message).join("; ") }) });
   let server: AgentIntegrationVerification["server"];
+  let version: string | undefined;
   if (options.launch !== false && entry !== undefined && launch.available) {
     const env = adapter.launchEnvironment(root);
     const probe = await probeMcpLaunch({ command: entry.command, args: entry.args, cwd: env.cwd, env: { ...pathEnv(host), ...env.env }, ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }) });
     if (probe.ok) {
+      version = probe.serverVersion;
       const status = probe.status as { index?: { status?: string } | null; baseline?: { status?: string } | null } | null;
       server = { name: probe.serverName, tools: probe.tools, index: status?.index?.status ?? null, baseline: status?.baseline?.status ?? null };
       checks.push({ name: "mcp-launch", ok: probe.serverName === SERVER_NAME && probe.tools.length === 9, detail: `${probe.serverName} · ${probe.tools.length} tools` });
@@ -314,7 +316,12 @@ export async function verifyAgentIntegration(root: string, agent: AgentId, optio
   if (server !== undefined && server.index !== "current") nextActions.push(`${launcherDisplay(launcher)} index`);
   if (adapter.projectTrustRequired) nextActions.push("Trust this project in Codex so it loads .codex/config.toml.");
   if (adapter.approvalRequired) nextActions.push("Approve the duo-director server in Claude Code (it asks for project .mcp.json servers).");
-  return { format: "duo.agent-integration-verify/1", agent, ok: checks.every((c) => c.ok), checks, ...(server === undefined ? {} : { server }), nextActions };
+  const provenance = {
+    kind: launcher.kind, command: launcher.command, argsPrefix: launcher.argsPrefix,
+    ...(launch.resolved === undefined ? {} : { resolved: launch.resolved }), ...(launch.localBin === undefined ? {} : { localBin: launch.localBin }),
+    ...(version === undefined ? {} : { version }),
+  };
+  return { format: "duo.agent-integration-verify/1", agent, ok: checks.every((c) => c.ok), checks, launcher: provenance, ...(server === undefined ? {} : { server }), nextActions };
 }
 
 /** PATH (and PATHEXT on Windows) from the host, so the probe resolves the launcher like the agent would. */

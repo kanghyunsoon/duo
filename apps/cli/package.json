@@ -1,14 +1,17 @@
 {
   "name": "@duo-director/cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "thin entry point: argument parsing, prompts, output, exit codes",
+  "description": "DUO: AI Project Direction Layer for Coding Agents (duoctl)",
   "type": "module",
+  "engines": {
+    "node": ">=24.15.0"
+  },
   "files": [
     "dist"
   ],
   "bin": {
-    "duoctl": "./dist/main.js"
+    "duoctl": "./dist/bin.js"
   },
   "dependencies": {
     "@duo-director/integration": "workspace:*",

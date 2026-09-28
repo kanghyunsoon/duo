@@ -46,6 +46,7 @@ function renderVerify(env: Env, v: AgentIntegrationVerification): string[] {
   const L = env.locale;
   return [
     t(L, "install.verify", { result: v.ok ? "ok" : "failed" }),
+    t(L, "install.launcher", { command: [v.launcher.command, ...v.launcher.argsPrefix].join(" "), state: [v.launcher.resolved, v.launcher.localBin, v.launcher.version === undefined ? undefined : `duoctl ${v.launcher.version}`].filter((x) => x !== undefined).join(" · ") || "not found" }),
     ...v.checks.map((c) => t(L, "install.check", { mark: c.ok ? "✓" : "✗", name: c.name, detail: c.detail === undefined ? "" : ` · ${c.detail}` })),
     ...v.nextActions.map((a) => t(L, "install.next", { action: a })),
   ];

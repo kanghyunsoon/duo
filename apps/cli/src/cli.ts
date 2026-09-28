@@ -8,9 +8,9 @@
  */
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { packageInfo as analyzer } from "@duo-director/analyzer";
-import { CLI_NAME, createDiagnostic, packageInfo as core, PRODUCT_NAME, type Diagnostic, type PackageInfo } from "@duo-director/core";
+import { CLI_NAME, createDiagnostic, packageInfo as core, PRODUCT_NAME, SUPPORTED_SCHEMA_VERSIONS, type Diagnostic, type PackageInfo } from "@duo-director/core";
 import { appendRuntimeMetric, packageInfo as director } from "@duo-director/director";
-import { packageInfo as graph } from "@duo-director/graph";
+import { GRAPH_SCHEMA_VERSION, packageInfo as graph } from "@duo-director/graph";
 import { packageInfo as integration } from "@duo-director/integration";
 import { contextCommand } from "./commands/context.js";
 import { decisionCommand } from "./commands/decision.js";
@@ -151,7 +151,10 @@ export async function run(argv: readonly string[], io: Io): Promise<number> {
   const v = parsed.values as Record<string, unknown>;
   const json = bool(v.json);
   if (bool(v.version)) {
-    io.out(json ? JSON.stringify({ name: CLI_NAME, version: VERSION, packages: WORKSPACE.map((p) => p.name) }) : `${CLI_NAME} ${VERSION}`);
+    io.out(json ? JSON.stringify({
+      name: CLI_NAME, version: VERSION, packages: WORKSPACE.map((p) => p.name),
+      graphSchemaVersion: GRAPH_SCHEMA_VERSION, projectSchemaVersions: SUPPORTED_SCHEMA_VERSIONS, node: process.version,
+    }) : `${CLI_NAME} ${VERSION}`);
     return EXIT.OK;
   }
   if (command === undefined || bool(v.help)) {

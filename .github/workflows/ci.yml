@@ -43,3 +43,6 @@ jobs:
         run: pnpm docs:validate
       - name: smoke test built CLI
         run: node apps/cli/dist/main.js --version
+      # T17.1: npm pack is the artifact oracle; clean global and project-local installs outside the workspace.
+      - name: distribution E2E (packed @duo-director/cli)
+        run: pnpm test:dist

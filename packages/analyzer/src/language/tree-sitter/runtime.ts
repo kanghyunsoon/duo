@@ -4,6 +4,8 @@
  * files shipped in the official tree-sitter-typescript and tree-sitter-javascript packages.
  */
 import { createRequire } from "node:module";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createDiagnostic, failure, success, type Diagnostic, type ParseResult } from "@duo-director/core";
 import { Language, LANGUAGE_VERSION, MIN_COMPATIBLE_VERSION, Parser } from "web-tree-sitter";
 
@@ -20,7 +22,24 @@ export const GRAMMAR_FILES: Readonly<Record<GrammarId, string>> = {
 export type GrammarLocator = (id: GrammarId) => string | Uint8Array;
 
 const requireFromHere = createRequire(import.meta.url);
-export const defaultGrammarLocator: GrammarLocator = (id) => requireFromHere.resolve(GRAMMAR_FILES[id]);
+
+/** File name of each grammar inside a packaged DUO (the published CLI vendors them in grammars/ next to the bundle, T17.1). */
+const fileName = (id: GrammarId) => GRAMMAR_FILES[id].slice(GRAMMAR_FILES[id].lastIndexOf("/") + 1);
+
+/**
+ * Packaged grammars first (grammars/<file>.wasm beside this module: the published @duo-director/cli,
+ * which does not depend on the grammar npm packages and their native install scripts), then the
+ * grammar packages (the development workspace).
+ */
+export const defaultGrammarLocator: GrammarLocator = (id) => {
+  const packaged = fileURLToPath(new URL(`./grammars/${fileName(id)}`, import.meta.url));
+  if (fs.existsSync(packaged)) return packaged;
+  try {
+    return requireFromHere.resolve(GRAMMAR_FILES[id]);
+  } catch {
+    throw new Error(`the grammar asset ${fileName(id)} is missing from this DUO installation (looked in ${packaged}); reinstall the @duo-director/cli package`);
+  }
+};
 
 /**
  * web-tree-sitter keeps one WASM runtime per process, so it is initialized once and never
