@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 // which packs first.
 export default defineConfig({
   test: {
-    include: ["tests/dist/**/*.test.ts"],
+    include: ["tests/distribution/**/*.test.ts"],
     environment: "node",
     testTimeout: 900_000,
     hookTimeout: 900_000,
