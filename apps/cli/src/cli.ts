@@ -17,6 +17,7 @@ import { decisionCommand } from "./commands/decision.js";
 import { graphCommand } from "./commands/graph.js";
 import { indexCommand } from "./commands/index-command.js";
 import { initCommand } from "./commands/init.js";
+import { mcpCommand } from "./commands/mcp.js";
 import { reviewCommand } from "./commands/review.js";
 import { CliFailure, usage, type Env } from "./commands/shared.js";
 import { statsCommand } from "./commands/stats.js";
@@ -29,7 +30,7 @@ import { VERSION } from "./version.js";
 export type { Io } from "./io.js";
 
 export const COMMANDS = ["init", "status", "index", "context", "review", "trace", "impact", "decision", "stats", "ui", "install", "mcp"] as const;
-const LATER: Readonly<Record<string, string>> = { ui: "TASK-018", install: "TASK-017", mcp: "TASK-016" };
+const LATER: Readonly<Record<string, string>> = { ui: "TASK-018", install: "TASK-017" };
 /** Commands that append runtime/metrics.jsonl. Read-only commands (status, trace, impact, stats) write nothing. */
 const METERED = new Set(["init", "index", "context", "review", "decision"]);
 
@@ -53,6 +54,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, Options>> = {
   impact: { depth: { type: "string" } },
   decision: { reason: { type: "string" } },
   stats: { last: { type: "string" } },
+  mcp: { agent: { type: "string" } },
 };
 
 const HELP = [
@@ -70,6 +72,7 @@ const HELP = [
   "  impact      Graph-recorded impact of a node (--depth 1-3)",
   "  decision    list | confirm <id> | reject <id> (terminal only)",
   "  stats       runtime metrics summary (--last n)",
+  "  mcp         serve the duo-director MCP server over stdio for this repository (--agent <label>)",
   "",
   "Options: --root <path>  --json  --locale en|ko  --non-interactive  --verbose  --version  --help",
   "init: --yes (operational confirmations only; never Truth or the adoption policy)  --answers -  --baseline-policy head|abort  --repair",
@@ -121,6 +124,10 @@ async function dispatch(env: Env, command: string, positionals: readonly string[
       return graphCommand(env, command, arg, str(v.depth));
     case "decision": return decisionCommand(env, arg, positionals[2], str(v.reason));
     case "stats": return statsCommand(env, str(v.last));
+    case "mcp":
+      // stdout is the MCP protocol: no JSON envelope, no human output on stdout.
+      if (env.json) return usage("mcp", "mcp speaks the MCP protocol on stdout; --json does not apply");
+      return mcpCommand(env, str(v.agent));
     default: return failed(command, EXIT.ERROR, [], [t(env.locale, "not-implemented", { command, task: LATER[command] ?? "" })]);
   }
 }

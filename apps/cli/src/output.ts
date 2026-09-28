@@ -30,6 +30,8 @@ export interface Outcome {
   readonly command: string;
   readonly exitCode: number;
   readonly result: unknown;
+  /** Surface metadata outside the shared payload (timings, a Review Record); never compared across surfaces. */
+  readonly meta?: unknown;
   readonly diagnostics: readonly Diagnostic[];
   /** Human output (already localized). */
   readonly human: readonly string[];
@@ -40,7 +42,7 @@ export interface Outcome {
 export function envelope(o: Outcome, extra: readonly Diagnostic[] = []): Record<string, unknown> {
   return {
     format: `duo.cli.${o.command}/1`, command: o.command, ok: o.exitCode === EXIT.OK, exitCode: o.exitCode,
-    result: o.result, diagnostics: [...o.diagnostics, ...extra],
+    result: o.result, ...(o.meta === undefined ? {} : { meta: o.meta }), diagnostics: [...o.diagnostics, ...extra],
   };
 }
 

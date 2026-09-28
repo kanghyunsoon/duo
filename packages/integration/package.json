@@ -15,8 +15,11 @@
     "dist"
   ],
   "dependencies": {
+    "@duo-director/analyzer": "workspace:*",
+    "@duo-director/core": "workspace:*",
     "@duo-director/director": "workspace:*",
     "@duo-director/graph": "workspace:*",
-    "@duo-director/core": "workspace:*"
+    "@modelcontextprotocol/server": "2.1.0",
+    "zod": "4.6.5"
   }
 }

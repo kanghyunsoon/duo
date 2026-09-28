@@ -1,0 +1,98 @@
+/**
+ * duo-director MCP server (TASK-016): stdio transport for a local coding agent. The server manages
+ * exactly one repository, given explicitly at startup and checked to be the top level of a Git work
+ * tree. stdout is the protocol; diagnostics go to stderr. Every tool call opens and closes its own
+ * graph access (no pinned SQLite snapshot, no open transaction between calls).
+ */
+import { openGitProvider } from "@duo-director/analyzer";
+import { createDiagnostic, failure, MCP_SERVER_NAME, success, type ParseResult } from "@duo-director/core";
+import { appendRuntimeMetric } from "@duo-director/director";
+import { McpServer, type CallToolResult, type ServerContext } from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { NOT_INITIALIZED_FORMAT } from "../operations/common.js";
+import { INPUT, OUTPUT, TOOLS, type ToolContext, type ToolName } from "./tools.js";
+
+export interface DuoMcpOptions {
+  /** Canonical repository root (the top level of its Git work tree). */
+  readonly root: string;
+  /** Audit label for proposals ("agent"); not an authentication. */
+  readonly agentName?: string;
+  readonly version: string;
+  /** Where diagnostics go (default stderr). Never stdout. */
+  readonly log?: (line: string) => void;
+}
+
+const METERED = new Set<ToolName>(["duo_get_context", "duo_review_changes", "duo_propose_decision"]);
+
+export function createDuoMcpServer(options: DuoMcpOptions): McpServer {
+  const server = new McpServer({ name: MCP_SERVER_NAME, version: options.version }, { capabilities: { tools: {} } });
+  const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`));
+  for (const name of Object.keys(TOOLS) as ToolName[]) {
+    const tool = TOOLS[name];
+    // The SDK's registerTool overloads are generic per schema; this loop registers heterogeneous tools through
+    // one loosely typed signature. Inputs are still validated by the strict zod schemas.
+    const register = server.registerTool.bind(server) as unknown as (
+      n: string, config: Record<string, unknown>, cb: (args: unknown, ctx: ServerContext) => Promise<CallToolResult>,
+    ) => void;
+    register(name, {
+      title: tool.title, description: tool.description, inputSchema: INPUT[name], outputSchema: OUTPUT[name],
+      annotations: { readOnlyHint: tool.readOnly, destructiveHint: false, idempotentHint: tool.readOnly, openWorldHint: false },
+    }, async (args: unknown, ctx: ServerContext): Promise<CallToolResult> => {
+      const started = Date.now();
+      const toolCtx: ToolContext = { root: options.root, agentName: options.agentName ?? "agent", signal: ctx.mcpReq.signal };
+      const run = await (tool.run as (a: unknown, c: ToolContext) => ReturnType<typeof tool.run>)(args, toolCtx);
+      if (METERED.has(name)) {
+        const written = await appendRuntimeMetric(options.root, {
+          format: "duo.metric/1", surface: "mcp", command: name, status: String(run.metric?.status ?? run.op.kind), exitCode: run.op.kind === "failed" ? 1 : 0,
+          durationMs: Date.now() - started, at: new Date().toISOString(), ...(run.metric ?? {}),
+        });
+        for (const d of written.diagnostics) log(`${MCP_SERVER_NAME}: ${d.code}: ${d.message}`);
+      }
+      if (run.op.kind === "failed") {
+        return { isError: true, content: [{ type: "text", text: run.op.diagnostics.map((d) => `${d.code}: ${d.message}`).join("\n") || "operation failed" }] };
+      }
+      const payload = run.op.kind === "ok"
+        ? run.op.payload as Record<string, unknown>
+        : { format: NOT_INITIALIZED_FORMAT, status: "not-initialized", message: "Not a DUO project yet (no .duo-project/project.yaml). A human runs duoctl init." };
+      const summary = run.op.kind === "ok" ? tool.summarize(payload) : String(payload.message);
+      return { content: [{ type: "text", text: summary }], structuredContent: payload };
+    });
+  }
+  return server;
+}
+
+export interface DuoMcpHandle {
+  /** Resolves when the connection ends (stdin closed by the client, or close() / a termination signal). */
+  readonly closed: Promise<void>;
+  close(): Promise<void>;
+}
+
+/**
+ * Validates the root and serves duo-director over this process's stdio. The root must be the top level
+ * of a Git work tree (GIT_REPOSITORY_REQUIRED / SCAN_ROOT_INVALID otherwise): one server manages one
+ * repository. The connection ends when the client closes stdin, or on SIGINT / SIGTERM.
+ */
+export async function serveDuoMcp(options: DuoMcpOptions): Promise<ParseResult<DuoMcpHandle>> {
+  const git = await openGitProvider(options.root);
+  if (git.value === undefined) {
+    return failure(git.diagnostics.length > 0 ? git.diagnostics : [createDiagnostic("GIT_REPOSITORY_REQUIRED", `${options.root} is not a Git repository`)]);
+  }
+  const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`));
+  const handle = serveStdio(() => createDuoMcpServer(options), { onerror: (e) => log(`${MCP_SERVER_NAME}: ${e.message}`) });
+  let finish = () => {};
+  const closed = new Promise<void>((resolve) => { finish = resolve; });
+  let closing: Promise<void> | undefined;
+  const close = () => {
+    closing ??= handle.close().catch((e: unknown) => log(`${MCP_SERVER_NAME}: ${(e as Error).message}`)).finally(() => {
+      process.stdin.off("end", onEnd).off("close", onEnd);
+      process.off("SIGINT", onSignal).off("SIGTERM", onSignal);
+      finish();
+    });
+    return closing;
+  };
+  const onEnd = () => { void close(); };
+  const onSignal = () => { void close(); };
+  process.stdin.on("end", onEnd).on("close", onEnd);
+  process.on("SIGINT", onSignal).on("SIGTERM", onSignal);
+  return success({ closed, close });
+}

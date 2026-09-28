@@ -155,14 +155,14 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-007](#task-007-graph-builder와-일관성-검사) | Graph builder와 일관성 검사 | graph | M1 | TASK-003, TASK-005, TASK-006 | done |
 | [TASK-008](#task-008-증분-인덱싱-trace-impact) | 증분 인덱싱, trace, impact | graph | M1 | TASK-007 | done |
 | [TASK-009](#task-009-decision-생명주기) | Decision 생명주기 | core | M2 | TASK-002 | done |
-| [TASK-010](#task-010-context-compiler) | Context Compiler | director | M2 | TASK-008, TASK-009 | todo |
-| [TASK-011](#task-011-knowledge-gap) | Knowledge Gap | director | M2 | TASK-008 | todo |
-| [TASK-012A](#task-012a-llmprovider-계약과-no-op) | LLMProvider 계약과 no-op | director | M2 | TASK-002 | todo |
+| [TASK-010](#task-010-context-compiler) | Context Compiler | director | M2 | TASK-008, TASK-009 | done |
+| [TASK-011](#task-011-knowledge-gap) | Knowledge Gap | director | M2 | TASK-008 | done |
+| [TASK-012A](#task-012a-llmprovider-계약과-no-op) | LLMProvider 계약과 no-op | director | M2 | TASK-002 | done |
 | [TASK-012B](#task-012b-openai-responses-provider) | OpenAI Responses Provider | director | M2 | TASK-010, TASK-013 | todo |
-| [TASK-013](#task-013-review-엔진) | Review 엔진 | director | M2 | TASK-008, TASK-009, TASK-010, TASK-011, TASK-012A | todo |
-| [TASK-014](#task-014-init-파이프라인) | init 파이프라인 | director | M2 | TASK-008, TASK-011 | todo |
-| [TASK-015](#task-015-cli) | CLI | apps/cli | M3 | TASK-009, TASK-010, TASK-013, TASK-014 | todo |
-| [TASK-016](#task-016-mcp-서버) | MCP 서버 | integration | M3 | TASK-010, TASK-013 | todo |
+| [TASK-013](#task-013-review-엔진) | Review 엔진 | director | M2 | TASK-008, TASK-009, TASK-010, TASK-011, TASK-012A | done |
+| [TASK-014](#task-014-init-파이프라인) | init 파이프라인 | director | M2 | TASK-008, TASK-011 | done |
+| [TASK-015](#task-015-cli) | CLI | apps/cli | M3 | TASK-009, TASK-010, TASK-013, TASK-014 | done |
+| [TASK-016](#task-016-mcp-서버) | MCP 서버 | integration | M3 | TASK-010, TASK-013 | done |
 | [TASK-017](#task-017-agent-adapter와-duoctl-install) | Agent Adapter와 duoctl install | integration | M3 | TASK-015, TASK-016 | todo |
 | [TASK-018](#task-018-local-http-api와-web-ui) | Local HTTP API와 Web UI | ui | M3 | TASK-009, TASK-013, TASK-015 | todo |
 | [TASK-019](#task-019-benchmark) | Benchmark | bench | M4 | TASK-010, TASK-013 | todo |
@@ -641,7 +641,7 @@ depends_on: [TASK-009, TASK-010, TASK-013, TASK-014]
 - **Output**: apps/cli 명령(init, status, index, context, review, trace, impact, decision, stats), 대화형 입력(prompt는 stderr), en/ko renderer, `duo.cli.<command>/1` JSON envelope, 종료 코드(verdict는 `--fail-on`일 때만), director `appendRuntimeMetric`·`readRuntimeMetrics`, graph `openProjectGraphReader`, analyzer `readGitUserName`, subprocess E2E(`tests/cli/`). ui, install, mcp는 TASK-016~018
 - **Dependencies**: [TASK-009](#task-009-decision-생명주기), [TASK-010](#task-010-context-compiler), [TASK-013](#task-013-review-엔진), [TASK-014](#task-014-init-파이프라인)
 - **Files expected to change**: `apps/cli/src/**`, `tests/cli/**`, `packages/director/src/{adoption,runtime}/**`
-- **Status**: done (T14.1, T15)
+- **Status**: done (T14.1, T15, T15.1: dirty policy preflight, HEAD baseline, adoption-bootstrap. AC-015-03은 TASK-016 parity e2e로 충족)
 - **검증 대상 Requirement**: [REQ-CLI-001](../01-requirements.md#req-cli-001-얇은-cli), [REQ-DECISION-002](../01-requirements.md#req-decision-002-human-confirmreject), [REQ-NFR-006](../01-requirements.md#req-nfr-006-간결한-기본-출력)
 - **관련 ADR**: [ADR-010](../adr/ADR-010-package-structure.md), [ADR-013](../adr/ADR-013-decision-lifecycle.md)
 
@@ -657,7 +657,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M3
 package: integration
 requirements: [REQ-MCP-001, REQ-NFR-007]
@@ -667,10 +667,10 @@ depends_on: [TASK-010, TASK-013]
 
 - **Goal**: Context Gateway MCP 서버를 만든다.
 - **Input**: 06 Tool 계약, ADR-004
-- **Output**: Tool 9종, freshness, 오류 코드, `duoctl mcp`
+- **Output**: Tool 9종(strict zod 입력·출력 스키마), shared operations(`packages/integration/src/operations/`, CLI와 공유, C135), stdio 서버 `serveDuoMcp`, `duoctl mcp --root --agent`, 오류 모델(인자 오류 = tool error, index-required·not-found·verdict = 정상 결과), 호출당 GraphStore open/close, cancellation 전달, metrics(`surface: mcp`), wire e2e(`tests/mcp/`)
 - **Dependencies**: [TASK-010](#task-010-context-compiler), [TASK-013](#task-013-review-엔진)
-- **Files expected to change**: `packages/integration/src/mcp/**`
-- **Status**: todo
+- **Files expected to change**: `packages/integration/src/{mcp,operations}/**`, `apps/cli/src/**`, `tests/mcp/**`
+- **Status**: done (T16)
 - **검증 대상 Requirement**: [REQ-MCP-001](../01-requirements.md#req-mcp-001-mcp-context-gateway), [REQ-NFR-007](../01-requirements.md#req-nfr-007-mcp-stdout-순수성)
 - **관련 ADR**: [ADR-004](../adr/ADR-004-mcp-context-gateway.md)
 

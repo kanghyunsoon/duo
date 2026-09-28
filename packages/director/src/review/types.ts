@@ -102,6 +102,11 @@ export interface ChangedFile {
   readonly hunks: readonly ChangedHunk[];
   /** Hunk evidence, or one change record when there are no hunks. */
   readonly evidenceIds: readonly string[];
+  /**
+   * adoption-bootstrap (T15.1): a Project Truth file exactly as init wrote it (Adoption Baseline
+   * bootstrapTruth, not committed yet). Shown, but not reviewed: no seed, no rule, no gap.
+   */
+  readonly provenance?: "adoption-bootstrap";
 }
 
 export interface DiffSeed {

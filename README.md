@@ -8,7 +8,31 @@ DUO는 Codex, Claude Code 같은 AI Coding Agent가 프로젝트의 목표와 �
 
 ## 상태
 
-T00 설계는 동결되었고 T01 Repository Skeleton까지 진행했습니다. 기능 구현은 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)의 순서를 따릅니다.
+CLI(`duoctl`)와 MCP 서버(`duoctl mcp`)까지 구현했습니다(TASK-016). Agent 설정 자동화(`duoctl install`, TASK-017), OpenAI Provider(TASK-012B), Web UI(TASK-018)는 아직입니다. 진행 순서는 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)를 따릅니다.
+
+## 사용
+
+```bash
+pnpm install && pnpm build
+cd <your-git-repository>
+node <duo>/apps/cli/dist/main.js init        # 관찰 → 최소 Truth → Index → Adoption Baseline
+node <duo>/apps/cli/dist/main.js status
+node <duo>/apps/cli/dist/main.js context "작업 설명"
+node <duo>/apps/cli/dist/main.js review
+```
+
+명령과 종료 코드는 [07-cli-interface.md](docs/07-cli-interface.md)에 있습니다.
+
+## MCP (Coding Agent 연결)
+
+`duoctl mcp`는 저장소 하나를 다루는 stdio MCP 서버(`duo-director`)를 띄웁니다. `--root`는 Git 저장소의 최상위여야 합니다. Agent의 MCP 설정에 다음 명령을 등록합니다(설정 파일 자동 작성은 TASK-017).
+
+```text
+command: node
+args:    ["<duo>/apps/cli/dist/main.js", "mcp", "--root", "<your-git-repository>"]
+```
+
+Tool은 9개입니다: `duo_get_status`, `duo_get_context`, `duo_review_changes`, `duo_get_requirement`, `duo_get_decision`, `duo_trace`, `duo_impact`, `duo_search_evidence`, `duo_propose_decision`. Agent는 Decision을 제안만 할 수 있고, 확정과 거절은 사람이 `duoctl decision`으로 합니다. Tool은 인덱싱하지 않으므로 `index-required`를 받으면 `duoctl index`를 실행합니다. 상세 계약은 [06-mcp-interface.md](docs/06-mcp-interface.md)에 있습니다.
 
 ## 개발
 

@@ -25,7 +25,7 @@ import type { ReviewResult } from "./types.js";
 export const REVIEW_RECORD_FORMAT = "duo.review-record/1";
 export const REVIEW_ASSIST_FORMAT = "duo.review-assist/1";
 /** T14.1: the Adoption Baseline is human-approved history too, with its own format and ID prefix. */
-export const ADOPTION_BASELINE_FORMAT = "duo.adoption-baseline/1";
+export const ADOPTION_BASELINE_FORMAT = "duo.adoption-baseline/2";
 export const REVIEWS_DIR = `${STATE_DIR_NAME}/reviews`;
 
 const ID_PREFIX: Readonly<Record<string, string>> = {
@@ -71,7 +71,7 @@ export function reviewRecordBody(result: ReviewResult): Record<string, unknown> 
         path: f.path, ...(f.oldPath === undefined ? {} : { oldPath: f.oldPath }), kind: f.kind, ...(f.similarity === undefined ? {} : { similarity: f.similarity }),
         binary: f.binary, ...(f.oldOid === undefined ? {} : { oldBlob: f.oldOid }), ...(f.newOid === undefined ? {} : { newBlob: f.newOid }),
         hunks: f.hunks.map((h) => ({ oldStart: h.oldStart, oldLines: h.oldLines, newStart: h.newStart, newLines: h.newLines, evidenceId: h.evidenceId })),
-        evidenceIds: f.evidenceIds,
+        evidenceIds: f.evidenceIds, ...(f.provenance === undefined ? {} : { provenance: f.provenance }),
       })),
     },
     claims: result.claims.map((c) => ({

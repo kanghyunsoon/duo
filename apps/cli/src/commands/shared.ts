@@ -81,3 +81,10 @@ export const usage = (command: string, message: string): Outcome =>
 export function diagLines(diagnostics: readonly Diagnostic[]): string[] {
   return diagnostics.filter((d) => d.severity === "error").map((d) => `${d.code}: ${d.message}`);
 }
+
+/** A shared operation that did not produce a payload: NOT_INITIALIZED (exit 5) or a failure (exit 1). */
+export function operationFailure(env: Env, command: string, op: { readonly kind: "not-initialized" | "failed"; readonly diagnostics: readonly Diagnostic[] }): Outcome {
+  return op.kind === "not-initialized"
+    ? failed(command, EXIT.NOT_INITIALIZED, op.diagnostics, [t(env.locale, "not-initialized")])
+    : failed(command, EXIT.ERROR, op.diagnostics, diagLines(op.diagnostics), null, { status: "failed" });
+}

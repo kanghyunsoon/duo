@@ -107,6 +107,26 @@ export async function initCommand(env: Env, options: InitOptions): Promise<Outco
   if (plan.documents.length > 0) progress(env, t(env.locale, "init.documents", { list: plan.documents.slice(0, 5).map((d) => d.path).join(", ") }));
   if (plan.importCandidates.length > 0) progress(env, t(env.locale, "init.imports", { n: plan.importCandidates.reduce((n, c) => n + c.definitions.length, 0) }));
 
+  // Dirty adoption policy: decided before any persistent write (T15.1). Resuming an initialized project
+  // that only lacks its baseline asks here too; nothing is written without the policy.
+  const baselineBefore = await getAdoptionBaselineStatus(env.root);
+  const needsBaseline = baselineBefore.value?.status === "missing";
+  let policy = options.baselinePolicy;
+  if (needsBaseline && wt.dirty && policy === undefined && interactive(env)) {
+    env.io.err(t(env.locale, "init.dirty.choose"));
+    const choice = (await env.io.prompt("> "))?.trim();
+    policy = choice === "1" ? "head" : choice === "2" ? "abort" : undefined;
+  }
+  if (needsBaseline && wt.dirty && policy !== "head") {
+    const aborted = policy === "abort";
+    steps.baseline = aborted ? { status: "aborted", detail: "ABORT_AND_CLEAN" } : { status: "action-required", detail: "dirty working tree" };
+    if (!aborted) diagnostics.push(createDiagnostic("ADOPTION_DIRTY_POLICY_REQUIRED", t("en", "init.dirty.policy-required")));
+    human.push(t(env.locale, aborted ? "init.dirty.aborted" : "init.dirty.policy-required"));
+    if (aborted) baseline = { status: "aborted" };
+    report("baseline");
+    return finish(EXIT.ACTION_REQUIRED);
+  }
+
   // 2. Truth
   if (plan.state === "initialized") {
     steps.truth = { status: "existing" };
@@ -192,22 +212,9 @@ export async function initCommand(env: Env, options: InitOptions): Promise<Outco
       human.push(t(env.locale, "init.done"));
       return finish(EXIT.OK);
     }
-    let policy = options.baselinePolicy;
-    if (wt.dirty && policy === undefined && interactive(env)) {
-      progress(env, t(env.locale, "init.dirty.choose"));
-      const choice = (await env.io.prompt("> "))?.trim();
-      policy = choice === "1" ? "head" : choice === "2" ? "abort" : undefined;
-    }
-    if (wt.dirty && policy === undefined) {
-      steps.baseline = { status: "action-required", detail: "dirty working tree" };
-      diagnostics.push(createDiagnostic("ADOPTION_DIRTY_POLICY_REQUIRED", t("en", "init.dirty.policy-required")));
-      human.push(t(env.locale, "init.dirty.policy-required"));
-      report("baseline");
-      return finish(EXIT.ACTION_REQUIRED);
-    }
     const captured = await withWriter(env.root, async (graph) => captureAdoptionBaseline(env.root, {
       graph, registry, actor: await humanActor(env.root), clock: () => env.io.now(),
-      ...(policy === undefined ? {} : { policy: policy === "head" ? "HEAD_BASELINE" as const : "ABORT_AND_CLEAN" as const }),
+      ...(wt.dirty ? { policy: "HEAD_BASELINE" as const } : {}),
     }));
     diagnostics.push(...captured.diagnostics);
     if (captured.value === undefined) {

@@ -35,6 +35,7 @@
       "allow": [
         "@duo-director/director",
         "@duo-director/graph",
+        "@duo-director/analyzer",
         "@duo-director/core"
       ],
       "typeOnly": []
@@ -102,6 +103,16 @@
       "cohere-ai",
       "groq-sdk",
       "ai"
+    ]
+  },
+  "mcpSdk": {
+    "$comment": "MCP TypeScript SDK는 integration의 mcp adapter 계층에서만 import한다(TASK-016). 공유 operation과 core/graph/director에는 MCP 타입이 없다.",
+    "dir": "packages/integration/src/mcp",
+    "modules": [
+      "@modelcontextprotocol/server",
+      "@modelcontextprotocol/client",
+      "@modelcontextprotocol/core",
+      "@modelcontextprotocol/sdk"
     ]
   },
   "sourceParsing": {

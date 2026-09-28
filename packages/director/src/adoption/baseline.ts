@@ -7,14 +7,14 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { openGitProvider, type AnalyzerRegistry } from "@duo-director/analyzer";
+import { createDefaultAnalyzerRegistry, openGitProvider, type AnalyzerRegistry, type GitProvider } from "@duo-director/analyzer";
 import {
-  compareUtf8, createDiagnostic, failure, loadProjectTruth, success, truthDigest,
+  canonicalSourceText, compareUtf8, createDiagnostic, failure, loadProjectTruth, readSourceFile, sha256Text, STATE_DIR_NAME, success, truthDigest, WRITE_AREAS,
   type DecisionActor, type ParseResult, type RepoPath,
 } from "@duo-director/core";
 import { inspectIndex, readIndexState, type GraphReader, type IndexedGraph } from "@duo-director/graph";
 import { ADOPTION_BASELINE_FORMAT, historyRecordId, REVIEWS_DIR, verifyReviewRecord, writeHistoryRecord } from "../review/record.js";
-import { baselineFindings } from "./findings.js";
+import { headBaselineFindings } from "./head.js";
 import type { AdoptionBaselineBody, AdoptionBaselineRecord, AdoptionBaselineState, CaptureResult, DirtyAdoptionPolicy } from "./types.js";
 import { observeWorkingTree } from "./worktree.js";
 
@@ -39,6 +39,20 @@ function fileHash(root: string, p: RepoPath): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+const NOT_TRUTH = [...WRITE_AREAS.regenerable, ...WRITE_AREAS["human-history"]].map((a) => `${STATE_DIR_NAME}/${a}`);
+
+/** Truth files under .duo-project that differ from HEAD right now (what init just wrote), with canonical text hashes. */
+async function bootstrapTruthOf(root: string, git: GitProvider): Promise<{ path: RepoPath; contentHash: string }[]> {
+  const changes = await git.listWorkingTreeChanges();
+  const out: { path: RepoPath; contentHash: string }[] = [];
+  for (const c of changes.value ?? []) {
+    if (!c.path.startsWith(`${STATE_DIR_NAME}/`) || NOT_TRUTH.some((p) => c.path.startsWith(p))) continue;
+    const text = readSourceFile(root, c.path).value;
+    if (text !== undefined) out.push({ path: c.path, contentHash: sha256Text(canonicalSourceText(text)) });
+  }
+  return out.sort((a, b) => compareUtf8(a.path, b.path));
 }
 
 /** The recorded baseline, verified, without Git (used by Review for provenance). */
@@ -114,13 +128,21 @@ export async function captureAdoptionBaseline(root: string, options: CaptureBase
   if (indexState === undefined) return failure([createDiagnostic("ADOPTION_INDEX_REQUIRED", "The index state cannot be read; index the repository first")]);
   const provenance = await git.value.blobProvenance(wt.staged);
   const indexBlob = new Map((provenance.value ?? []).map((p) => [p.path, p.indexBlobOid] as const));
-  const dirty = new Set<string>([...wt.staged, ...wt.unstaged, ...wt.untracked, ...wt.conflicted]);
-  const { findings, skipped } = baselineFindings({ root, truth, graph: options.graph, stateDiagnostics: indexState.diagnostics, skip: dirty });
-  const limitations = [
-    ...(wt.dirty ? ["dirty-paths-not-baselined"] : []), ...(skipped > 0 ? ["findings-in-dirty-paths-skipped"] : []), ...(wt.truncated ? ["working-tree-list-truncated"] : []),
-  ];
+  // HEAD_BASELINE: findings describe the HEAD tree. Tracked paths that differ from HEAD are read from HEAD.
+  const divergent = new Set<string>([...wt.staged, ...wt.unstaged, ...wt.conflicted]);
+  const own = options.registry === undefined ? await createDefaultAnalyzerRegistry() : undefined;
+  const registry = options.registry ?? own?.value;
+  if (registry === undefined) return failure(own?.diagnostics ?? []);
+  let evaluated;
+  try {
+    evaluated = await headBaselineFindings({ root, truth, graph: options.graph, git: git.value, registry, stateDiagnostics: indexState.diagnostics, divergent });
+  } finally {
+    own?.value?.dispose();
+  }
+  const bootstrapTruth = await bootstrapTruthOf(root, git.value);
+  const limitations = [...evaluated.limitations, ...(wt.truncated ? ["working-tree-list-truncated"] : [])].sort(compareUtf8);
   const body: AdoptionBaselineBody = {
-    format: "duo.adoption-baseline/1",
+    format: "duo.adoption-baseline/2",
     project: { name: truth.config.name, rootCommits: repo.value.rootCommitOids },
     git: { headOid: repo.value.headOid, ...(repo.value.branch === undefined ? {} : { branch: repo.value.branch }), detached: repo.value.detached },
     truth: { digest: truthDigest(root, truth) },
@@ -132,7 +154,7 @@ export async function captureAdoptionBaseline(root: string, options: CaptureBase
       untracked: wt.untracked.map((p) => { const h = fileHash(root, p); return { path: p, ...(h === undefined ? {} : { contentHash: h }) }; }),
       conflicted: wt.conflicted, counts: wt.counts, excludedSecrets: wt.excludedSecrets, truncated: wt.truncated,
     },
-    findings, limitations,
+    bootstrapTruth, findingsAt: "HEAD", findings: evaluated.findings, limitations,
   };
   const id = historyRecordId("adoption", body);
   const existing = loadAdoptionBaseline(root);

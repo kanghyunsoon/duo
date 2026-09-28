@@ -7,7 +7,7 @@
 ```mermaid
 flowchart TD
   cli["apps/cli<br/>(thin entry)"] --> integration & director & graph & analyzer & core
-  integration["integration<br/>MCP · agents · http"] --> director & graph & core
+  integration["integration<br/>operations · MCP · agents · http"] --> director & graph & analyzer & core
   director["director<br/>context · review · gap · llm · init"] --> graph & analyzer & core
   graph["graph<br/>store · build · traverse · incremental"] --> analyzer & core
   analyzer["analyzer<br/>scan · fingerprint · language · git"] --> core
@@ -24,7 +24,7 @@ flowchart TD
 | analyzer | 파일 스캔, fingerprint, LanguageAnalyzer(TS/JS), GitProvider | TASK-004, 005, 006 |
 | graph | GraphStore(node:sqlite), builder, traversal, incremental, trace, impact, check | TASK-003, 007, 008 |
 | director | Context Compiler, Evidence, Review, Knowledge Gap, token budget, LLMProvider, InitService | TASK-010~014 |
-| integration | MCP 서버, Codex/Claude Adapter, 로컬 HTTP API, (향후) 외부 EvidenceProvider | TASK-016, 017, 018 |
+| integration | shared operations(`operations/`: CLI `--json` result와 MCP structuredContent의 공통 payload, C135), MCP stdio 서버(`mcp/`, SDK는 이 계층에서만 import), Codex/Claude Adapter, 로컬 HTTP API, (향후) 외부 EvidenceProvider. analyzer는 Git root 검증과 analyzer registry 때문에 import한다(TASK-016) | TASK-016, 017, 018 |
 | ui | React 앱(5개 화면) | TASK-018 |
 | apps/cli | `duoctl` 명령 | TASK-015 |
 
@@ -69,11 +69,11 @@ LLM을 호출하지 않는다(TASK-014). 관찰한 사실은 observed, 그로부
 ### Context 요청 (REQ-CONTEXT-001, REQ-MCP-001)
 
 ```text
-Agent ─duo_get_context(task)─▶ freshness(증분 인덱싱) ─▶ Seed 해석 ─▶ Subgraph 확장 ─▶ 필수 항목
-  ─▶ 후보 표현(L1~L3) ─▶ budget packing ─▶ Packet ─▶ runtime/metrics.jsonl
+Agent ─duo_get_context(task)─▶ shared operation projectContext ─▶ freshness 확인(인덱싱하지 않음, stale이면 index-required)
+  ─▶ Seed 해석 ─▶ Subgraph 확장 ─▶ 필수 항목 ─▶ 후보 표현(L1~L3) ─▶ budget packing ─▶ Packet + Gap ─▶ runtime/metrics.jsonl(surface mcp)
 ```
 
-상세는 [05-context-compiler.md](05-context-compiler.md).
+상세는 [05-context-compiler.md](05-context-compiler.md), MCP 전송은 [06](06-mcp-interface.md).
 
 ### Review (REQ-REVIEW-001)
 
@@ -96,14 +96,14 @@ Human: duoctl decision confirm|reject <id>  또는  UI Confirm/Reject ─▶ cor
 
 ## Freshness
 
-CLI 명령과 MCP Tool은 실행 전 증분 인덱싱을 한 번 한다. 변경 탐지는 Scanner의 현재 파일 목록과 `contentHash`를 이전 `generated/index-state.json`의 fingerprint와 비교해서 한다(TASK-004 `compareFingerprints`, TASK-008 Indexer). stat(size, mtime)은 이후 hash 계산을 줄이는 hint로만 쓸 수 있고, 내용이 같은지는 `contentHash`로만 판단한다(C33). 변경이 없으면 parse하지 않는다(REQ-INDEX-002).
+Context, Review, MCP Tool은 인덱싱하지 않는다. index가 current가 아니면 `index-required`를 돌려주고, 인덱싱은 `duoctl index`(또는 CLI `--refresh`)가 명시적으로 한다(T10.1, TASK-015, TASK-016, C139). Indexer의 변경 탐지는 Scanner의 현재 파일 목록과 `contentHash`를 이전 `generated/index-state.json`의 fingerprint와 비교해서 한다(TASK-004 `compareFingerprints`, TASK-008 Indexer). stat(size, mtime)은 이후 hash 계산을 줄이는 hint로만 쓸 수 있고, 내용이 같은지는 `contentHash`로만 판단한다(C33). 변경이 없으면 parse하지 않는다(REQ-INDEX-002).
 
 ## 실행 형태와 동시성
 
 | 프로세스 | 수명 | 쓰기 |
 |---|---|---|
 | CLI | 명령 1회 | generated/, cache/, runtime/(metrics.jsonl), reviews/(--record, adoption baseline), decisions/(confirm/reject), init의 Truth |
-| MCP 서버 | Agent 세션 동안 | generated/, cache/, runtime/, decisions/proposals/(새 파일) |
+| MCP 서버(`duoctl mcp`, stdio) | Agent 세션 동안 | runtime/metrics.jsonl, decisions/proposals/(새 파일)만. Graph는 호출마다 read-only로 열고 닫는다(index 쓰기 없음) |
 | UI 서버 | 사용자가 종료할 때까지 | decisions/(Confirm/Reject만) |
 
 SQLite는 WAL 모드로 연다. Graph 쓰기는 SQLite writer lock(`BEGIN IMMEDIATE`)으로 한 프로세스만 하고 Indexer는 transaction 안에서 index state token을 다시 확인한다(T08). 잠금을 얻지 못한 프로세스는 마지막 commit 상태를 읽기만 한다(snapshot visibility). 이때 갱신하지 못한 Node의 freshness는 `unknown`으로 표시한다. freshness는 GraphStore가 아니라 Indexer의 비교 결과다(C31). Decision 파일 쓰기는 임시 파일에 쓴 뒤 rename하는 원자적 교체로 한다.

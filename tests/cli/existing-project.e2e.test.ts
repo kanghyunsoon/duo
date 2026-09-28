@@ -42,18 +42,18 @@ describe("Existing Project Adoption through the CLI (T15, subprocess)", () => {
   it("a stale review is index-required (exit 6) and writes no record; index, context and review then work", () => {
     const stale = duoctl(p.root, ["review", "--json"]);
     expect(stale.code).toBe(6);
-    expect(stale.json().result.review.status).toBe("index-required");
+    expect(stale.json().result.status).toBe("index-required");
     const idx = duoctl(p.root, ["index", "--json"]);
     expect(idx.code).toBe(0);
     expect(idx.json().result).toMatchObject({ mode: "incremental", fullRebuildReason: null });
     const ctx = duoctl(p.root, ["context", "Scheduler.next", "--json"]);
     expect(ctx.code).toBe(0);
-    expect(ctx.json()).toMatchObject({ format: "duo.cli.context/1", result: { status: "ready", packet: { format: "duo.context-packet/1" } } });
+    expect(ctx.json()).toMatchObject({ format: "duo.cli.context/1", result: { format: "duo.context/1", status: "ready", context: { packet: { format: "duo.context-packet/1" } } } });
     const md = duoctl(p.root, ["context", "Scheduler.next"]);
     expect(md.stdout).toContain("# DUO CONTEXT PACKET");
     const rv = duoctl(p.root, ["review", "--json"]);
     expect(rv.code).toBe(0);
-    const review = rv.json().result.review;
+    const review = rv.json().result;
     expect(review).toMatchObject({ format: "duo.review/1", status: "ready", baseline: { status: "present" }, metrics: { llmCalls: 0 } });
     expect(["PASS", "WARN", "ASK", "BLOCK"]).toContain(review.verdict);
     expect(review.diff.files.map((f: { path: string }) => f.path)).toContain("src/scheduler.ts");
@@ -64,14 +64,14 @@ describe("Existing Project Adoption through the CLI (T15, subprocess)", () => {
   });
 
   it("review exit codes follow the verdict only with --fail-on; --record writes one Review Record", () => {
-    const rv = duoctl(p.root, ["review", "--json"]).json().result.review;
+    const rv = duoctl(p.root, ["review", "--json"]).json().result;
     const failing = duoctl(p.root, ["review", "--fail-on", "warn"]);
     expect(failing.code).toBe(({ PASS: 0, WARN: 2, ASK: 3, BLOCK: 4 } as Record<string, number>)[rv.verdict]);
     expect(duoctl(p.root, ["review", "--fail-on", "block"]).code).toBe(rv.verdict === "BLOCK" ? 4 : 0);
     const rec = duoctl(p.root, ["review", "--record", "--json"]);
     expect(rec.code).toBe(0);
-    expect(rec.json().result.record).toMatchObject({ status: "created", path: expect.stringMatching(/^\.duo-project\/reviews\/review-/u) });
-    expect(duoctl(p.root, ["review", "--record", "--json"]).json().result.record.status).toBe("unchanged");
+    expect(rec.json().meta.record).toMatchObject({ status: "created", path: expect.stringMatching(/^\.duo-project\/reviews\/review-/u) });
+    expect(duoctl(p.root, ["review", "--record", "--json"]).json().meta.record.status).toBe("unchanged");
     expect(reviews().filter((f) => f.startsWith("review-"))).toHaveLength(1);
   });
 
@@ -110,29 +110,37 @@ describe("dirty existing project (T15, subprocess)", () => {
   p.edit("src/reminder.ts", "\"member-\"", "\"person-\"");
   p.write("src/holidays.ts", "export const HOLIDAYS: readonly number[] = [];\n");
 
-  it("dirty is detected; without a policy (and with --yes) init stops at the baseline; Truth and index stay", () => {
+  it("dirty is detected before any write: without a policy (also with --yes) or with abort, nothing persistent exists", () => {
+    const before = snapshot(p.root);
     const r = duoctl(p.root, ["init", "--non-interactive", "--json"]);
     expect(r.code).toBe(6);
     const out = r.json();
     expect(out.result.plan.observed.workingTree).toMatchObject({ dirty: true, unstaged: ["src/reminder.ts"], untracked: ["src/holidays.ts"] });
-    expect(out.result.steps).toMatchObject({ truth: { status: "ok" }, index: { status: "ok" }, baseline: { status: "action-required" } });
+    expect(out.result.steps).toMatchObject({ repository: { status: "ok" }, truth: { status: "skipped" }, index: { status: "skipped" }, baseline: { status: "action-required" } });
     expect(out.diagnostics.map((d) => d.code)).toContain("ADOPTION_DIRTY_POLICY_REQUIRED");
-    const yes = duoctl(p.root, ["init", "--non-interactive", "--yes", "--json"]);
-    expect(yes.code).toBe(6);
-    expect(yes.json().result.steps).toMatchObject({ truth: { status: "existing" }, index: { status: "existing" }, baseline: { status: "action-required" } });
-    const abort = duoctl(p.root, ["init", "--non-interactive", "--baseline-policy", "abort", "--json"]);
-    expect(abort.code).toBe(6);
-    expect(abort.json().result.steps.baseline.status).toBe("aborted");
-    expect(fs.existsSync(path.join(p.root, ".duo-project", "reviews")) ? fs.readdirSync(path.join(p.root, ".duo-project", "reviews")) : []).toEqual([]);
+    for (const args of [["init", "--non-interactive", "--yes", "--json"], ["init", "--non-interactive", "--baseline-policy", "abort", "--json"]]) {
+      const again = duoctl(p.root, args);
+      expect(again.code).toBe(6);
+      expect(again.json().result.steps.truth.status).toBe("skipped");
+    }
+    // No .duo-project, graph.db, index-state.json, baseline or metrics.
+    expect(fs.existsSync(path.join(p.root, ".duo-project"))).toBe(false);
+    expect(snapshot(p.root)).toEqual(before);
   });
 
   it("HEAD_BASELINE adopts at HEAD; the dirty changes stay visible to the next Review", () => {
     const r = duoctl(p.root, ["init", "--non-interactive", "--baseline-policy", "head", "--json"]);
     expect(r.code).toBe(0);
+    expect(r.json().result.steps).toMatchObject({ truth: { status: "ok" }, index: { status: "ok" }, baseline: { status: "ok" } });
     expect(r.json().result.baseline).toMatchObject({ status: "captured", dirtyAtAdoption: true });
     const status = duoctl(p.root, ["status", "--json"]).json();
     expect(status.result.baseline).toMatchObject({ status: "current", dirtyAtAdoption: true });
-    const rv = duoctl(p.root, ["review", "--json"]).json().result.review;
+    const rv = duoctl(p.root, ["review", "--json"]).json().result;
     expect(rv.diff.files.map((f: { path: string }) => f.path)).toEqual(expect.arrayContaining(["src/holidays.ts", "src/reminder.ts"]));
+    // Truth files init wrote are classified, not reviewed (C138).
+    const truth = rv.diff.files.filter((f: { path: string }) => f.path.startsWith(".duo-project/"));
+    expect(truth.length).toBeGreaterThan(0);
+    expect(truth.every((f: { provenance?: string }) => f.provenance === "adoption-bootstrap")).toBe(true);
+    expect(rv.seeds.filter((s: { reason: string }) => s.reason === "truth-changed")).toEqual([]);
   });
 });

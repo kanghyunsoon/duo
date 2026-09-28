@@ -67,7 +67,7 @@ describe("Adoption Baseline (T14.1)", () => {
     expect(r.value).toMatchObject({ status: "captured", path: expect.stringMatching(/^\.duo-project\/reviews\/adoption-[0-9a-f]{16}\.json$/u) });
     const b = r.value?.status === "aborted" ? undefined : r.value?.baseline;
     expect(b).toMatchObject({
-      format: "duo.adoption-baseline/1", project: { name: "pocket-ledger" }, git: { branch: "main", detached: false, headOid: expect.stringMatching(/^[0-9a-f]{40}$/u) },
+      format: "duo.adoption-baseline/2", findingsAt: "HEAD", project: { name: "pocket-ledger" }, git: { branch: "main", detached: false, headOid: expect.stringMatching(/^[0-9a-f]{40}$/u) },
       truth: { digest: expect.stringMatching(/^sha256:/u) }, index: { stateToken: expect.stringMatching(/^sha256:/u) },
       workingTree: { dirty: false, policy: "HEAD_BASELINE", staged: [], unstaged: [], untracked: [] }, findings: [], limitations: [], recorded: { by: "Ada" },
     });
@@ -112,7 +112,7 @@ describe("Adoption Baseline (T14.1)", () => {
       dirty: true, policy: "HEAD_BASELINE",
       unstaged: [{ path: "src/ledger.ts", contentHash: expect.stringMatching(/^sha256:/u) }], untracked: [{ path: "src/currency.ts", contentHash: expect.stringMatching(/^sha256:/u) }],
     });
-    expect(b?.limitations).toContain("dirty-paths-not-baselined");
+    expect(b?.findingsAt).toBe("HEAD");
     expect(JSON.stringify(b)).not.toContain("ledger.concat"); // hashes, not content
     // The dirty changes are not hidden: they are still what the next Review looks at.
     expect((await review(repo2.root)).diff?.files.map((f) => f.path)).toEqual(expect.arrayContaining(["src/currency.ts", "src/ledger.ts"]));
@@ -121,6 +121,74 @@ describe("Adoption Baseline (T14.1)", () => {
 
 const LEGACY = "/** Kept from before DUO. */\nexport class LegacySessionStore {\n  private readonly sessions = new Map<string, string>();\n\n  save(token: string, userId: string): void {\n    this.sessions.set(token, userId);\n  }\n}\n";
 const SERVER = "export class ServerSessionStore {\n  keep(token: string): string {\n    return token;\n  }\n}\n";
+
+describe("HEAD_BASELINE evaluates the HEAD tree (T15.1, C136)", () => {
+  it("a forbidden symbol in HEAD that is being modified is pre-existing-touched (WARN); one added in the working tree is introduced (BLOCK)", async () => {
+    const repo = makeContextRepo(temps, registry, REVIEW_FIXTURE);
+    repo.write("src/auth/legacy-session-store.ts", LEGACY);
+    repo.write("src/auth/old-session-store.ts", "export class OldSessionStore {}\n");
+    repo.git("add", "-A");
+    repo.git("commit", "-qm", "legacy stores");
+    // Dirty at adoption: the legacy store is being edited, the old one deleted, a new forbidden store added.
+    repo.edit("src/auth/legacy-session-store.ts", "this.sessions.set(token, userId);", "this.sessions.set(token, userId.trim());");
+    fs.rmSync(path.join(repo.root, "src/auth/old-session-store.ts"));
+    repo.write("src/auth/server-session-store.ts", SERVER);
+    repo.write("src/legacy/Report.java", "class Report {}\n");
+    repo.git("add", "src/legacy/Report.java");
+    repo.git("commit", "-qm", "java");
+    repo.write("src/legacy/Report.java", "class Report { int x; }\n");
+    await repo.index();
+    const r = await capture(repo.root, { policy: "HEAD_BASELINE" });
+    const b = r.value?.status === "captured" ? r.value.baseline : undefined;
+    const offending = b?.findings.filter((f) => f.rule === "decision-forbids").map((f) => f.offending).sort();
+    expect(offending).toEqual([
+      "sym:src/auth/legacy-session-store.ts#LegacySessionStore", "sym:src/auth/legacy-session-store.ts#LegacySessionStore.save",
+      "sym:src/auth/old-session-store.ts#OldSessionStore", // deleted in the working tree, but in HEAD
+    ]); // server-session-store.ts is untracked: not in HEAD, not a baseline finding
+    expect(b?.limitations).toContain("head-symbols-unsupported-language"); // the changed Java file: file-level only
+    const res = await review(repo.root, "AUTH-03");
+    const byFile = (p: string) => res.claims.filter((c) => c.rule === "decision-forbids" && c.observed.includes(p));
+    expect(byFile("legacy-session-store.ts").map((c) => [c.provenance, c.blockEligible])).toEqual([["pre-existing-touched", false]]);
+    expect(byFile("server-session-store.ts").map((c) => [c.provenance, c.blockEligible])).toEqual([["introduced", true]]);
+    expect(res.verdict).toBe("BLOCK"); // because of the introduced store only
+    fs.rmSync(path.join(repo.root, "src/auth/server-session-store.ts"));
+    await repo.index();
+    const touched = await review(repo.root, "AUTH-03");
+    expect(touched.claims.filter((c) => c.rule === "decision-forbids").every((c) => c.provenance === "pre-existing-touched" && !c.blockEligible)).toBe(true);
+    expect(touched.verdict).toBe("WARN");
+  });
+
+  it("a /1 baseline (working-tree findings, no bootstrapTruth) is incompatible, not reinterpreted", async () => {
+    const repo = await adopted();
+    const r = await capture(repo.root);
+    const file = path.join(repo.root, r.value?.status === "captured" ? r.value.path : "");
+    const record = JSON.parse(fs.readFileSync(file, "utf8"));
+    record.format = "duo.adoption-baseline/1";
+    fs.writeFileSync(file, JSON.stringify(record));
+    expect((await getAdoptionBaselineStatus(repo.root)).value).toMatchObject({ status: "incompatible", reason: expect.stringContaining("duo.adoption-baseline/1") });
+  });
+});
+
+describe("adoption-bootstrap Truth (T15.1, C138)", () => {
+  it("Truth files exactly as init wrote them are classified, never reviewed; a human edit makes them a normal Truth change", async () => {
+    const repo = await adopted();
+    const r = await capture(repo.root);
+    const b = r.value?.status === "captured" ? r.value.baseline : undefined;
+    expect(b?.bootstrapTruth.map((x) => x.path)).toEqual([".duo-project/.gitignore", ".duo-project/intent/constraints.yaml", ".duo-project/intent/vision.md", ".duo-project/project.yaml"]);
+    const res = await review(repo.root);
+    const truthFiles = res.diff?.files.filter((f) => f.path.startsWith(".duo-project/")) ?? [];
+    expect(truthFiles.map((f) => [f.path, f.provenance])).toEqual(b?.bootstrapTruth.map((x) => [x.path, "adoption-bootstrap"]));
+    expect(res.seeds).toEqual([]);
+    expect(res.claims).toEqual([]);
+    expect(res.verdict).toBe("PASS");
+    repo.edit(".duo-project/intent/constraints.yaml", "constraints: []", "constraints:\n  - id: CON-001\n    statement: All amounts are integer cents\n    state: confirmed\n    enforcement: warn");
+    await repo.index();
+    const edited = await review(repo.root);
+    expect(edited.diff?.files.find((f) => f.path === ".duo-project/intent/constraints.yaml")?.provenance).toBeUndefined();
+    expect(edited.diff?.files.find((f) => f.path === ".duo-project/project.yaml")?.provenance).toBe("adoption-bootstrap");
+    expect(edited.seeds.map((s) => s.ref)).toEqual(["CON-001"]);
+  });
+});
 
 describe("pre-existing vs introduced violations (T14.1)", () => {
   let repo: ContextRepo;

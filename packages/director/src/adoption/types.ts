@@ -51,7 +51,8 @@ export interface BaselineFinding {
 export type ViolationProvenance = "introduced" | "pre-existing" | "pre-existing-touched";
 
 export interface AdoptionBaselineBody {
-  readonly format: "duo.adoption-baseline/1";
+  /** /2 (T15.1): findings evaluated on the HEAD tree, bootstrapTruth. A /1 record is incompatible (not reinterpreted). */
+  readonly format: "duo.adoption-baseline/2";
   readonly project: { readonly name: string; readonly rootCommits: readonly string[] };
   readonly git: { readonly headOid: string; readonly branch?: string; readonly detached: boolean };
   readonly truth: { readonly digest: string };
@@ -67,7 +68,14 @@ export interface AdoptionBaselineBody {
     readonly excludedSecrets: number;
     readonly truncated: boolean;
   };
-  /** Ordered by key. Paths changed in the dirty working tree are not baselined (limitation). */
+  /**
+   * Project Truth files init left uncommitted (untracked or changed against HEAD at capture): path and
+   * sha256 of the canonical text. Review classifies an identical file as adoption-bootstrap (T15.1).
+   */
+  readonly bootstrapTruth: readonly { readonly path: RepoPath; readonly contentHash: string }[];
+  /** The state the findings describe: always the HEAD tree (HEAD_BASELINE). */
+  readonly findingsAt: "HEAD";
+  /** Ordered by key. */
   readonly findings: readonly BaselineFinding[];
   readonly limitations: readonly string[];
 }

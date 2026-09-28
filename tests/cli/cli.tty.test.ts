@@ -56,7 +56,7 @@ describe("interactive duoctl init (T15, terminal)", () => {
     expect(term.out.join("\n")).toContain("작업 트리에 변경이 있습니다");
     const files = fs.readdirSync(path.join(p.root, ".duo-project", "reviews"));
     const baseline = JSON.parse(fs.readFileSync(path.join(p.root, ".duo-project", "reviews", files[0] ?? ""), "utf8"));
-    expect(baseline).toMatchObject({ format: "duo.adoption-baseline/1", workingTree: { dirty: true, policy: "HEAD_BASELINE", untracked: [{ path: "src/holidays.ts" }] }, recorded: { by: "Ada Lovelace" } });
+    expect(baseline).toMatchObject({ format: "duo.adoption-baseline/2", workingTree: { dirty: true, policy: "HEAD_BASELINE", untracked: [{ path: "src/holidays.ts" }] }, recorded: { by: "Ada Lovelace" } });
   });
 });
 

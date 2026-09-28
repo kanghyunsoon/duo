@@ -71,7 +71,7 @@ export interface CliRun {
   readonly stdout: string;
   readonly stderr: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- parsed CLI JSON; the tests assert its shape
-  json(): { format: string; ok: boolean; exitCode: number; result: any; diagnostics: { code: string }[] };
+  json(): { format: string; ok: boolean; exitCode: number; result: any; meta?: any; diagnostics: { code: string }[] };
 }
 
 /** Runs the built duoctl in root (no terminal: stdin is a pipe). */

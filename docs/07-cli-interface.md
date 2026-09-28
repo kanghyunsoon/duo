@@ -21,7 +21,8 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 | `duoctl impact <node>` | Graph에 기록된 영향 | `--depth <1-3>` | graph impact | 없음 |
 | `duoctl decision list\|confirm <id>\|reject <id>` | proposal 목록, 확정, 거절 | `--reason <text>`(reject) | core DecisionService, listDecisionProposals | decisions/ |
 | `duoctl stats` | runtime/metrics.jsonl 요약 | `--last <n>` | director readRuntimeMetrics | 없음 |
-| `duoctl ui`, `install`, `mcp` | TASK-018, 017, 016 | | | 아직 구현하지 않음(종료 코드 1) |
+| `duoctl mcp` | duo-director MCP 서버를 stdio로 실행(한 저장소, [06](06-mcp-interface.md)) | `--root`(Git top level이어야 함), `--agent <label>` | integration `serveDuoMcp` | Tool이 쓰는 것만(metrics, proposals) |
+| `duoctl ui`, `install` | TASK-018, 017 | | | 아직 구현하지 않음(종료 코드 1) |
 
 - `<node>`는 node ID(`sym:src/a.ts#A.b`), 정의 ID(`AUTH-03`), RepoPath, 유일한 qualified Symbol 이름을 받는다.
 - `review` 기본 diff는 HEAD → WORKTREE, `--staged`는 HEAD → INDEX다. `--from`/`--to`는 `HEAD`, `INDEX`, `WORKTREE` 또는 commit·branch 이름이며 해석은 Git provider가 한다. CLI는 diff parser를 갖지 않는다.
@@ -31,9 +32,9 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 ## 출력과 JSON
 
 - 기본 출력은 사람이 읽는 짧은 text이며 renderer가 locale(en, ko)별 문구로 만든다. Knowledge Gap 질문은 director renderer, Review claim은 rule·subject·reason 코드로 보인다.
-- `--json`은 stdout에 envelope 하나를 출력한다: `{ format: "duo.cli.<command>/1", command, ok, exitCode, result, diagnostics }`. `result`는 domain 결과 그대로다(status: 조합 객체, context: `ContextResult`, review: `{ review: ReviewResult, performance, record? }`, index: `{ mode, fullRebuildReason, metrics, graphRevision }`, init: `{ steps, plan, apply?, index?, baseline? }`). Agent는 문장을 parsing하지 않는다.
+- `--json`은 stdout에 envelope 하나를 출력한다: `{ format: "duo.cli.<command>/1", command, ok, exitCode, result, meta?, diagnostics }`. `result`는 integration shared operation의 semantic payload다(TASK-016, C135): status `duo.status/1`, context `duo.context/1` `{ status, context: ContextResult(performance 제외), gaps }`, review `ReviewResult`(`duo.review/1`), trace `duo.trace/1`, impact `duo.impact/1`. `meta`는 surface metadata(`performance`, review `--record`의 `record`)이며 비교 대상이 아니다. index는 `{ mode, fullRebuildReason, metrics, graphRevision }`, init은 `{ steps, plan, apply?, index?, baseline? }`. Agent는 문장을 parsing하지 않는다.
 - 질문과 확인 prompt는 stderr로 나가므로 `--json` stdout은 항상 JSON이다.
-- MCP structuredContent(TASK-016)는 같은 domain 결과를 쓴다(AC-015-03은 T16에서 대조, C135).
+- MCP structuredContent는 같은 shared operation의 payload다. `status|context|review|trace|impact --json`의 `result`와 해당 Tool의 structuredContent가 deep-equal임을 e2e로 확인한다(AC-015-03, C135 해결). T15의 review `result.review`·`result.record`는 `result`·`meta.record`로, context `result.packet`은 `result.context.packet`으로 옮겼다. 종료 코드는 그대로다.
 
 ## 종료 코드
 
@@ -80,7 +81,8 @@ DUO is set up. Next: duoctl status · duoctl context <task> · duoctl review
 - 질문(InitService의 `InitQuestion`)은 TTY에서만 묻는다: 프로젝트 Goal(README 첫 문단 또는 package.json description 제안, 받아들이면 README provenance), 현재 Milestone 또는 MVP 범위(제목, ID는 plan이 배정), Critical Constraint(';'로 구분, confirmed·warn). 관찰로 알 수 있는 것은 묻지 않는다. 답하지 않은 질문은 vision.md의 `UNKNOWN(<id>)` 줄이 되고 JSON `result.plan.questions`로 ASK 목록이 된다(AC-014-04).
 - 비대화형(`--non-interactive` 또는 TTY 없음)의 Human 답은 `--answers -`로 stdin JSON(`InitAnswer[]` 또는 `{ "answers": [...] }`)을 준다.
 - **`--yes`는 Human Intent를 만들어내는 옵션이 아니다.** 파일 생성 확인, partial repair 같은 operational 확인만 승인한다. README 제안 vision, 추론한 milestone, 제안 constraint, import 후보를 확정하지 않고, dirty adoption policy도 고르지 않는다.
-- Dirty working tree(staged, unstaged, untracked, conflicted; .duo-project와 secret 파일 제외)는 init 실패가 아니다. baseline에는 정책이 필요하다: `--baseline-policy head`(HEAD_BASELINE: baseline commit = HEAD, 현재 변경은 adoption 이후 Review 대상으로 남음) 또는 `abort`(ABORT_AND_CLEAN: baseline을 만들지 않고 종료 코드 6, 정리 후 다시 실행). TTY면 둘 중 하나를 묻고, 비대화형에서 정책이 없으면 Truth와 Index까지 하고 종료 코드 6이다. dirty working tree 전체를 snapshot으로 삼는 정책은 MVP에 없다.
+- Dirty working tree(staged, unstaged, untracked, conflicted; .duo-project와 secret 파일 제외)는 init 실패가 아니다. baseline에는 정책이 필요하다: `--baseline-policy head`(HEAD_BASELINE: baseline commit = HEAD, finding은 HEAD tree로 계산, 현재 변경은 adoption 이후 Review 대상으로 남음) 또는 `abort`(ABORT_AND_CLEAN: 종료 코드 6, 정리 후 다시 실행). **정책은 어떤 persistent write보다 먼저 정한다**(T15.1): baseline이 없는 dirty 저장소에서 정책이 없거나 `abort`면 `.duo-project`, graph.db, index-state.json, baseline, metrics를 하나도 만들지 않고 종료 코드 6(`ADOPTION_DIRTY_POLICY_REQUIRED` 또는 `aborted`, steps의 truth·index는 `skipped`)이다. TTY면 둘 중 하나를 stderr로 묻는다. 이미 초기화되어 baseline만 없는 project도 같은 순서다. dirty working tree 전체를 snapshot으로 삼는 정책은 MVP에 없다.
+- init이 만든 Truth 파일은 commit 전까지 HEAD→WORKTREE diff에 보이지만, baseline의 `bootstrapTruth`와 내용이 같으면 Review가 `adoption-bootstrap`으로 분류하고 WARN·BLOCK·ASK를 만들지 않는다. Human이 고친 Truth는 일반 Truth 변경이다(C138, [03](03-data-model.md#adoption-baseline-t141)).
 - Import 후보는 개수만 보이고 가져오지 않는다(Human 확인 import 흐름은 후속).
 - baseline 기록자 이름은 Git `user.name`이다(없으면 "human").
 

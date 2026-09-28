@@ -11,8 +11,11 @@
  */
 import { performance } from "node:perf_hooks";
 import { openGitProvider, type AnalyzerRegistry } from "@duo-director/analyzer";
-import { canonicalDiagnostics, compareUtf8, loadProjectTruth, sha256Text, stableJson, success, type Diagnostic, type EvidenceBasis, type ParseResult } from "@duo-director/core";
-import type { GitDiffEnd } from "@duo-director/analyzer";
+import {
+  canonicalDiagnostics, canonicalSourceText, compareUtf8, loadProjectTruth, readSourceFile, sha256Text, stableJson, STATE_DIR_NAME, success,
+  type Diagnostic, type EvidenceBasis, type ParseResult,
+} from "@duo-director/core";
+import type { GitDiffEnd, GitProvider } from "@duo-director/analyzer";
 import { inspectIndex, readIndexState, type GraphReader, type IndexedGraph } from "@duo-director/graph";
 import { compileContext } from "../context/compile.js";
 import { SourceReader } from "../context/retrieve.js";
@@ -32,7 +35,7 @@ import {
 import { unlinkedAdditions } from "./scope.js";
 import { diffSeeds } from "./seeds.js";
 import { semanticAssist } from "./semantic.js";
-import type { Alignment, ReviewClaim, ReviewLimitation, ReviewPerformance, ReviewRequest, ReviewRequestIdentity, ReviewResult } from "./types.js";
+import type { Alignment, ChangedFile, ReviewClaim, ReviewLimitation, ReviewPerformance, ReviewRequest, ReviewRequestIdentity, ReviewResult } from "./types.js";
 
 export interface ReviewOptions {
   readonly graph: GraphReader & IndexedGraph;
@@ -64,6 +67,25 @@ const zeroMetrics = {
   changedFiles: 0, changedHunks: 0, diffSeeds: 0, claims: { ALIGNED: 0, PARTIAL: 0, CONFLICT: 0, UNKNOWN: 0 },
   evidence: { "project-truth": 0, repository: 0, git: 0, test: 0, llm: 0 }, contextTokens: 0, taskContextTokens: 0, semanticCandidates: 0, llmCalls: 0, llmCacheHits: 0,
 };
+
+/** Marks untracked or changed .duo-project files whose content on the reviewed side equals the baseline's bootstrapTruth. */
+async function classifyBootstrap(root: string, git: GitProvider, to: GitDiffEnd, files: readonly ChangedFile[], bootstrap: readonly { readonly path: string; readonly contentHash: string }[]): Promise<ChangedFile[]> {
+  const expected = new Map(bootstrap.map((b) => [b.path, b.contentHash] as const));
+  const out: ChangedFile[] = [];
+  for (const f of files) {
+    const hash = expected.get(f.path);
+    let text: string | undefined;
+    if (hash !== undefined && f.kind !== "deleted" && f.path.startsWith(`${STATE_DIR_NAME}/`)) {
+      if (to === "WORKTREE") text = readSourceFile(root, f.path).value;
+      else {
+        const blob = await git.readBlob(to === "INDEX" || to === "HEAD" ? to : { commit: to.commit }, f.path);
+        text = blob.value === undefined ? undefined : canonicalSourceText(new TextDecoder("utf-8").decode(blob.value));
+      }
+    }
+    out.push(text !== undefined && sha256Text(canonicalSourceText(text)) === hash ? { ...f, provenance: "adoption-bootstrap" } : f);
+  }
+  return out;
+}
 
 const endLabel = (end: GitDiffEnd) => (typeof end === "string" ? end : `commit:${end.commit}`);
 
@@ -109,7 +131,10 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   const diff = await collectDiff(git.value, root, request.diff, store);
   diagnostics.push(...diff.diagnostics);
   if (diff.value === undefined) return { diagnostics: canonicalDiagnostics(diagnostics) };
-  const seeds = diffSeeds(diff.value.files, options.graph, truth);
+  // T15.1: Truth files still exactly as init wrote them (Adoption Baseline bootstrapTruth) are classified, not reviewed.
+  const allFiles = await classifyBootstrap(root, git.value, request.diff.to, diff.value.files, adoption.baseline?.bootstrapTruth ?? []);
+  const files = allFiles.filter((f) => f.provenance === undefined);
+  const seeds = diffSeeds(files, options.graph, truth);
   time.diffMs = performance.now() - t;
 
   // 4. Review context (explicit diff seeds) and, with a task, the task-only context for scope drift.
@@ -138,7 +163,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   // 6. Deterministic rules.
   t = performance.now();
   const ctx: RuleContext = {
-    root, truth, graph: options.graph, git: git.value, files: diff.value.files, seeds, store, reader: new SourceReader(root), identity: diff.value.identity,
+    root, truth, graph: options.graph, git: git.value, files, seeds, store, reader: new SourceReader(root), identity: diff.value.identity,
     from: request.diff.from, to: request.diff.to, fromLabel: diff.value.from, toLabel: diff.value.to, task,
     ...(reviewPacket === undefined ? {} : { reviewPacket }),
     ...(taskContext?.status === "ready" && taskContext.packet !== undefined ? { taskScope: packetScopeIds(taskContext.packet) } : {}),
@@ -171,7 +196,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   const count = <K extends string>(keys: readonly K[], values: readonly K[]) => Object.fromEntries(keys.map((k) => [k, values.filter((v) => v === k).length])) as Record<K, number>;
   const result: ReviewResult = {
     format: "duo.review/1", status: "ready", request: requestIdentity, baseline, freshness,
-    diff: { identity: diff.value.identity, from: diff.value.from, to: diff.value.to, files: diff.value.files },
+    diff: { identity: diff.value.identity, from: diff.value.from, to: diff.value.to, files: allFiles },
     seeds, verdict: verdict.verdict, verdictBasis: verdict.basis, claims, evidence,
     ...(gaps === undefined ? {} : { gaps }),
     context: {
@@ -180,7 +205,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
       ...(taskContext?.packet === undefined ? {} : { task: taskContext.packet.dependencyDigest }),
     },
     limitations: [
-      ...limitationsOf({ identity: diff.value.identity, from: diff.value.from, to: diff.value.to, files: diff.value.files }, reviewPacket, task !== "", taskContext?.status === "ready"),
+      ...limitationsOf({ identity: diff.value.identity, from: diff.value.from, to: diff.value.to, files }, reviewPacket, task !== "", taskContext?.status === "ready"),
       ...drift.limitations,
       ...(adoption.status === "incompatible" ? [{ code: "adoption-baseline-unusable", message: "The Adoption Baseline cannot be used (" + (adoption.reason ?? "unreadable") + "); violations are not told apart from pre-existing ones." }] : []),
     ],

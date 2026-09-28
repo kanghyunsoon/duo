@@ -1,16 +1,16 @@
 /**
- * duoctl review (T15). Default diff HEAD → WORKTREE; --staged is HEAD → INDEX; --from/--to name any
- * endpoints the Git provider accepts. Read-only: a stale index is shown as index-required (--refresh
- * indexes first), and only --record writes, through recordReview(). A verdict is not a process error:
- * the exit code follows the verdict only with --fail-on (or --strict = --fail-on warn).
+ * duoctl review (T15): the shared review operation. Default diff HEAD → WORKTREE; --staged is
+ * HEAD → INDEX; --from/--to name any endpoints the Git provider accepts. Read-only: a stale index is
+ * index-required (--refresh indexes first); only --record writes, through recordReview(). A verdict
+ * is not a process error: the exit code follows it only with --fail-on (or --strict).
  */
-import type { GitDiffEnd } from "@duo-director/analyzer";
-import { recordReview, renderGapQuestions, reviewChanges, type ReviewResult, type Verdict } from "@duo-director/director";
+import { recordReview, renderGapQuestions, type ReviewResult, type Verdict } from "@duo-director/director";
 import { normalizeRepoPath, type RepoPath } from "@duo-director/core";
 import { indexRepository } from "@duo-director/graph";
+import { diffEnd, projectReview, withGraphWriter } from "@duo-director/integration";
 import { t } from "../messages.js";
 import { EXIT, failed, type Outcome } from "../output.js";
-import { diagLines, humanActor, requireProject, usage, withReader, withRegistry, withWriter, type Env } from "./shared.js";
+import { diagLines, humanActor, operationFailure, requireProject, usage, withRegistry, type Env } from "./shared.js";
 
 export interface ReviewOptions {
   readonly staged: boolean;
@@ -27,11 +27,6 @@ export interface ReviewOptions {
 const SEVERITY: Readonly<Record<Verdict, number>> = { PASS: 0, WARN: 1, ASK: 2, BLOCK: 3 };
 const VERDICT_EXIT: Readonly<Record<Verdict, number>> = { PASS: EXIT.OK, WARN: EXIT.WARN, ASK: EXIT.ASK, BLOCK: EXIT.BLOCK };
 
-function endpoint(value: string): GitDiffEnd {
-  const upper = value.toUpperCase();
-  return upper === "HEAD" || upper === "INDEX" || upper === "WORKTREE" ? (upper as GitDiffEnd) : { commit: value };
-}
-
 function renderReview(env: Env, r: ReviewResult): string[] {
   const L = env.locale;
   if (r.status === "index-required") return [t(L, "index.required", { status: r.freshness.status })];
@@ -47,6 +42,8 @@ function renderReview(env: Env, r: ReviewResult): string[] {
   }
   const aligned = r.claims.length - shown.length;
   if (aligned > 0) out.push(t(L, "review.aligned", { n: aligned }));
+  const bootstrap = r.diff?.files.filter((f) => f.provenance === "adoption-bootstrap").length ?? 0;
+  if (bootstrap > 0) out.push(t(L, "review.bootstrap", { n: bootstrap }));
   if (r.gaps !== undefined) {
     const q = renderGapQuestions(r.gaps, { locale: L });
     if (q.primaryQuestion !== undefined || q.notes.length > 0) {
@@ -65,8 +62,8 @@ export async function reviewCommand(env: Env, options: ReviewOptions): Promise<O
   const project = requireProject(env, "review");
   if (project.value === undefined) return project.outcome as Outcome;
   if (options.staged && (options.from !== undefined || options.to !== undefined)) return usage("review", "--staged cannot be combined with --from/--to");
-  const from = options.from === undefined ? "HEAD" as const : endpoint(options.from);
-  const to = options.staged ? "INDEX" as const : options.to === undefined ? "WORKTREE" as const : endpoint(options.to);
+  const from = options.from === undefined ? "HEAD" as const : diffEnd(options.from);
+  const to = options.staged ? "INDEX" as const : options.to === undefined ? "WORKTREE" as const : diffEnd(options.to);
   let files: RepoPath[] | undefined;
   if (options.files !== undefined) {
     files = [];
@@ -78,32 +75,30 @@ export async function reviewCommand(env: Env, options: ReviewOptions): Promise<O
   }
   return withRegistry(async (registry) => {
     if (options.refresh) {
-      const r = await withWriter(env.root, (store) => indexRepository(env.root, { store, registry }));
+      const r = await withGraphWriter(env.root, (store) => indexRepository(env.root, { store, registry }));
       if (r.value === undefined) return failed("review", EXIT.ERROR, r.diagnostics, diagLines(r.diagnostics), null, { status: "failed" });
     }
-    const request = {
+    const op = await projectReview(env.root, {
       diff: { from, to, ...(files === undefined ? {} : { files }) },
       ...(options.task === undefined ? {} : { task: options.task }), ...(options.budget === undefined ? {} : { budget: options.budget }),
-    };
-    const reviewed = await withReader(env.root, (graph) => reviewChanges(env.root, request, { graph, registry }));
-    if (reviewed.value === undefined) return failed("review", EXIT.ERROR, reviewed.diagnostics, diagLines(reviewed.diagnostics), null, { status: "failed" });
-    const r = reviewed.value.result;
+    }, { registry });
+    if (op.kind !== "ok") return operationFailure(env, "review", op);
+    const r = op.payload;
     const metric = { status: r.status, ...(r.verdict === undefined ? {} : { reviewVerdict: r.verdict }), reviewClaims: r.claims.length, llmCalls: r.metrics.llmCalls };
     if (r.status === "index-required") {
-      return { command: "review", exitCode: EXIT.ACTION_REQUIRED, result: { review: r, performance: reviewed.value.performance }, diagnostics: [], human: renderReview(env, r), metric };
+      return { command: "review", exitCode: EXIT.ACTION_REQUIRED, result: r, meta: { performance: op.performance }, diagnostics: [], human: renderReview(env, r), metric };
     }
     const human = renderReview(env, r);
     let record: unknown = undefined;
-    const diagnostics = [...r.diagnostics.filter((d) => d.severity === "error")];
     if (options.record) {
       const rec = await recordReview(r, { root: env.root, actor: await humanActor(env.root), clock: () => env.io.now() });
-      if (rec.value === undefined) return failed("review", EXIT.ERROR, rec.diagnostics, [...human, ...diagLines(rec.diagnostics)], { review: r, performance: reviewed.value.performance }, metric);
+      if (rec.value === undefined) return failed("review", EXIT.ERROR, rec.diagnostics, [...human, ...diagLines(rec.diagnostics)], r, metric);
       record = rec.value;
       human.push(t(env.locale, "review.recorded", { path: rec.value.path, status: rec.value.status }));
     }
     const verdict = r.verdict ?? "PASS";
     const threshold = options.failOn === undefined ? undefined : SEVERITY[options.failOn === "block" ? "BLOCK" : options.failOn === "ask" ? "ASK" : "WARN"];
     const exitCode = threshold !== undefined && SEVERITY[verdict] >= threshold ? VERDICT_EXIT[verdict] : EXIT.OK;
-    return { command: "review", exitCode, result: { review: r, performance: reviewed.value.performance, ...(record === undefined ? {} : { record }) }, diagnostics, human, metric };
+    return { command: "review", exitCode, result: r, meta: { performance: op.performance, ...(record === undefined ? {} : { record }) }, diagnostics: op.diagnostics, human, metric };
   });
 }
