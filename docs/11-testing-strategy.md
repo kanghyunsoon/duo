@@ -42,7 +42,7 @@
 ## E2E 시나리오 (v0.1 인수 기준, TASK-020)
 
 1. fixture 이력 재현 → `duoctl init --non-interactive` → .duo-project와 graph.db 생성, ASK 목록 출력, llm_calls 0
-2. `duoctl install codex`, `duoctl install claude`(임시 설정 경로)
+2. `duoctl install codex`, `duoctl install claude-code`(임시 저장소, PATH의 duoctl shim, `tests/install/`)
 3. MCP client로 `duo_get_context("GAME-42 refresh token")` → AUTH-03, D-004, CON-001, AuthService.refresh 포함, budget 준수, llm_calls 0
 4. OAuth 변경 세트 적용 → `duo_review_changes` → CON-001 enforcement에 맞는 Verdict, Evidence에 CON-001과 새 파일
 5. `duo_propose_decision` → UI API로 Confirm(token 포함) → `.duo-project/decisions/D-###.yaml` 생성, lock 기록

@@ -20,11 +20,11 @@ Tool은 9개로 고정한다(H-10). 새 Tool이 필요하면 별도 Spec과 ADR�
 
 ## 서버
 
-- 실행: `duoctl mcp [--root <path>] [--agent <label>]`(stdio). Agent 설정이 이 명령을 실행한다. `--json`은 쓸 수 없다(stdout이 protocol).
+- 실행: `duoctl mcp [--root <path> | --root-from git-cwd|env:<NAME>] [--agent <label>]`(stdio). Agent 설정이 이 명령을 실행한다. `--json`은 쓸 수 없다(stdout이 protocol).
 - 서버 이름: `duo-director`(`MCP_SERVER_NAME`, H-20). 버전은 duoctl 버전이다. Tool 이름의 `duo_` 접두사는 서버 이름 아래에 있으므로 유지한다.
 - SDK: 공식 MCP TypeScript SDK v2. `@modelcontextprotocol/server@2.1.0`(integration, exact), 입력·출력 스키마는 `zod@4.6.5`(workspace 전체가 같은 한 벌). 테스트는 `@modelcontextprotocol/client@2.1.0`(root devDependency). v1 monolithic `@modelcontextprotocol/sdk`는 쓰지 않는다. SDK import는 `packages/integration/src/mcp/`에서만 허용한다(`boundaries.json` `mcpSdk`, lint).
 - 연결: `serveStdio(factory)`가 opening exchange로 protocol era를 고르고 연결마다 `McpServer` 인스턴스 하나를 고정한다. 2025-era `initialize`도 같은 factory로 받는다(`legacy: "serve"`, SDK 기본).
-- Root: 시작할 때 한 번 정한다. `--root`(없으면 cwd)가 **Git work tree의 top level**이어야 한다(`openGitProvider`: 저장소가 아니면 `GIT_REPOSITORY_REQUIRED`, 하위 디렉터리면 `SCAN_ROOT_INVALID`). 위로 올라가며 `.duo-project/`를 찾지 않는다. 서버 하나는 저장소 하나만 다룬다. 시작 실패는 stderr에 진단을 쓰고 종료 코드 1이며 stdout은 비어 있다.
+- Root: 시작할 때 한 번 정한다. `--root`(없으면 cwd), 또는 `--root-from git-cwd`(작업 디렉터리를 포함한 Git work tree의 top level), `--root-from env:<NAME>`(서버 환경 변수의 절대 경로, Claude Code의 `CLAUDE_PROJECT_DIR`). 결과는 **Git work tree의 top level**이어야 한다(`openGitProvider`: 저장소가 아니면 `GIT_REPOSITORY_REQUIRED`, 하위 디렉터리면 `SCAN_ROOT_INVALID`, `--root-from`을 풀 수 없으면 `MCP_ROOT_UNRESOLVED`). 위로 올라가며 `.duo-project/`를 찾지 않는다. 서버 하나는 저장소 하나만 다룬다. 시작 실패는 stderr에 진단을 쓰고 종료 코드 1이며 stdout은 비어 있다.
 - stdout에는 JSON-RPC 메시지만 쓴다. 진단과 metric 쓰기 경고는 stderr로 보낸다. CLI renderer는 호출하지 않는다.
 - 종료: client가 stdin을 닫거나 SIGINT/SIGTERM을 받으면 연결을 닫고 종료 코드 0으로 끝난다. 호출 사이에 열린 GraphStore, statement, transaction이 없으므로 따로 정리할 handle이 없다.
 - **Freshness**: Tool은 인덱싱하지 않는다(T00 초안의 "실행 전 증분 인덱싱"을 대체, C139). index가 current가 아니면 context와 review는 정상 결과 `status: "index-required"`를 돌려주고, Agent 또는 Human이 `duoctl index`를 명시적으로 실행한다. MCP에는 index 쓰기 Tool이 없다. freshness 판정은 매 호출 graph의 `inspectIndex()`이며 mtime 전용 판정, TTL cache, watcher는 없다(T19 측정 뒤 결정).
@@ -100,7 +100,7 @@ Tool은 9개로 고정한다(H-10). 새 Tool이 필요하면 별도 Spec과 ADR�
 | `.duo-project/project.yaml` 없음 | 정상 결과 `{ format: "duo.not-initialized/1", status: "not-initialized", message }` |
 | index-required, not-found, verdict BLOCK·ASK | 정상 DUO structured result |
 | operation 실패(Truth 파싱 오류, Graph를 열 수 없음, Decision 쓰기 거부) | tool error, text에 진단 코드 |
-| 예기치 않은 예외 | tool error(SDK가 예외를 tool 실패로 바꿈) |
+| 예기치 않은 예외 | 서버 callback이 잡아 해당 호출만 tool error(`MCP_INTERNAL_ERROR`, stderr에 `INTERNAL <tool>`)로 돌려준다. 서버는 계속 동작한다(T16.1) |
 
 DUO result format(`duo.status/1` 등)과 MCP protocol version은 별개다.
 
@@ -110,7 +110,7 @@ Tool 호출마다 `openProjectGraphReader`로 열고 끝나기 전에 닫는다(
 
 ## Cancellation
 
-MCP 요청 취소는 SDK의 `ctx.mcpReq.signal`(AbortSignal)로 들어와 shared operation의 `signal`로 넘어간다. context는 `compileContext`, review는 `reviewChanges`(와 LLM semantic assist)까지 전달한다. 취소된 요청은 응답하지 않는다.
+MCP 요청 취소(client의 `notifications/cancelled`)는 SDK의 `ctx.mcpReq.signal`(AbortSignal)로 들어와 shared operation의 `signal`로 넘어간다. context는 `compileContext`, review는 `reviewChanges`(와 LLM semantic assist)까지 전달한다. 취소된 요청은 응답하지 않고 서버는 다음 요청을 계속 받는다(T16.1 wire test).
 
 ## Metrics
 
@@ -120,19 +120,46 @@ context, review, propose 호출은 `runtime/metrics.jsonl`에 `duo.metric/1` 한
 
 CLI와 MCP는 같은 shared operation을 호출한다. `duoctl status|context|review|trace|impact --json`의 `result`와 같은 Tool의 `structuredContent`는 deep-equal이다(e2e 계약 테스트). 타이밍, Review Record 같은 surface metadata는 CLI envelope의 `meta`에 있고 비교하지 않는다.
 
-## Agent bridge 문구 (T17 installer용 계약)
+## Server instructions
 
-TASK-016은 AGENTS.md·CLAUDE.md를 쓰지 않는다. T17 installer가 넣을 최소 문구는 다음이다.
+초기화 응답의 `instructions`(`MCP_INSTRUCTIONS`)에는 서버 전체 원칙 다섯 문장만 둔다: DUO가 confirmed direction을 가짐, 구현 전 `duo_get_context`와 변경 후 `duo_review_changes`, Tool은 인덱싱하지 않으니 index-required면 `duoctl index`, pending proposal과 surfaced gap은 확정이 아님, Agent는 제안만 가능. Codex는 이 필드를 서버 전체 guidance로 읽는다(처음 512자가 자기완결). 작업 순서는 bridge(AGENTS.md·CLAUDE.md)에 두고 중복하지 않는다.
+
+## Agent integration (duoctl install)
+
+TASK-017. `duoctl install codex|claude-code`가 기존 CLI·MCP 기능을 Agent의 project 설정에 연결한다. Project Direction 로직은 없다.
 
 ```text
-DUO (duo-director MCP) holds this project's confirmed direction.
-Before substantial implementation: call duo_get_context with the task.
-If it returns index-required: run `duoctl index`, then call it again.
-Ask the human only when gaps.requiresHumanInput is true; surfaced gaps are not instructions.
-After changes: make sure the index is current, then call duo_review_changes.
-Never treat pending proposals as confirmed decisions. Use duo_propose_decision to propose; only a human confirms.
+inspectAgentIntegration → planAgentIntegration(쓰기 0) → IntegrationPlan → 확인(TTY 또는 --yes) → applyAgentIntegration → verifyAgentIntegration
 ```
 
-## 계약 테스트
+| | Codex | Claude Code |
+|---|---|---|
+| MCP 설정 | `.codex/config.toml`(project, trusted project에서만 로드) | `.mcp.json`(project, 저장소로 공유) |
+| 기록 방식 | 파일 끝에 DUO 관리 블록(`# duo-director:begin` … `# duo-director:end`) 추가. 블록 밖 TOML과 주석은 byte 그대로(재직렬화 없음, smol-toml은 검증에만) | JSON을 읽어 `mcpServers["duo-director"]`만 설정하고 파일의 들여쓰기·줄바꿈으로 다시 쓴다 |
+| 항목 | `command = "duoctl"`, `args = ["mcp", "--root-from", "git-cwd", "--agent", "codex"]`, cwd 없음 | `{"type": "stdio", "command": "duoctl", "args": ["mcp", "--root-from", "env:CLAUDE_PROJECT_DIR", "--agent", "claude-code"]}` |
+| Root | Codex는 project stdio 서버를 세션 작업 디렉터리에서 띄우고 상대 `cwd`도 그 기준으로 푼다(codex-cli 0.147.0에서 확인). 그래서 duoctl이 세션 위치의 Git top level을 쓴다 | Claude Code가 서버 환경에 넣는 `CLAUDE_PROJECT_DIR`(공식)을 duoctl이 읽는다. `${...}` 확장은 쓰지 않는다 |
+| Bridge | `AGENTS.md` | `CLAUDE.md` |
+| 사람 확인 | `requiresProjectTrust`: Codex에서 project를 trust해야 한다(DUO는 trust를 바꾸지 않음) | `approvalRequired`: Claude Code가 project 서버 승인을 묻는다(`claude mcp get`의 Pending approval, DUO는 승인하지 않음) |
 
+- `duoctl mcp --root-from git-cwd | env:<NAME>`: 이 두 형식만 받는다. 결과는 다시 Git top level로 검증한다(`MCP_ROOT_UNRESOLVED`, `SCAN_ROOT_INVALID`). `--root`와 함께 쓸 수 없다. 설정에 절대 경로가 없으므로 clone·이동 뒤에도 같은 설정이 새 위치의 저장소를 연다.
+- Launcher(`DuoLauncher { kind, command, argsPrefix }`): 기본 `path` = PATH의 `duoctl`(설치된 실행 파일), `--launcher npx` = `npx --no-install duoctl`(project의 `node_modules/.bin/duoctl`). 설정에 개발자의 소스 경로를 쓰지 않는다. 설치 시 Agent가 찾을 수 있는지 확인하고 못 찾으면 `AGENT_LAUNCHER_UNAVAILABLE`로 막는다. 상대 경로 command는 거부, 절대 경로는 API로만 가능하며 이식성 경고를 낸다. 저장소 root에 `duoctl`, `duoctl.cmd` 같은 파일이 있으면(Windows의 process 검색이 작업 디렉터리를 볼 수 있음) conflict다. Windows에서 Codex가 `duoctl.cmd` shim을 `command = "duoctl"`로 실행하는 것을 확인했다.
+- 기존 항목: not-configured(추가), already-configured(unchanged), drifted(DUO 블록이 다름: 갱신), compatible-different-format(다른 모양의 DUO launch: JSON은 확인 후 교체, TOML 블록 밖이면 사람이 지우도록 conflict), conflict(같은 이름의 다른 command, 읽을 수 없는 파일, 깨진 marker, symlink). conflict는 `--yes`로도 덮어쓰지 않는다.
+- Bridge: `<!-- duo-director:begin -->` … `<!-- duo-director:end -->` 블록. 없으면 한 줄 띄우고 추가, 있으면 블록만 갱신, marker가 깨졌으면 conflict. 블록 밖 사람 글은 바꾸지 않는다. 내용(10줄 이하, 저장소 정보 없음):
+
+```markdown
+<!-- duo-director:begin -->
+## DUO (project direction, duo-director MCP server)
+- Before substantial work: call duo_get_status; if the index is stale, run `duoctl index`; then call duo_get_context for the task.
+- Pending proposals are not confirmed project decisions.
+- After meaningful code changes: run `duoctl index`, then call duo_review_changes.
+- If the review returns ASK, show the human its question. Never bypass BLOCK by editing Project Truth (.duo-project/).
+- To change a decision, call duo_propose_decision. You cannot confirm or reject decisions; a human does.
+<!-- duo-director:end -->
+```
+
+- Plan: agent, repositoryRoot, launcher, mcp(status, target, current?, planned, action), bridge(target, status, plannedBlock, action), requirements(duoctlAvailable, projectTrustRequired, approvalRequired), willCreate, willModify, willDelete, unchanged, conflicts, warnings, blockers, files(파일 hash). apply는 hash가 바뀌었으면 `AGENT_PLAN_STALE`, 수정 전 원본을 `.duo-project/runtime/backup/agent-<agent>-<time>/`에 두고, 두 번째 파일 쓰기가 실패하면 앞의 파일을 되돌린다.
+- Verify: 설정 parse, 계획한 항목, bridge 블록, launcher 접근, 그리고 설정의 command·args를 Agent와 같은 방식(Codex: 세션 cwd, Claude: `CLAUDE_PROJECT_DIR`)으로 직접 spawn해 initialize → tools/list(9개) → `duo_get_status`. index가 current가 아니면 `nextActions`에 `duoctl index`(install 자체는 실패하지 않음).
+- Remove: `duoctl install remove <agent>`는 DUO 항목과 DUO 블록만 지운다. DUO 내용만 남은 파일은 삭제하고 빈 `.codex/`도 지운다. `.duo-project`, 사람 글, 다른 MCP 서버는 그대로다. Truth Layer 제거 기능은 없다.
+- init 전이면 `AGENT_NOT_INITIALIZED`(종료 코드 5)이며 아무것도 쓰지 않는다. install은 init·index·git add·commit을 하지 않는다. Agent 설정 파일 네 개는 Project Graph 스캔에서 빠진다(duo-agent-integration).
+ `tests/mcp/isolation.e2e.test.ts`(T16.1): 테스트 주입(`toolOverrides`, Tool 목록 불변)으로 client 취소 → server AbortSignal → 요청 종료 → 같은 연결의 `duo_get_status` 성공, operation 예외 → 해당 호출만 tool error → 바로 다음 status 성공, raw stdout의 모든 줄이 JSON-RPC frame. `tests/install/install.e2e.test.ts`(T17): 생성된 설정의 command로 실제 DUO stdio 서버를 띄운다.
 `tests/mcp/mcp.e2e.test.ts`: 빌드된 `duoctl mcp`를 stdio subprocess로 띄우고 공식 client로 호출한다. initialize, tools/list(정확히 9개, confirm·reject·record·index Tool 없음, strict 스키마, description 문구), 모든 Tool 호출, 인자 오류, root 검증, stdin 종료, existing-project 흐름(stale → index-required → CLI index → 같은 프로세스에서 ready), WAL checkpoint, propose-only, metrics, dirty baseline provenance의 CLI parity. CI 3 OS에서 실행한다.

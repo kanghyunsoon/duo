@@ -17,6 +17,7 @@ import { decisionCommand } from "./commands/decision.js";
 import { graphCommand } from "./commands/graph.js";
 import { indexCommand } from "./commands/index-command.js";
 import { initCommand } from "./commands/init.js";
+import { installCommand } from "./commands/install.js";
 import { mcpCommand } from "./commands/mcp.js";
 import { reviewCommand } from "./commands/review.js";
 import { CliFailure, usage, type Env } from "./commands/shared.js";
@@ -30,9 +31,9 @@ import { VERSION } from "./version.js";
 export type { Io } from "./io.js";
 
 export const COMMANDS = ["init", "status", "index", "context", "review", "trace", "impact", "decision", "stats", "ui", "install", "mcp"] as const;
-const LATER: Readonly<Record<string, string>> = { ui: "TASK-018", install: "TASK-017" };
+const LATER: Readonly<Record<string, string>> = { ui: "TASK-018" };
 /** Commands that append runtime/metrics.jsonl. Read-only commands (status, trace, impact, stats) write nothing. */
-const METERED = new Set(["init", "index", "context", "review", "decision"]);
+const METERED = new Set(["init", "index", "context", "review", "decision", "install"]);
 
 const WORKSPACE: readonly PackageInfo[] = [core, analyzer, graph, director, integration];
 
@@ -54,7 +55,8 @@ const COMMAND_OPTIONS: Readonly<Record<string, Options>> = {
   impact: { depth: { type: "string" } },
   decision: { reason: { type: "string" } },
   stats: { last: { type: "string" } },
-  mcp: { agent: { type: "string" } },
+  mcp: { agent: { type: "string" }, "root-from": { type: "string" } },
+  install: { yes: { type: "boolean", short: "y" }, launcher: { type: "string" } },
 };
 
 const HELP = [
@@ -72,7 +74,8 @@ const HELP = [
   "  impact      Graph-recorded impact of a node (--depth 1-3)",
   "  decision    list | confirm <id> | reject <id> (terminal only)",
   "  stats       runtime metrics summary (--last n)",
-  "  mcp         serve the duo-director MCP server over stdio for this repository (--agent <label>)",
+  "  mcp         serve the duo-director MCP server over stdio (--root <path> | --root-from git-cwd|env:<NAME>, --agent <label>)",
+  "  install     connect an agent: install codex|claude-code [--launcher path|npx] [--yes] · install status [agent] · install remove <agent>",
   "",
   "Options: --root <path>  --json  --locale en|ko  --non-interactive  --verbose  --version  --help",
   "init: --yes (operational confirmations only; never Truth or the adoption policy)  --answers -  --baseline-policy head|abort  --repair",
@@ -124,10 +127,14 @@ async function dispatch(env: Env, command: string, positionals: readonly string[
       return graphCommand(env, command, arg, str(v.depth));
     case "decision": return decisionCommand(env, arg, positionals[2], str(v.reason));
     case "stats": return statsCommand(env, str(v.last));
+    case "install": return installCommand(env, arg, positionals[2], { ...(str(v.launcher) === undefined ? {} : { launcher: str(v.launcher) as string }) });
     case "mcp":
       // stdout is the MCP protocol: no JSON envelope, no human output on stdout.
       if (env.json) return usage("mcp", "mcp speaks the MCP protocol on stdout; --json does not apply");
-      return mcpCommand(env, str(v.agent));
+      {
+        const root = str(v.root); const rootFrom = str(v["root-from"]); const agent = str(v.agent);
+        return mcpCommand(env, { ...(root === undefined ? {} : { root }), ...(rootFrom === undefined ? {} : { rootFrom }), ...(agent === undefined ? {} : { agent }) });
+      }
     default: return failed(command, EXIT.ERROR, [], [t(env.locale, "not-implemented", { command, task: LATER[command] ?? "" })]);
   }
 }

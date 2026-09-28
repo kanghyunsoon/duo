@@ -30,6 +30,8 @@ export interface RuntimeMetric {
   readonly reviewVerdict?: string;
   readonly reviewClaims?: number;
   readonly llmCalls?: number;
+  /** duoctl install (T17): which agent; no paths or configuration contents. */
+  readonly agent?: string;
 }
 
 /** Appends one metric. "skipped" when the repository is not initialized; a boundary violation is an error. */

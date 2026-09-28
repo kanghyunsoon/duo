@@ -2,7 +2,7 @@
  * Which repository entries the scanner indexes (TASK-004, docs/10-security.md). Pure functions over
  * RepoPaths; case-sensitive except for the secret patterns, which err on the side of exclusion.
  */
-import { compileRepoPattern, STATE_DIR_NAME, WRITE_AREAS, type RepoPath } from "@duo-director/core";
+import { AGENT_INTEGRATION_FILES, compileRepoPattern, STATE_DIR_NAME, WRITE_AREAS, type RepoPath } from "@duo-director/core";
 import type { ExclusionReason } from "./types.js";
 
 /** File name patterns that are never indexed, even when tracked (docs/10-security.md). Matched case-insensitively. */
@@ -36,7 +36,7 @@ export interface PathPolicy {
   readonly invalidPatterns: readonly string[];
 }
 
-/** Precedence: git-internal, duo-regenerable, duo-history, secret, index-exclude, not-included. */
+/** Precedence: git-internal, duo-regenerable, duo-history, duo-agent-integration, secret, index-exclude, not-included. */
 export function createPathPolicy(include: readonly string[] = [], exclude: readonly string[] = []): PathPolicy {
   const includeMatchers = compileAll(include);
   const excludeMatchers = compileAll(exclude);
@@ -47,6 +47,7 @@ export function createPathPolicy(include: readonly string[] = [], exclude: reado
       if (path.split("/").some((segment) => segment.toLowerCase() === ".git")) return "git-internal";
       if (DUO_REGENERABLE_PREFIXES.some((prefix) => path.startsWith(prefix))) return "duo-regenerable";
       if (DUO_HISTORY_PREFIXES.some((prefix) => path.startsWith(prefix))) return "duo-history";
+      if (AGENT_INTEGRATION_FILES.includes(path)) return "duo-agent-integration";
       if (isSecretFileName(path)) return "secret";
       if (excludeMatchers.some((m) => m(path))) return "index-exclude";
       if (include.length > 0 && !includeMatchers.some((m) => m(path))) return "not-included";

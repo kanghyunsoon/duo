@@ -163,7 +163,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-014](#task-014-init-파이프라인) | init 파이프라인 | director | M2 | TASK-008, TASK-011 | done |
 | [TASK-015](#task-015-cli) | CLI | apps/cli | M3 | TASK-009, TASK-010, TASK-013, TASK-014 | done |
 | [TASK-016](#task-016-mcp-서버) | MCP 서버 | integration | M3 | TASK-010, TASK-013 | done |
-| [TASK-017](#task-017-agent-adapter와-duoctl-install) | Agent Adapter와 duoctl install | integration | M3 | TASK-015, TASK-016 | todo |
+| [TASK-017](#task-017-agent-adapter와-duoctl-install) | Agent Adapter와 duoctl install | integration | M3 | TASK-015, TASK-016 | done |
 | [TASK-018](#task-018-local-http-api와-web-ui) | Local HTTP API와 Web UI | ui | M3 | TASK-009, TASK-013, TASK-015 | todo |
 | [TASK-019](#task-019-benchmark) | Benchmark | bench | M4 | TASK-010, TASK-013 | todo |
 | [TASK-020](#task-020-e2e와-문서-구현-대조) | E2E와 문서-구현 대조 | 공통 | M4 | TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-012B | todo |
@@ -686,7 +686,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M3
 package: integration
 requirements: [REQ-AGENT-001]
@@ -696,10 +696,10 @@ depends_on: [TASK-015, TASK-016]
 
 - **Goal**: Codex와 Claude Code 연동을 설치한다.
 - **Input**: ADR-011
-- **Output**: AgentAdapter(codex, claude), dry-run, 백업, uninstall
+- **Output**: AgentIntegrationAdapter(codex, claude-code), inspect → plan(쓰기 0) → apply → verify, remove, `duoctl install <agent>|status|remove`, launcher(`DuoLauncher`: PATH duoctl, npx), `duoctl mcp --root-from git-cwd|env:<NAME>`, bridge 관리 블록, 백업, core writeKind `agent-integration`, scan 제외 duo-agent-integration, MCP server instructions, T16.1 cancellation·예외 격리 wire test
 - **Dependencies**: [TASK-015](#task-015-cli), [TASK-016](#task-016-mcp-서버)
-- **Files expected to change**: `packages/integration/src/agents/**`
-- **Status**: todo
+- **Files expected to change**: `packages/integration/src/{agents,mcp}/**`, `apps/cli/src/commands/{install,mcp}.ts`, `packages/core/src/write-boundary.ts`, `packages/analyzer/src/scan/policy.ts`, `tests/{install,mcp}/**`
+- **Status**: done (T16.1, T17)
 - **검증 대상 Requirement**: [REQ-AGENT-001](../01-requirements.md#req-agent-001-duoctl-install-codexclaude)
 - **관련 ADR**: [ADR-011](../adr/ADR-011-agent-integration.md)
 

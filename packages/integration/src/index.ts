@@ -15,3 +15,4 @@ export const packageInfo: PackageInfo = {
 
 export * from "./operations/index.js";
 export * from "./mcp/index.js";
+export * from "./agents/index.js";

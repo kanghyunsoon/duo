@@ -13,3 +13,15 @@ export async function readGitUserName(root: string): Promise<string | undefined>
   const name = r.value.trim();
   return name === "" ? undefined : name;
 }
+
+/**
+ * The top level of the Git work tree that contains dir (T17: duoctl mcp --root-from git-cwd), or
+ * undefined when dir is not inside a work tree. Read-only; the caller still validates the result as a
+ * repository root.
+ */
+export async function findGitTopLevel(dir: string): Promise<string | undefined> {
+  const r = await runGit(path.resolve(dir), ["rev-parse", "--show-toplevel"]);
+  if (!r.ok) return undefined;
+  const top = r.value.replace(/\r?\n$/u, "");
+  return top === "" ? undefined : path.resolve(top);
+}

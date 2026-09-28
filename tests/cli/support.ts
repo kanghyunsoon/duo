@@ -74,10 +74,10 @@ export interface CliRun {
   json(): { format: string; ok: boolean; exitCode: number; result: any; meta?: any; diagnostics: { code: string }[] };
 }
 
-/** Runs the built duoctl in root (no terminal: stdin is a pipe). */
-export function duoctl(root: string, args: readonly string[], input?: string): CliRun {
+/** Runs the built duoctl in root (no terminal: stdin is a pipe). env replaces the inherited environment. */
+export function duoctl(root: string, args: readonly string[], input?: string, env?: NodeJS.ProcessEnv): CliRun {
   if (!fs.existsSync(CLI_MAIN)) throw new Error("apps/cli/dist/main.js is missing: run pnpm build before the CLI end-to-end tests");
-  const r = spawnSync(process.execPath, [CLI_MAIN, ...args], { cwd: root, input: input ?? "", encoding: "utf8", windowsHide: true, env: { ...process.env, DUO_LOCALE: "" } });
+  const r = spawnSync(process.execPath, [CLI_MAIN, ...args], { cwd: root, input: input ?? "", encoding: "utf8", windowsHide: true, env: { ...(env ?? process.env), DUO_LOCALE: "" } });
   return {
     code: r.status ?? -1, stdout: r.stdout, stderr: r.stderr,
     json: () => JSON.parse(r.stdout) as ReturnType<CliRun["json"]>,

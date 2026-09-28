@@ -31,6 +31,8 @@ export type ExclusionReason =
   | "duo-regenerable"
   /** .duo-project/reviews: Human-approved Review Records (tracked history, not project content; T13.1). */
   | "duo-history"
+  /** .codex/config.toml, .mcp.json, AGENTS.md, CLAUDE.md: agent integration files duoctl install manages (T17). Installing must not make the index stale. */
+  | "duo-agent-integration"
   /** Matches SECRET_FILE_PATTERNS (docs/10-security.md). Checked before include/exclude. */
   | "secret"
   /** Matches project.yaml index.exclude. */

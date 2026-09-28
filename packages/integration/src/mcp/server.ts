@@ -10,7 +10,23 @@ import { appendRuntimeMetric } from "@duo-director/director";
 import { McpServer, type CallToolResult, type ServerContext } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { NOT_INITIALIZED_FORMAT } from "../operations/common.js";
-import { INPUT, OUTPUT, TOOLS, type ToolContext, type ToolName } from "./tools.js";
+import { INPUT, OUTPUT, TOOLS, type ToolContext, type ToolName, type ToolRun } from "./tools.js";
+
+/**
+ * Server-wide guidance returned at initialization (MCP instructions). A few principles only; the
+ * workflow lives in the Agent bridge (AGENTS.md / CLAUDE.md, TASK-017). The first 512 characters are
+ * self-contained.
+ */
+export const MCP_INSTRUCTIONS = [
+  "DUO holds this repository's confirmed project direction (Project Truth).",
+  "Call duo_get_context before substantial implementation and duo_review_changes after changes.",
+  "Tools never index: on index-required, run `duoctl index` and call again.",
+  "Pending proposals and surfaced gaps are not confirmed decisions or instructions.",
+  "Agents can only propose decisions (duo_propose_decision); a human confirms or rejects.",
+].join(" ");
+
+/** Replaces a tool's operation (test injection only: cancellation and failure isolation tests). */
+export type ToolOverride = (args: unknown, ctx: ToolContext) => Promise<ToolRun>;
 
 export interface DuoMcpOptions {
   /** Canonical repository root (the top level of its Git work tree). */
@@ -20,12 +36,14 @@ export interface DuoMcpOptions {
   readonly version: string;
   /** Where diagnostics go (default stderr). Never stdout. */
   readonly log?: (line: string) => void;
+  /** Test injection: replaces the operation behind a tool. The tool list and schemas stay the same. */
+  readonly toolOverrides?: Partial<Record<ToolName, ToolOverride>>;
 }
 
 const METERED = new Set<ToolName>(["duo_get_context", "duo_review_changes", "duo_propose_decision"]);
 
 export function createDuoMcpServer(options: DuoMcpOptions): McpServer {
-  const server = new McpServer({ name: MCP_SERVER_NAME, version: options.version }, { capabilities: { tools: {} } });
+  const server = new McpServer({ name: MCP_SERVER_NAME, version: options.version }, { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS });
   const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`));
   for (const name of Object.keys(TOOLS) as ToolName[]) {
     const tool = TOOLS[name];
@@ -40,7 +58,16 @@ export function createDuoMcpServer(options: DuoMcpOptions): McpServer {
     }, async (args: unknown, ctx: ServerContext): Promise<CallToolResult> => {
       const started = Date.now();
       const toolCtx: ToolContext = { root: options.root, agentName: options.agentName ?? "agent", signal: ctx.mcpReq.signal };
-      const run = await (tool.run as (a: unknown, c: ToolContext) => ReturnType<typeof tool.run>)(args, toolCtx);
+      const operation = options.toolOverrides?.[name] ?? (tool.run as ToolOverride);
+      let run: ToolRun;
+      try {
+        run = await operation(args, toolCtx);
+      } catch (error) {
+        // An unexpected exception fails this invocation only; the server keeps serving (T16.1).
+        const message = error instanceof Error ? error.message : String(error);
+        log(`${MCP_SERVER_NAME}: INTERNAL ${name}: ${message}`);
+        run = { op: { kind: "failed", diagnostics: [createDiagnostic("MCP_INTERNAL_ERROR", `${name} failed unexpectedly: ${message}`)] } };
+      }
       if (METERED.has(name)) {
         const written = await appendRuntimeMetric(options.root, {
           format: "duo.metric/1", surface: "mcp", command: name, status: String(run.metric?.status ?? run.op.kind), exitCode: run.op.kind === "failed" ? 1 : 0,

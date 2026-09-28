@@ -182,6 +182,22 @@ export const DIAGNOSTIC_SEVERITY = {
   CLI_TTY_REQUIRED: "error",
   /** CLI: runtime/metrics.jsonl could not be appended; the command result stands. */
   METRICS_WRITE_FAILED: "warning",
+  /** MCP (T16.1): a tool operation threw unexpectedly; this invocation fails, the server keeps serving. */
+  MCP_INTERNAL_ERROR: "error",
+  /** MCP (T17): the root given by --root-from cannot be resolved (no Git work tree, environment variable unset or not absolute). */
+  MCP_ROOT_UNRESOLVED: "error",
+  /** Agent integration (T17): the project is not initialized; nothing is configured. */
+  AGENT_NOT_INITIALIZED: "error",
+  /** Agent integration: the DUO launcher cannot be found where the agent would spawn it (PATH, project-local bin). */
+  AGENT_LAUNCHER_UNAVAILABLE: "error",
+  /** Agent integration: an existing configuration or bridge is in the way (name collision, malformed file or markers, symlink, shadowing file); never overwritten. */
+  AGENT_INTEGRATION_CONFLICT: "error",
+  /** Agent integration: the files changed after the plan was made; plan again. */
+  AGENT_PLAN_STALE: "error",
+  /** Agent integration: verification after apply found the configuration, bridge or launch not as planned. */
+  AGENT_VERIFY_FAILED: "error",
+  /** Agent integration: a warning in the plan (a non-portable launcher, a project needing trust or approval). */
+  AGENT_INTEGRATION_WARNING: "warning",
 } as const satisfies Record<string, DiagnosticSeverity>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_SEVERITY;
@@ -230,6 +246,8 @@ export const DIAGNOSTIC_PERSISTENCE = {
   INIT_ANSWER_INVALID: T, INIT_VALIDATION_FAILED: T, INIT_APPLY_FAILED: T,
   ADOPTION_FORBIDDEN: T, ADOPTION_INDEX_REQUIRED: T, ADOPTION_HEAD_REQUIRED: T, ADOPTION_DIRTY_POLICY_REQUIRED: T, ADOPTION_BASELINE_EXISTS: T,
   CLI_USAGE_INVALID: T, CLI_TTY_REQUIRED: T, METRICS_WRITE_FAILED: T,
+  MCP_INTERNAL_ERROR: T, MCP_ROOT_UNRESOLVED: T,
+  AGENT_NOT_INITIALIZED: T, AGENT_LAUNCHER_UNAVAILABLE: T, AGENT_INTEGRATION_CONFLICT: T, AGENT_PLAN_STALE: T, AGENT_VERIFY_FAILED: T, AGENT_INTEGRATION_WARNING: T,
 } as const satisfies Record<DiagnosticCode, DiagnosticPersistence>;
 
 export function isPersistentDiagnostic(diagnostic: Diagnostic): boolean {

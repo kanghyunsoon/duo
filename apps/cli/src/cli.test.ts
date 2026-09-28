@@ -39,7 +39,7 @@ describe("CLI entry (T15)", () => {
     expect((await capture([])).out[0]).toContain("Usage: " + CLI_NAME + " <command>");
     expect((await capture(["deploy"])).code).toBe(1);
     expect((await capture(["status", "--bogus"])).code).toBe(1);
-    for (const [command, task] of [["ui", "TASK-018"], ["install", "TASK-017"]] as const) {
+    for (const [command, task] of [["ui", "TASK-018"]] as const) {
       const r = await capture([command]);
       expect(r.code).toBe(1);
       expect(r.err[0]).toContain(task);

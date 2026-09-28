@@ -53,11 +53,12 @@ DUO가 어디에 쓸 수 있는지는 core의 순수 정책 함수 `checkWriteBo
 | `project-truth` | `project.yaml`, `.gitignore`(init, AC-014-05), `intent/`, `specs/`, `decisions/`, `milestones/`, `integrations/` |
 | `human-history` | `reviews/` |
 | `regenerable` | `generated/`, `cache/`, `runtime/` |
+| `agent-integration` | `.duo-project/` 밖의 정확히 네 파일(`AGENT_INTEGRATION_FILES`, T17): 저장소 root의 `.codex/config.toml`, `.mcp.json`, `AGENTS.md`, `CLAUDE.md`. `duoctl install`만 쓴다 |
 
 - Repository 밖 경로는 항상 `WRITE_OUTSIDE_REPOSITORY`로 거부한다(`..` 경로, 다른 저장소의 절대경로 포함).
 - `.duo-project/` 밖(프로젝트 Source Code), 영역에 없는 경로(`.duo-project/unknown.txt`), 영역과 writeKind가 다른 쓰기는 `WRITE_NOT_ALLOWED`다.
 - `options.restrictTo`로 호출 주체별 허용 경로를 더 좁힐 수 있다. 예: Agent는 `.duo-project/decisions/proposals/`만. 기본 영역을 넓힐 수는 없다.
-- `duoctl install`이 설정하는 Agent 파일(AGENTS.md 등)은 TASK-017에서 별도 writeKind로 추가한다.
+- `duoctl install`이 설정하는 Agent 파일은 `agent-integration`으로만 쓸 수 있고, 다른 kind로는 거부된다. 하위 디렉터리의 같은 이름(`src/AGENTS.md`), `.codex/`의 다른 파일(hooks 등)도 거부한다(T17, [06](06-mcp-interface.md#agent-integration-duoctl-install)).
 - 실제 writer는 core `guardWrite(root, path, kind, options?)`(boundary + 경로의 어떤 segment도 symlink가 아님)와 `guardDirectory`, `writeFileAtomic`(temp + rename), `createFileExclusive`(temp + hard link)를 쓴다(T13.1, DecisionService·Review Record·Init 공통).
 
 ## 소유권
@@ -199,7 +200,7 @@ glob 패턴(`implements.paths`, `index.include/exclude` 등)은 구분자만 바
 - **Git 필수**: DUO MVP는 Git 저장소를 전제로 한다(C36). Git이 아닌 디렉터리 fallback은 없다. scan root가 Git work tree가 아니면 `GIT_REPOSITORY_REQUIRED`, 최상위가 아니면 `SCAN_ROOT_INVALID`다. `duoctl init`(TASK-014)도 Git이 아닌 디렉터리에 같은 진단을 쓴다.
 - **경로 출처**: tracked 파일은 Git index 철자, untracked 파일은 Git이 파일 시스템에서 읽은 철자를 RepoPath로 쓴다. 파일 시스템 `readdir()` 철자는 tracked 파일의 ID에 쓰지 않는다. Git 호출은 `rev-parse --show-prefix`, `ls-files -z --stage`, `ls-files -z --others --exclude-standard`, `diff-files -z --name-only --diff-filter=T` 네 번이고 파일마다 호출하지 않는다. Git CLI 세부는 analyzer 밖으로 export하지 않는다.
 - **상태**: `RepositoryFileState = "tracked" | "untracked"`. ignored 파일과 `.git/`은 목록에 없다.
-- **제외**(`ExclusionReason`): `.duo-project/generated|cache|runtime/`(duo-regenerable), `.duo-project/reviews/`(duo-history, T13.1: Review Record는 프로젝트 내용이 아니며 기록 때문에 index가 stale해지거나 다음 Review의 diff가 바뀌면 안 된다), 비밀 파일 패턴(secret, include보다 우선하고 대소문자 무시), `index.exclude`, `index.include` 불일치, symlink, working tree에 없는 tracked 파일(missing), submodule과 중첩 저장소, 일반 파일이 아닌 항목과 RepoPath로 표현할 수 없는 이름(unsupported-entry). tracked 파일은 .gitignore 패턴에 맞아도 포함한다.
+- **제외**(`ExclusionReason`): `.duo-project/generated|cache|runtime/`(duo-regenerable), `.duo-project/reviews/`(duo-history, T13.1: Review Record는 프로젝트 내용이 아니며 기록 때문에 index가 stale해지거나 다음 Review의 diff가 바뀌면 안 된다), Agent integration 파일 `.codex/config.toml`·`.mcp.json`·`AGENTS.md`·`CLAUDE.md`(duo-agent-integration, T17: install 때문에 index가 stale해지지 않게. Git diff와 Review에는 그대로 보인다), 비밀 파일 패턴(secret, include보다 우선하고 대소문자 무시), `index.exclude`, `index.include` 불일치, symlink, working tree에 없는 tracked 파일(missing), submodule과 중첩 저장소, 일반 파일이 아닌 항목과 RepoPath로 표현할 수 없는 이름(unsupported-entry). tracked 파일은 .gitignore 패턴에 맞아도 포함한다.
 - **Symlink**: 따라가지 않는다. index mode가 symlink(120000)면 checkout 형태(Windows `core.symlinks=false`의 일반 파일 포함)와 관계없이 symlink로 본다. 상위 디렉터리가 symlink인 파일도 제외한다. link 문자열만 읽어 대상이 저장소 밖이면 `SYMLINK_OUTSIDE_REPOSITORY`(warning), 안이면 `SYMLINK_SKIPPED`(info)를 낸다. 대상 파일은 읽지 않는다.
 - **파일 타입 변경**(T04.1): index와 working tree의 symlink/일반 파일이 다르면 `FILE_TYPE_CHANGED`(info)와 `RepositoryScan.typeChanges`(`{ path, index, workingTree }`)에 사실만 남긴다. freshness 판정은 Indexer가 한다. index 일반 파일이 symlink가 되면 계속 symlink로 제외하고 대상을 읽지 않는다. index symlink가 일반 파일이 된 것은 Git이 typechange로 보고할 때만이다(Git이 `core.symlinks`를 반영하므로 Windows 기본 checkout은 해당하지 않음). 이 경우 일반 파일로 인덱싱하고 `gitBlobOid`는 붙이지 않는다(index blob은 이전 link 문자열).
 - **충돌 검사**: 포함된 tracked와 untracked 경로 전체에 `PATH_PORTABILITY_COLLISION`을 적용한다.

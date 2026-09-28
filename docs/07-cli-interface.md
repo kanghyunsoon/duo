@@ -21,8 +21,11 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 | `duoctl impact <node>` | Graph에 기록된 영향 | `--depth <1-3>` | graph impact | 없음 |
 | `duoctl decision list\|confirm <id>\|reject <id>` | proposal 목록, 확정, 거절 | `--reason <text>`(reject) | core DecisionService, listDecisionProposals | decisions/ |
 | `duoctl stats` | runtime/metrics.jsonl 요약 | `--last <n>` | director readRuntimeMetrics | 없음 |
-| `duoctl mcp` | duo-director MCP 서버를 stdio로 실행(한 저장소, [06](06-mcp-interface.md)) | `--root`(Git top level이어야 함), `--agent <label>` | integration `serveDuoMcp` | Tool이 쓰는 것만(metrics, proposals) |
-| `duoctl ui`, `install` | TASK-018, 017 | | | 아직 구현하지 않음(종료 코드 1) |
+| `duoctl mcp` | duo-director MCP 서버를 stdio로 실행(한 저장소, [06](06-mcp-interface.md)) | `--root <path>` 또는 `--root-from git-cwd\|env:<NAME>`(결과는 Git top level이어야 함), `--agent <label>` | integration `resolveMcpRoot`, `serveDuoMcp` | Tool이 쓰는 것만(metrics, proposals) |
+| `duoctl install <codex\|claude-code>` | Agent 연결: plan → 확인 → apply → verify([06 Agent integration](06-mcp-interface.md#agent-integration-duoctl-install)) | `--launcher path\|npx`, `--yes`, `--non-interactive`, `--json` | integration `planAgentIntegration`, `applyAgentIntegration`, `verifyAgentIntegration` | `.codex/config.toml`+`AGENTS.md` 또는 `.mcp.json`+`CLAUDE.md`, 백업(runtime/backup) |
+| `duoctl install status [agent]` | Agent별 not-configured / configured / drifted / conflict | | integration `inspectAgentIntegration` | 없음 |
+| `duoctl install remove <agent>` | DUO MCP 항목과 DUO bridge 블록만 제거 | `--yes` | integration `planAgentRemoval`, `applyAgentIntegration` | 같은 파일들 |
+| `duoctl ui` | TASK-018 | | | 아직 구현하지 않음(종료 코드 1) |
 
 - `<node>`는 node ID(`sym:src/a.ts#A.b`), 정의 ID(`AUTH-03`), RepoPath, 유일한 qualified Symbol 이름을 받는다.
 - `review` 기본 diff는 HEAD → WORKTREE, `--staged`는 HEAD → INDEX다. `--from`/`--to`는 `HEAD`, `INDEX`, `WORKTREE` 또는 commit·branch 이름이며 해석은 Git provider가 한다. CLI는 diff parser를 갖지 않는다.
@@ -48,7 +51,21 @@ Operational failure와 Review verdict를 섞지 않는다. Verdict는 `--fail-on
 | 3 | review ASK 이상이고 `--fail-on ask\|warn` |
 | 4 | review BLOCK이고 `--fail-on block\|ask\|warn` |
 | 5 | .duo-project 없음(NOT_INITIALIZED) |
-| 6 | 조치 필요: index-required(context, review), adoption policy 필요, ABORT_AND_CLEAN, partial의 repair |
+| 6 | 조치 필요: index-required(context, review), adoption policy 필요, ABORT_AND_CLEAN, partial의 repair, install의 conflict·launcher 없음·확인 필요(비대화형에서 `--yes` 없음) |
+
+install은 init 전이면 5(`AGENT_NOT_INITIALIZED`), verify 실패면 1이다.
+
+## Agent 연결 (install)
+
+```text
+Existing project → duoctl 설치(PATH) → duoctl init → duoctl install codex|claude-code
+```
+
+- plan을 먼저 보인다(willCreate, willModify, conflicts, trust·approval 안내). TTY면 확인을 묻고, 비대화형은 `--yes`가 있어야 적용한다(없으면 종료 코드 6, `status: "confirmation-required"`, 쓰기 0).
+- `--yes`는 계획한 파일 변경만 승인한다. 같은 이름의 다른 MCP 서버, 읽을 수 없는 설정, 깨진 bridge marker, launcher 가로채기 파일, Codex trust, Claude Code approval은 넘어가지 않는다.
+- apply 뒤 verify가 생성된 설정의 command로 DUO 서버를 직접 띄워 확인한다. index가 stale이면 install은 성공하고 다음 조치로 `duoctl index`를 보인다.
+- 두 번 실행하면 `unchanged`. install은 init, index, git add, commit을 하지 않는다. 바뀐 파일을 알려줄 뿐이다.
+- metrics: `{ command: "install", status, agent }`(경로와 설정 내용 없음).
 
 ## Existing Project Adoption
 

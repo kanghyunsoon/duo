@@ -61,4 +61,15 @@ describe("AC-002-04 write boundary policy", () => {
     expect(codes(checkWriteBoundary(root, `${S}/decisions/D-004.yaml`, "project-truth", agent))).toEqual(["WRITE_NOT_ALLOWED"]);
     expect(codes(checkWriteBoundary(root, "src/a.ts", "project-truth", { restrictTo: ["src/"] }))).toEqual(["WRITE_NOT_ALLOWED"]);
   });
+
+  it("agent-integration (T17) is exactly the four Agent files at the repository root, and only as that kind", () => {
+    for (const f of [".codex/config.toml", ".mcp.json", "AGENTS.md", "CLAUDE.md"]) {
+      expect(checkWriteBoundary(root, f, "agent-integration").value).toMatchObject({ path: f, kind: "agent-integration" });
+      expect(codes(checkWriteBoundary(root, f, "project-truth"))).toEqual(["WRITE_NOT_ALLOWED"]);
+    }
+    for (const f of ["src/AGENTS.md", ".codex/hooks.json", "package.json", `${S}/project.yaml`, "agents.md"]) {
+      expect(codes(checkWriteBoundary(root, f, "agent-integration"))).toEqual(["WRITE_NOT_ALLOWED"]);
+    }
+    expect(codes(checkWriteBoundary(root, "../AGENTS.md", "agent-integration"))).not.toEqual([]);
+  });
 });

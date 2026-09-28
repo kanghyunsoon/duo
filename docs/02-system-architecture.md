@@ -24,7 +24,7 @@ flowchart TD
 | analyzer | 파일 스캔, fingerprint, LanguageAnalyzer(TS/JS), GitProvider | TASK-004, 005, 006 |
 | graph | GraphStore(node:sqlite), builder, traversal, incremental, trace, impact, check | TASK-003, 007, 008 |
 | director | Context Compiler, Evidence, Review, Knowledge Gap, token budget, LLMProvider, InitService | TASK-010~014 |
-| integration | shared operations(`operations/`: CLI `--json` result와 MCP structuredContent의 공통 payload, C135), MCP stdio 서버(`mcp/`, SDK는 이 계층에서만 import), Codex/Claude Adapter, 로컬 HTTP API, (향후) 외부 EvidenceProvider. analyzer는 Git root 검증과 analyzer registry 때문에 import한다(TASK-016) | TASK-016, 017, 018 |
+| integration | shared operations(`operations/`: CLI `--json` result와 MCP structuredContent의 공통 payload, C135), MCP stdio 서버(`mcp/`, SDK는 이 계층에서만 import), Agent integration(`agents/`: `duoctl install`의 inspect → plan → apply → verify, codex·claude-code adapter, T17), 로컬 HTTP API, (향후) 외부 EvidenceProvider. analyzer는 Git root 검증과 analyzer registry 때문에 import한다(TASK-016) | TASK-016, 017, 018 |
 | ui | React 앱(5개 화면) | TASK-018 |
 | apps/cli | `duoctl` 명령 | TASK-015 |
 
@@ -37,7 +37,7 @@ flowchart TD
 | `LLMProvider` | director(계약, T12A). adapter는 integration(`packages/integration/src/llm/`) → director 방향. director는 vendor SDK를 import하지 않음(lint) | Noop provider(T12A), OpenAIResponsesProvider(T12B) | OpenAICompatibleChatProvider, AnthropicProvider, LocalProvider |
 | `TokenEstimator` | director/tokens(C79) | o200k_base(gpt-tokenizer 4.0.0), chars/4(UI approx) | - |
 | `GraphStore` | graph | NodeSqliteGraphStore(`node:sqlite`는 이 구현 안에서만 import) | better-sqlite3 기반 구현 |
-| `AgentAdapter` | integration | codex, claude | 기타 MCP Agent |
+| `AgentIntegrationAdapter` | integration(`agents/`) | codex(`.codex/config.toml` 관리 블록 + AGENTS.md), claude-code(`.mcp.json` + CLAUDE.md) | 다른 MCP Agent, Codex plugin distribution |
 
 ## 판단 순서 (Deterministic First)
 

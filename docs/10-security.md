@@ -19,8 +19,8 @@
 | API Key 노출 | Key는 `api_key_env`가 가리키는 환경 변수에서만 읽고 파일, 로그, metrics, 오류 메시지에 쓰지 않는다 |
 | Repository 코드 실행 | DUO는 소스를 parse만 한다. 예외는 사용자가 project.yaml에 설정한 `test_command`를 `--run-tests`로 명시했을 때뿐 |
 | 경로 조작(Tool, API 입력) | 모든 경로를 Repository root 기준으로 정규화하고 root 밖이면 거부. `/api/source`는 인덱싱 대상 파일만 허용 |
-| Source Code 변경 | 모든 파일 쓰기는 먼저 core의 순수 정책 `checkWriteBoundary`로 판정한다. 허용 영역은 `.duo-project/` 아래의 Project Truth, Human-approved History, Regenerable 영역뿐이고 Repository 밖은 항상 거부한다([03 Write Boundary](03-data-model.md#write-boundary)). 실제 writer는 symlink를 풀어 다시 확인한다. `duoctl install` 대상 파일은 TASK-017에서 별도 writeKind로 추가. 테스트로 검증(AC-002-04) |
-| Agent 설정 파일 손상 | `duoctl install`은 `--dry-run`, 수정 전 백업(`runtime/backup/`), `<!-- duo-director:begin -->` 블록 안만 교체, 반복 실행 시 같은 결과 |
+| Source Code 변경 | 모든 파일 쓰기는 먼저 core의 순수 정책 `checkWriteBoundary`로 판정한다. 허용 영역은 `.duo-project/` 아래의 Project Truth, Human-approved History, Regenerable 영역뿐이고 Repository 밖은 항상 거부한다([03 Write Boundary](03-data-model.md#write-boundary)). 실제 writer는 symlink를 풀어 다시 확인한다. `duoctl install`은 writeKind `agent-integration`으로 저장소 root의 네 Agent 파일(`.codex/config.toml`, `.mcp.json`, `AGENTS.md`, `CLAUDE.md`)만 쓴다(T17). 테스트로 검증(AC-002-04) |
+| Agent 설정 파일 손상·실행 설정 탈취 | `duoctl install`은 plan(쓰기 0) → 확인(TTY 또는 `--yes`) → apply → verify. 수정 전 백업(`.duo-project/runtime/backup/`), DUO 관리 블록(`<!-- duo-director:begin -->`, TOML은 `# duo-director:begin`) 안과 JSON의 `mcpServers["duo-director"]`만 바꾸고 반복 실행은 unchanged. 같은 이름의 다른 command, 읽을 수 없는 설정, 깨진 marker, symlink는 conflict이며 `--yes`로도 덮어쓰지 않는다. 설정은 PATH의 `duoctl`(또는 project-local `npx --no-install duoctl`)만 기록하고 상대 경로 실행 파일은 거부하며, 저장소 root에 launcher 이름의 파일(`duoctl`, `duoctl.cmd` 등)이 있으면 가로채기 위험으로 conflict다. Codex trust와 Claude Code approval은 바꾸지 않는다. git add·commit을 하지 않는다 |
 | 대형·악성 파일로 인한 자원 고갈 | max_file_bytes, 확장자 기반 fingerprint mode(TASK-004), 파일당 parse timeout 2초(TASK-005 `AST_PARSE_TIMEOUT`), nodeLimit |
 | LLM 응답 조작(프롬프트 주입된 코드 주석 등) | 응답은 스키마 검증, Packet 밖 ID 인용 시 폐기, `basis: llm` Claim은 BLOCK 불가 |
 | Supply chain | 의존성 최소화, lockfile 커밋, CI에서 `pnpm audit`(경고만) |

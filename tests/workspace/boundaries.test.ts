@@ -31,6 +31,8 @@ describe("AC-001-02 lint enforces the ADR-010 dependency direction", () => {
     ["director cannot import the MCP SDK", "packages/director/src/probe.ts", 'import { McpServer } from "@modelcontextprotocol/server";', false],
     ["shared operations cannot import the MCP SDK", "packages/integration/src/operations/probe.ts", 'import { McpServer } from "@modelcontextprotocol/server";', false],
     ["the MCP adapter may import the MCP SDK", "packages/integration/src/mcp/probe.ts", 'import { McpServer } from "@modelcontextprotocol/server";', true],
+    ["the agent installer cannot import the MCP SDK (it uses mcp/probe)", "packages/integration/src/agents/probe.ts", 'import { Client } from "@modelcontextprotocol/client";', false],
+    ["the TOML parser is a normal dependency of integration", "packages/integration/src/agents/probe.ts", 'import { parse } from "smol-toml";', true],
     ["ui may import core types", "packages/ui/src/probe.ts", 'import type { PackageInfo } from "@duo-director/core";', true],
     ["ui cannot import core values", "packages/ui/src/probe.ts", 'import { packageInfo } from "@duo-director/core";', false],
     ["no relative import into another package", "packages/core/src/probe.ts", 'import { packageInfo } from "../../graph/src/index.js";', false],

@@ -7,15 +7,23 @@ import { STATE_DIR_NAME } from "./constants.js";
 import { createDiagnostic, failure, success, type ParseResult } from "./diagnostics.js";
 import { normalizeRepoPath, normalizeRepoPattern, type RepoPath } from "./paths.js";
 
-/** What is being written. Each kind maps to fixed areas of the state directory (ADR-006). */
-export type WriteKind = "project-truth" | "human-history" | "regenerable";
+/**
+ * What is being written. Each kind maps to fixed areas of the state directory (ADR-006), except
+ * "agent-integration" (T17): the Agent configuration and bridge files that duoctl install manages,
+ * exact repository-root paths outside the state directory (AGENT_INTEGRATION_FILES).
+ */
+export type WriteKind = "project-truth" | "human-history" | "regenerable" | "agent-integration";
 
 /** Areas relative to the state directory. A trailing "/" means "anything below this directory". */
 export const WRITE_AREAS: Readonly<Record<WriteKind, readonly string[]>> = {
   "project-truth": ["project.yaml", ".gitignore", "intent/", "specs/", "decisions/", "milestones/", "integrations/"],
   "human-history": ["reviews/"],
   regenerable: ["generated/", "cache/", "runtime/"],
+  "agent-integration": [],
 };
+
+/** The only files outside the state directory DUO may write, and only as "agent-integration" (T17). */
+export const AGENT_INTEGRATION_FILES: readonly string[] = [".codex/config.toml", ".mcp.json", "AGENTS.md", "CLAUDE.md"];
 
 export interface AllowedWrite {
   readonly path: RepoPath;
@@ -58,6 +66,11 @@ export function checkWriteBoundary(
   }
   const path = normalized.value;
   const prefix = `${STATE_DIR_NAME}/`;
+  if (writeKind === "agent-integration") {
+    return AGENT_INTEGRATION_FILES.includes(path)
+      ? success({ path, kind: writeKind, area: path })
+      : failure([createDiagnostic("WRITE_NOT_ALLOWED", `Refusing to write "${path}" as agent-integration: only ${AGENT_INTEGRATION_FILES.join(", ")}`, { path })]);
+  }
   if (!path.startsWith(prefix)) {
     return failure([createDiagnostic(
       "WRITE_NOT_ALLOWED",
