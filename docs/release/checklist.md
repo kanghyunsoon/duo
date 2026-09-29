@@ -28,6 +28,7 @@
 - [x] `npm publish --dry-run`(목록 = release candidate)
 - [x] Final artifact E2E(clean global·local install, MCP, UI, polyglot, LLM 없음)
 - [x] Docs conformance(README·07·`--help`, 옛 설계 표현 0)
+- [x] README 설치 흐름(root README와 package README의 기본 설치는 `npm install -g @duo-director/cli`, tarball은 From source)
 - [x] NFR decision(REQ-NFR-004 benchmark-scoped target, H-44)
 - [x] `release:audit`(advisory 0, deprecated 0), 재현성, secret·절대경로 0, `@duo-director/cli@0.1.0` 미존재
 
@@ -53,7 +54,7 @@ npm publish .dist/duo-director-cli-0.1.0.tgz --access public --registry https://
 git tag -a v0.1.0 -m "DUO 0.1.0" <release candidate commit> && git push origin v0.1.0
 ```
 
-publish한 뒤 README의 설치 절을 “Release 후” 흐름으로 바꾼다.
+README와 package README는 publish 전에 이미 npm registry 설치 흐름으로 바뀌어 있고, 그 문서 전환 commit이 final release candidate다. publish 뒤 문서를 다시 바꿀 필요는 없다. GitHub Release는 tag를 push한 뒤 따로 만든다.
 
 ## 알려진 limitation
 

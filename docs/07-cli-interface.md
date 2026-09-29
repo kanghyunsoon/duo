@@ -172,12 +172,12 @@ review   6 runs · PASS 2 · WARN 3 · BLOCK 1 · ASK 0
 llm      calls 0
 ```
 
-## 배포 (T17.1, 아직 publish하지 않음)
+## 배포 (T17.1)
 
 DUO 실행 파일 설치, 저장소 초기화, Agent 연결은 서로 다른 단계다.
 
 ```text
-1. duoctl 실행 파일 설치      npm install -g @duo-director/cli   (publish 뒤. 지금은 pnpm pack:cli로 만든 tarball)
+1. duoctl 실행 파일 설치      npm install -g @duo-director/cli   (source에서는 pnpm pack:cli로 만든 tarball)
 2. 저장소에 DUO 초기화        duoctl init
 3. Coding Agent 연결          duoctl install codex | claude-code
 ```

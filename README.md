@@ -13,35 +13,21 @@ DUO는 Codex, Claude Code 같은 AI Coding Agent가 프로젝트의 목표와 �
 
 LLM은 선택 사항입니다. API key 없이도 index, Context, Review, MCP, UI가 모두 동작하고, 기본값에서는 네트워크를 쓰지 않습니다.
 
-## 상태
-
-0.1.0 release candidate 단계입니다. **npm에는 아직 publish하지 않았습니다.** 남은 결정은 [docs/release/checklist.md](docs/release/checklist.md)에 있습니다.
-
 ## 빠른 시작
 
 Node.js 24.15 이상이 필요합니다. native build나 install script는 없습니다.
 
-**지금(release candidate)**: 이 저장소에서 tarball을 만들어 설치합니다.
-
-```bash
-pnpm install && pnpm release:pack          # .dist/duo-director-cli-0.1.0.tgz
-npm install -g .dist/duo-director-cli-0.1.0.tgz
-
-cd existing-project
-duoctl init
-duoctl install codex        # 또는: duoctl install claude-code
-duoctl ui                   # 선택
-```
-
-**npm publish 후**(아직 사용할 수 없음):
-
 ```bash
 npm install -g @duo-director/cli
+
 cd existing-project
 duoctl init
-duoctl install codex        # Claude Code: duoctl install claude-code
-duoctl ui                   # 선택
+duoctl install codex
+# optional
+duoctl ui
 ```
+
+Claude Code를 쓴다면 `duoctl install codex` 대신 `duoctl install claude-code`를 실행합니다. source에서 만든 package로 설치하는 방법은 [From source](#from-source)에 있습니다.
 
 `duoctl init`은 이미 있는 저장소에서 시작합니다. 저장소를 관찰하고, 꼭 필요한 질문만 사람에게 묻고, 최소한의 Project Truth를 만들고, 첫 index를 만든 뒤, 지금 상태를 Adoption Baseline으로 기록합니다. 그래서 도입 전부터 있던 문제와 도입 후 새로 생긴 문제를 구분합니다. 처음부터 DUO로 만든 프로젝트가 아니어도 됩니다. 작업 중인 변경이 있으면 `--baseline-policy head|abort` 중 하나를 고릅니다.
 
@@ -92,6 +78,8 @@ llm:
 OPENAI_API_KEY=... duoctl review --semantic
 ```
 
+`openai-responses`는 공식 OpenAI API(`api.openai.com`)에만 연결합니다. 실제 OpenAI API 연동 smoke는 0.1.0 release 검증에 포함되지 않은 선택 검증입니다.
+
 `--semantic`(MCP `includeSemanticAssist: true`)을 줄 때만 Review의 의미 후보를 한 번 확인합니다. 이때 **선택된 Evidence 발췌(관련 Truth 문단, 바뀐 코드 부분, diff hunk)가 OpenAI API로 전송됩니다**. 파일 전체나 저장소는 보내지 않고, `store: false`로 요청합니다. 결과는 별도 `semanticAssist`로 붙고 결정적 판정을 바꾸거나 BLOCK을 만들지 않습니다. 같은 요청의 검증된 응답은 로컬 `.duo-project/cache/llm/`에 저장되며(`llm.cache: false`로 끔), 이것은 OpenAI 서버 저장과 별개입니다.
 
 Agent는 MCP Tool 9개(`duo_get_status`, `duo_get_context`, `duo_review_changes`, `duo_get_requirement`, `duo_get_decision`, `duo_trace`, `duo_impact`, `duo_search_evidence`, `duo_propose_decision`)를 씁니다. Agent는 Decision을 제안만 할 수 있고 확정과 거절은 사람이 `duoctl decision`으로 합니다. Tool은 인덱싱하지 않으므로 `index-required`를 받으면 `duoctl index`를 실행합니다. 명령은 [07-cli-interface.md](docs/07-cli-interface.md), MCP와 설치 계약은 [06-mcp-interface.md](docs/06-mcp-interface.md)에 있습니다.
@@ -114,11 +102,20 @@ pnpm duoctl --version
 | `pnpm build` | `tsc -b` project references 빌드 |
 | `pnpm test` | Vitest |
 | `pnpm docs:validate` | Requirement/ADR/Task/AC 추적성 검사 |
-| `pnpm pack:cli` | 배포 package(`.dist/cli-package/`)와 tarball 생성, publish하지 않음 |
+| `pnpm pack:cli` | 배포 package(`.dist/cli-package/`)와 tarball 생성(publish는 하지 않음) |
 | `pnpm test:dist` | tarball을 임시 prefix·project에 설치해 배포본만으로 E2E(npm registry 접근 필요) |
-| `pnpm release:pack` · `release:preflight` · `release:audit` · `release:lock` | release candidate 생성과 검사([checklist](docs/release/checklist.md)). publish하지 않음 |
+| `pnpm release:pack` · `release:preflight` · `release:audit` · `release:lock` | release tarball 생성과 검사([checklist](docs/release/checklist.md), publish는 하지 않음) |
 | `pnpm benchmark:smoke` | 100파일 fixture benchmark와 결과 계약 검사(CI) |
 | `pnpm benchmark` | 100/1,000/5,000파일 full benchmark, 결과는 Git 제외 `bench/results/local/` |
+
+### From source
+
+이 저장소에서 package tarball을 만들어 설치합니다. npm registry의 package와 같은 구성입니다.
+
+```bash
+pnpm install && pnpm release:pack          # .dist/duo-director-cli-0.1.0.tgz
+npm install -g .dist/duo-director-cli-0.1.0.tgz
+```
 
 ## License와 보안
 

@@ -55,6 +55,8 @@ Release Hardening에서 사람이 결정해야 하는 항목이다. 각 항목�
 - 결정·실행 필요: npm 계정 로그인, `duo-director` organization 생성 또는 권한 확보. 불가능하면 namespace 변경을 사람이 결정한다(이름 변경은 문서, bin 안내, MCP 설정 예시 전반에 영향).
 - GitHub 저장소 `kanghyunsoon/duo`는 현재 private다. package metadata의 repository/homepage/bugs가 이 저장소를 가리키므로, 공개하지 않으면 사용자에게 열리지 않는 링크가 된다. 공개 여부를 결정해야 한다.
 
+**결과(H-45, 2026-09-29):** npm 로그인 완료, `duo-director` organization owner, 저장소 public 전환, Private Vulnerability Reporting 활성화. `@duo-director/cli` 이름을 유지한다.
+
 ## DP-4. 실제 OpenAI smoke
 
 fake transport 테스트는 실제 smoke가 아니다. publish 전 한 번 `DUO_OPENAI_SMOKE=1`, `OPENAI_API_KEY`, `DUO_OPENAI_SMOKE_MODEL`을 주고 `pnpm test:openai-smoke`를 실행해야 한다. 사용할 model과 비용 부담 주체는 사람이 정한다.

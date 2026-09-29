@@ -40,8 +40,8 @@ Installer는 Project Direction 로직 없이 기존 CLI·MCP를 Agent의 project
 
 ## 배포와 launcher (T17.1, H-37)
 
-- 공개 package는 `@duo-director/cli` 하나이고 bin은 `duoctl`이다. 내부 package는 bundle한다(C158). 아직 publish하지 않았다.
-- **global 설치**(`npm install -g @duo-director/cli`, publish 전에는 tarball): Agent 설정은 기본 `path` launcher인 `duoctl`을 기록한다.
+- 공개 package는 `@duo-director/cli` 하나이고 bin은 `duoctl`이다. 내부 package는 bundle한다(C158).
+- **global 설치**(`npm install -g @duo-director/cli`, source에서는 tarball): Agent 설정은 기본 `path` launcher인 `duoctl`을 기록한다.
 - **project-local 설치**(`npm install -D`): `--launcher npx`가 `npx --no-install duoctl`을 기록한다. project의 `node_modules/.bin/duoctl`이 있을 때만 유효하고, 없으면 installer가 `AGENT_LAUNCHER_UNAVAILABLE`로 막는다. `--no-install`은 package를 내려받지 않으며, 인터넷에서 최신 package를 받는 launcher는 기본값이 아니다(C162).
 - verify는 `launcher: {kind, command, argsPrefix, resolved, localBin, version}`을 보인다. version은 설정대로 띄운 서버가 initialize에서 알린 값이다. 설치 뒤 PATH가 다른 `duoctl`을 가리키게 되는 것은 막지 않는다(signing은 범위 밖).
 - 배포본만 설치한 깨끗한 환경에서 install codex·claude-code → 생성된 설정 → 설치된 duoctl로 MCP 실행 → clone 이동을 3 OS에서 검증한다(`pnpm test:dist`).

@@ -11,6 +11,8 @@ npm install -g @duo-director/cli     # 1. install the duoctl executable
 cd your-git-repository
 duoctl init                          # 2. initialize DUO in this repository (.duo-project/, first index, adoption baseline)
 duoctl install codex                 # 3. connect a coding agent (or: duoctl install claude-code)
+# optional
+duoctl ui                            # local read-only console on 127.0.0.1
 ```
 
 Step 3 shows the planned file changes first and asks before writing. Codex needs the project to be trusted; Claude Code asks you to approve the `duo-director` server. DUO never commits.
