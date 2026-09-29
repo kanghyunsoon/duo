@@ -104,6 +104,8 @@ packed tarball(1,343,096 B, unpacked 13,999,607 B)을 임시 prefix에 설치해
 
 ## C145: 호출당 비용의 원인
 
+CI(GitHub hosted runner, commit ac3a902)의 small smoke 한 번: Ubuntu initial 0.31 s / cold no-op 0.67 s / context 0.10 s, macOS 0.22 / 0.57 / 0.08 s, Windows 0.95 / 1.53 / 0.39 s. runner 하드웨어가 달라 직접 비교하지 않지만, 파일 단위 lstat·읽기가 많은 freshness와 index 비용이 Windows에서 특히 크다는 profile 결과와 방향이 같다. 위 표의 수치는 Windows 기준 환경 값이다.
+
 | 구성 요소 | 측정 | 비고 |
 |---|---:|---|
 | Node process 시작 | 90~97 ms | CLI만 |
