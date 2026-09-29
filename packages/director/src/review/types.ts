@@ -190,8 +190,12 @@ export interface ReviewResult {
 /** Wall clock, kept out of ReviewResult so the deterministic body stays byte-identical. */
 export interface ReviewPerformance {
   readonly totalMs: number;
+  /** Read-only index inspection (TASK-019: measured separately from the diff). */
+  readonly freshnessMs: number;
   readonly diffMs: number;
   readonly contextMs: number;
+  /** Knowledge Gap assessment of the review context. */
+  readonly gapMs: number;
   readonly rulesMs: number;
   readonly semanticMs: number;
 }

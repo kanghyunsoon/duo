@@ -79,12 +79,16 @@ export interface IndexOptions {
   readonly full?: boolean;
   /** Commits in the history window. Default HISTORY_WINDOW (500, 04). */
   readonly historyWindow?: number;
+  /** Optional observation only; never enters persisted state or the deterministic result. */
+  readonly onPhase?: (name: string, milliseconds: number) => void;
 }
 
 /** Digest of a scope without rows (the Project Truth scope always has the Project node, so this is a fallback). */
 const EMPTY_DIGEST = `sha256:${"0".repeat(64)}`;
 
 export async function indexRepository(root: string, options: IndexOptions): Promise<ParseResult<IndexResult>> {
+  let phaseStart = performance.now();
+  const phase = (name: string): void => { const now = performance.now(); options.onPhase?.(name, now - phaseStart); phaseStart = now; };
   const rootDir = path.resolve(root);
   const { store } = options;
   const window = options.historyWindow ?? HISTORY_WINDOW;
@@ -95,17 +99,21 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   diagnostics.push(...loaded.diagnostics);
   if (loaded.value === undefined) return failure(diagnostics);
   const { truth, trace } = loaded.value;
+  phase("truth");
   const scan = await scanRepository(rootDir, { include: truth.config.index.include, exclude: truth.config.index.exclude });
   diagnostics.push(...scan.diagnostics);
   if (scan.diagnostics.some((d) => d.severity === "error")) return failure(diagnostics);
+  phase("scan");
   const fingerprinted = await fingerprintRepositoryFiles(rootDir, scan.files);
   diagnostics.push(...fingerprinted.diagnostics);
   const current: readonly FileFingerprint[] = fingerprinted.fingerprints;
+  phase("fingerprint");
 
   // ---- previous state: any doubt means a full rebuild ----
   const loadedState = loadPreviousState(rootDir, store, window, options.full === true);
   diagnostics.push(...loadedState.diagnostics);
   const { previous, fullRebuildReason } = loadedState;
+  phase("state");
   const mode = previous === undefined ? "full" : "incremental";
   const prevFiles = new Map((previous?.files ?? []).map((f) => [f.path, f] as const));
   const changes = compareFingerprints(previous?.files ?? [], current);
@@ -120,6 +128,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
     if (created.value === undefined) return failure(diagnostics);
     registry = created.value;
   }
+  phase("registry");
   const selection = registry.scope(current.map((f) => f.path).filter((p) => !p.startsWith(STATE_PREFIX)));
   const analyzerIdentities = registry.identities();
   const analyzerRegistryDigest = registry.digest();
@@ -184,6 +193,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   } finally {
     if (options.registry === undefined) registry.dispose();
   }
+  phase("analysis");
 
   // ---- Git: the history window is recomputed whole when HEAD moves ----
   const git = await openGitProvider(rootDir);
@@ -203,6 +213,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
       historyRecomputed = true;
     }
   }
+  phase("git");
 
   // ---- module resolution reuse (config scope, file set, versions) ----
   const indexedFiles = new Set(current.map((f) => f.path).filter((p) => !p.startsWith(STATE_PREFIX)));
@@ -241,6 +252,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
     moduleResolver: resolver,
     git: { ...(gitState === undefined ? {} : { state: gitState }), ...(history === undefined ? {} : { history }) },
   }, memo);
+  phase("graph-plan");
   diagnostics.push(...plan.diagnostics);
   if (!plan.valid) {
     return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "The graph plan did not pass validation; nothing was written"), ...diagnostics]);
@@ -325,6 +337,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
     diagnostics.push(...writeFingerprintFile(rootDir, current).diagnostics.map((d) => ({ ...d, severity: "warning" as const })));
     pruneAnalysisCache(rootDir, cacheKeys);
   }
+  phase("write");
 
   // ---- report ----
   const count = (status: string) => changes.filter((c) => c.status === status).length;
@@ -363,6 +376,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
       ...(a === undefined ? {} : { analysis: a }), ...(m === undefined ? {} : { modules: m }), ...(c === undefined ? {} : { calls: c }),
     };
   });
+  phase("report");
   return success({ mode, ...(fullRebuildReason === undefined ? {} : { fullRebuildReason }), metrics, freshness, stats: plan.stats, graphRevision: revision }, canonicalDiagnostics(diagnostics));
 }
 

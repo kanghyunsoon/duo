@@ -8,7 +8,15 @@ DUO는 Codex, Claude Code 같은 AI Coding Agent가 프로젝트의 목표와 �
 
 ## 상태
 
-CLI(`duoctl`), MCP 서버(`duoctl mcp`), Agent 연결(`duoctl install`), 선택적 OpenAI 의미 보조, 로컬 Project Direction Console(`duoctl ui`)까지 구현했습니다. 배포용 package는 만들었지만 **npm에는 아직 publish하지 않았습니다.** Benchmark(TASK-019)는 아직입니다. 진행 순서는 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)를 따릅니다.
+CLI(`duoctl`), MCP 서버(`duoctl mcp`), Agent 연결(`duoctl install`), 선택적 OpenAI 의미 보조, 로컬 Project Direction Console(`duoctl ui`), Benchmark(TASK-019)까지 진행했습니다. 배포용 package는 만들었지만 **npm에는 아직 publish하지 않았습니다.** 진행 순서는 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)를 따릅니다.
+
+## Benchmark
+
+수치는 한 기준 환경(Windows 11, Intel Core Ultra 7 155H, Node 24.18)과 DUO의 synthetic fixture `duo-bench-fixture/1`에서 잰 값이며 다른 프로젝트나 성능 보장으로 일반화하지 않습니다. 방법과 전체 결과는 [docs/performance-benchmark.md](docs/performance-benchmark.md)에 있습니다.
+
+- 5,000개 source file fixture(TS/Java/C#/C++/Python과 분석기 없는 파일)에서 `AUTH-03` task의 Context Packet은 2,023 o200k_base token이고, 137,048 token의 source corpus보다 98.52% 작습니다. 100개 파일 fixture에서도 같은 Packet(같은 digest)이 나옵니다. 기대한 Requirement, Decision, Symbol, Test 4개가 모두 들어갑니다.
+- 같은 fixture에서 Packet은 관련 파일 원문 합(1,602 token)보다 26% 큽니다. 절감은 저장소 전체를 읽는 경우와 비교한 값입니다.
+- 같은 기준 환경에서 5,000파일 fixture의 장기 실행(MCP·UI) `context`는 약 2.5초, `review`는 약 3.9초, 파일 하나를 바꾼 뒤 `index`는 약 2.4초입니다. 대부분은 결과를 정확하게 유지하기 위해 매 호출 수행하는 freshness 확인입니다.
 
 ## 지원 범위
 
@@ -108,6 +116,8 @@ pnpm duoctl --version
 | `pnpm docs:validate` | Requirement/ADR/Task/AC 추적성 검사 |
 | `pnpm pack:cli` | 배포 package(`.dist/cli-package/`)와 tarball 생성, publish하지 않음 |
 | `pnpm test:dist` | tarball을 임시 prefix·project에 설치해 배포본만으로 E2E(npm registry 접근 필요) |
+| `pnpm benchmark:smoke` | 100파일 fixture benchmark와 결과 계약 검사(CI) |
+| `pnpm benchmark` | 100/1,000/5,000파일 full benchmark, 결과는 Git 제외 `bench/results/local/` |
 
 ## 문서
 

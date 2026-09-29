@@ -20,6 +20,7 @@ import { inspectIndex, readIndexState, type GraphReader, type IndexedGraph } fro
 import { compileContext } from "../context/compile.js";
 import { analysisLimitations } from "../context/candidates.js";
 import { SourceReader } from "../context/retrieve.js";
+import type { TokenCountMemo } from "../context/metrics.js";
 import type { ContextPacket, ContextResult } from "../context/types.js";
 import { EvidenceStore } from "../evidence/store.js";
 import { assessKnowledgeGaps } from "../gap/assess.js";
@@ -48,6 +49,8 @@ export interface ReviewOptions {
   /** Reuse LLM answers under .duo-project/cache/llm/ (provider cacheIdentity required). Default false. */
   readonly llmCache?: boolean;
   readonly signal?: AbortSignal;
+  /** In-memory repository token counts (TASK-019); default: one memo for this Review's two compiles. */
+  readonly tokenCounts?: TokenCountMemo;
 }
 
 const packetScopeIds = (p: ContextPacket | undefined): ReadonlySet<string> =>
@@ -125,9 +128,12 @@ export function reviewRequestIdentity(request: ReviewRequest): ReviewRequestIden
 
 export async function reviewChanges(root: string, request: ReviewRequest, options: ReviewOptions): Promise<ParseResult<{ readonly result: ReviewResult; readonly performance: ReviewPerformance }>> {
   const t0 = performance.now();
-  const time = { diffMs: 0, contextMs: 0, rulesMs: 0, semanticMs: 0 };
+  const time = { freshnessMs: 0, diffMs: 0, contextMs: 0, gapMs: 0, rulesMs: 0, semanticMs: 0 };
   const diagnostics: Diagnostic[] = [];
-  const perf = (): ReviewPerformance => ({ totalMs: Math.round(performance.now() - t0), diffMs: Math.round(time.diffMs), contextMs: Math.round(time.contextMs), rulesMs: Math.round(time.rulesMs), semanticMs: Math.round(time.semanticMs) });
+  const perf = (): ReviewPerformance => ({
+    totalMs: Math.round(performance.now() - t0), freshnessMs: Math.round(time.freshnessMs), diffMs: Math.round(time.diffMs), contextMs: Math.round(time.contextMs),
+    gapMs: Math.round(time.gapMs), rulesMs: Math.round(time.rulesMs), semanticMs: Math.round(time.semanticMs),
+  });
   const shared = { graph: options.graph, ...(options.registry === undefined ? {} : { registry: options.registry }), ...(options.historyWindow === undefined ? {} : { historyWindow: options.historyWindow }) };
   const requestIdentity = reviewRequestIdentity(request);
   // T14.1: provenance against the Adoption Baseline (read-only; missing or unreadable → no provenance).
@@ -135,7 +141,9 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   const baseline = { status: adoption.status, ...(adoption.baseline === undefined ? {} : { id: adoption.baseline.id }) };
 
   // 1. Freshness: a Review never uses a stale graph and never indexes.
+  const tFresh = performance.now();
   const inspected = await inspectIndex(root, shared);
+  time.freshnessMs = performance.now() - tFresh;
   if (inspected.value === undefined) return { diagnostics: inspected.diagnostics };
   const freshness = { status: inspected.value.status, fullRebuildRequired: inspected.value.status === "missing" || inspected.value.status === "incompatible" };
   const noAssist = { status: "not-requested" as const, candidates: [], skippedChecks: [], claims: [], evidence: [], calls: 0, cacheHits: 0 };
@@ -163,7 +171,8 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   // 4. Review context (explicit diff seeds) and, with a task, the task-only context for scope drift.
   t = performance.now();
   const task = (request.task ?? "").trim();
-  const withInspection = { ...shared, inspection: inspected.value };
+  // One freshness snapshot and one token-count memo for both compiles (the metrics are the same without it).
+  const withInspection = { ...shared, inspection: inspected.value, tokenCounts: options.tokenCounts ?? new Map() };
   const budget = request.budget === undefined ? {} : { budget: request.budget };
   let reviewContext: ContextResult | undefined;
   if (seeds.length > 0 || task !== "") {
@@ -181,7 +190,9 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   const reviewPacket = reviewContext?.status === "ready" ? reviewContext.packet : undefined;
 
   // 5. Knowledge Gap assessment (the authority for ASK, C100).
+  const tGap = performance.now();
   const gaps = reviewContext === undefined ? undefined : assessKnowledgeGaps({ request: { task }, result: reviewContext, truth });
+  time.gapMs = performance.now() - tGap;
 
   // 6. Deterministic rules.
   t = performance.now();

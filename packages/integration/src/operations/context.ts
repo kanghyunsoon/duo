@@ -37,7 +37,7 @@ export function projectContext(root: string, input: ContextRequestInput, options
     options.signal?.throwIfAborted();
     const compiled = await withRegistry(options.registry, (registry) => withGraphReader(root, (graph) => compileContext(root, {
       task: input.task, ...(input.budget === undefined ? {} : { budget: input.budget }), ...(input.profile === undefined ? {} : { profile: input.profile }),
-    }, { graph, registry })));
+    }, { graph, registry, ...(options.tokenCounts === undefined ? {} : { tokenCounts: options.tokenCounts }) })));
     if (compiled.value === undefined) return { kind: "failed", diagnostics: compiled.diagnostics };
     const { performance, ...context } = compiled.value;
     let gaps: ContextPayload["gaps"] = null;

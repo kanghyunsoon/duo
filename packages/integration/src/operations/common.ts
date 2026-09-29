@@ -7,6 +7,7 @@
  */
 import { createDefaultAnalyzerRegistry, type AnalyzerRegistry } from "@duo-director/analyzer";
 import { loadProjectTruth, type Diagnostic, type LoadedProject } from "@duo-director/core";
+import type { TokenCountMemo } from "@duo-director/director";
 import { openProjectGraphReader, openProjectGraphStore, type GraphStore } from "@duo-director/graph";
 import { LLMProviderPool } from "../llm/factory.js";
 
@@ -23,6 +24,11 @@ export interface OperationOptions {
    * made per call (CLI). The MCP server passes one pool for its lifetime (environment snapshot at startup).
    */
   readonly llm?: LLMProviderPool;
+  /**
+   * Repository token counts kept by a long-lived surface (MCP server, UI server) across calls
+   * (TASK-019). In memory only; the context and review results are the same without it.
+   */
+  readonly tokenCounts?: TokenCountMemo;
 }
 
 /** The pool of the options, or one over the current environment. */

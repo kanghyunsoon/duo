@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { AnalyzerRegistry } from "@duo-director/analyzer";
+import { readFingerprintFile, type AnalyzerRegistry } from "@duo-director/analyzer";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { PACKET_CACHE_DIR } from "./cache.js";
+import type { TokenCountMemo } from "./metrics.js";
 import { renderContextMarkdown } from "./render.js";
 import { contextRegistry, makeContextRepo, type ContextRepo } from "./testing.js";
 import type { ContextPacket, ContextResult, PacketItem } from "./types.js";
@@ -317,5 +318,34 @@ describe("freshness, cache and redaction (TASK-010)", () => {
     expect(md).toContain("[REDACTED]");
     expect(p.request.task).toBe("AUTH-03 [REDACTED]");
     expect(p.metrics.redactions).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("repository token-count memo (TASK-019)", () => {
+  let memoRepo: ContextRepo;
+  beforeAll(async () => {
+    memoRepo = makeContextRepo(temps, registry);
+    await memoRepo.index();
+  });
+  const textHashes = () => new Set((readFingerprintFile(memoRepo.root).value ?? []).filter((f) => f.fingerprintMode === "normalized-text").map((f) => f.contentHash));
+
+  it("same metrics and Packet as a fresh count, bounded to the current files, nothing written", async () => {
+    const memo: TokenCountMemo = new Map();
+    const same = async () => {
+      const plain = await memoRepo.compile({ task: "AUTH-03" });
+      const memoized = await memoRepo.compile({ task: "AUTH-03" }, { tokenCounts: memo });
+      expect(JSON.stringify(memoized.metrics)).toBe(JSON.stringify(plain.metrics));
+      expect(JSON.stringify(memoized.packet)).toBe(JSON.stringify(plain.packet));
+      return plain;
+    };
+    await same();
+    const again = await same(); // served from the memo
+    expect(memo.size).toBe(textHashes().size);
+    memoRepo.edit("src/game/scoring.ts", "/** Match scoring and ranking. */", "/** Match scoring and ranking (memo). */");
+    await memoRepo.index();
+    const changed = await same(); // the changed file is counted again; its stale entry is dropped
+    expect(changed.metrics?.repository.tokens).not.toBe(again.metrics?.repository.tokens);
+    expect(new Set(memo.keys())).toEqual(textHashes());
+    expect(fs.existsSync(path.join(memoRepo.root, ".duo-project/cache/token-counts.json"))).toBe(false);
   });
 });

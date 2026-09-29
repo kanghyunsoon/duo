@@ -45,6 +45,8 @@ jobs:
       - name: tree-sitter grammar smoke test
         run: pnpm test:grammars
       - run: pnpm test
+      - name: benchmark correctness smoke (small fixture, JSON contract)
+        run: pnpm benchmark:smoke
       - name: validate docs traceability
         run: pnpm docs:validate
       - name: smoke test built CLI

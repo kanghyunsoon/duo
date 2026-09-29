@@ -24,6 +24,7 @@ export function projectReview(root: string, request: ReviewRequest, options: Ope
     const llm = llmPoolOf(options).forConfig(llmConfig).provider;
     const r = await withRegistry(options.registry, (registry) => withGraphReader(root, (graph) => reviewChanges(root, request, {
       graph, registry, llm, llmCache: llmConfig.cache, ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(options.tokenCounts === undefined ? {} : { tokenCounts: options.tokenCounts }),
     })));
     if (r.value === undefined) return { kind: "failed", diagnostics: r.diagnostics };
     return { kind: "ok", payload: r.value.result, performance: r.value.performance, diagnostics: errorsOf(r.value.result.diagnostics) };

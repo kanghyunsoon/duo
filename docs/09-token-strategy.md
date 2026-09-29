@@ -72,14 +72,14 @@ Reduction만으로는 품질을 보장하지 못한다. 아무것도 넣지 않�
 
 ## Benchmark
 
-- 위치 `bench/`, 실행 `pnpm bench`(TASK-019).
-- 대상: `fixtures/`의 repository와 고정 commit으로 pin한 공개 오픈소스 repository 1~2개, 그리고 이 저장소 자체(self fixture).
-- 시나리오(`bench/scenarios/*.yaml`): repository, commit, task, budget, 필수 Node 목록, 적용할 diff(선택), 기대 Review verdict(선택).
-- 결과: `bench/results/<date>-<git-sha>.md`와 `.json`. 열은 Repository Files, Repository Estimated Tokens, Files Considered, Files Loaded, Raw Context Tokens, Compiled Context Tokens, Reduction %, LLM Calls, Coverage, Review Result, Token Estimator, Bytes/Chars.
-- 공식 benchmark는 LLM Provider 없이(`llm.provider: none`) 실행한다. 의미 판정을 포함한 측정은 별도 열(`with_llm`)로 분리하고 Provider와 모델을 기록한다.
-- 재현성: 같은 DUO 버전, commit, 시나리오는 같은 결과를 낸다(LLM 열 제외). CI는 fixture 시나리오를 실행해 결과 변화를 diff로 보여 준다.
+- 위치 `bench/`, 실행 `pnpm benchmark`(full) 또는 `pnpm benchmark:smoke`(CI 소규모). 방법·한계는 [performance-benchmark.md](performance-benchmark.md).
+- 대상: 고정된 `fixtures/context/app`를 바탕으로 만든 100/1,000/5,000 source file repository, `fixtures/review/app` 시나리오, DUO 저장소의 pinned HEAD 복제본. DUO 복제본에는 성능 측정용 Truth overlay를 명시한다.
+- 시나리오와 필수 Entity는 `bench/run.mjs`와 `bench/reviews.mjs`에 코드로 고정한다. Generator 버전·seed와 실제 source count를 기록한다.
+- 결과: Git ignored `bench/results/local/{smoke,full}.{json,md}`. 측정 원본을 Project Truth로 취급하지 않는다. 추적할 수 있는 작은 요약만 문서에 커밋한다.
+- 공식 benchmark는 LLM Provider 없이(`llm.provider: none`, llmCalls 0) 실행한다. 시간과 memory는 환경 의존이므로 동일 DUO 버전·fixture에서도 같지 않다. 결정적 비교 대상은 Graph·Packet·Review 내용, parse/reuse count, expected entity coverage다.
+- Context reduction의 공개 기준 denominator는 `src` 안의 source text에 적용한 `o200k_base` 값이다. `ContextResult.metrics.repository.tokens`는 Truth/문서도 포함하므로 별도로 표기하고 공개 절감률 분모로 사용하지 않는다. Candidate representation 대비와 관련 파일 원문(raw candidate) 대비 reduction도 분리한다.
 
-결과 예:
+아래는 수치 형식의 설계 예시이며 실측 결과가 아니다. 실측은 [performance-benchmark.md](performance-benchmark.md)를 참조한다.
 
 ```text
 Token Estimator     o200k_base

@@ -9,6 +9,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { analyzeTrace, formatDiagnostic, parseDefinitionDocument, parseMarkdown } from "@duo-director/core";
 
 const SKIP = new Set([".git", "node_modules", "dist", "coverage", "tmp", ".worklog", "fixtures"]);
+/** Generated, Git-ignored paths (benchmark fixtures copy Truth fixtures; TASK-019). */
+const SKIP_PATHS = new Set(["bench/results"]);
 const MENTION = /\b(?:REQ-[A-Z]+-\d{3}|ADR-\d{3}|TASK-\d{3}[A-Z]?|AC-\d{3}[A-Z]?-\d{2})\b/g;
 
 /** Files that define REQ/ADR/TASK/Milestone (ADR-014). */
@@ -26,6 +28,7 @@ function walk(root, dir = "", out = []) {
   for (const entry of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
     if (SKIP.has(entry.name)) continue;
     const rel = dir ? `${dir}/${entry.name}` : entry.name;
+    if (SKIP_PATHS.has(rel)) continue;
     if (entry.isDirectory()) walk(root, rel, out);
     else if (rel.endsWith(".md")) out.push(rel);
   }

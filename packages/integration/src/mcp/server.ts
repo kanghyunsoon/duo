@@ -6,7 +6,7 @@
  */
 import { openGitProvider } from "@duo-director/analyzer";
 import { createDiagnostic, failure, MCP_SERVER_NAME, success, type ParseResult } from "@duo-director/core";
-import { appendRuntimeMetric } from "@duo-director/director";
+import { appendRuntimeMetric, type TokenCountMemo } from "@duo-director/director";
 import { McpServer, type CallToolResult, type ServerContext } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { NOT_INITIALIZED_FORMAT } from "../operations/common.js";
@@ -52,6 +52,8 @@ export function createDuoMcpServer(options: DuoMcpOptions): McpServer {
   const server = new McpServer({ name: MCP_SERVER_NAME, version: options.version }, { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS });
   const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`));
   const llm = options.llm ?? new LLMProviderPool(process.env);
+  // Repository token counts for Context metrics, kept in memory for the server's lifetime (TASK-019, C145).
+  const tokenCounts: TokenCountMemo = new Map();
   for (const name of Object.keys(TOOLS) as ToolName[]) {
     const tool = TOOLS[name];
     // The SDK's registerTool overloads are generic per schema; this loop registers heterogeneous tools through
@@ -64,7 +66,7 @@ export function createDuoMcpServer(options: DuoMcpOptions): McpServer {
       annotations: { readOnlyHint: tool.readOnly, destructiveHint: false, idempotentHint: tool.readOnly, openWorldHint: false },
     }, async (args: unknown, ctx: ServerContext): Promise<CallToolResult> => {
       const started = Date.now();
-      const toolCtx: ToolContext = { root: options.root, agentName: options.agentName ?? "agent", signal: ctx.mcpReq.signal, llm };
+      const toolCtx: ToolContext = { root: options.root, agentName: options.agentName ?? "agent", signal: ctx.mcpReq.signal, llm, tokenCounts };
       const operation = options.toolOverrides?.[name] ?? (tool.run as ToolOverride);
       let run: ToolRun;
       try {

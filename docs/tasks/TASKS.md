@@ -165,7 +165,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-016](#task-016-mcp-서버) | MCP 서버 | integration | M3 | TASK-010, TASK-013 | done |
 | [TASK-017](#task-017-agent-adapter와-duoctl-install) | Agent Adapter와 duoctl install | integration | M3 | TASK-015, TASK-016 | done |
 | [TASK-018](#task-018-local-http-api와-web-ui) | Local HTTP API와 Web UI | ui | M3 | TASK-009, TASK-013, TASK-015 | done |
-| [TASK-019](#task-019-benchmark) | Benchmark | bench | M4 | TASK-010, TASK-013 | todo |
+| [TASK-019](#task-019-benchmark) | Benchmark | bench | M4 | TASK-010, TASK-013 | done |
 | [TASK-020](#task-020-e2e와-문서-구현-대조) | E2E와 문서-구현 대조 | 공통 | M4 | TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-012B | todo |
 
 ## 상세
@@ -744,7 +744,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M4
 package: bench
 requirements: [REQ-TOKEN-002, REQ-NFR-004]
@@ -752,21 +752,21 @@ decisions: [ADR-005]
 depends_on: [TASK-010, TASK-013]
 ```
 
-- **Goal**: Context 절감 효과를 재현 가능하게 측정한다.
-- **Input**: 09 Benchmark 절
-- **Output**: bench runner, 시나리오, 결과 md/json
+- **Goal**: 실제 규모에서 DUO의 비용과 Context 절감·품질을 재현 가능한 수치로 확정한다(T19 지시: baseline 먼저, 병목 분해, 효과가 명확한 최적화만).
+- **Input**: 09 Benchmark 절, T19 사용자 지시
+- **Output**: `bench/` runner(deterministic fixture generator, worker, surfaces, reviews, cache, upgrade, incremental, invariant, self, packed, compare), `pnpm benchmark`·`pnpm benchmark:smoke`, [performance-benchmark.md](../performance-benchmark.md)
 - **Dependencies**: [TASK-010](#task-010-context-compiler), [TASK-013](#task-013-review-엔진)
-- **Files expected to change**: `bench/**`
-- **Status**: todo
+- **Files expected to change**: `bench/**`, 계측용 observer(graph incremental), repository token-count memo(director context/review, integration operations·MCP·UI)
+- **Status**: done (T19. C145 Resolved, C184 계속 보류)
 - **검증 대상 Requirement**: [REQ-TOKEN-002](../01-requirements.md#req-token-002-재현-가능한-benchmark), [REQ-NFR-004](../01-requirements.md#req-nfr-004-성능-목표)
 - **관련 ADR**: [ADR-005](../adr/ADR-005-token-measurement.md)
 
 Acceptance Criteria
 
-- **AC-019-01** `pnpm bench`를 두 번 실행한 결과가 같다
-- **AC-019-02** 결과에 09의 모든 열과 측정 방식이 있다
-- **AC-019-03** fixture와 pin한 공개 repository 1~2개 결과를 커밋한다
-- **AC-019-04** NFR-004 목표 대비 실측값을 기록한다
+- **AC-019-01** `pnpm benchmark`를 두 번 실행한 결정적 결과(Packet digest, coverage, parse/reuse 수, Review verdict·claim·Evidence ID)가 같다(`bench/compare.mjs`, 시간은 비교하지 않음)
+- **AC-019-02** 결과에 09의 열과 측정 방식(환경, cold/warm, 반복·통계, token 정의)이 있다
+- **AC-019-03** deterministic generator와 시나리오, 요약 결과를 커밋하고 생성 fixture와 원본 결과는 Git에서 제외한다(C198)
+- **AC-019-04** NFR-004 목표 대비 실측값을 기록한다(SLA로 확정하지 않음)
 
 ### TASK-020 E2E와 문서-구현 대조
 

@@ -18,7 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDefaultAnalyzerRegistry, isSecretFileName, readGitUserName, type AnalyzerRegistry } from "@duo-director/analyzer";
 import { createDecisionService, fileRef, normalizeRepoPath, readSourceFile, type Diagnostic, type RepoPath } from "@duo-director/core";
-import { appendRuntimeMetric, MAX_BUDGET, MIN_BUDGET, reviewLlmMetric, type ReviewResult } from "@duo-director/director";
+import { appendRuntimeMetric, MAX_BUDGET, MIN_BUDGET, reviewLlmMetric, type ReviewResult, type TokenCountMemo } from "@duo-director/director";
 import { z } from "zod";
 import { LLMProviderPool } from "../llm/factory.js";
 import { withGraphReader, type Operation } from "../operations/common.js";
@@ -154,7 +154,8 @@ export async function startDuoUiServer(options: DuoUiServerOptions): Promise<Duo
   const own = options.registry === undefined ? await createDefaultAnalyzerRegistry() : undefined;
   const registry = options.registry ?? own?.value;
   if (registry === undefined) throw new Error((own?.diagnostics ?? []).map((d) => d.message).join("; ") || "no analyzer registry");
-  const shared = { registry, llm };
+  // One registry, one LLM pool and one in-memory token-count memo for the server's lifetime (TASK-019).
+  const shared = { registry, llm, tokenCounts: new Map() as TokenCountMemo };
   let port = 0;
   const cookieName = () => `duo_ui_${port}`;
   const allowedHosts = () => new Set([`127.0.0.1:${port}`, `localhost:${port}`]);

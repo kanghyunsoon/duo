@@ -77,9 +77,13 @@ export interface InspectOptions {
   readonly graph: IndexedGraph;
   readonly registry?: AnalyzerRegistry;
   readonly historyWindow?: number;
+  /** Benchmark observation only; excluded from freshness results. */
+  readonly onPhase?: (name: string, milliseconds: number) => void;
 }
 
 export async function inspectIndex(root: string, options: InspectOptions): Promise<ParseResult<IndexInspection>> {
+  let phaseStart = performance.now();
+  const phase = (name: string): void => { const now = performance.now(); options.onPhase?.(name, now - phaseStart); phaseStart = now; };
   const rootDir = path.resolve(root);
   const window = options.historyWindow ?? HISTORY_WINDOW;
   const diagnostics: Diagnostic[] = [];
@@ -87,12 +91,16 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
   diagnostics.push(...loaded.diagnostics);
   if (loaded.value === undefined) return failure(diagnostics);
   const { truth } = loaded.value;
+  phase("truth");
   const scan = await scanRepository(rootDir, { include: truth.config.index.include, exclude: truth.config.index.exclude });
   diagnostics.push(...scan.diagnostics);
   if (scan.diagnostics.some((d) => d.severity === "error")) return failure(diagnostics);
+  phase("scan");
   const current = (await fingerprintRepositoryFiles(rootDir, scan.files)).fingerprints;
+  phase("fingerprint");
 
   const { previous, fullRebuildReason, diagnostics: stateDiagnostics } = loadPreviousState(rootDir, options.graph, window, false);
+  phase("state");
   diagnostics.push(...stateDiagnostics);
   const changes = compareFingerprints(previous?.files ?? [], current);
   const prevFiles = new Map((previous?.files ?? []).map((f) => [f.path, f] as const));
@@ -104,6 +112,7 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
     if (created.value === undefined) return failure(diagnostics);
     registry = created.value;
   }
+  phase("registry");
   const analysis = new Map<RepoPath, AnalysisFreshness>();
   const changedFiles = new Set<string>(changes.filter((c) => c.status === "DELETED").map((c) => c.path));
   const indexed = current.map((f) => f.path).filter((p) => !p.startsWith(STATE_PREFIX));
@@ -134,6 +143,7 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
   } finally {
     if (options.registry === undefined) registry.dispose();
   }
+  phase("analysis");
   for (const [p, f] of prevFiles) if (f.resolution !== undefined && !analysis.has(p)) changedFiles.add(p);
 
   const signals = resolutionSignals(rootDir, changes, previous);
@@ -162,6 +172,7 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
     && (previous?.history === undefined || recordedHead !== repo.headOid || previous.history.shallow !== repo.shallow);
   const repositoryMoved = previous !== undefined && (previous.git?.headOid !== repo?.headOid || previous.git?.branch !== repo?.branch
     || (previous.git?.detached ?? false) !== (repo?.detached ?? false));
+  phase("resolution-and-git");
 
   const truthChanged = changes.filter((c) => c.path.startsWith(STATE_PREFIX) && c.status !== "UNCHANGED").map((c) => c.path);
   // A state or blob OID change with the same content is UNCHANGED for compareFingerprints but still rewrites the File payload or the state.

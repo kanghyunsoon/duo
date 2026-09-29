@@ -20,7 +20,7 @@ import { planContext } from "./candidates.js";
 import { packetDependencyDigest } from "./digest.js";
 import { expandCandidates } from "./expand.js";
 import { TokenMeter } from "./meter.js";
-import { reduction, repositoryTokens } from "./metrics.js";
+import { reduction, repositoryTokens, type TokenCountMemo } from "./metrics.js";
 import { packContext } from "./pack.js";
 import { DEFAULT_LIMITS, MAX_BUDGET, MIN_BUDGET, TASK_TOKEN_LIMIT } from "./policy.js";
 import { SourceReader } from "./retrieve.js";
@@ -42,6 +42,11 @@ export interface CompileContextOptions {
    * once and compiles twice). Only a "current" inspection is accepted; otherwise it is ignored.
    */
   readonly inspection?: IndexInspection;
+  /**
+   * In-memory repository token counts to reuse (TASK-019): Review shares one across its two compiles,
+   * MCP and the UI keep one for their lifetime. Same metrics as without it; writes nothing.
+   */
+  readonly tokenCounts?: TokenCountMemo;
 }
 
 const MAX_TASK_CHARS = 20_000;
@@ -132,7 +137,7 @@ export async function compileContext(root: string, request: ContextRequest, opti
   // 6. Request-level metrics (outside the Packet).
   t = performance.now();
   const before = meter.ms;
-  const repo = repositoryTokens(root, meter, useCache);
+  const repo = repositoryTokens(root, meter, useCache, options.tokenCounts);
   const considered = new Set(plan.items.map((i) => i.file));
   const loadedFiles = new Set([...packet.intent.requirements, ...packet.intent.constraints, ...packet.decisions.active, ...packet.code, ...packet.tests, ...packet.issues]
     .filter((i) => i.level !== "L1").map((i) => i.source?.path ?? i.ref));

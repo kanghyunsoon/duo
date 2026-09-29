@@ -26,6 +26,14 @@ export interface RepositoryTokens {
   readonly perFile: ReadonlyMap<string, number>;
 }
 
+/**
+ * Caller-owned, in-memory token counts by content hash (TASK-019). A count is a pure function of the
+ * canonical text, which the content hash identifies, so a hit gives the same value a fresh count
+ * would; the metrics do not change. Nothing is written. After each call the memo holds exactly the
+ * current files' entries, so a long-lived process (MCP, UI) stays bounded by the repository.
+ */
+export type TokenCountMemo = Map<string, { readonly tokens: number; readonly chars: number }>;
+
 function readCounts(root: string): Map<string, { tokens: number; chars: number }> {
   try {
     const entry = JSON.parse(fs.readFileSync(path.join(root, TOKEN_COUNT_CACHE_PATH), "utf8")) as { format?: unknown; estimator?: unknown; counts?: Record<string, [number, number]> };
@@ -51,7 +59,7 @@ function writeCounts(root: string, counts: ReadonlyMap<string, { tokens: number;
   }
 }
 
-export function repositoryTokens(root: string, meter: TokenMeter, useCache: boolean): RepositoryTokens {
+export function repositoryTokens(root: string, meter: TokenMeter, useCache: boolean, memo?: TokenCountMemo): RepositoryTokens {
   const fingerprints = readFingerprintFile(root).value ?? [];
   const cached = useCache ? readCounts(root) : new Map<string, { tokens: number; chars: number }>();
   const next = new Map<string, { tokens: number; chars: number }>();
@@ -60,7 +68,7 @@ export function repositoryTokens(root: string, meter: TokenMeter, useCache: bool
   for (const f of fingerprints) {
     bytes += f.size;
     if (f.fingerprintMode !== "normalized-text") { binaryFiles++; continue; }
-    let v = cached.get(f.contentHash);
+    let v = memo?.get(f.contentHash) ?? cached.get(f.contentHash);
     if (v === undefined) {
       const text = readSourceFile(root, f.path).value;
       if (text === undefined) continue;
@@ -72,6 +80,10 @@ export function repositoryTokens(root: string, meter: TokenMeter, useCache: bool
     chars += v.chars;
   }
   if (useCache && (next.size !== cached.size || [...next.keys()].some((k) => !cached.has(k)))) writeCounts(root, next);
+  if (memo !== undefined) {
+    memo.clear();
+    for (const [k, v] of next) memo.set(k, v);
+  }
   return { files: fingerprints.length, binaryFiles, tokens, bytes, chars, perFile };
 }
 

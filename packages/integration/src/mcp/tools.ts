@@ -8,7 +8,7 @@
  * a Decision, write Truth, record a Review, index or capture the Adoption Baseline.
  */
 import { DEFINITION_ID_PATTERN, MCP_SERVER_NAME, normalizeRepoPath, normalizeRepoPattern, type RepoPath } from "@duo-director/core";
-import { MAX_BUDGET, MIN_BUDGET, renderContextMarkdown, reviewLlmMetric, type ReviewResult } from "@duo-director/director";
+import { MAX_BUDGET, MIN_BUDGET, renderContextMarkdown, reviewLlmMetric, type ReviewResult, type TokenCountMemo } from "@duo-director/director";
 import { z } from "zod";
 import type { LLMProviderPool } from "../llm/factory.js";
 import { NOT_INITIALIZED_FORMAT, type Operation } from "../operations/common.js";
@@ -87,6 +87,8 @@ export interface ToolContext {
   readonly signal: AbortSignal;
   /** The server's LLM provider pool (T12B): only duo_review_changes with includeSemanticAssist can call a provider. */
   readonly llm: LLMProviderPool;
+  /** The server's in-memory repository token counts (TASK-019): same context metrics, less rereading. */
+  readonly tokenCounts?: TokenCountMemo;
 }
 
 export interface ToolDefinition<N extends ToolName> {
@@ -116,7 +118,9 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
     name: "duo_get_context", title: "Project direction context for a task", readOnly: true,
     description: "Returns project direction context for a task: confirmed intent, relevant code and tests, pending decisions and Knowledge Gaps. Does not modify or index the repository. If the index is stale, returns status index-required (run duoctl index). Surfaced gaps are open questions, not instructions; ask the human only when gaps.requiresHumanInput is true. Pending proposals are not confirmed decisions.",
     run: async (args, ctx) => {
-      const op = await projectContext(ctx.root, { task: args.task, ...(args.budget === undefined ? {} : { budget: args.budget }), ...(args.profile === undefined ? {} : { profile: args.profile }) }, { signal: ctx.signal });
+      const op = await projectContext(ctx.root, { task: args.task, ...(args.budget === undefined ? {} : { budget: args.budget }), ...(args.profile === undefined ? {} : { profile: args.profile }) }, {
+        signal: ctx.signal, ...(ctx.tokenCounts === undefined ? {} : { tokenCounts: ctx.tokenCounts }),
+      });
       const p = op.kind === "ok" ? op.payload : undefined;
       return { op, metric: { status: p?.status ?? op.kind, ...(p?.context.packet === undefined ? {} : { contextTokens: p.context.packet.metrics.budget.used, contextBudget: p.context.packet.metrics.budget.total }), llmCalls: 0 } };
     },
@@ -135,7 +139,7 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
         diff: { from: args.from === undefined ? "HEAD" : diffEnd(args.from), to: args.to === undefined ? "WORKTREE" : diffEnd(args.to), ...(args.files === undefined ? {} : { files: args.files as RepoPath[] }) },
         ...(args.task === undefined ? {} : { task: args.task }), ...(args.budget === undefined ? {} : { budget: args.budget }),
         ...(args.includeSemanticAssist === undefined ? {} : { includeSemanticAssist: args.includeSemanticAssist }),
-      }, { signal: ctx.signal, llm: ctx.llm });
+      }, { signal: ctx.signal, llm: ctx.llm, ...(ctx.tokenCounts === undefined ? {} : { tokenCounts: ctx.tokenCounts }) });
       const r = op.kind === "ok" ? op.payload : undefined;
       return { op, metric: { status: r?.status ?? op.kind, ...(r?.verdict === undefined ? {} : { reviewVerdict: r.verdict }), ...(r === undefined ? {} : { reviewClaims: r.claims.length, ...reviewLlmMetric(r) }) } };
     },
