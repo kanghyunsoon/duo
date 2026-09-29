@@ -25,21 +25,18 @@ if (git.branch !== "main") block("git-branch", "release candidates are cut from 
 const upstream = run("git", ["rev-parse", "@{u}"]).stdout.trim();
 const pushed = upstream === git.commit;
 if (!pushed) block("git-not-pushed", "HEAD is not the pushed origin/main commit");
-let ci = { status: "unknown" };
-const runs = run("gh", ["run", "list", "--commit", git.commit, "--json", "databaseId,status,conclusion", "--limit", "5"]);
-if (runs.code === 0) {
-  const list = JSON.parse(runs.stdout || "[]");
-  const done = list.find((r) => r.status === "completed");
-  ci = { status: list.length === 0 ? "none" : done === undefined ? "in-progress" : done.conclusion, run: done?.databaseId ?? list[0]?.databaseId };
-}
-if (ci.status !== "success") block("ci-not-green", "no successful CI run (3 OS) for HEAD " + git.commit.slice(0, 12) + " (" + ci.status + ")");
-log("git " + git.commit.slice(0, 12) + " " + git.branch + (git.clean ? " clean" : " DIRTY") + ", CI " + ci.status);
+log("git " + git.commit.slice(0, 12) + " " + git.branch + (git.clean ? " clean" : " DIRTY"));
+// The full output of every step, for diagnosis (the report keeps only a tail).
+const LOGS = path.join(DIST, "preflight-logs");
+fs.rmSync(LOGS, { recursive: true, force: true });
+fs.mkdirSync(LOGS, { recursive: true });
 
 // ---- verification (§32) ----
 const verification = {};
 const step = (name, args) => {
   log("running pnpm " + args.join(" "));
   const r = pnpm(args);
+  fs.writeFileSync(path.join(LOGS, name + ".log"), "exit " + r.code + " · " + r.ms + " ms\n--- stdout\n" + r.stdout + "\n--- stderr\n" + r.stderr);
   verification[name] = { ok: r.code === 0, ms: r.ms, ...(r.code === 0 ? {} : { tail: (r.stdout + r.stderr).split(/\r?\n/u).slice(-15).join("\n") }) };
   if (r.code !== 0) block("verification-" + name, "pnpm " + args.join(" ") + " failed");
 };
@@ -178,6 +175,17 @@ const smokeFile = path.join(DIST, "openai-smoke.json");
 const smoke = fs.existsSync(smokeFile) ? readJson(smokeFile) : undefined;
 const openaiSmoke = smoke === undefined ? { status: "not-executed" } : { status: smoke.passed && smoke.commit === git.commit ? "passed" : smoke.passed ? "passed-on-other-commit" : "failed", commit: smoke.commit, model: smoke.model, checks: smoke.checks };
 if (openaiSmoke.status !== "passed") block("openai-smoke", "real OpenAI provider smoke not yet executed on this commit (" + openaiSmoke.status + "): DUO_OPENAI_SMOKE=1 OPENAI_API_KEY=… DUO_OPENAI_SMOKE_MODEL=… pnpm test:openai-smoke");
+
+// ---- CI for this exact commit, checked last (the steps above take long enough for CI to finish) ----
+let ci = { status: "unknown" };
+const runs = run("gh", ["run", "list", "--commit", git.commit, "--json", "databaseId,status,conclusion", "--limit", "5"]);
+if (runs.code === 0) {
+  const list = JSON.parse(runs.stdout || "[]");
+  const done = list.find((r) => r.status === "completed");
+  ci = { status: list.length === 0 ? "none" : done === undefined ? "in-progress" : done.conclusion, run: done?.databaseId ?? list[0]?.databaseId };
+}
+if (ci.status !== "success") block("ci-not-green", "no successful CI run (3 OS) for HEAD " + git.commit.slice(0, 12) + " (" + ci.status + ")");
+log("CI " + ci.status);
 
 const report = {
   format: "duo.release-preflight/1",

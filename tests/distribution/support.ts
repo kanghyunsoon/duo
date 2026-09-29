@@ -91,7 +91,19 @@ export function runOnPath(command: string, args: readonly string[], cwd: string,
   const r = IS_WIN
     ? spawnSync([command, ...args].map(quote).join(" "), { cwd, env, input, encoding: "utf8", windowsHide: true, shell: true, timeout: 600_000 })
     : spawnSync(command, [...args], { cwd, env, input, encoding: "utf8", timeout: 600_000 });
-  return { code: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "", json: () => JSON.parse(r.stdout) };
+  const stdout = r.stdout ?? "";
+  const stderr = r.stderr ?? "";
+  return {
+    code: r.status ?? -1, stdout, stderr,
+    json: () => {
+      try {
+        return JSON.parse(stdout);
+      } catch (error) {
+        // Release Hardening: an intermittent empty stdout (exit 0) under load; keep what is needed to diagnose it.
+        throw new Error(`${command} ${args.join(" ")}: stdout is not JSON (exit ${r.status}, signal ${r.signal}, error ${r.error?.message ?? "none"}, stdout ${stdout.length} chars: ${JSON.stringify(stdout.slice(0, 200))}, stderr: ${JSON.stringify(stderr.slice(0, 800))}): ${(error as Error).message}`);
+      }
+    },
+  };
 }
 
 /** Every package.json under dir (installed dependency tree). */
