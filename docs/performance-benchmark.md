@@ -152,3 +152,22 @@ CI(GitHub hosted runner, commit ac3a902)의 small smoke 한 번: Ubuntu initial 
 - “DUO benchmark fixture `duo-bench-fixture/1`(5,000 synthetic source files, TS/Java/C#/C++/Python/L0)에서 AUTH-03 task의 Packet은 2,023 o200k_base token이며, 137,048 token source corpus 대비 98.52% 작다. 같은 Packet은 100-file fixture에서도 같은 digest로 만들어진다.”
 - “같은 fixture에서 Packet은 관련 파일 원문 합(1,602 token)보다 26% 크다.” 절감은 저장소 전체 대비이며 관련 파일만 읽는 경우 대비가 아니다.
 - 시간 주장에는 위 기준 환경, fixture, operation을 함께 쓴다.
+
+
+## 설치 직후 첫 실행 (Release Hardening)
+
+T19에서 본 “설치 직후 첫 `duoctl status` 18.3 s”를 같은 Windows 기준 환경에서 분해했다(`bench/experiments/first-run*.mjs`, 결과는 Git 제외 `bench/results/local/first-run*.json`). packed tarball을 매번 새 npm prefix에 설치하고 3라운드 반복했다.
+
+| 시나리오 | 1회 | 2회 | 3회 |
+|---|---:|---:|---:|
+| A. 새 package + 기존 initialized project | 17.4~18.6 s | 1.45~1.47 s | 1.45 s |
+| B. 새 package + 새 project | 18.4~18.9 s | 1.43~1.49 s | 1.46~1.53 s |
+| D. 새 package, 설치 파일을 먼저 한 번 읽음(63~78 s, 7,481 파일 108.5 MB) | 1.38~1.54 s | 1.41~1.48 s | 1.41~1.57 s |
+
+- 프로세스 시작부터 사용자 코드까지 20~36 ms, 프로세스 밖(spawn, 종료) 68~108 ms로 매번 같았다. 차이는 모두 프로세스 안에서 났다.
+- 첫 실행 CPU profile(19.2 s): 16.5 s가 Node ESM loader가 모듈 소스 파일을 여는 `openSync` 안이었다. DUO 작업(Truth 로드, scan, freshness, registry와 문법 load, SQLite open, Git)의 CPU 시간은 합쳐 0.4 s 미만이었다. 문법 WASM(12 MB)을 여는 시간은 22 ms였다.
+- 모듈별(load hook): 첫 실행은 모듈 310개 로드에 16.9 s, 두 번째는 같은 310개에 0.22 s. typescript(파일 1개, 8.9 MB) 9.6 s → 0.12 s, gpt-tokenizer(2.4 MB) 2.1 s → 0.007 s, zod(0.8 MB) 1.3 s → 0.04 s, DUO bundle(0.76 MB) 1.0 s. 새로 쓰인 JavaScript 파일의 첫 open이 KB당 약 1 ms였다.
+- 새 project(B)는 비용을 늘리지 않았다. 설치 파일을 먼저 읽으면(D) 첫 실행도 정상이다.
+- 이 PC의 Windows Defender는 실행 중이 아니었고(`AMRunningMode: Not running`), Security Center에는 AhnLab V3 Internet Security가 활성 백신으로 등록되어 있다. 측정 패턴은 스크립트 파일에 대한 on-access 검사와 일치하지만 보안 제품을 끄고 비교하지 않았으므로 원인을 확정하지 않는다. DUO 쪽에서는 **unattributed external startup cost: first open of newly installed JavaScript module files**로 기록한다.
+
+**판단**: 설치 직후 1회만 발생하고, 같은 실행 안의 DUO 작업은 정상이며, 이후 호출은 1.4~1.5 s로 정상이다. release blocker가 아니며 limitation으로 문서화한다. 보안 검사를 우회하거나 끄는 조치는 하지 않는다. CLI가 명령에 필요 없는 큰 모듈(typescript 등)을 처음부터 로드하는 점은 이 비용의 절반 이상을 차지하지만, lazy import는 C202로 계속 보류한다.

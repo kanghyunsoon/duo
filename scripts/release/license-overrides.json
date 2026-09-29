@@ -1,0 +1,7 @@
+{
+  "format": "duo.license-overrides/1",
+  "note": "Reviewed dependencies whose license the lockfile does not record. Each entry names the exact version and where the license was read.",
+  "packages": {
+    "format@0.2.2": { "license": "MIT", "source": "package.json legacy licenses[] field: { type: MIT, url: http://sjs.mit-license.org }", "reviewed": "2026-09-29" }
+  }
+}

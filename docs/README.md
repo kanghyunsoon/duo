@@ -21,6 +21,9 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [12-roadmap.md](12-roadmap.md) | Milestone(M0~M4)과 MVP 이후 |
 | [language-support.md](language-support.md) | Analysis Level(L0~L3), AnalyzerCapabilities, 언어별 지원·한계, stack·build output 판별, grammar (T18.0) |
 | [performance-benchmark.md](performance-benchmark.md) | TASK-019 benchmark 방법, 기준 환경, index·Context·Review·MCP·UI 측정, C145 원인, 적용한 최적화 |
+| [release/checklist.md](release/checklist.md) | 0.1.0 release 명령, 사람이 확인할 항목, publish 명령(실행하지 않음), limitation |
+| [release/decision-packets.md](release/decision-packets.md) | 사람 결정 요청: REQ-NFR-004, DUO LICENSE, npm scope·공개 저장소, 실제 OpenAI smoke |
+| [release/compatibility.md](release/compatibility.md) | 0.1.0 format freeze와 breaking change 정책 |
 | [conflicts.md](conflicts.md) | 원본 충돌, Human 결정 기록(H-*), 미결 사항 |
 | [adr/](adr/README.md) | ADR-001~014 |
 | [tasks/TASKS.md](tasks/TASKS.md) | TASK-000~020(TASK-012A/012B 포함), 의존성, E2E 매핑 |

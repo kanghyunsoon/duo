@@ -4,70 +4,70 @@
 
 > Human defines intent. Agent performs implementation. DUO maintains direction.
 
-DUO는 Codex, Claude Code 같은 AI Coding Agent가 프로젝트의 목표와 결정사항에서 벗어나지 않도록 Repository 상태를 관찰하고, 현재 작업에 필요한 Context만 전달하며, 작업 결과를 근거(Evidence)와 함께 검수하는 로컬 도구입니다. DUO는 코드를 작성하지 않습니다.
+DUO는 Codex, Claude Code 같은 AI Coding Agent가 프로젝트의 목표와 결정사항에서 벗어나지 않게 돕는 로컬 도구입니다. DUO는 코드를 작성하지 않습니다. 하는 일은 네 가지입니다.
+
+- **Project Direction**: 사람이 확정한 목표, 요구사항, Decision을 `.duo-project/`에 Project Truth로 둡니다. Agent는 제안만 하고 확정은 사람이 합니다.
+- **Deterministic evidence**: 파일, Git history, 코드 구조를 결정적으로 분석해 Graph와 근거(Evidence)를 만듭니다.
+- **Context Compiler**: 작업에 필요한 Truth, 코드, 테스트만 골라 작은 Context Packet으로 Agent에게 줍니다.
+- **Drift Review**: 변경을 확정된 방향과 대조해 PASS / WARN / BLOCK / ASK를 근거와 함께 보고합니다.
+
+LLM은 선택 사항입니다. API key 없이도 index, Context, Review, MCP, UI가 모두 동작하고, 기본값에서는 네트워크를 쓰지 않습니다.
 
 ## 상태
 
-CLI(`duoctl`), MCP 서버(`duoctl mcp`), Agent 연결(`duoctl install`), 선택적 OpenAI 의미 보조, 로컬 Project Direction Console(`duoctl ui`), Benchmark(TASK-019)까지 진행했습니다. 배포용 package는 만들었지만 **npm에는 아직 publish하지 않았습니다.** 진행 순서는 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)를 따릅니다.
+0.1.0 release candidate 단계입니다. **npm에는 아직 publish하지 않았습니다.** 남은 결정은 [docs/release/checklist.md](docs/release/checklist.md)에 있습니다.
+
+## 빠른 시작
+
+Node.js 24.15 이상이 필요합니다. native build나 install script는 없습니다.
+
+**지금(release candidate)**: 이 저장소에서 tarball을 만들어 설치합니다.
+
+```bash
+pnpm install && pnpm release:pack          # .dist/duo-director-cli-0.1.0.tgz
+npm install -g .dist/duo-director-cli-0.1.0.tgz
+
+cd existing-project
+duoctl init
+duoctl install codex        # 또는: duoctl install claude-code
+duoctl ui                   # 선택
+```
+
+**npm publish 후**(아직 사용할 수 없음):
+
+```bash
+npm install -g @duo-director/cli
+cd existing-project
+duoctl init
+duoctl install codex        # Claude Code: duoctl install claude-code
+duoctl ui                   # 선택
+```
+
+`duoctl init`은 이미 있는 저장소에서 시작합니다. 저장소를 관찰하고, 꼭 필요한 질문만 사람에게 묻고, 최소한의 Project Truth를 만들고, 첫 index를 만든 뒤, 지금 상태를 Adoption Baseline으로 기록합니다. 그래서 도입 전부터 있던 문제와 도입 후 새로 생긴 문제를 구분합니다. 처음부터 DUO로 만든 프로젝트가 아니어도 됩니다. 작업 중인 변경이 있으면 `--baseline-policy head|abort` 중 하나를 고릅니다.
+
+`duoctl install codex`와 `duoctl install claude-code`는 바꿀 파일을 먼저 보여 주고, 확인하면 MCP 설정(`.codex/config.toml` 또는 `.mcp.json`)과 짧은 안내 블록(`AGENTS.md` 또는 `CLAUDE.md`)을 추가한 뒤 DUO 서버가 실제로 뜨는지 확인합니다. 기존 설정과 사람이 쓴 글은 그대로 두고, commit은 직접 합니다. Codex는 이 project를 trust해야 하고 Claude Code는 `duo-director` 서버 승인을 묻습니다. DUO는 둘 다 대신하지 않습니다. `duoctl install status`로 연결 상태를, `duoctl install remove <agent>`로 DUO가 추가한 항목만 제거합니다. project 안에만 설치했다면 `--launcher npx`를 줍니다.
+
+`duoctl ui`는 `127.0.0.1`에서 로컬 Console을 열고 출력된 URL로 접속합니다. UI는 현재 index를 읽기만 하므로 `index-required`가 보이면 `duoctl index`를 실행하고 Refresh합니다. UI에서 바꿀 수 있는 Truth는 사람의 Decision Confirm/Reject뿐입니다.
+
+Windows에서는 설치 직후 첫 명령이 오래 걸릴 수 있습니다(기준 PC에서 약 18초, 이후 약 1.5초). 새로 설치된 JavaScript 파일을 처음 열 때 드는 외부 비용이며 한 번만 생깁니다([측정](docs/performance-benchmark.md#설치-직후-첫-실행-release-hardening)).
+
+## 지원 범위
+
+| 수준 | 대상 | 하는 일 |
+|---|---|---|
+| L0 | 모든 Git repository의 모든 파일(분석기 없는 언어 포함) | 파일, fingerprint, Git history와 diff, Project Truth 참조, 파일 수준 Context와 Review |
+| L1 | TypeScript / JavaScript / Java / C# / C++ / Python | Symbol, Test, import·include·using, call site, 정확한 source 위치 |
+| L2 | TypeScript / JavaScript | 모든 import의 module resolution, binding으로 확실한 CALLS |
+
+모든 언어를 의미 수준으로 이해한다는 뜻은 아닙니다. Analyzer가 없거나 얕은 언어에서는 확신이 낮아질 뿐 DUO가 실패하거나 WARN·BLOCK이 생기지 않습니다. 자세한 범위와 한계는 [docs/language-support.md](docs/language-support.md)에 있습니다.
 
 ## Benchmark
 
 수치는 한 기준 환경(Windows 11, Intel Core Ultra 7 155H, Node 24.18)과 DUO의 synthetic fixture `duo-bench-fixture/1`에서 잰 값이며 다른 프로젝트나 성능 보장으로 일반화하지 않습니다. 방법과 전체 결과는 [docs/performance-benchmark.md](docs/performance-benchmark.md)에 있습니다.
 
-- 5,000개 source file fixture(TS/Java/C#/C++/Python과 분석기 없는 파일)에서 `AUTH-03` task의 Context Packet은 2,023 o200k_base token이고, 137,048 token의 source corpus보다 98.52% 작습니다. 100개 파일 fixture에서도 같은 Packet(같은 digest)이 나옵니다. 기대한 Requirement, Decision, Symbol, Test 4개가 모두 들어갑니다.
+- On DUO's synthetic 5,000-source-file fixture on Windows 11 / Core Ultra 7 155H, the `AUTH-03` packet contained 2,023 o200k_base tokens from a 137,048-token analyzed source corpus and included all expected entities (Requirement, Decision, Symbol, Test). 100개 파일 fixture에서도 같은 Packet(같은 digest)이 나옵니다.
 - 같은 fixture에서 Packet은 관련 파일 원문 합(1,602 token)보다 26% 큽니다. 절감은 저장소 전체를 읽는 경우와 비교한 값입니다.
-- 같은 기준 환경에서 5,000파일 fixture의 장기 실행(MCP·UI) `context`는 약 2.5초, `review`는 약 3.9초, 파일 하나를 바꾼 뒤 `index`는 약 2.4초입니다. 대부분은 결과를 정확하게 유지하기 위해 매 호출 수행하는 freshness 확인입니다.
-
-## 지원 범위
-
-DUO는 stack-agnostic repository support 위에 언어별 Analyzer를 점점 깊게 얹는 구조입니다. 모든 언어를 의미 수준으로 이해한다는 뜻은 아닙니다.
-
-| 수준 | 대상 | 하는 일 |
-|---|---|---|
-| Universal repository support (L0) | 모든 Git repository의 모든 파일 | 파일, fingerprint, Git history와 diff, Project Truth 참조, 파일 수준 Context와 Review |
-| Structural analyzers (L1) | TypeScript / JavaScript / Java / C# / C++ / Python | Symbol, Test, import·include·using, call site, 정확한 source 위치 |
-| Deep semantic resolution (L2 일부) | 현재 TypeScript / JavaScript가 가장 강함 | 모든 import의 module resolution, binding으로 확실한 CALLS |
-
-Analyzer가 없거나 얕은 언어에서는 확신이 낮아질 뿐 DUO가 실패하거나 WARN·BLOCK이 생기지 않습니다. 언어별 범위와 한계는 [docs/language-support.md](docs/language-support.md)에 있습니다.
-
-## 설치
-
-세 단계는 서로 다른 일입니다.
-
-| 단계 | 명령 | 하는 일 |
-|---|---|---|
-| 1. 실행 파일 설치 | 아래 참고 | 컴퓨터에 `duoctl`을 설치합니다 |
-| 2. 저장소 초기화 | `duoctl init` | 저장소를 관찰하고 `.duo-project/`, 첫 Index, Adoption Baseline을 만듭니다 |
-| 3. Agent 연결 | `duoctl install codex` 또는 `duoctl install claude-code` | MCP 설정과 짧은 안내 블록을 추가합니다 |
-| 4. Project Direction 확인 | `duoctl ui` | 로컬 Console에서 Truth, 관계, Coverage, Context, Review와 사람의 Decision을 확인합니다 |
-
-Node.js 24.15 이상이 필요합니다. native build나 install script는 없습니다.
-
-### 1. 실행 파일 설치
-
-지금은 이 저장소에서 배포 tarball을 만들어 설치합니다.
-
-```bash
-pnpm install && pnpm build && pnpm pack:cli
-npm install -g .dist/duo-director-cli-0.1.0.tgz
-duoctl --version
-```
-
-npm에 publish한 뒤에는 `npm install -g @duo-director/cli` 한 줄이 됩니다(아직 사용할 수 없음). project 안에만 설치하려면 `npm install -D <tarball>` 뒤 `npx --no-install duoctl …`로 실행하고, Agent 연결 때 `--launcher npx`를 줍니다.
-
-### 2. 저장소 초기화
-
-저장소 최상위에서 `duoctl init`. 작업 중인 변경이 있으면 `--baseline-policy head|abort` 중 하나를 고릅니다.
-
-### 3. Agent 연결
-
-`duoctl install codex` 또는 `duoctl install claude-code`. 바꿀 파일을 먼저 보여 주고, 확인하면 MCP 설정(`.codex/config.toml` 또는 `.mcp.json`)과 안내 블록(`AGENTS.md` 또는 `CLAUDE.md`)을 추가한 뒤 DUO 서버가 실제로 뜨는지 확인합니다. 기존 설정과 사람이 쓴 글은 그대로 두고, commit은 직접 합니다. Codex는 이 project를 trust해야 하고, Claude Code는 `duo-director` 서버 승인을 묻습니다. DUO는 둘 다 대신하지 않습니다.
-
-`duoctl install status`로 연결 상태를, `duoctl install remove <agent>`로 DUO가 추가한 항목만 제거합니다. Agent가 비대화형으로 연결할 때는 `--non-interactive --yes --json`을 씁니다(`--yes`는 충돌을 덮어쓰지 않습니다).
-
-### 4. Local UI
-
-`duoctl ui`를 실행하고 출력된 URL을 브라우저에서 엽니다. 서버는 `127.0.0.1`의 사용 가능한 port를 선택합니다. `--port N`으로 port를 지정하거나 `--open`으로 브라우저를 열 수 있습니다. UI는 현재 Index를 읽기만 하므로 `index-required`가 나오면 별도 터미널에서 `duoctl index`를 실행하고 화면에서 Refresh합니다. Confirm/Reject 외의 Truth 변경이나 Review Record 생성은 CLI를 사용합니다. UI API는 실행별 session cookie, CSRF token, Host/Origin 검사를 사용합니다.
+- 같은 환경의 5,000파일 fixture에서 장기 실행(MCP·UI) `context`는 약 2.5초, `review`는 약 3.9초, 파일 하나를 바꾼 뒤 `index`는 약 2.4초입니다. 대부분은 결과를 정확하게 유지하려고 매 호출 수행하는 freshness 확인입니다.
 
 ## 사용
 
@@ -116,6 +116,7 @@ pnpm duoctl --version
 | `pnpm docs:validate` | Requirement/ADR/Task/AC 추적성 검사 |
 | `pnpm pack:cli` | 배포 package(`.dist/cli-package/`)와 tarball 생성, publish하지 않음 |
 | `pnpm test:dist` | tarball을 임시 prefix·project에 설치해 배포본만으로 E2E(npm registry 접근 필요) |
+| `pnpm release:pack` · `release:preflight` · `release:audit` · `release:lock` | release candidate 생성과 검사([checklist](docs/release/checklist.md)). publish하지 않음 |
 | `pnpm benchmark:smoke` | 100파일 fixture benchmark와 결과 계약 검사(CI) |
 | `pnpm benchmark` | 100/1,000/5,000파일 full benchmark, 결과는 Git 제외 `bench/results/local/` |
 
@@ -124,11 +125,10 @@ pnpm duoctl --version
 - [문서 지도](docs/README.md)
 - [제품 비전](docs/00-product-vision.md) · [요구사항](docs/01-requirements.md) · [아키텍처](docs/02-system-architecture.md)
 - [충돌 및 미결 사항](docs/conflicts.md)
+- Release: [checklist](docs/release/checklist.md) · [결정 요청](docs/release/decision-packets.md) · [호환성 계약](docs/release/compatibility.md) · [benchmark](docs/performance-benchmark.md)
 - [ADR](docs/adr/README.md)
 
 ## 원본 입력
 
 - [Duo 기획서.md](Duo%20기획서.md): 제품 기획서
 - [docs/references/development-directive.md](docs/references/development-directive.md): 개발 지시문
-
-
