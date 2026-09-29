@@ -48,17 +48,15 @@ Release Hardening에서 사람이 결정해야 하는 항목이다. 각 항목�
 
 ## DP-3. npm scope와 공개 저장소 (C168)
 
-보안 신고 채널(H-44): `SECURITY.md`는 GitHub Private Vulnerability Reporting을 공식 채널로 정했다. 이 기능은 저장소가 public일 때 켤 수 있으므로 **Human action required: 저장소를 public으로 전환할 때 Settings → Code security에서 Private vulnerability reporting을 켠다.** DUO는 저장소 설정을 바꾸지 않는다.
+보안 신고 채널(H-44): `SECURITY.md`는 GitHub Private Vulnerability Reporting을 공식 채널로 정했다. H-45에서 저장소 공개와 기능 활성화를 확인했다. DUO는 저장소 설정을 바꾸지 않는다.
 
 - 이름은 `@duo-director/cli`로 유지한다. 다른 이름으로 자동 대체하지 않는다.
-- 2026-09-29 확인: registry는 `https://registry.npmjs.org/`, 이 PC는 npm 로그인이 없고(`ENEEDAUTH`), `@duo-director/cli`는 registry에 없다(404, 0.1.0 미존재). `@duo-director` scope(npm organization)의 존재와 publish 권한은 로그인 전에는 확인할 수 없다.
-- 결정·실행 필요: npm 계정 로그인, `duo-director` organization 생성 또는 권한 확보. 불가능하면 namespace 변경을 사람이 결정한다(이름 변경은 문서, bin 안내, MCP 설정 예시 전반에 영향).
-- GitHub 저장소 `kanghyunsoon/duo`는 현재 private다. package metadata의 repository/homepage/bugs가 이 저장소를 가리키므로, 공개하지 않으면 사용자에게 열리지 않는 링크가 된다. 공개 여부를 결정해야 한다.
-
-**결과(H-45, 2026-09-29):** npm 로그인 완료, `duo-director` organization owner, 저장소 public 전환, Private Vulnerability Reporting 활성화. `@duo-director/cli` 이름을 유지한다.
+- registry는 `https://registry.npmjs.org/`로 고정한다. H-45에서 npm 로그인과 `duo-director` organization owner 권한을 확인했다.
+- GitHub 저장소 `kanghyunsoon/duo`는 public이고 Private Vulnerability Reporting이 활성화되어 있다(H-45). package metadata의 repository/homepage/bugs가 이 저장소를 가리킨다.
+- `@duo-director/cli@0.1.0`은 final preflight에서 미게시 상태를 재확인한다. namespace는 `@duo-director`로 유지한다.
 
 ## DP-4. 실제 OpenAI smoke
 
-fake transport 테스트는 실제 smoke가 아니다. publish 전 한 번 `DUO_OPENAI_SMOKE=1`, `OPENAI_API_KEY`, `DUO_OPENAI_SMOKE_MODEL`을 주고 `pnpm test:openai-smoke`를 실행해야 한다. 사용할 model과 비용 부담 주체는 사람이 정한다.
+fake transport 테스트는 실제 smoke가 아니다. 실제 smoke를 선택해 실행할 때는 `DUO_OPENAI_SMOKE=1`, `OPENAI_API_KEY`, `DUO_OPENAI_SMOKE_MODEL`을 주고 `pnpm test:openai-smoke`를 실행한다. 사용할 model과 비용 부담 주체는 사람이 정한다.
 
 **결정(H-45, 2026-09-29): Deferred / Optional integration verification.** 공식 OpenAI API key가 없고 0.1.0의 주 사용 목적은 Codex·Claude Code와 MCP 연결이다(LLM은 기본 OFF). 실제 smoke는 0.1.0 release blocker에서 빠지고 key가 생기면 실행하는 선택 검증으로 남는다. fake transport 테스트를 smoke로 부르지 않는 원칙은 그대로다. GMS 같은 OpenAI Responses API 호환 endpoint는 `OpenAIResponsesProvider`의 공식 endpoint 전용 계약을 바꾸지 않고 0.1.0 이후 별도 Provider로 다룬다(C212).
