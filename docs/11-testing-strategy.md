@@ -41,16 +41,18 @@
 
 ## E2E 시나리오 (v0.1 인수 기준, TASK-020)
 
-1. fixture 이력 재현 → `duoctl init --non-interactive` → .duo-project와 graph.db 생성, ASK 목록 출력, llm_calls 0
-2. `duoctl install codex`, `duoctl install claude-code`(임시 저장소, PATH의 duoctl shim, `tests/install/`)
-3. MCP client로 `duo_get_context("GAME-42 refresh token")` → AUTH-03, D-004, CON-001, AuthService.refresh 포함, budget 준수, llm_calls 0
-4. OAuth 변경 세트 적용 → `duo_review_changes` → CON-001 enforcement에 맞는 Verdict, Evidence에 CON-001과 새 파일
-5. `duo_propose_decision` → UI API로 Confirm(token 포함) → `.duo-project/decisions/D-###.yaml` 생성, lock 기록
-6. UI 서버 `/api/drift`에 4의 Claim 존재, `/api/decisions`에 5의 결과 존재
-7. `duoctl stats`에 3, 4의 지표 존재
-8. self fixture(docs/를 복사한 임시 `.duo-project`)에서 `duoctl trace REQ-CONTEXT-001` → ADR-005, TASK-010 포함
+TASK-020부터 아래 시나리오는 `pnpm test:conformance`가 packed tarball을 격리된 prefix에 설치한 뒤 **설치된 `duoctl`로** 실행한다(C210). 계약별 검증 위치는 [release/product-contract.md](release/product-contract.md)에 있다.
 
-모든 단계는 LLM Provider 없이 통과해야 한다. 가짜 Responses API 서버를 켠 변형 시나리오(TASK-012B 이후)는 4단계에서 R-SCOPE/R-INTENT 결과가 LLM 판정으로 채워지는지 추가 확인한다.
+1. 기존 저장소 → `duoctl init --non-interactive --answers -` → 최소 Truth, 첫 index, Adoption Baseline, llm calls 0. dirty 저장소는 정책 없이 쓰기 0, `--baseline-policy head`로 채택(`tests/cli/existing-project`, C209 반복 `scripts/release/init-repro.mjs`)
+2. `duoctl install codex`, `duoctl install claude-code` → 생성된 설정의 명령으로 MCP 실제 기동, clone 이식성(`tests/install/`, `tests/distribution/`)
+3. MCP `duo_get_context` / CLI `context`: 기대 Entity(AUTH-03 → AUTH-03, D-015, AuthService.refresh, 관련 Test) 포함, budget 이하, 중복 이름은 ambiguous(`tests/conformance`, `tests/mcp`)
+4. 변경 → `index` → `review`: PASS/WARN/BLOCK/ASK와 claim·Evidence·Gap, `--fail-on` 종료 코드, pre-existing/introduced provenance, CLI = MCP(`tests/conformance`, `tests/mcp`)
+5. `duo_propose_decision` → UI API Confirm(session, CSRF, ID 재입력) → `.duo-project/decisions/D-###`, 다시 Confirm하면 `PROPOSAL_NOT_PENDING`(`tests/conformance`)
+6. UI `/api/overview`, `/api/context`, `/api/review`, `/api/graph`가 CLI와 같은 operation 결과를 준다. 보안(Host, Origin, session, CSRF, GET mutation)과 외부 자원 없음(CSP)(`tests/conformance`, `tests/cli/ui`)
+7. `metrics.jsonl`에 task·source·diff 원문과 key가 없다(`tests/conformance`, `tests/mcp`). `duoctl stats`가 요약한다
+8. self fixture(docs/를 복사한 임시 `.duo-project`)에서 `duoctl trace REQ-CONTEXT-001` → ADR-005, TASK-010 포함(`tests/conformance`, `tests/workspace/docs`)
+
+모든 단계는 LLM Provider 없이 통과해야 한다. 설치본은 공식 endpoint만 쓰므로 가짜 provider를 쓰는 semantic 변형은 workspace e2e가 검증하고, 실제 Responses API는 opt-in `pnpm test:openai-smoke`가 검증한다.
 
 ## 문서-구현 대조
 

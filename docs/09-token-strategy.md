@@ -67,7 +67,7 @@ Reduction만으로는 품질을 보장하지 못한다. 아무것도 넣지 않�
 | LOBBY-01 | 5,187 | 9 / 987 | 12개, 1,196 | 1,392 | 73.16% | −41.03% |
 | 같은 세 Task, 관계없는 모듈 40개 추가 후 | 17,947 (70 files) | 같음 | 같음 | 같음(cache hit, 같은 digest) | 92.40%, 88.64%, 92.24% | 같음 |
 
-- 이 fixture의 파일은 작아서 Packet이 관련 파일 전체보다 크다(vs Raw 음수). frame(약 290 token), EVIDENCE 줄, Truth 정의 slice가 들어가기 때문이다. 파일이 크고 관련 없는 부분이 많을수록 vs Raw가 양수가 된다. TASK-019에서 실제 저장소로 확인한다.
+- 이 fixture의 파일은 작아서 Packet이 관련 파일 전체보다 크다(vs Raw 음수). frame(약 290 token), EVIDENCE 줄, Truth 정의 slice가 들어가기 때문이다. 파일이 크고 관련 없는 부분이 많을수록 vs Raw가 양수가 될 것으로 본다. TASK-019의 5,000파일 synthetic fixture에서도 vs Raw는 −26.28%였다([performance-benchmark](performance-benchmark.md#context)). 큰 파일이 있는 공개 실제 저장소 측정은 C198로 남아 있다.
 - Repository가 커져도 Packet은 그대로였다. Packet이 후보 Subgraph에만 의존한다는 성질(Packet Dependency Digest)의 직접 측정이다.
 
 ## Benchmark

@@ -125,7 +125,7 @@ pnpm duoctl --version
 - [문서 지도](docs/README.md)
 - [제품 비전](docs/00-product-vision.md) · [요구사항](docs/01-requirements.md) · [아키텍처](docs/02-system-architecture.md)
 - [충돌 및 미결 사항](docs/conflicts.md)
-- Release: [checklist](docs/release/checklist.md) · [결정 요청](docs/release/decision-packets.md) · [호환성 계약](docs/release/compatibility.md) · [benchmark](docs/performance-benchmark.md)
+- Release: [checklist](docs/release/checklist.md) · [제품 계약](docs/release/product-contract.md) · [결정 요청](docs/release/decision-packets.md) · [호환성 계약](docs/release/compatibility.md) · [benchmark](docs/performance-benchmark.md)
 - [ADR](docs/adr/README.md)
 
 ## 원본 입력

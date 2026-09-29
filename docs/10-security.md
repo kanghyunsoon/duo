@@ -35,6 +35,8 @@ UI 서버에 쓰기 endpoint(Decision Confirm/Reject)가 있으므로 다음을 
 4. 실행마다 무작위 session token과 별도 CSRF token을 만든다. 시작 URL의 `?session=<token>`을 검증한 뒤 `HttpOnly; SameSite=Strict` cookie를 설정하고 token 없는 URL로 redirect한다. `/api` 요청은 cookie를 요구하고 POST는 `/api/session`에서 받은 `X-Duo-CSRF`도 요구한다. token은 서버 수명 동안만 메모리에 있고 Truth, localStorage, metrics에는 기록하지 않는다. 요청 URL을 로그에 남기지 않는다.
 5. POST는 `application/json`만 받는다(단순 form 요청 차단). CORS 헤더를 보내지 않는다. CSP는 자체 script/style/connect만 허용하고 정적 asset은 메모리 allowlist에서만 제공한다.
 
+범위: Local UI는 한 사용자가 자기 컴퓨터에서 쓰는 loopback 로컬 도구다. 인증된 다중 사용자 웹 애플리케이션이 아니다. session token과 CSRF token은 다른 웹 페이지와 다른 origin의 요청을 막기 위한 것이며, 같은 컴퓨터의 다른 사용자나 프로세스로부터 보호하지 않는다. Decision의 `ui:<git user.name>` actor label도 기록용 표시이며 인증이 아니다.
+
 ## 데이터 보존
 
 - `runtime/reviews/`는 로컬 전용이다.

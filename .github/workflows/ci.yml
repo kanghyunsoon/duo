@@ -54,3 +54,8 @@ jobs:
       # T17.1: npm pack is the artifact oracle; clean global and project-local installs outside the workspace.
       - name: distribution E2E (packed @duo-director/cli)
         run: pnpm test:dist
+      # TASK-020: CLI/MCP/install journeys and RC-only checks against the installed release candidate; C209 init repetitions.
+      - name: release conformance (installed release candidate)
+        run: pnpm test:conformance
+        env:
+          DUO_C209_RUNS: "6"

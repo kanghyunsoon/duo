@@ -10,7 +10,12 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const CLI_MAIN = fileURLToPath(new URL("../../apps/cli/dist/main.js", import.meta.url));
+/**
+ * The duoctl under test. Default: the workspace build. TASK-020 conformance (pnpm test:conformance) sets
+ * DUO_CONFORMANCE_CLI to the installed release candidate's dist/duoctl.js, so the same journeys run
+ * against the packaged artifact.
+ */
+export const CLI_MAIN = process.env.DUO_CONFORMANCE_CLI ?? fileURLToPath(new URL("../../apps/cli/dist/main.js", import.meta.url));
 
 const gitEnv = {
   ...process.env, GIT_AUTHOR_NAME: "Dev", GIT_AUTHOR_EMAIL: "dev@duo.invalid", GIT_AUTHOR_DATE: "2025-03-01T00:00:00Z",
@@ -76,11 +81,18 @@ export interface CliRun {
 
 /** Runs the built duoctl in root (no terminal: stdin is a pipe). env replaces the inherited environment. */
 export function duoctl(root: string, args: readonly string[], input?: string, env?: NodeJS.ProcessEnv): CliRun {
-  if (!fs.existsSync(CLI_MAIN)) throw new Error("apps/cli/dist/main.js is missing: run pnpm build before the CLI end-to-end tests");
+  if (!fs.existsSync(CLI_MAIN)) throw new Error(`${CLI_MAIN} is missing: run pnpm build before the CLI end-to-end tests`);
   const r = spawnSync(process.execPath, [CLI_MAIN, ...args], { cwd: root, input: input ?? "", encoding: "utf8", windowsHide: true, env: { ...(env ?? process.env), DUO_LOCALE: "" } });
+  const stdout = r.stdout ?? "";
+  const stderr = r.stderr ?? "";
+  // TASK-020 success contract (C209): a successful invocation always delivers its result on stdout.
+  if (r.status === 0 && stdout.trim() === "") {
+    throw new Error(`duoctl ${args[0] ?? ""}: exit 0 but stdout is empty (signal ${r.signal}, error ${r.error?.message ?? "none"}, stderr ${stderr.length} bytes: ${JSON.stringify(stderr.slice(0, 500))})`);
+  }
   return {
-    code: r.status ?? -1, stdout: r.stdout, stderr: r.stderr,
-    json: () => JSON.parse(r.stdout) as ReturnType<CliRun["json"]>,
+    code: r.status ?? -1, stdout, stderr,
+    // JSON mode: the whole stdout is exactly one JSON value (JSON.parse rejects anything before or after it).
+    json: () => JSON.parse(stdout) as ReturnType<CliRun["json"]>,
   };
 }
 

@@ -166,7 +166,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-017](#task-017-agent-adapter와-duoctl-install) | Agent Adapter와 duoctl install | integration | M3 | TASK-015, TASK-016 | done |
 | [TASK-018](#task-018-local-http-api와-web-ui) | Local HTTP API와 Web UI | ui | M3 | TASK-009, TASK-013, TASK-015 | done |
 | [TASK-019](#task-019-benchmark) | Benchmark | bench | M4 | TASK-010, TASK-013 | done |
-| [TASK-020](#task-020-e2e와-문서-구현-대조) | E2E와 문서-구현 대조 | 공통 | M4 | TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-012B | todo |
+| [TASK-020](#task-020-e2e와-문서-구현-대조) | E2E와 문서-구현 대조 | 공통 | M4 | TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-012B | done |
 
 ## 상세
 
@@ -772,7 +772,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M4
 package: all
 requirements: [REQ-TRACE-001, REQ-NFR-001]
@@ -780,12 +780,12 @@ decisions: [ADR-014]
 depends_on: [TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-012B]
 ```
 
-- **Goal**: MVP End-to-End 흐름을 검증한다.
-- **Input**: 11 E2E 시나리오
-- **Output**: E2E 테스트, self fixture 테스트, 대조 결과
+- **Goal**: 문서, CLI, MCP, UI, packaged artifact가 같은 0.1.0 제품 계약을 End-to-End로 만족하는지 공개 전에 검증한다(TASK-020 Release Conformance 지시, C210).
+- **Input**: 11 E2E 시나리오, Release Hardening 결과
+- **Output**: `pnpm test:conformance`(설치된 RC로 CLI·MCP·install journey와 `tests/conformance`, C209 반복, 문서·help 대조) → `.dist/release-conformance.json`, [release/product-contract.md](../release/product-contract.md), 문서 수정
 - **Dependencies**: [TASK-015](#task-015-cli), [TASK-016](#task-016-mcp-서버), [TASK-017](#task-017-agent-adapter와-duoctl-install), [TASK-018](#task-018-local-http-api와-web-ui), [TASK-019](#task-019-benchmark), [TASK-012B](#task-012b-openai-responses-provider)
-- **Files expected to change**: `tests/e2e/**`, `docs/**`
-- **Status**: todo
+- **Files expected to change**: `tests/conformance/**`, `tests/cli/support.ts`, `scripts/release/**`, `vitest.conformance.config.ts`, `docs/**`
+- **Status**: done (TASK-020. C209 Observed once / Not reproduced)
 - **검증 대상 Requirement**: [REQ-TRACE-001](../01-requirements.md#req-trace-001-id-기반-추적성), [REQ-NFR-001](../01-requirements.md#req-nfr-001-cross-platform)
 - **관련 ADR**: [ADR-014](../adr/ADR-014-traceability-ids.md)
 
