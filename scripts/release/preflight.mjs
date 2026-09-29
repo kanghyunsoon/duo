@@ -24,7 +24,6 @@ const EXTERNAL = {
   "version-taken": "a human decides the next version; 0.1.0 already exists",
   "repository-not-public": "a human makes github.com/kanghyunsoon/duo public (package repository, homepage and bugs point there)",
   "github-private-vulnerability-reporting": "when the repository is public: Settings → Code security → enable Private vulnerability reporting (SECURITY.md names it as the reporting channel)",
-  "openai-smoke": "DUO_OPENAI_SMOKE=1 OPENAI_API_KEY=… DUO_OPENAI_SMOKE_MODEL=<model> pnpm test:openai-smoke on this commit, then rerun the preflight",
 };
 const block = (id, message) => blockers.push({ id, message, kind: Object.hasOwn(EXTERNAL, id) ? "external" : "code", nextAction: EXTERNAL[id] ?? "fix in the repository, commit, and rerun pnpm release:preflight" });
 const log = (m) => console.log("release:preflight: " + m);
@@ -210,10 +209,16 @@ if (!npmState.publishDryRun.ok || !npmState.publishDryRun.filesMatchCandidate) b
 if (!dryFiles.includes("npm-shrinkwrap.json")) block("shrinkwrap-not-packed", "npm-shrinkwrap.json is not inside the tarball npm would publish");
 
 // ---- actual OpenAI smoke (§28–30) ----
+// H-45: deferred / optional integration verification for 0.1.0. The result is reported when present but never
+// blocks a release; a failed or missing smoke says nothing about the deterministic product (LLM is off by default).
 const smokeFile = path.join(DIST, "openai-smoke.json");
 const smoke = fs.existsSync(smokeFile) ? readJson(smokeFile) : undefined;
-const openaiSmoke = smoke === undefined ? { status: "not-executed" } : { status: smoke.passed && smoke.commit === git.commit ? "passed" : smoke.passed ? "passed-on-other-commit" : "failed", commit: smoke.commit, model: smoke.model, checks: smoke.checks };
-if (openaiSmoke.status !== "passed") block("openai-smoke", "real OpenAI provider smoke not yet executed on this commit (" + openaiSmoke.status + "): DUO_OPENAI_SMOKE=1 OPENAI_API_KEY=… DUO_OPENAI_SMOKE_MODEL=… pnpm test:openai-smoke");
+const openaiSmoke = {
+  gate: "deferred-optional",
+  ...(smoke === undefined ? { status: "not-executed" } : { status: smoke.passed && smoke.commit === git.commit ? "passed" : smoke.passed ? "passed-on-other-commit" : "failed", commit: smoke.commit, model: smoke.model, checks: smoke.checks }),
+  howTo: "DUO_OPENAI_SMOKE=1 OPENAI_API_KEY=… DUO_OPENAI_SMOKE_MODEL=<model> pnpm test:openai-smoke (official api.openai.com only)",
+};
+log("OpenAI smoke " + openaiSmoke.status + " (optional, not a release blocker)");
 
 // ---- CI for this exact commit, checked last (the steps above take long enough for CI to finish) ----
 let ci = { status: "unknown" };
@@ -234,7 +239,7 @@ const report = {
   package: pkg, reproducibility, scan,
   dependencies, license, npm: npmState, openaiSmoke,
   blockers,
-  deferred: ["C184 optional grammar packaging", "C185 custom analyzer capability persistence", "C197 gap semantic assist", "C198 public repository benchmark", "C202 further performance candidates", "L2 resolvers for Java, C#, C++, Python", "REQ-NFR-004 scope (DP-1, priority should)"],
+  deferred: ["C184 optional grammar packaging", "C185 custom analyzer capability persistence", "C197 gap semantic assist", "C198 public repository benchmark", "C202 further performance candidates", "C208 real OpenAI smoke (optional integration verification, H-45)", "C212 OpenAI-compatible endpoint provider as a separate adapter (H-45)", "L2 resolvers for Java, C#, C++, Python", "REQ-NFR-004 scope (DP-1, priority should)"],
   ready: blockers.length === 0,
   // BLOCKED with codeReady true means the code and artifact are ready and only external human actions remain.
   codeReady: blockers.every((b) => b.kind !== "code"),

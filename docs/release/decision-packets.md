@@ -58,3 +58,5 @@ Release Hardening에서 사람이 결정해야 하는 항목이다. 각 항목�
 ## DP-4. 실제 OpenAI smoke
 
 fake transport 테스트는 실제 smoke가 아니다. publish 전 한 번 `DUO_OPENAI_SMOKE=1`, `OPENAI_API_KEY`, `DUO_OPENAI_SMOKE_MODEL`을 주고 `pnpm test:openai-smoke`를 실행해야 한다. 사용할 model과 비용 부담 주체는 사람이 정한다.
+
+**결정(H-45, 2026-09-29): Deferred / Optional integration verification.** 공식 OpenAI API key가 없고 0.1.0의 주 사용 목적은 Codex·Claude Code와 MCP 연결이다(LLM은 기본 OFF). 실제 smoke는 0.1.0 release blocker에서 빠지고 key가 생기면 실행하는 선택 검증으로 남는다. fake transport 테스트를 smoke로 부르지 않는 원칙은 그대로다. GMS 같은 OpenAI Responses API 호환 endpoint는 `OpenAIResponsesProvider`의 공식 endpoint 전용 계약을 바꾸지 않고 0.1.0 이후 별도 Provider로 다룬다(C212).
