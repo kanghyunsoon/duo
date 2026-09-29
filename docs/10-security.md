@@ -15,7 +15,7 @@
 | 위협 | 대응 |
 |---|---|
 | 비밀 정보가 Context, Evidence, LLM 요청으로 새어 나감 | 기본 제외(`.env*`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`, `secrets.*`, `credentials*`, .gitignore 대상, `.git/`, `.duo-project/generated|cache|runtime/`). symlink는 따라가지 않고 저장소 밖 대상은 읽지 않는다(TASK-004). Packet 생성 시 알려진 토큰 형식(private key block, AWS, GitHub, OpenAI, Anthropic, Slack, Google API key, JWT)을 측정 전에 `[REDACTED]`로 치환(T10 `redactSecrets`, Task 텍스트 포함). Task 텍스트는 검색 입력일 뿐 경로·shell·SQL에 넣지 않고, 원문은 `readSourceFile`이 저장소 경계와 symlink를 다시 확인한 뒤 읽는다. LLM 요청은 치환이 끝난 Packet만 보냄 |
-| 외부 네트워크 전송 | 기본 `llm.provider: none`에서는 네트워크 코드가 실행되지 않는다. Provider를 켜면 설정된 `base_url`로만 보내고, 요청 크기는 `max_input_tokens`로 제한 |
+| 외부 네트워크 전송 | 기본 `llm.provider: none`에서는 네트워크 코드가 실행되지 않는다. `openai-responses`를 켜면 공식 `https://api.openai.com/v1` endpoint만 사용한다. 사용자 `base_url`과 `OPENAI_BASE_URL`은 공식 URL 이외에는 거부한다. 요청 크기는 `max_input_tokens`로 제한 |
 | API Key 노출 | Key는 `api_key_env`가 가리키는 환경 변수에서만 읽고 파일, 로그, metrics, 오류 메시지에 쓰지 않는다 |
 | Repository 코드 실행 | DUO는 소스를 parse만 한다. 예외는 사용자가 project.yaml에 설정한 `test_command`를 `--run-tests`로 명시했을 때뿐 |
 | 경로 조작(Tool, API 입력) | 모든 경로를 Repository root 기준으로 정규화하고 root 밖이면 거부. `/api/source`는 인덱싱 대상 파일만 허용 |
@@ -32,8 +32,8 @@ UI 서버에 쓰기 endpoint(Decision Confirm/Reject)가 있으므로 다음을 
 1. `127.0.0.1`에만 bind한다.
 2. `Host` 헤더가 `127.0.0.1:<port>` 또는 `localhost:<port>`가 아니면 거부한다(DNS rebinding 방지).
 3. POST는 `Origin`이 같은 origin일 때만 받는다.
-4. 실행마다 무작위 token을 만들어 시작 URL(`http://127.0.0.1:7346/#t=<token>`)로 전달한다. UI는 이를 메모리에만 두고 `X-Duo-Token` 헤더로 보낸다. token이 없거나 다르면 거부한다.
-5. POST는 `application/json`만 받는다(단순 form 요청 차단). CORS 헤더를 보내지 않는다.
+4. 실행마다 무작위 session token과 별도 CSRF token을 만든다. 시작 URL의 `?session=<token>`을 검증한 뒤 `HttpOnly; SameSite=Strict` cookie를 설정하고 token 없는 URL로 redirect한다. `/api` 요청은 cookie를 요구하고 POST는 `/api/session`에서 받은 `X-Duo-CSRF`도 요구한다. token은 서버 수명 동안만 메모리에 있고 Truth, localStorage, metrics에는 기록하지 않는다. 요청 URL을 로그에 남기지 않는다.
+5. POST는 `application/json`만 받는다(단순 form 요청 차단). CORS 헤더를 보내지 않는다. CSP는 자체 script/style/connect만 허용하고 정적 asset은 메모리 allowlist에서만 제공한다.
 
 ## 데이터 보존
 

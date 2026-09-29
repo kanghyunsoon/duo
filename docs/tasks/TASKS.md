@@ -164,7 +164,7 @@ TASK-012B(OpenAI Responses Provider)는 Context Compiler(TASK-010)와 Review(TAS
 | [TASK-015](#task-015-cli) | CLI | apps/cli | M3 | TASK-009, TASK-010, TASK-013, TASK-014 | done |
 | [TASK-016](#task-016-mcp-서버) | MCP 서버 | integration | M3 | TASK-010, TASK-013 | done |
 | [TASK-017](#task-017-agent-adapter와-duoctl-install) | Agent Adapter와 duoctl install | integration | M3 | TASK-015, TASK-016 | done |
-| [TASK-018](#task-018-local-http-api와-web-ui) | Local HTTP API와 Web UI | ui | M3 | TASK-009, TASK-013, TASK-015 | todo |
+| [TASK-018](#task-018-local-http-api와-web-ui) | Local HTTP API와 Web UI | ui | M3 | TASK-009, TASK-013, TASK-015 | done |
 | [TASK-019](#task-019-benchmark) | Benchmark | bench | M4 | TASK-010, TASK-013 | todo |
 | [TASK-020](#task-020-e2e와-문서-구현-대조) | E2E와 문서-구현 대조 | 공통 | M4 | TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-012B | todo |
 
@@ -715,7 +715,7 @@ Acceptance Criteria
 
 ```duo
 type: issue
-status: todo
+status: done
 milestone: M3
 package: ui
 requirements: [REQ-UI-001, REQ-UI-002, REQ-REVIEW-004]
@@ -723,22 +723,22 @@ decisions: [ADR-009, ADR-013]
 depends_on: [TASK-009, TASK-013, TASK-015]
 ```
 
-- **Goal**: 5개 화면과 Decision Confirm/Reject를 제공한다.
-- **Input**: 08 화면과 API
-- **Output**: integration/http API, React 앱
+- **Goal**: Project Direction Console에서 Truth, Evidence, 관계와 Human Decision을 탐색한다.
+- **Input**: 08 화면과 API, T18.1 사용자 결정
+- **Output**: integration/http versioned API, React 앱, `duoctl ui`, 배포 artifact
 - **Dependencies**: [TASK-009](#task-009-decision-생명주기), [TASK-013](#task-013-review-엔진), [TASK-015](#task-015-cli)
 - **Files expected to change**: `packages/integration/src/http/**`, `packages/ui/src/**`
-- **Status**: todo
+- **Status**: done (T18.1)
 - **검증 대상 Requirement**: [REQ-UI-001](../01-requirements.md#req-ui-001-읽기-중심-web-ui-5개-화면), [REQ-UI-002](../01-requirements.md#req-ui-002-ui의-decision-confirmreject), [REQ-REVIEW-004](../01-requirements.md#req-review-004-specdecisionissue와-code-사이의-drift)
 - **관련 ADR**: [ADR-009](../adr/ADR-009-ui-stack.md), [ADR-013](../adr/ADR-013-decision-lifecycle.md)
 
 Acceptance Criteria
 
-- **AC-018-01** GET API 6종의 응답 스키마 테스트가 통과한다
+- **AC-018-01** Versioned local API의 응답과 strict input validation 테스트가 통과한다
 - **AC-018-02** Confirm/Reject는 DecisionService를 거쳐 .duo-project/decisions/만 바꾸고 UI 전용 상태가 없다
 - **AC-018-03** Host/Origin 검사와 실행별 token이 없는 쓰기 요청을 거부한다
-- **AC-018-04** 5개 화면이 fixture 데이터로 렌더링된다
-- **AC-018-05** Graph 화면은 300 Node 상한을 지킨다
+- **AC-018-04** Overview, Direction, Decisions, Graph, Coverage, Context, Review/Reviews/Evidence가 fixture 데이터로 렌더링된다
+- **AC-018-05** Graph 화면은 기존 trace/impact의 200 Node 기본 상한을 지키며 전체 Graph를 보내지 않는다
 
 ### TASK-019 Benchmark
 

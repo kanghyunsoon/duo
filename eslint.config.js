@@ -13,7 +13,7 @@ const dirs = Object.values(packages).map((p) => p.dir.split("/")[1]);
 
 /**
  * @param {string} name
- * @param {{ sqliteAllowed?: boolean, cliNode?: boolean, sourceParsingAllowed?: boolean, treeSitterAllowed?: boolean, typescriptApiAllowed?: boolean, tokenizerAllowed?: boolean, llmVendorAllowed?: boolean, mcpSdkAllowed?: boolean }} [opts]
+ * @param {{ sqliteAllowed?: boolean, cliNode?: boolean, sourceParsingAllowed?: boolean, treeSitterAllowed?: boolean, typescriptApiAllowed?: boolean, tokenizerAllowed?: boolean, llmVendorAllowed?: boolean, mcpSdkAllowed?: boolean, uiFrameworkAllowed?: boolean }} [opts]
  */
 function restrictions(name, opts = {}) {
   const spec = packages[name];
@@ -62,6 +62,13 @@ function restrictions(name, opts = {}) {
     ...(opts.llmVendorAllowed ? [] : [{
       group: boundaries.llmVendorSdk.modules.flatMap((m) => [m, `${m}/*`]),
       message: `LLM vendor SDKs may be imported only in ${boundaries.llmVendorSdk.dir}/ (director owns only the LLMProvider contract, ADR-012).`,
+    }]),
+    ...(opts.uiFrameworkAllowed ? [{
+      group: ["node:*"],
+      message: "The UI runs in the browser: no node: modules (T18.1).",
+    }] : [{
+      group: boundaries.uiFramework.modules.flatMap((m) => [m, `${m}/*`]),
+      message: `UI framework modules may be imported only in ${boundaries.uiFramework.dir}/ (T18.1).`,
     }]),
     ...(opts.mcpSdkAllowed ? [] : [{
       group: boundaries.mcpSdk.modules.flatMap((m) => [m, `${m}/*`]),
@@ -112,6 +119,10 @@ export default defineConfig(
   {
     files: [`${boundaries.llmVendorSdk.dir}/${TS}`],
     rules: { [RULE]: restrictions("@duo-director/integration", { llmVendorAllowed: true }) },
+  },
+  {
+    files: [`${boundaries.uiFramework.dir}/${TS}`],
+    rules: { [RULE]: restrictions("@duo-director/ui", { uiFrameworkAllowed: true }) },
   },
   {
     files: [`${boundaries.mcpSdk.dir}/${TS}`],

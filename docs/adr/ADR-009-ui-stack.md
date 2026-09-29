@@ -5,7 +5,7 @@ title: UI 스택과 Human Action
 state: confirmed
 owner: human
 question: ui
-answer: "React + Vite static bundle served locally; read-centric; only Decision Confirm/Reject writes"
+answer: "React + TypeScript static bundle served locally; read-centric; only Decision Confirm/Reject writes"
 governs:
   requirements: [REQ-UI-001, REQ-UI-002]
 supersedes: null
@@ -19,10 +19,10 @@ confirmed_at: 2026-09-27
 
 ## 결정
 
-- React + Vite로 정적 번들을 만들고, integration 패키지의 로컬 HTTP 서버(Node 내장 `http`)가 서빙한다. `duoctl ui`는 이 서버를 띄우기만 한다.
+- React + TypeScript로 정적 번들을 만들고, integration 패키지의 로컬 HTTP 서버(Node 내장 `http`)가 서빙한다. `duoctl ui`는 사용 가능한 loopback port에서 이 서버를 띄운다. T18.1에서는 작은 단일 번들을 위한 esbuild 0.28.2를 선택했다. React/React DOM 19.3.0은 UI package에만 둔다.
 - UI는 **읽기 중심**이다. 쓰기는 Decisions 화면의 **Confirm**과 **Reject** 두 동작만 허용한다(H-4). 이 동작은 CLI와 같은 `DecisionService`(core)를 호출해 `.duo-project/decisions/`를 직접 바꾼다. UI 전용 상태나 저장소를 만들지 않는다.
 - Intent 대규모 수정, Spec Editor, Milestone Editor, Jira 수정, Source 수정은 구현하지 않는다.
-- Graph 시각화 라이브러리는 TASK-018에서 Cytoscape.js와 React Flow를 번들 크기, 300 Node 성능, 레이아웃 품질로 비교해 고르고 이 ADR에 기록한다. 이는 Human 결정 사항이 아닌 구현 세부 선택이다.
+- Graph는 기존 bounded trace/impact(기본 200 node)를 사용하는 관계 탐색기로 시작한다. 추가 graph 라이브러리 없이 Node, Edge, entity detail을 탐색한다. 큰 Graph 전체를 보내거나 렌더링하지 않는다.
 - 상태 관리는 React 기본 기능과 fetch만 쓴다.
 
 ## 결과

@@ -44,16 +44,11 @@ describe("CLI entry (T15)", () => {
     expect(nodeVersionProblem("v22.12.0", ">=24.15.0")).toMatch(/does not bundle Node\.js/u);
   });
 
-  it("prints help, rejects unknown commands and options, and names the Task of unimplemented commands", async () => {
+  it("prints help and rejects unknown commands and options", async () => {
     expect((await capture([])).out[0]).toContain("Usage: " + CLI_NAME + " <command>");
     expect((await capture(["deploy"])).code).toBe(1);
     expect((await capture(["status", "--bogus"])).code).toBe(1);
-    for (const [command, task] of [["ui", "TASK-018"]] as const) {
-      const r = await capture([command]);
-      expect(r.code).toBe(1);
-      expect(r.err[0]).toContain(task);
-    }
-    expect(COMMANDS).toEqual(expect.arrayContaining(["init", "status", "index", "context", "review", "trace", "impact", "decision", "stats"]));
+    expect(COMMANDS).toEqual(expect.arrayContaining(["init", "status", "index", "context", "review", "trace", "impact", "decision", "stats", "ui"]));
   });
 
   it("--json wraps every result in a versioned envelope", async () => {

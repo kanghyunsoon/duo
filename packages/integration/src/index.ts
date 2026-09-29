@@ -17,3 +17,4 @@ export * from "./operations/index.js";
 export * from "./mcp/index.js";
 export * from "./agents/index.js";
 export * from "./llm/index.js";
+export * from "./http/index.js";

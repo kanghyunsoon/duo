@@ -7,7 +7,7 @@ import { openProjectGraphStore } from "@duo-director/graph";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { contextRegistry, HISTORY, makeContextRepo, REVIEW_FIXTURE, type ContextRepo } from "../context/testing.js";
 import type { LLMProvider, LLMRequest, LLMResponse } from "../llm/contract/types.js";
-import { recordReview, verifyReviewRecord } from "./record.js";
+import { listReviewRecords, recordReview, verifyReviewRecord } from "./record.js";
 import { reviewChanges, type ReviewOptions } from "./review.js";
 import { nonApplicationReason } from "./scope.js";
 import type { ReviewRequest, ReviewResult } from "./types.js";
@@ -63,6 +63,27 @@ const recordFiles = (r: ContextRepo) => (fs.existsSync(reviewsDir(r)) ? fs.readd
 const rows = (res: ReviewResult) => res.claims.map((c) => [c.rule, c.subject.id, c.alignment, c.blockEligible ? "block" : "", c.drift ? "drift" : "", c.semanticCandidate ? "semantic" : ""].filter((x) => x !== "").join(" "));
 const aligned = () => repo.edit("src/auth/token-service.ts", 'throw new Error("expired refresh token");', 'throw new Error("refresh token expired");');
 const metricsSort = (r: ContextRepo) => r.edit("src/admin/metrics-export.ts", '.join("\\n")', '.sort().join("\\n")');
+
+describe("Review history read boundary (T18.1)", () => {
+  it("rejects a symlinked reviews directory before reading its target", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "duo-review-link-"));
+    try {
+      const project = path.join(root, ".duo-project");
+      const outside = path.join(root, "outside");
+      fs.mkdirSync(project);
+      fs.mkdirSync(outside);
+      fs.writeFileSync(path.join(outside, "review-0123456789abcdef.json"), "private data");
+      fs.symlinkSync(outside, path.join(project, "reviews"), process.platform === "win32" ? "junction" : "dir");
+      const result = await listReviewRecords(root);
+      expect(result.value).toBeUndefined();
+      expect(result.diagnostics.map((d) => d.code)).toContain("REVIEW_RECORD_INTEGRITY");
+    } finally {
+      if (path.resolve(root).startsWith(`${path.resolve(os.tmpdir())}${path.sep}`)) {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
+  });
+});
 
 describe("Review Record (T13.1, AC-013-05)", () => {
   it("a Review writes nothing; only an explicit recordReview() writes under reviews/", async () => {

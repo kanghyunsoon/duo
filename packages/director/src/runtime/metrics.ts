@@ -15,7 +15,7 @@ export const METRICS_PATH = `${STATE_DIR_NAME}/runtime/metrics.jsonl`;
 export interface RuntimeMetric {
   readonly format: "duo.metric/1";
   /** Which surface ran the command (T16). */
-  readonly surface?: "cli" | "mcp";
+  readonly surface?: "cli" | "mcp" | "ui";
   readonly command: string;
   /** Outcome of the command (ok, index-required, failed, …). */
   readonly status: string;

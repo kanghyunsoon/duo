@@ -8,7 +8,7 @@ DUO는 Codex, Claude Code 같은 AI Coding Agent가 프로젝트의 목표와 �
 
 ## 상태
 
-CLI(`duoctl`), MCP 서버(`duoctl mcp`), Agent 연결(`duoctl install`), 배포용 package(`@duo-director/cli`, T17.1)까지 구현했습니다. **npm에는 아직 publish하지 않았습니다.** 선택적 OpenAI 의미 보조(TASK-012B)까지 구현했고, Web UI(TASK-018)와 Benchmark(TASK-019)는 아직입니다. 진행 순서는 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)를 따릅니다.
+CLI(`duoctl`), MCP 서버(`duoctl mcp`), Agent 연결(`duoctl install`), 선택적 OpenAI 의미 보조, 로컬 Project Direction Console(`duoctl ui`)까지 구현했습니다. 배포용 package는 만들었지만 **npm에는 아직 publish하지 않았습니다.** Benchmark(TASK-019)는 아직입니다. 진행 순서는 [docs/tasks/TASKS.md](docs/tasks/TASKS.md)를 따릅니다.
 
 ## 지원 범위
 
@@ -31,6 +31,7 @@ Analyzer가 없거나 얕은 언어에서는 확신이 낮아질 뿐 DUO가 실�
 | 1. 실행 파일 설치 | 아래 참고 | 컴퓨터에 `duoctl`을 설치합니다 |
 | 2. 저장소 초기화 | `duoctl init` | 저장소를 관찰하고 `.duo-project/`, 첫 Index, Adoption Baseline을 만듭니다 |
 | 3. Agent 연결 | `duoctl install codex` 또는 `duoctl install claude-code` | MCP 설정과 짧은 안내 블록을 추가합니다 |
+| 4. Project Direction 확인 | `duoctl ui` | 로컬 Console에서 Truth, 관계, Coverage, Context, Review와 사람의 Decision을 확인합니다 |
 
 Node.js 24.15 이상이 필요합니다. native build나 install script는 없습니다.
 
@@ -55,6 +56,10 @@ npm에 publish한 뒤에는 `npm install -g @duo-director/cli` 한 줄이 됩니
 `duoctl install codex` 또는 `duoctl install claude-code`. 바꿀 파일을 먼저 보여 주고, 확인하면 MCP 설정(`.codex/config.toml` 또는 `.mcp.json`)과 안내 블록(`AGENTS.md` 또는 `CLAUDE.md`)을 추가한 뒤 DUO 서버가 실제로 뜨는지 확인합니다. 기존 설정과 사람이 쓴 글은 그대로 두고, commit은 직접 합니다. Codex는 이 project를 trust해야 하고, Claude Code는 `duo-director` 서버 승인을 묻습니다. DUO는 둘 다 대신하지 않습니다.
 
 `duoctl install status`로 연결 상태를, `duoctl install remove <agent>`로 DUO가 추가한 항목만 제거합니다. Agent가 비대화형으로 연결할 때는 `--non-interactive --yes --json`을 씁니다(`--yes`는 충돌을 덮어쓰지 않습니다).
+
+### 4. Local UI
+
+`duoctl ui`를 실행하고 출력된 URL을 브라우저에서 엽니다. 서버는 `127.0.0.1`의 사용 가능한 port를 선택합니다. `--port N`으로 port를 지정하거나 `--open`으로 브라우저를 열 수 있습니다. UI는 현재 Index를 읽기만 하므로 `index-required`가 나오면 별도 터미널에서 `duoctl index`를 실행하고 화면에서 Refresh합니다. Confirm/Reject 외의 Truth 변경이나 Review Record 생성은 CLI를 사용합니다. UI API는 실행별 session cookie, CSRF token, Host/Origin 검사를 사용합니다.
 
 ## 사용
 

@@ -16,6 +16,7 @@
  * supplement file with its own ID, so an LLM answer never rewrites the deterministic history.
  */
 import fsp from "node:fs/promises";
+import path from "node:path";
 import {
   createDiagnostic, createFileExclusive, failure, guardWrite, sha256Text, stableJson, STATE_DIR_NAME, success,
   type DecisionActor, type Diagnostic, type ParseResult, type RepoPath,
@@ -169,4 +170,68 @@ export async function recordReview(result: ReviewResult, options: RecordReviewOp
   const assist = await writeHistoryRecord(options.root, `${REVIEWS_DIR}/${id}.${assistId}.json` as RepoPath, { id: assistId, recorded, ...supplement }, assistId, supplement);
   const diagnostics: Diagnostic[] = [...assist.diagnostics];
   return assist.value === undefined ? failure(diagnostics) : success({ ...main.value, assist: assist.value }, diagnostics);
+}
+
+export interface ReviewRecordEntry {
+  readonly id: string;
+  readonly path: RepoPath;
+  readonly recorded?: { readonly by?: string; readonly at?: string };
+  /** The verified record body (pointers and structured fields only). */
+  readonly body: Record<string, unknown>;
+  /** The semantic assistance supplement of this review, when one was recorded (kept apart, T13.1). */
+  readonly assist?: { readonly id: string; readonly path: RepoPath; readonly body: Record<string, unknown> };
+}
+
+/**
+ * Human-recorded Review Records under .duo-project/reviews/ (T18.1, read-only): each verified
+ * review-*.json with its separate assist supplement. Adoption baselines are not reviews and are left
+ * out. A file that fails verification is reported, never shown as history. Newest recorded first.
+ */
+export async function listReviewRecords(root: string): Promise<ParseResult<readonly ReviewRecordEntry[]>> {
+  const dir = path.join(root, REVIEWS_DIR);
+  let names: string[];
+  try {
+    // A repository could contain a symlinked Truth/reviews directory. Do not read outside it.
+    for (const part of [path.dirname(dir), dir]) {
+      const stat = await fsp.lstat(part);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) {
+        return failure([createDiagnostic("REVIEW_RECORD_INTEGRITY", "Review history directory is not a real project directory")]);
+      }
+    }
+    names = (await fsp.readdir(dir)).filter((n) => /^review-[0-9a-f]{16}(?:\.assist-[0-9a-f]{16})?\.json$/u.test(n)).sort();
+  } catch {
+    return success([]);
+  }
+  const diagnostics: Diagnostic[] = [];
+  const read = async (name: string) => {
+    const rel = `${REVIEWS_DIR}/${name}` as RepoPath;
+    try {
+      const stat = await fsp.lstat(path.join(dir, name));
+      if (!stat.isFile()) return undefined;
+      const text = await fsp.readFile(path.join(dir, name), "utf8");
+      const verified = verifyReviewRecord(text, rel);
+      diagnostics.push(...verified.diagnostics);
+      if (verified.value === undefined) return undefined;
+      const recorded = (JSON.parse(text) as { recorded?: { by?: string; at?: string } }).recorded;
+      return { id: verified.value.id, path: rel, body: verified.value.body, ...(recorded === undefined ? {} : { recorded }) };
+    } catch (error) {
+      diagnostics.push(createDiagnostic("REVIEW_RECORD_INTEGRITY", `Cannot read ${rel}: ${(error as Error).message}`, { path: rel }));
+      return undefined;
+    }
+  };
+  const reviews = new Map<string, ReviewRecordEntry>();
+  const assists: { review: string; entry: NonNullable<Awaited<ReturnType<typeof read>>> }[] = [];
+  for (const name of names) {
+    const entry = await read(name);
+    if (entry === undefined) continue;
+    const m = /^(review-[0-9a-f]{16})\.assist-/u.exec(name);
+    if (m !== null && entry.body.format === REVIEW_ASSIST_FORMAT) assists.push({ review: m[1] as string, entry });
+    else if (m === null && entry.body.format === REVIEW_RECORD_FORMAT) reviews.set(entry.id, entry);
+  }
+  for (const a of assists) {
+    const r = reviews.get(a.review);
+    if (r !== undefined && a.entry.body.review === r.id) reviews.set(r.id, { ...r, assist: { id: a.entry.id, path: a.entry.path, body: a.entry.body } });
+  }
+  const list = [...reviews.values()].sort((a, b) => (b.recorded?.at ?? "").localeCompare(a.recorded?.at ?? "") || a.id.localeCompare(b.id));
+  return success(list, diagnostics);
 }

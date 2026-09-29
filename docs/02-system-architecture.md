@@ -25,7 +25,7 @@ flowchart TD
 | graph | GraphStore(node:sqlite), builder, traversal, incremental, trace, impact, check | TASK-003, 007, 008 |
 | director | Context Compiler, Evidence, Review, Knowledge Gap, token budget, LLMProvider, InitService | TASK-010~014 |
 | integration | shared operations(`operations/`: CLI `--json` result와 MCP structuredContent의 공통 payload, C135), MCP stdio 서버(`mcp/`, SDK는 이 계층에서만 import), Agent integration(`agents/`: `duoctl install`의 inspect → plan → apply → verify, codex·claude-code adapter, T17), 로컬 HTTP API, (향후) 외부 EvidenceProvider. analyzer는 Git root 검증과 analyzer registry 때문에 import한다(TASK-016) | TASK-016, 017, 018 |
-| ui | React 앱(5개 화면) | TASK-018 |
+| ui | React + TypeScript 로컬 Project Direction Console | TASK-018 |
 | apps/cli | `duoctl` 명령 | TASK-015 |
 
 ## 확장 지점

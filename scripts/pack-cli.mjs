@@ -112,6 +112,18 @@ for (const [id, g] of GRAMMARS) {
   });
 }
 fs.writeFileSync(path.join(STAGE, "dist", "grammars", "grammars.json"), `${JSON.stringify(grammarManifest, null, 2)}\n`);
+
+// The local UI (T18.1): the built static assets next to the bundle (dist/ui/), where the server looks first.
+// React is inside app.js; the package gains no runtime dependency. No source maps.
+const UI_ASSETS = ["index.html", "app.js", "app.css"];
+const uiBuilt = path.join(ROOT, "packages", "ui", "dist", "app");
+fs.mkdirSync(path.join(STAGE, "dist", "ui"), { recursive: true });
+for (const f of UI_ASSETS) {
+  if (!fs.existsSync(path.join(uiBuilt, f))) fail(`packages/ui/dist/app/${f} is missing: run pnpm build first`);
+  fs.copyFileSync(path.join(uiBuilt, f), path.join(STAGE, "dist", "ui", f));
+}
+const extraUi = fs.readdirSync(uiBuilt).filter((f) => !UI_ASSETS.includes(f));
+if (extraUi.length > 0) fail(`unexpected UI build output: ${extraUi.join(", ")}`);
 for (const pkg of GRAMMAR_PACKAGES) {
   const dir = path.dirname(fromAnalyzer.resolve(`${pkg}/package.json`));
   const license = fs.readdirSync(dir).find((f) => /^LICENSE/iu.test(f));

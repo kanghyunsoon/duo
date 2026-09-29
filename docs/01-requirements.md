@@ -516,7 +516,7 @@ priority: must
 source: [D§12, P§18, H-4]
 ```
 
-`duoctl ui`는 127.0.0.1:7346에 Overview, Graph, Decisions, Drift, Context 화면을 띄운다.
+`duoctl ui`는 사용 가능한 127.0.0.1 port에 Overview, Direction, Decisions, Graph, Coverage, Context, Review, Reviews/Evidence 화면을 띄운다. Graph는 bounded 탐색이며 Review에서 drift와 evidence를 보여준다. `--port`로 port를 선택할 수 있다.
 
 상세: [08-ui-spec](08-ui-spec.md) · ADR: [ADR-009](adr/ADR-009-ui-stack.md) · Task: [TASK-018](tasks/TASKS.md#task-018-local-http-api와-web-ui)
 

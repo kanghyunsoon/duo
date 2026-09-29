@@ -14,7 +14,7 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [05-context-compiler.md](05-context-compiler.md) | Director Context Packet 생성 알고리즘 |
 | [06-mcp-interface.md](06-mcp-interface.md) | MCP Context Gateway Tool 계약 |
 | [07-cli-interface.md](07-cli-interface.md) | CLI 명령, 출력, 종료 코드 |
-| [08-ui-spec.md](08-ui-spec.md) | Web UI 5개 화면과 Decision Confirm/Reject |
+| [08-ui-spec.md](08-ui-spec.md) | Local Project Direction Console과 Decision Confirm/Reject |
 | [09-token-strategy.md](09-token-strategy.md) | 토큰 최적화 원칙, 측정 방식, benchmark |
 | [10-security.md](10-security.md) | 신뢰 모델, 위협, 대응 |
 | [11-testing-strategy.md](11-testing-strategy.md) | 테스트 계층, fixture, 필수 검증, E2E |

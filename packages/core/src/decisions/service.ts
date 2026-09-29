@@ -64,6 +64,15 @@ export interface ConfirmResult {
 }
 export interface RejectResult { readonly proposalId: string; readonly path: RepoPath; readonly indexRequired: false; readonly repaired: readonly string[] }
 
+/** What confirming a pending proposal would do (T18.1, read-only): shown to the human before confirming. */
+export interface ConfirmPreview {
+  readonly proposalId: string;
+  /** The ID the next confirm would try first (allocation is repeated under the lock at confirm time). */
+  readonly nextDecisionId: string;
+  readonly stale?: StaleInfo;
+  readonly supersedes?: { readonly id: string; readonly title: string; readonly state: string; readonly path: RepoPath };
+}
+
 export interface DecisionServiceOptions {
   readonly root: string;
   /** Injectable clock for timestamps (never used as an identity). */
@@ -78,6 +87,8 @@ export interface DecisionService {
   /** Confirms a proposal (P-...) or a YAML Decision that is proposed or confirmed without a lock (ADR-013). */
   confirm(actor: DecisionActor, id: string): Promise<ParseResult<ConfirmResult>>;
   reject(actor: DecisionActor, proposalId: string, reason?: string): Promise<ParseResult<RejectResult>>;
+  /** Read-only preview of confirm(proposalId): no lock, no write, no repair. */
+  previewConfirm(proposalId: string): Promise<ParseResult<ConfirmPreview>>;
   /** Finishes what an interrupted confirm left behind (also done at the start of every operation). */
   repair(): Promise<ParseResult<{ readonly repaired: readonly string[] }>>;
   /** Read-only lock check of one Decision. */
@@ -341,6 +352,22 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
       return withLock(async () => {
         const prepared = await prepare();
         return prepared.value === undefined ? failure(prepared.diagnostics) : success({ repaired: prepared.value.repaired }, prepared.diagnostics);
+      });
+    },
+
+    async previewConfirm(proposalId) {
+      if (!PROPOSAL_ID_PATTERN.test(proposalId)) return failure([createDiagnostic("INVALID_ID", `"${proposalId}" is not a proposal ID`)]);
+      const loaded = load();
+      if (loaded.value === undefined) return failure(loaded.diagnostics);
+      const truth = loaded.value;
+      const entry = listDecisionProposals(truth).find((p) => p.id === proposalId);
+      if (entry === undefined) return failure([createDiagnostic("PROPOSAL_NOT_FOUND", `No proposal ${proposalId}`)]);
+      if (entry.status !== "pending") return failure([createDiagnostic("PROPOSAL_NOT_PENDING", `${proposalId} is ${entry.status}`, entry.proposal.location)]);
+      const stale = staleness(truth, entry.proposal);
+      const target = entry.proposal.supersedes === null ? undefined : truth.decisions.find((d) => d.id === entry.proposal.supersedes);
+      return success({
+        proposalId, nextDecisionId: await allocate("D", truth), ...(stale === undefined ? {} : { stale }),
+        ...(target === undefined ? {} : { supersedes: { id: target.id, title: target.title, state: target.state, path: target.location.path as RepoPath } }),
       });
     },
 

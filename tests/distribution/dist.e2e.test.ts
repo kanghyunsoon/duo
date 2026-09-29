@@ -4,7 +4,7 @@
  * the generated MCP configuration started from the installed duoctl. Global (temporary npm prefix) and
  * project-local (npx --no-install) installs. Nothing falls back to the workspace build.
  */
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -59,7 +59,7 @@ beforeAll(() => {
 describe("the packed artifact (npm pack is the oracle)", () => {
   it("holds only the allowlisted files: the executable, the bundle, the grammar WASM and licenses, README, package.json", () => {
     const files = pack.files.map((f) => f.path);
-    const grammar = /^dist\/grammars\/(tree-sitter-(typescript|tsx|javascript|java|c_sharp|cpp|python)\.wasm|LICENSE-tree-sitter-(typescript|javascript|java|c-sharp|cpp|python)|grammars\.json)$/u;
+    const grammar = /^dist\/grammars\/(tree-sitter-(typescript|tsx|javascript|java|c_sharp|cpp|python)\.wasm|LICENSE-tree-sitter-(typescript|javascript|java|c-sharp|cpp|python)|grammars\.json)$|^dist\/ui\/(index\.html|app\.js|app\.css)$/u;
     for (const f of files) expect(f, f).toMatch(/^(package\.json|README\.md|dist\/duoctl\.js|dist\/cli-[A-Z0-9]+\.js)$/u.test(f) ? /./u : grammar);
     expect(files).toEqual(expect.arrayContaining(["dist/duoctl.js", "dist/grammars/grammars.json", ...["typescript", "tsx", "javascript", "java", "c_sharp", "cpp", "python"].map((g) => `dist/grammars/tree-sitter-${g}.wasm`)]));
     const forbidden = /(^|\/)(\.env|\.worklog|fixtures|coverage|\.duo-project|node_modules|tmp)(\/|$)|credentials|\.pem$|\.key$|id_rsa|\.p12$|metrics\.jsonl|\.map$|\.test\.|\.tgz$/iu;
@@ -245,6 +245,45 @@ describe("global install (temporary npm prefix)", () => {
     // The file-only change creates no claim; a WARN here can only be the surfaced gap (this repository has no confirmed Truth).
     expect(rv.claims).toEqual([]);
     expect(rv.verdict).not.toBe("BLOCK");
+  });
+
+  it("duoctl ui (T18.1) from the installed package: bundled assets, loopback only, session cookie, API through the installed operations", async () => {
+    const files = pack.files.map((f) => f.path);
+    expect(files).toEqual(expect.arrayContaining(["dist/ui/index.html", "dist/ui/app.js", "dist/ui/app.css"]));
+    const appJs = fs.readFileSync(path.join(pkgDir, "dist", "ui", "app.js"), "utf8");
+    expect(appJs).not.toMatch(/https?:\/\/(?!127\.0\.0\.1|localhost)[a-z0-9.-]+\.(?:com|net|org|io|dev)\/[^"'\s]*\.(?:js|css|woff2?)/iu); // no CDN assets
+    const p = project();
+    const noKey = Object.fromEntries(Object.entries(env).filter(([k]) => !k.toUpperCase().startsWith("OPENAI_")));
+    expect(runOnPath("duoctl", ["init", "--non-interactive", "--answers", "-", "--json"], p.root, noKey, "[]").code).toBe(0);
+    const child = spawn(process.execPath, [path.join(pkgDir, "dist", "duoctl.js"), "ui", "--port", "0"], { cwd: p.root, env: noKey, windowsHide: true });
+    try {
+      const url = await new Promise<string>((resolve, reject) => {
+        let out = "";
+        const timer = setTimeout(() => reject(new Error(`no URL: ${out}`)), 120_000);
+        child.stdout.on("data", (c: Buffer) => {
+          out += c.toString("utf8");
+          const m = /DUO UI: (http:\/\/127\.0\.0\.1:\d+\/\?session=[\w-]+)/u.exec(out);
+          if (m !== null) { clearTimeout(timer); resolve(m[1] as string); }
+        });
+        child.once("exit", (code) => reject(new Error(`exited ${code}: ${out}`)));
+      });
+      const launch = await fetch(url, { redirect: "manual" });
+      expect(launch.status).toBe(303);
+      const cookie = (launch.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+      const page = await fetch(new URL("/overview", url));
+      expect(await page.text()).toContain('src="/assets/app.js"');
+      expect(page.headers.get("content-security-policy")).toContain("default-src 'none'");
+      expect((await fetch(new URL("/assets/app.js", url))).status).toBe(200);
+      const overview = await (await fetch(new URL("/api/overview", url), { headers: { Cookie: cookie } })).json() as { format: string; data: { status: { index: { status: string }; llm: string } } };
+      expect(overview).toMatchObject({ format: "duo.ui.overview/1", data: { status: { index: { status: "current" }, llm: "disabled" } } });
+      const context = await (await fetch(new URL("/api/session", url), { headers: { Cookie: cookie } })).json() as { data: { csrf: string } };
+      const compiled = await fetch(new URL("/api/context", url), {
+        method: "POST", headers: { Cookie: cookie, Origin: new URL(url).origin, "Content-Type": "application/json", "X-Duo-CSRF": context.data.csrf }, body: JSON.stringify({ task: "Scheduler.next" }),
+      });
+      expect(await compiled.json()).toMatchObject({ format: "duo.ui.context/1", data: { status: "ready" } });
+    } finally {
+      child.kill();
+    }
   });
 
   it("OpenAI SDK (T12B): an exact runtime dependency, not bundled; nothing needs a key; status reports the provider without a request", () => {

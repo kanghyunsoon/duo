@@ -20,6 +20,7 @@ import { initCommand } from "./commands/init.js";
 import { installCommand } from "./commands/install.js";
 import { mcpCommand } from "./commands/mcp.js";
 import { reviewCommand } from "./commands/review.js";
+import { uiCommand } from "./commands/ui.js";
 import { CliFailure, usage, type Env } from "./commands/shared.js";
 import { statsCommand } from "./commands/stats.js";
 import { statusCommand } from "./commands/status.js";
@@ -31,7 +32,7 @@ import { VERSION } from "./version.js";
 export type { Io } from "./io.js";
 
 export const COMMANDS = ["init", "status", "index", "context", "review", "trace", "impact", "decision", "stats", "ui", "install", "mcp"] as const;
-const LATER: Readonly<Record<string, string>> = { ui: "TASK-018" };
+const LATER: Readonly<Record<string, string>> = {};
 /** Commands that append runtime/metrics.jsonl. Read-only commands (status, trace, impact, stats) write nothing. */
 const METERED = new Set(["init", "index", "context", "review", "decision", "install"]);
 
@@ -57,6 +58,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, Options>> = {
   stats: { last: { type: "string" } },
   mcp: { agent: { type: "string" }, "root-from": { type: "string" } },
   install: { yes: { type: "boolean", short: "y" }, launcher: { type: "string" } },
+  ui: { port: { type: "string" }, open: { type: "boolean" } },
 };
 
 const HELP = [
@@ -76,6 +78,7 @@ const HELP = [
   "  stats       runtime metrics summary (--last n)",
   "  mcp         serve the duo-director MCP server over stdio (--root <path> | --root-from git-cwd|env:<NAME>, --agent <label>)",
   "  install     connect an agent: install codex|claude-code [--launcher path|npx] [--yes] · install status [agent] · install remove <agent>",
+  "  ui          local Project Direction Console on 127.0.0.1 (--port <n>, --open); Ctrl+C stops it",
   "",
   "Options: --root <path>  --json  --locale en|ko  --non-interactive  --verbose  --version  --help",
   "init: --yes (operational confirmations only; never Truth or the adoption policy)  --answers -  --baseline-policy head|abort  --repair",
@@ -128,6 +131,9 @@ async function dispatch(env: Env, command: string, positionals: readonly string[
     case "decision": return decisionCommand(env, arg, positionals[2], str(v.reason));
     case "stats": return statsCommand(env, str(v.last));
     case "install": return installCommand(env, arg, positionals[2], { ...(str(v.launcher) === undefined ? {} : { launcher: str(v.launcher) as string }) });
+    case "ui":
+      if (env.json) return usage("ui", "ui serves a local web console; --json does not apply");
+      return uiCommand(env, { open: bool(v.open), ...(str(v.port) === undefined ? {} : { port: str(v.port) as string }) });
     case "mcp":
       // stdout is the MCP protocol: no JSON envelope, no human output on stdout.
       if (env.json) return usage("mcp", "mcp speaks the MCP protocol on stdout; --json does not apply");

@@ -15,6 +15,11 @@
     "dist"
   ],
   "devDependencies": {
-    "@duo-director/core": "workspace:*"
+    "@duo-director/core": "workspace:*",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "esbuild": "0.28.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }

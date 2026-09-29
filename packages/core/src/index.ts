@@ -31,7 +31,7 @@ export * from "./trace/trace.js";
 export { loadProjectTruth, type LoadedProject, type LoadProjectOptions } from "./loader/project.js";
 export {
   createDecisionService, DECISION_PERMISSIONS,
-  type ConfirmResult, type DecisionService, type DecisionServiceOptions, type ProposalInput, type ProposeResult, type RejectResult, type StaleInfo,
+  type ConfirmPreview, type ConfirmResult, type DecisionService, type DecisionServiceOptions, type ProposalInput, type ProposeResult, type RejectResult, type StaleInfo,
 } from "./decisions/service.js";
 export {
   DECISION_LOCK_PATH, DECISIONS_DIR, decisionPath, guardDecisionWrite, nodeDecisionFileSystem, proposalPath, PROPOSALS_DIR,
