@@ -145,7 +145,9 @@ CI(GitHub hosted runner, commit ac3a902)의 small smoke 한 번: Ubuntu initial 
 | 변경 20파일 이하 증분 2초 이내 | 5개 변경 medium 0.91 s, large 2.39 s(장기 실행). 1개 변경 cold large 3.4~3.6 s | 고정 freshness 비용이 지배한다 |
 | `duoctl context` 1초 이내 | cold CLI small 1.5~1.9 s, 장기 실행 small 0.7 s, medium 1.0~1.1 s, large 2.2~2.5 s | |
 
-목표는 benchmark 뒤 확정하기로 한 초기값이며 이번 Task는 SLA를 정하지 않는다.
+위 표는 T19 당시의 기록이다. 초기 목표를 환경 조건 없는 universal 목표로 읽으면 context는 medium 이상, 증분 index는 large에서 NOT MET이었다.
+
+**결정(H-44, Human 승인)**: REQ-NFR-004를 benchmark-scoped target으로 명확히 했다. 목표 수치(context 1초, 증분 2초, 1만 파일 init 60초)는 그대로이고, repository scale(`duo-bench-fixture/1` small·medium·large), operation, warm/cold, 기준 환경을 명시했다. 목표를 낮춘 것이 아니라 검증 가능한 측정 범위를 적은 것이다. 이 조건에서 현재 상태는 context small MET·medium NOT MET·large NOT MET, 증분 index medium MET·large NOT MET, 1만 파일 init 미측정이다([REQ-NFR-004](01-requirements.md#req-nfr-004-성능-목표)). SLA가 아니며 다른 기기에서의 보장이 아니다.
 
 ## 공개할 수 있는 주장
 

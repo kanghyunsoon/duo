@@ -4,6 +4,8 @@ Release Hardening에서 사람이 결정해야 하는 항목이다. 각 항목�
 
 ## DP-1. REQ-NFR-004 성능 목표
 
+**결정됨(H-44, 2026-09-29)**: B안. REQ-NFR-004를 benchmark-scoped target으로 명확히 했다(목표 수치 유지, 조건 명시, NOT MET 이력 보존). 아래는 결정 전 비교 기록이다.
+
 **현재 문장**: “초기 목표(benchmark로 검증 후 확정): 소스 1만 파일 init 60초 이내, 변경 20파일 이하 증분 인덱싱 2초 이내, `duoctl context` 1초 이내.”
 
 **전제 확인**: 출처 D§17(기획서 17. CLI)에는 이 수치가 없다. T00에서 정한 초기값이며 기준 환경, cold/warm, 저장소 크기·형태, 측정 operation이 정해져 있지 않다.
@@ -31,7 +33,9 @@ Release Hardening에서 사람이 결정해야 하는 항목이다. 각 항목�
 
 ## DP-2. DUO LICENSE (C164)
 
-DUO 자체 license가 없다. 현재 package의 `license` 값은 `UNLICENSED`(사용 허가를 주지 않았다는 뜻)이며 이는 현재 상태를 사실대로 나타낸다. publish 전 반드시 사람이 고른다. 제3자 license(React, Tree-sitter grammar, npm 의존성)는 `dist/THIRD_PARTY_NOTICES.md`와 `dist/grammars/LICENSE-*`로 따로 배포되며 이 결정과 무관하다.
+**결정됨(H-44, 2026-09-29)**: Apache License 2.0. 루트 `LICENSE`(apache.org 원문), `apps/cli/package.json` `license: Apache-2.0`, package에 `LICENSE` 포함. 아래는 결정 전 비교 기록이다.
+
+결정 전에는 DUO 자체 license가 없었고 package 값도 “사용 허가 없음”을 뜻하는 값이었다. 제3자 license(React, Tree-sitter grammar, npm 의존성)는 `dist/THIRD_PARTY_NOTICES.md`와 `dist/grammars/LICENSE-*`로 따로 배포되며 이 결정과 무관하다.
 
 | | MIT | Apache-2.0 |
 |---|---|---|
@@ -43,6 +47,8 @@ DUO 자체 license가 없다. 현재 package의 `license` 값은 `UNLICENSED`(�
 **추천**: 코드 재사용을 제한할 요구가 없다면 Apache-2.0. 공개 개발 도구·인프라 소프트웨어에서 명시적 patent grant가 사용자와 기여자 모두에게 분명함을 준다. 선택 후 할 일: 루트 `LICENSE` 추가, `apps/cli/package.json`의 `license`(`Apache-2.0` 또는 `MIT`), pack이 `LICENSE`를 package에 포함하도록 allowlist 확장, release:preflight blocker 해제.
 
 ## DP-3. npm scope와 공개 저장소 (C168)
+
+보안 신고 채널(H-44): `SECURITY.md`는 GitHub Private Vulnerability Reporting을 공식 채널로 정했다. 이 기능은 저장소가 public일 때 켤 수 있으므로 **Human action required: 저장소를 public으로 전환할 때 Settings → Code security에서 Private vulnerability reporting을 켠다.** DUO는 저장소 설정을 바꾸지 않는다.
 
 - 이름은 `@duo-director/cli`로 유지한다. 다른 이름으로 자동 대체하지 않는다.
 - 2026-09-29 확인: registry는 `https://registry.npmjs.org/`, 이 PC는 npm 로그인이 없고(`ENEEDAUTH`), `@duo-director/cli`는 registry에 없다(404, 0.1.0 미존재). `@duo-director` scope(npm organization)의 존재와 publish 권한은 로그인 전에는 확인할 수 없다.

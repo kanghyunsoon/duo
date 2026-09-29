@@ -615,12 +615,24 @@ type: requirement
 status: planned
 milestone: M4
 priority: should
-source: [D§17]
+source: [D§17, H-44]
 ```
 
-초기 목표(benchmark로 검증 후 확정): 소스 1만 파일 init 60초 이내, 변경 20파일 이하 증분 인덱싱 2초 이내, `duoctl context` 1초 이내.
+성능 목표는 **benchmark-scoped target**이다(H-44, Human 승인). 기기 간 보장이나 SLA가 아니며, 아래 조건에서 측정해 목표별로 MET / NOT MET을 기록한다. 목표 수치는 초기 목표와 같고 측정 범위만 명시했다.
 
-상세: [09-token-strategy](09-token-strategy.md) · Task: [TASK-019](tasks/TASKS.md#task-019-benchmark)
+- 기준 환경: [performance-benchmark](performance-benchmark.md)의 benchmark 기기(Windows 11, Intel Core Ultra 7 155H, Node 24). 다른 기기의 값은 참고값이다.
+- Repository scale: `duo-bench-fixture/1`(seed 19019)의 small 100, medium 1,000, large 5,000 source file. 1만 파일은 같은 generator로 만든 fixture.
+- warm: 장기 실행 process(MCP·UI 조건, analyzer registry 재사용)의 정상 상태 median. cold: 새 CLI process 한 번(파일을 막 생성한 뒤의 첫 실행 제외).
+
+| 목표 | Operation | Scale | 모드 | T19 실측 | 상태 |
+|---|---|---|---|---|---|
+| context 1초 이내 | `projectContext`(= `duo_get_context`, `duoctl context`) AUTH-03 | small / medium / large | warm | 0.7 s / 1.0~1.1 s / 2.2~2.5 s | MET / NOT MET / NOT MET |
+| 변경 20파일 이하 증분 index 2초 이내 | 5개 파일 변경 뒤 `index` | medium / large | warm | 0.91 s / 2.39 s | MET / NOT MET |
+| 1만 파일 init 60초 이내 | 초기 index(`init`의 index 단계) | 10,000 | cold | 측정 안 함(5,000 파일 17.7~20.5 s) | 미측정 |
+
+cold CLI 값(small context 1.5~1.9 s, large 단일 파일 증분 3.4~3.6 s)과 설치 직후 첫 실행 비용은 참고값으로 기록한다. 이력: T00의 초기 목표는 같은 수치를 환경 조건 없이 적었고, T19 benchmark에서 그대로 적용하면 context는 medium 이상, 증분 index는 large에서 NOT MET이었다. H-44는 목표를 낮추지 않고 검증 가능한 측정 범위를 명시했다.
+
+상세: [performance-benchmark](performance-benchmark.md#req-nfr-004-초기-목표와-실측) · [09-token-strategy](09-token-strategy.md) · Task: [TASK-019](tasks/TASKS.md#task-019-benchmark)
 
 ### REQ-NFR-005 결정적 출력
 

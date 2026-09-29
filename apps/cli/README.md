@@ -21,6 +21,10 @@ Language support: every Git repository gets file-level analysis (L0); TypeScript
 
 On Windows the very first command after installation can take much longer than later ones (about 18 s vs 1.5 s on the reference PC): opening freshly installed JavaScript files for the first time. It happens once.
 
+## License
+
+Apache License 2.0 (see `LICENSE`). Third-party notices: `dist/THIRD_PARTY_NOTICES.md` and `dist/grammars/`. Report security issues through GitHub Private Vulnerability Reporting, not public issues (`SECURITY.md` in the repository).
+
 ## Daily use
 
 ```sh

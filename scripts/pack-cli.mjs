@@ -34,6 +34,9 @@ const sha256 = (file) => createHash("sha256").update(fs.readFileSync(file)).dige
 const cli = readJson(path.join(ROOT, "apps/cli/package.json"));
 const entry = path.join(ROOT, "apps/cli/dist/bin.js");
 if (!fs.existsSync(entry)) fail("apps/cli/dist/bin.js is missing: run pnpm build first");
+if (cli.license !== "Apache-2.0") fail(`apps/cli/package.json license is ${JSON.stringify(cli.license)}; DUO is Apache-2.0 (H-44)`);
+const licenseText = fs.existsSync(path.join(ROOT, "LICENSE")) ? fs.readFileSync(path.join(ROOT, "LICENSE"), "utf8").replaceAll("\r\n", "\n") : "";
+if (!/^\s*Apache License\n\s*Version 2\.0, January 2004\n/u.test(licenseText) || !licenseText.includes("END OF TERMS AND CONDITIONS")) fail("the repository LICENSE is not the Apache License 2.0 text");
 
 // The grammars the analyzer loads: its built GRAMMAR_FILES is the one list ("<package>/<file>.wasm").
 const runtime = path.join(ROOT, "packages/analyzer/dist/language/tree-sitter/runtime.js");
@@ -166,7 +169,8 @@ const manifest = {
   name: cli.name,
   version: cli.version,
   description: cli.description,
-  license: cli.license ?? "UNLICENSED",
+  // DUO's own license (H-44: Apache-2.0). apps/cli/package.json is the one source; no placeholder value.
+  license: cli.license,
   // Public links come from apps/cli/package.json (the one metadata source); release:preflight checks they resolve.
   ...(cli.repository === undefined ? {} : { repository: cli.repository }),
   ...(cli.homepage === undefined ? {} : { homepage: cli.homepage }),
@@ -182,6 +186,8 @@ const manifest = {
 };
 fs.writeFileSync(path.join(STAGE, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 fs.copyFileSync(path.join(ROOT, "apps/cli/README.md"), path.join(STAGE, "README.md"));
+// The repository LICENSE ships unchanged; third-party licenses stay in dist/THIRD_PARTY_NOTICES.md and dist/grammars/.
+fs.copyFileSync(path.join(ROOT, "LICENSE"), path.join(STAGE, "LICENSE"));
 
 // C163: the committed npm-shrinkwrap.json pins the transitive runtime tree. It must describe exactly this
 // manifest (name, version, direct dependencies); otherwise run pnpm release:lock and review the diff.

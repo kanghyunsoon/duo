@@ -14,7 +14,19 @@ import { DIST, gitState, npm, pnpm, readJson, REGISTRY, ROOT, run, stagedFiles }
 
 const skipTests = process.argv.includes("--skip-tests");
 const blockers = [];
-const block = (id, message) => blockers.push({ id, message });
+// Blockers are "code" (fixable in this repository, gates codeReady) or "external" (an account or setting a human
+// changes outside the repository, gates externalReady). Each one says what to do next.
+const EXTERNAL = {
+  "npm-registry": "point the npm registry back to https://registry.npmjs.org/ (npm config)",
+  "npm-scope-registry": "remove the @duo-director:registry override (npm config delete @duo-director:registry)",
+  "npm-auth": "npm login --registry https://registry.npmjs.org/ (a human, with the account that will own @duo-director)",
+  "npm-scope-access": "create or join the duo-director npm organization with a publish role; if impossible a human decides a new namespace (DP-3)",
+  "version-taken": "a human decides the next version; 0.1.0 already exists",
+  "repository-not-public": "a human makes github.com/kanghyunsoon/duo public (package repository, homepage and bugs point there)",
+  "github-private-vulnerability-reporting": "when the repository is public: Settings → Code security → enable Private vulnerability reporting (SECURITY.md names it as the reporting channel)",
+  "openai-smoke": "DUO_OPENAI_SMOKE=1 OPENAI_API_KEY=… DUO_OPENAI_SMOKE_MODEL=<model> pnpm test:openai-smoke on this commit, then rerun the preflight",
+};
+const block = (id, message) => blockers.push({ id, message, kind: Object.hasOwn(EXTERNAL, id) ? "external" : "code", nextAction: EXTERNAL[id] ?? "fix in the repository, commit, and rerun pnpm release:preflight" });
 const log = (m) => console.log("release:preflight: " + m);
 
 // ---- git ----
@@ -131,10 +143,21 @@ if (audit.code !== 0) block("audit", "release:audit reported a problem (advisory
 // ---- DUO license (C164, §18–22) ----
 const hasLicenseFile = fs.existsSync(path.join(ROOT, "LICENSE"));
 const license = { declared: manifest.license, licenseFile: hasLicenseFile, inPackage: Object.hasOwn(candidate.files, "LICENSE"), thirdPartyNotices: Object.hasOwn(candidate.files, "dist/THIRD_PARTY_NOTICES.md"), grammarLicenses: Object.keys(candidate.files).filter((f) => f.startsWith("dist/grammars/LICENSE-")).length };
-if (manifest.license === "UNLICENSED" || !hasLicenseFile || !license.inPackage) block("license-not-selected", "DUO's own LICENSE is not selected (C164, docs/release/decision-packets.md DP-2)");
+// H-44: DUO is Apache-2.0. The package declares it, ships the repository LICENSE unchanged, and keeps third-party notices separate.
+const licenseDoc = hasLicenseFile ? fs.readFileSync(path.join(ROOT, "LICENSE"), "utf8").replaceAll("\r\n", "\n") : "";
+license.apache = /^\s*Apache License\n\s*Version 2\.0, January 2004\n/u.test(licenseDoc) && licenseDoc.includes("END OF TERMS AND CONDITIONS");
+license.packageMatchesRepository = license.inPackage && fs.readFileSync(path.join(stage, "LICENSE"), "utf8") === fs.readFileSync(path.join(ROOT, "LICENSE"), "utf8");
+if (manifest.license !== "Apache-2.0" || repoCli.license !== "Apache-2.0" || !license.apache || !license.packageMatchesRepository) block("license", "package license must be Apache-2.0 with the repository's Apache License 2.0 LICENSE inside the package (H-44)");
 if (!license.thirdPartyNotices || license.grammarLicenses < 6) block("third-party-notices", "third-party notices or grammar licenses are missing from the package");
 // docs/10-security.md: a security reporting policy is written before the repository goes public (contact chosen by a human).
-if (!fs.existsSync(path.join(ROOT, "SECURITY.md"))) block("security-policy", "SECURITY.md (how to report a vulnerability) does not exist; it is required before the repository goes public");
+// SECURITY.md (H-44): GitHub Private Vulnerability Reporting is the reporting channel; public issues are not.
+const securityDoc = fs.existsSync(path.join(ROOT, "SECURITY.md")) ? fs.readFileSync(path.join(ROOT, "SECURITY.md"), "utf8") : "";
+if (!/Private Vulnerability Reporting/u.test(securityDoc) || !/not report security vulnerabilities through public GitHub Issues/iu.test(securityDoc)) block("security-policy", "SECURITY.md must name GitHub Private Vulnerability Reporting and rule out public issues");
+// REQ-NFR-004 (H-44): a benchmark-scoped target with scale, operation, cold/warm and the reference environment.
+const requirements = fs.readFileSync(path.join(ROOT, "docs", "01-requirements.md"), "utf8");
+const nfr = requirements.slice(requirements.indexOf("### REQ-NFR-004"), requirements.indexOf("### REQ-NFR-005"));
+const nfrDecision = { benchmarkScoped: /benchmark-scoped/u.test(nfr), decision: /H-44/u.test(nfr), conditions: ["duo-bench-fixture/1", "warm", "cold", "기준 환경"].every((c) => nfr.includes(c)) };
+if (!nfrDecision.benchmarkScoped || !nfrDecision.decision || !nfrDecision.conditions) block("nfr-decision", "REQ-NFR-004 does not state the Human-approved benchmark-scoped target (H-44)");
 const conformanceFile = path.join(DIST, "release-conformance.json");
 const conformance = fs.existsSync(conformanceFile) ? readJson(conformanceFile) : undefined;
 if (!skipTests && (conformance?.git?.commit !== git.commit || conformance.problems.length > 0 || conformance.e2e?.ok !== true)) {
@@ -166,6 +189,14 @@ if (npmState.user !== null) {
 const publicRepo = await fetch(String(manifest.homepage ?? "").replace(/#.*$/u, ""), { method: "HEAD", redirect: "follow" }).then((r) => r.status, (e) => String(e));
 npmState.repositoryPublic = publicRepo === 200;
 if (!npmState.repositoryPublic) block("repository-not-public", "package links point to " + manifest.homepage + ", which is not publicly reachable (HTTP " + publicRepo + ")");
+// GitHub Private Vulnerability Reporting (SECURITY.md's channel). Read-only; DUO never changes repository settings.
+const repoSlug = /github\.com\/([^/]+\/[^/#]+)/u.exec(String(manifest.homepage ?? ""))?.[1];
+const pvr = repoSlug === undefined ? { code: -1, stdout: "" } : run("gh", ["api", "repos/" + repoSlug + "/private-vulnerability-reporting"]);
+const pvrEnabled = (() => {
+  try { return pvr.code === 0 ? JSON.parse(pvr.stdout).enabled === true : null; } catch { return null; }
+})();
+npmState.githubPrivateVulnerabilityReporting = pvrEnabled === true ? "enabled" : pvrEnabled === false ? "disabled" : "not-verifiable (repository not public or not accessible)";
+if (pvrEnabled !== true) block("github-private-vulnerability-reporting", "GitHub Private Vulnerability Reporting is " + npmState.githubPrivateVulnerabilityReporting);
 log("npm publish --dry-run");
 const dry = npm(["publish", path.join(DIST, candidate.tarball), "--dry-run", "--json", "--access", "public", "--tag", "latest", "--registry", REGISTRY, "--ignore-scripts"]);
 let dryParsed;
@@ -205,10 +236,18 @@ const report = {
   blockers,
   deferred: ["C184 optional grammar packaging", "C185 custom analyzer capability persistence", "C197 gap semantic assist", "C198 public repository benchmark", "C202 further performance candidates", "L2 resolvers for Java, C#, C++, Python", "REQ-NFR-004 scope (DP-1, priority should)"],
   ready: blockers.length === 0,
+  // BLOCKED with codeReady true means the code and artifact are ready and only external human actions remain.
+  codeReady: blockers.every((b) => b.kind !== "code"),
+  externalReady: blockers.every((b) => b.kind !== "external"),
   readiness: blockers.length === 0 ? "READY" : "BLOCKED",
+  nfrDecision,
   conformance: conformance === undefined ? null : { commit: conformance.git?.commit, e2e: conformance.e2e === undefined ? null : { passed: conformance.e2e.passed, failed: conformance.e2e.failed }, c209: { runs: conformance.c209?.runs, anomalies: conformance.c209?.anomalies, failures: conformance.c209?.failures }, problems: conformance.problems },
 };
 fs.writeFileSync(path.join(DIST, "release-preflight.json"), JSON.stringify(report, null, 2) + "\n");
-log(blockers.length === 0 ? "READY: no blockers" : blockers.length + " blocker(s):");
-for (const b of blockers) console.log("  - [" + b.id + "] " + b.message);
+log(report.readiness + " · codeReady " + report.codeReady + " · externalReady " + report.externalReady);
+for (const kind of ["code", "external"]) {
+  const list = blockers.filter((b) => b.kind === kind);
+  if (list.length > 0) console.log("  " + kind + " blockers:");
+  for (const b of list) console.log("  - [" + b.id + "] " + b.message + "\n      next: " + b.nextAction);
+}
 process.exit(blockers.length === 0 ? 0 : 1);

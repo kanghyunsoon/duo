@@ -120,6 +120,12 @@ pnpm duoctl --version
 | `pnpm benchmark:smoke` | 100파일 fixture benchmark와 결과 계약 검사(CI) |
 | `pnpm benchmark` | 100/1,000/5,000파일 full benchmark, 결과는 Git 제외 `bench/results/local/` |
 
+## License와 보안
+
+DUO는 [Apache License 2.0](LICENSE)으로 배포합니다. 배포 package에 들어 있는 제3자 소프트웨어(UI에 bundle된 React 등, Tree-sitter grammar, npm 의존성)의 license는 `dist/THIRD_PARTY_NOTICES.md`와 `dist/grammars/LICENSE-*`에 따로 있습니다.
+
+보안 취약점은 공개 Issue로 올리지 말고 GitHub Private Vulnerability Reporting으로 신고해 주세요([SECURITY.md](SECURITY.md)).
+
 ## 문서
 
 - [문서 지도](docs/README.md)

@@ -60,7 +60,7 @@ describe("the packed artifact (npm pack is the oracle)", () => {
   it("holds only the allowlisted files: the executable, the bundle, the grammar WASM and licenses, README, package.json", () => {
     const files = pack.files.map((f) => f.path);
     const grammar = /^dist\/grammars\/(tree-sitter-(typescript|tsx|javascript|java|c_sharp|cpp|python)\.wasm|LICENSE-tree-sitter-(typescript|javascript|java|c-sharp|cpp|python)|grammars\.json)$|^dist\/ui\/(index\.html|app\.js|app\.css)$/u;
-    for (const f of files) expect(f, f).toMatch(/^(package\.json|npm-shrinkwrap\.json|README\.md|dist\/THIRD_PARTY_NOTICES\.md|dist\/duoctl\.js|dist\/cli-[A-Z0-9]+\.js)$/u.test(f) ? /./u : grammar);
+    for (const f of files) expect(f, f).toMatch(/^(package\.json|npm-shrinkwrap\.json|README\.md|LICENSE|dist\/THIRD_PARTY_NOTICES\.md|dist\/duoctl\.js|dist\/cli-[A-Z0-9]+\.js)$/u.test(f) ? /./u : grammar);
     expect(files).toEqual(expect.arrayContaining(["dist/duoctl.js", "dist/grammars/grammars.json", ...["typescript", "tsx", "javascript", "java", "c_sharp", "cpp", "python"].map((g) => `dist/grammars/tree-sitter-${g}.wasm`)]));
     const forbidden = /(^|\/)(\.env|\.worklog|fixtures|coverage|\.duo-project|node_modules|tmp)(\/|$)|credentials|\.pem$|\.key$|id_rsa|\.p12$|metrics\.jsonl|\.map$|\.test\.|\.tgz$/iu;
     expect(files.filter((f) => forbidden.test(f))).toEqual([]);
@@ -123,6 +123,18 @@ describe("the packed artifact (npm pack is the oracle)", () => {
     }
     for (const [name, version] of Object.entries(pack.dependencies)) expect(notices).toContain(`- ${name}@${version}`);
     expect(notices).toContain("It is not DUO's own license.");
+  });
+
+  it("DUO's own license (H-44): Apache-2.0 metadata and the repository LICENSE, separate from third-party notices", () => {
+    const stage = path.join(REPO, ".dist", "cli-package");
+    const m = JSON.parse(fs.readFileSync(path.join(stage, "package.json"), "utf8"));
+    expect(m.license).toBe("Apache-2.0");
+    expect(pack.files.map((f) => f.path)).toContain("LICENSE");
+    const license = fs.readFileSync(path.join(stage, "LICENSE"), "utf8");
+    expect(license).toBe(fs.readFileSync(path.join(REPO, "LICENSE"), "utf8"));
+    expect(license).toContain("Apache License");
+    expect(license).toContain("Version 2.0, January 2004");
+    expect(fs.readFileSync(path.join(stage, "dist", "THIRD_PARTY_NOTICES.md"), "utf8")).not.toContain("TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n   1. Definitions.");
   });
 
   it("Release Hardening (C163): npm-shrinkwrap.json pins the runtime tree to registry.npmjs.org; metadata links are public URLs", () => {
