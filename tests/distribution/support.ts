@@ -100,7 +100,7 @@ export function runOnPath(command: string, args: readonly string[], cwd: string,
         return JSON.parse(stdout);
       } catch (error) {
         // Release Hardening: an intermittent empty stdout (exit 0) under load; keep what is needed to diagnose it.
-        throw new Error(`${command} ${args.join(" ")}: stdout is not JSON (exit ${r.status}, signal ${r.signal}, error ${r.error?.message ?? "none"}, stdout ${stdout.length} chars: ${JSON.stringify(stdout.slice(0, 200))}, stderr: ${JSON.stringify(stderr.slice(0, 800))}): ${(error as Error).message}`);
+        throw new Error(`${command} ${args.join(" ")}: stdout is not JSON (exit ${r.status}, signal ${r.signal}, error ${r.error?.message ?? "none"}, stdout ${stdout.length} chars: ${JSON.stringify(stdout.slice(0, 200))}, stderr: ${JSON.stringify(stderr.slice(0, 800))}): ${(error as Error).message}`, { cause: error });
       }
     },
   };
