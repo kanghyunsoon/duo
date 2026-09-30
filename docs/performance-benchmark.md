@@ -173,3 +173,127 @@ T19에서 본 “설치 직후 첫 `duoctl status` 18.3 s”를 같은 Windows �
 - 이 PC의 Windows Defender는 실행 중이 아니었고(`AMRunningMode: Not running`), Security Center에는 AhnLab V3 Internet Security가 활성 백신으로 등록되어 있다. 측정 패턴은 스크립트 파일에 대한 on-access 검사와 일치하지만 보안 제품을 끄고 비교하지 않았으므로 원인을 확정하지 않는다. DUO 쪽에서는 **unattributed external startup cost: first open of newly installed JavaScript module files**로 기록한다.
 
 **판단**: 설치 직후 1회만 발생하고, 같은 실행 안의 DUO 작업은 정상이며, 이후 호출은 1.4~1.5 s로 정상이다. release blocker가 아니며 limitation으로 문서화한다. 보안 검사를 우회하거나 끄는 조치는 하지 않는다. CLI가 명령에 필요 없는 큰 모듈(typescript 등)을 처음부터 로드하는 점은 이 비용의 절반 이상을 차지하지만, lazy import는 C202로 계속 보류한다.
+
+## Real-world baseline (T23)
+
+이 절은 위의 TASK-019 synthetic 측정과 별개의 데이터다. T22의 real-world 수치([0.2.0 audit §3](roadmap/0.2.0-audit.md#3-real-world-performance))는 historical observation으로 그대로 두고 덮어쓰지 않는다.
+
+```
+pnpm build
+pnpm benchmark:realworld                        # 5개 저장소 → bench/results/local/realworld.json
+node bench/realworld-suite.mjs --ci             # 3 OS workflow와 같은 작은 저장소 3개
+node bench/compare.mjs a.json[,a2.json] b.json[,b2.json]
+```
+
+**구조.** 새 framework 없이 기존 `bench/`를 확장했다.
+
+| 파일 | 역할 |
+|---|---|
+| `bench/realworld-repos.mjs` | manifest: stable ID, URL, 정확한 commit SHA, project type, 기대 analysis level, 1-file 편집 대상, Context 시나리오와 T22 관찰, CI 대상 여부 |
+| `bench/realworld-suite.mjs` | SHA 하나만 depth 1로 fetch(branch·tag 없음)해 OS temp에 받고, 매 실행 전 pristine checkout으로 되돌린다(`checkout --force`, `clean -ffdx`). 저장소마다 새 process로 runner를 실행한다. `--duo-root`는 다른 DUO checkout의 build로 같은 저장소를 잰다(A/B). `--keep`이 없으면 clone을 지운다 |
+| `bench/realworld.mjs` | 저장소 하나를 측정하고 JSON 하나를 출력한다 |
+| `bench/compare.mjs` | 결과 형식으로 분기한다. synthetic 형식은 그대로 두고, real-world 형식은 결정적 필드 전체를 비교하고 시간은 나란히 보여 준다 |
+| `.github/workflows/realworld.yml` | 수동 `workflow_dispatch` 3 OS job. push와 PR에서는 실행하지 않는다 |
+
+**측정 순서(runner).**
+
+1. cold process의 CLI `init --baseline-policy head`
+2. generated와 cache를 지운 initial index와 Graph capture
+3. no-op freshness 3회
+4. pristine tree에서 Context 시나리오 실행(시나리오마다 2회)
+5. 편집 대상 파일 끝에 새 최상위 선언 하나를 붙인다. 줄 끝은 파일의 기존 EOL을 따른다
+6. incremental index와 Graph capture
+7. generated와 cache를 다시 지우고 같은 tree를 clean full rebuild한 뒤 Graph capture
+8. canonical 비교(`dumpGraph` JSON 동일)
+9. Review HEAD → WORKTREE
+
+source 저장소에는 commit하지 않는다.
+
+**결과 형식(internal, 공개 계약 아님).** suite 결과는 `duo.bench-realworld/1`, 저장소별 runner 출력은 `duo.bench-realworld-run/1`이다.
+
+| 구분 | 필드 | 비교 |
+|---|---|---|
+| deterministic | init exit·baseline, scan(total, Project Truth 파일과 경로, repository 파일 수와 경로 목록 SHA-256, 제외 사유별 수), coverage(files, 언어별 files·level·analyzer, 파일만 확장자), Graph(initial·incremental·clean full의 node·edge 수와 SHA-256, 동일 여부), no-op status·parse 수, 편집(path, EOL, byte, mode, 분석 파일 수), Context 시나리오별(status, 파일, found, missing, dependency digest, omitted, truncated), Review(verdict, claim alignment·rule·subject) | 같아야 한다 |
+| build | DUO commit, uncommitted 여부, analyzer registry digest, Node, platform | 보고 |
+| environment | Git 버전, `core.symlinks`·`core.autocrlf`, 최대 경로 길이(저장소 기준·절대), 대소문자 충돌 수 | 보고 |
+| timings, memory, operations | init, import, grammar load, initial·no-op·incremental·clean full index, Context, Review, peak RSS·heap, no-op과 incremental의 git process·fs 호출 수 | gate 아님 |
+| checks | init, initial index, no-op current, scan accounting(repository 파일 = coverage total), 기대 level, 1-file incremental, incremental 뒤 current, incremental = clean full, 편집 감지, 결정적 출력에 절대 경로 없음 | 하나라도 실패하면 DUO correctness failure |
+
+**T22의 "4개 차이"(C221).** scan 수 = repository 파일 + Project Truth 파일 4개(`.duo-project/.gitignore`, `intent/constraints.yaml`, `intent/vision.md`, `project.yaml`)다. scanner는 Truth 변경을 감지하려고 이 파일을 fingerprint하고, coverage와 Graph는 `.duo-project/`를 repository 파일로 세지 않는다(H-24). 5개 저장소 모두 `scan-accounting` check가 통과한다.
+
+**실패 구분.** suite exit code는 다음과 같다.
+
+| exit | 의미 |
+|---|---|
+| 0 | 정상 |
+| 1 | DUO correctness failure(runner check 실패) |
+| 2 | network failure(fetch) |
+| 3 | harness failure(git 없음, checkout 실패, runner 비정상 종료, build 없음) |
+
+compare exit code는 다음과 같다.
+
+| exit | 의미 |
+|---|---|
+| 0 | 결정적 필드 동일 |
+| 1 | 결정적 필드 차이 |
+| 2 | 비교 불가(다른 SHA나 다른 platform) |
+
+네 경우를 모두 직접 발생시켜 확인했다.
+
+- network: 닿지 않는 proxy로 fetch → 2
+- harness: 받지 않은 저장소에 `--no-fetch` → 3
+- correctness: manifest 기대 level을 틀리게 바꿈 → 1
+- 비교: SHA를 바꾼 결과 → 2, 결정적 필드 하나를 바꾼 결과 → 1
+
+**측정(2026-09-30).** Windows 11, Intel Core Ultra 7 155H(22 logical), 32 GB, Node 24.18.0, Git 2.55.0, DUO 0.1.2 제품 코드다. 같은 build로 연속 두 번 실행했고, 결정적 필드는 5개 저장소 모두 같았다. 시간은 두 실행의 범위다.
+
+| 저장소 | SHA | repository 파일 (+Truth) | 구조 분석 / 파일만 | 언어 (level, 파일) | Graph node / edge | CLI init | initial index | no-op freshness | 1-file incremental | clean full | Context | Review | peak RSS |
+|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| spring-petclinic | `500158f7` | 132 (+4) | 50 / 82 | java L1 50 | 456 / 652 | 4.6–5.2 s | 0.96–0.99 s | 0.58–0.64 s | 0.55–0.58 s | 0.92 s | 0.70–1.00 s | 1.6–1.8 s | 280–322 MB |
+| bulletproof-react | `9506629e` | 528 (+4) | 447 / 81 | typescript L2 422, javascript L2 25 | 1,335 / 2,675 | 8.2–8.4 s | 2.7–4.6 s | 0.80–1.10 s | 0.88–1.33 s | 2.8–4.4 s | 0.77–2.20 s | 2.2–3.3 s | 382–449 MB |
+| full-stack-fastapi-template | `cb740b65` | 246 (+4) | 152 / 94 | typescript L2 109, python L1 43 | 955 / 1,484 | 6.3–7.0 s | 1.6–2.8 s | 0.61–0.88 s | 0.66–1.06 s | 1.6–2.6 s | 0.83–1.43 s | 1.8–2.6 s | 358–380 MB |
+| ActionRoguelike | `9e4ee5ff` | 1,948 (+4) | 168 / 1,780 | cpp L1 164, csharp L1 4 | 2,780 / 3,256 | 10.3–10.6 s | 2.6–3.4 s | 1.67–1.97 s | 1.44–2.14 s | 2.5–3.6 s | 1.58–2.38 s | 2.9–3.6 s | 389–408 MB |
+| EntityComponentSystemSamples | `6786a741` | 8,074 (+4) | 851 / 7,223 | csharp L1 851 | 13,342 / 16,808 | 21.9–22.5 s | 7.1–10.7 s | 2.89–4.10 s | 3.08–5.10 s | 7.2–11.3 s | 3.43–5.76 s | 5.2–7.3 s | 572–586 MB |
+
+- incremental Graph는 5개 저장소 모두 clean full rebuild와 같았다. FastAPI의 편집 대상(`items.py`)은 CRLF 파일이다.
+- no-op freshness 한 번에 git process는 모든 저장소에서 8개다. fs 호출 수(`readFileSync` / `lstatSync`)는 spring 54 / 390, react 454 / 2,540, FastAPI 158 / 920, ActionRoguelike 172 / 2,785, ECS 855 / 12,408이다.
+- grammar load는 39~94 ms다.
+- ECS 저장소의 최대 절대 경로는 253자로 Windows MAX_PATH(260)에 가깝다.
+
+**T22 재현.** SHA, 파일 분류(repository와 Truth, 구조 분석과 파일만), 제외 사유별 수, 알려진 한계, Context 시나리오 8개의 status·found·missing이 T22 관찰과 같다.
+
+- Spring: 2/3, `Owner.java` 누락
+- React: 경로 없는 과제 ambiguous, 경로를 쓴 과제 2/2
+- FastAPI: 1/3과 3/3
+- Unreal: 경로 없는 과제 ambiguous, 경로를 쓴 과제 2/3(`RogueAction.h` 누락)
+- Unity: 3/3
+
+같은 PC의 시간은 T22보다 대체로 짧았다(예: ECS no-op 2.9~4.1 s, T22 4.10 s). 절대 시간은 재현 대상이 아니다.
+
+**같은 build의 시간 편차.** 같은 build, 같은 세션의 연속 두 실행에서 B/A 비율이 0.78~2.18로 흩어졌다. 그래서 before/after는 다음 절차로 한다.
+
+1. 두 checkout을 각각 build한다.
+2. 같은 세션에서 `--duo-root`로 A, B, A, B 순서로 최소 3 round 실행한다.
+3. `compare.mjs a1,a2,a3 b1,b2,b3`로 비교한다. 각 쪽의 결과끼리 같아야 하고 시간은 median이다.
+
+이 편차보다 작은 차이는 개선으로 보지 않는다. "몇 % 빨라졌다"는 같은 세션, 같은 저장소에서만 쓴다.
+
+**변화 감지(AC5).** 임시 worktree에서 Python absolute import root에 `backend/` 한 줄을 더해 build하고 FastAPI를 쟀다(commit하지 않음). compare가 exit 1로 차이를 보고했다: Graph edge 1,484 → 1,559(initial), Graph SHA-256, Context dependency digest, 경로를 쓴 과제의 파일 목록.
+
+**3 OS workflow.** manifest에서 `ci: true`인 작은 저장소 3개(spring-petclinic Java L1, bulletproof-react TypeScript L2, FastAPI template Python L1 + TypeScript polyglot, symlink 포함)를 3 OS에서 두 번씩 재고 같은 build 비교를 한다. Unity와 Unreal 저장소는 크기(indexed 합계 약 1.3 GiB)와 시간 때문에 local/manual 성능 측정으로 둔다. 실패는 step으로 나뉜다: fetch(network), measure(harness 3, correctness 1), compare(결정성), hygiene(DUO checkout에 쓴 것 없음).
+
+**Cross-platform hazard.**
+
+| hazard | 처리 | 확인 |
+|---|---|---|
+| Windows 경로 길이 | fetch한 저장소에 `core.longpaths=true` | Windows 로컬 ECS, 최대 절대 경로 253자 |
+| path separator | 결정적 출력은 `/` repository 경로만. 절대 경로 check는 두 구분자를 모두 본다 | 5개 저장소 check 통과 |
+| CRLF/LF | `core.autocrlf=false`로 commit된 byte 그대로. 편집은 파일의 EOL을 따른다 | FastAPI CRLF 파일에서 equivalence 성립 |
+| 대소문자 | 대소문자 충돌 수를 기록한다. 결정적 비교는 같은 platform끼리만 한다 | 5개 저장소 모두 0 |
+| symlink | scanner는 Git index mode로 판정한다. `core.symlinks` 값을 기록한다 | Windows(`core.symlinks=false`)에서 FastAPI symlink 4개 제외. 3 OS는 workflow |
+| 실행 방식 | `process.execPath`와 인자 배열, Git은 `execFileSync`. shell 문자열 없음 | 3 OS workflow |
+| temp 정리 | clone은 `--work`(OS temp) 아래에만 둔다. `--keep`이 없으면 지우고, `--cleanup`으로 정리한다 | workflow의 hygiene와 remove step |
+| Git 사용 가능 여부 | 시작 시 `git --version`, 없으면 exit 3 | suite 시작 검사 |
+
+저장소 내용은 OS 차이를 없애려고 변형하지 않는다. 외부 저장소는 실행 중에 OS temp로 clone할 뿐 DUO 저장소나 npm package에 넣지 않고, 측정 결과는 Git ignored인 `bench/results/local/`에만 쓴다.
+

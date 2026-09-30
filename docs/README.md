@@ -20,7 +20,7 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [11-testing-strategy.md](11-testing-strategy.md) | 테스트 계층, fixture, 필수 검증, E2E |
 | [12-roadmap.md](12-roadmap.md) | Milestone(M0~M4)과 MVP 이후 |
 | [language-support.md](language-support.md) | Analysis Level(L0~L3), AnalyzerCapabilities, 언어별 지원·한계, stack·build output 판별, grammar (T18.0) |
-| [performance-benchmark.md](performance-benchmark.md) | TASK-019 benchmark 방법, 기준 환경, index·Context·Review·MCP·UI 측정, C145 원인, 적용한 최적화 |
+| [performance-benchmark.md](performance-benchmark.md) | TASK-019 benchmark 방법, 기준 환경, index·Context·Review·MCP·UI 측정, C145 원인, 적용한 최적화, T23 real-world baseline(고정 SHA 5개 저장소, A/B 비교, 3 OS 수동 workflow) |
 | [release/checklist.md](release/checklist.md) | release 명령, 0.1.1 준비와 0.1.0 상태, 사람이 확인할 항목, publish 명령(실행하지 않음), limitation |
 | [release/notes-0.1.1.md](release/notes-0.1.1.md) | 0.1.1 release notes 초안 |
 | [release/notes-0.1.2.md](release/notes-0.1.2.md) | 0.1.2 release notes 초안 |

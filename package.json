@@ -25,6 +25,7 @@
     "test:openai-smoke": "vitest run --config vitest.openai-smoke.config.ts --reporter=verbose",
     "benchmark": "pnpm build && node bench/run.mjs --full && node bench/check.mjs --full && node bench/cache.mjs && node bench/upgrade.mjs && node bench/incremental.mjs && node bench/invariant.mjs && node bench/self.mjs && node bench/packed.mjs",
     "benchmark:smoke": "node bench/run.mjs && node bench/check.mjs",
+    "benchmark:realworld": "node bench/realworld-suite.mjs",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "docs:validate": "tsc -b packages/core && node scripts/validate-docs.mjs",
     "verify": "pnpm check:boundaries && pnpm lint && pnpm typecheck && pnpm build && pnpm test && pnpm docs:validate",

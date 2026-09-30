@@ -1,0 +1,54 @@
+name: realworld-benchmark
+
+# T23 manual real-world benchmark on 3 OS. Never runs on push or pull_request: it depends on external network and
+# public repository availability. It measures the small representative repositories (manifest "ci": true:
+# spring-petclinic Java L1, bulletproof-react TypeScript L2, FastAPI template Python L1 + TypeScript polyglot with
+# symlinks) to check that the harness and DUO's deterministic results hold on every OS. The large Unity and Unreal
+# repositories stay a local/manual performance run. Timings are observations, never a gate.
+# Failure categories are separate steps: fetch = network, measure = harness (exit 3) or DUO correctness (exit 1),
+# compare = determinism of one build, hygiene = nothing written into the DUO checkout.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  realworld:
+    name: realworld (${{ matrix.os }}, node 24)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: fetch pinned repositories (network)
+        run: node bench/realworld-suite.mjs --ci --fetch-only --work "${{ runner.temp }}/duo-bench-repos"
+      - name: measure, run 1 (harness failure exit 3, DUO correctness failure exit 1)
+        run: node bench/realworld-suite.mjs --ci --no-fetch --keep --work "${{ runner.temp }}/duo-bench-repos" --out "${{ runner.temp }}/realworld-1.json"
+      - name: measure, run 2
+        run: node bench/realworld-suite.mjs --ci --no-fetch --keep --work "${{ runner.temp }}/duo-bench-repos" --out "${{ runner.temp }}/realworld-2.json"
+      - name: same-build comparison (deterministic fields must be identical)
+        run: node bench/compare.mjs "${{ runner.temp }}/realworld-1.json" "${{ runner.temp }}/realworld-2.json"
+      - name: repository hygiene (no clone, result or edit in the DUO checkout)
+        shell: bash
+        run: test -z "$(git status --porcelain --untracked-files=all)"
+      - name: remove clones
+        if: always()
+        run: node bench/realworld-suite.mjs --cleanup --work "${{ runner.temp }}/duo-bench-repos"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: realworld-${{ matrix.os }}
+          path: ${{ runner.temp }}/realworld-*.json
+          if-no-files-found: ignore
+
