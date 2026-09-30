@@ -19,6 +19,7 @@
     "release:pack": "node scripts/release/pack.mjs",
     "release:audit": "node scripts/release/audit.mjs",
     "release:preflight": "node scripts/release/preflight.mjs",
+    "release:verify-published": "node scripts/release/verify-published.mjs",
     "test:conformance": "pnpm build && node scripts/pack-cli.mjs && node scripts/release/conformance.mjs",
     "test:dist": "node scripts/pack-cli.mjs && vitest run --config vitest.dist.config.ts --reporter=verbose",
     "test:openai-smoke": "vitest run --config vitest.openai-smoke.config.ts --reporter=verbose",

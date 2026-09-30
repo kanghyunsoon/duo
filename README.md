@@ -105,6 +105,7 @@ pnpm duoctl --version
 | `pnpm pack:cli` | 배포 package(`.dist/cli-package/`)와 tarball 생성(publish는 하지 않음) |
 | `pnpm test:dist` | tarball을 임시 prefix·project에 설치해 배포본만으로 E2E(npm registry 접근 필요) |
 | `pnpm release:pack` · `release:preflight` · `release:audit` · `release:lock` | release tarball 생성과 검사([checklist](docs/release/checklist.md), publish는 하지 않음) |
+| `pnpm release:verify-published` | publish한 version을 registry에서 받아 임시 prefix에 설치하고 확인(integrity, `duoctl --version`, init·status, tag, GitHub Release) |
 | `pnpm benchmark:smoke` | 100파일 fixture benchmark와 결과 계약 검사(CI) |
 | `pnpm benchmark` | 100/1,000/5,000파일 full benchmark, 결과는 Git 제외 `bench/results/local/` |
 
