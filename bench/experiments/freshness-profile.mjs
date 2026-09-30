@@ -18,7 +18,11 @@ const name = process.argv[2] && !process.argv[2].startsWith("--") ? process.argv
 const runsArg = process.argv.indexOf("--runs");
 const runs = runsArg < 0 ? 5 : Number(process.argv[runsArg + 1]);
 const plain = process.argv.includes("--plain");
-const root = fileURLToPath(new URL("../results/local/fixtures/" + name + "/", import.meta.url));
+// --git-args: also print every Git command line of the last run (to find duplicate queries).
+const gitArgs = process.argv.includes("--git-args");
+const gitLog = [];
+// A fixture name, or a path to any initialized repository (T22).
+const root = /[\\/]/u.test(name) ? name : fileURLToPath(new URL("../results/local/fixtures/" + name + "/", import.meta.url));
 
 const counters = new Map();
 const add = (key, ms, bytes = 0) => { const c = counters.get(key) ?? { calls: 0, ms: 0, bytes: 0 }; c.calls++; c.ms += ms; c.bytes += bytes; counters.set(key, c); };
@@ -43,6 +47,7 @@ if (!plain) {
     const list = Array.isArray(args) ? args.map(String) : [];
     const sub = list.find((x, i) => !x.startsWith("-") && list[i - 1] !== "-c" && list[i - 1] !== "-C") ?? "";
     const s = performance.now(); const key = "git " + sub;
+    if (gitArgs) gitLog.push(list.join(" "));
     const cbIndex = rest.findIndex((x) => typeof x === "function");
     if (cbIndex >= 0) { const cb = rest[cbIndex]; rest[cbIndex] = (...r) => { add(String(file).includes("git") ? key : "execFile " + file, performance.now() - s); cb(...r); }; }
     return execFile.call(this, file, args, ...rest);
@@ -75,7 +80,7 @@ async function inspectOnce() {
 
 await inspectOnce(); // warm: the long-lived MCP/UI case
 const samples = [];
-for (let i = 0; i < runs; i++) samples.push(await inspectOnce());
+for (let i = 0; i < runs; i++) { gitLog.length = 0; samples.push(await inspectOnce()); }
 registry.dispose();
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
 const phaseNames = samples[0].phases.map((p) => p.name);
@@ -83,5 +88,6 @@ console.log(JSON.stringify({
   fixture: name, runs, instrumented: !plain, node: process.version, platform: process.platform, status: samples[0].status, files: samples[0].files,
   totalMs: { median: median(samples.map((s) => s.totalMs)), min: Math.min(...samples.map((s) => s.totalMs)), max: Math.max(...samples.map((s) => s.totalMs)) },
   phases: phaseNames.map((n) => ({ name: n, medianMs: median(samples.map((s) => s.phases.find((p) => p.name === n)?.ms ?? 0)), ops: plain ? undefined : samples.at(-1).phases.find((p) => p.name === n)?.ops })),
+  ...(gitArgs ? { gitCommands: gitLog } : {}),
 }, null, 1));
 
