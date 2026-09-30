@@ -73,7 +73,13 @@ const removeRegenerable = () => { for (const d of ["generated", "cache"]) fs.rmS
 const graphOf = (store) => {
   const d = dumpGraph(store);
   const text = JSON.stringify(d);
-  return { summary: { nodes: d.nodes.length, edges: d.edges.length, sha256: sha256(text) }, rows: d, text };
+  // Row digests per node kind (ID prefix) and edge type: localize a Graph difference (for example across OSes).
+  const groups = new Map();
+  const put = (k, row) => groups.set(k, [...(groups.get(k) ?? []), String(row)]);
+  for (const n of d.nodes) put("node:" + String(JSON.parse(n).id).split(":")[0], n);
+  for (const e of d.edges) put("edge:" + JSON.parse(e).type, e);
+  const byKind = Object.fromEntries([...groups].sort(([a], [b]) => byText(a, b)).map(([k, rows]) => [k, rows.length + ":" + sha256(rows.sort(byText).join("\n")).slice(0, 16)]));
+  return { summary: { nodes: d.nodes.length, edges: d.edges.length, sha256: sha256(text), byKind }, rows: d, text };
 };
 const index = async (label) => {
   const store = openProjectGraphStore(root).value;
