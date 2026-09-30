@@ -152,7 +152,7 @@ describe("RC: Review matrix, exit semantics and exit codes (review fixture)", ()
   });
 });
 
-function startUi(root: string): Promise<{ origin: string; launch: string; stop: () => void }> {
+function startUi(root: string): Promise<{ origin: string; launch: string; stop: () => Promise<void> }> {
   const child = spawn(process.execPath, [CLI_MAIN, "ui"], { cwd: root, env, windowsHide: true });
   let out = "";
   return new Promise((resolve, reject) => {
@@ -160,7 +160,9 @@ function startUi(root: string): Promise<{ origin: string; launch: string; stop: 
     child.stdout.on("data", (c: Buffer) => {
       out += c.toString("utf8");
       const m = /DUO UI: (http:\/\/127\.0\.0\.1:(\d+))\/\?session=[\w-]+/u.exec(out);
-      if (m !== null) { clearTimeout(timer); resolve({ origin: m[1] as string, launch: m[0].slice("DUO UI: ".length), stop: () => child.kill() }); }
+      // stop waits for the process to exit: on Windows a live child keeps its cwd (the fixture) from being removed.
+      const stop = () => new Promise<void>((done) => { if (child.exitCode !== null || child.signalCode !== null) return done(); child.once("exit", () => done()); child.kill(); });
+      if (m !== null) { clearTimeout(timer); resolve({ origin: m[1] as string, launch: m[0].slice("DUO UI: ".length), stop }); }
     });
     child.once("exit", (code) => reject(new Error("ui exited " + code + ": " + out)));
   });
@@ -168,21 +170,26 @@ function startUi(root: string): Promise<{ origin: string; launch: string; stop: 
 
 describe("RC: local UI — same operations as CLI/MCP, security, no external resources, Decision Lock", () => {
   let r: Repo;
-  let ui: { origin: string; launch: string; stop: () => void };
+  let ui: { origin: string; launch: string; stop: () => Promise<void> };
   let cookie = "";
   let csrf = "";
+  // T21 (C213): every request to the UI opens its own connection. The CLI calls between requests run through
+  // spawnSync and block this process, so a pooled keep-alive socket could be reused just as the server's 5 s
+  // idle timeout closes it, and the request failed with ECONNRESET on slow Windows runners. Connection: close
+  // leaves no idle socket to reuse. The UI server itself is unchanged.
+  const CLOSE = { Connection: "close" } as const;
   beforeAll(async () => {
     r = fixture("review/app");
     index(r);
     ui = await startUi(r.root);
-    const opened = await fetch(ui.launch, { redirect: "manual" });
+    const opened = await fetch(ui.launch, { redirect: "manual", headers: CLOSE });
     cookie = (opened.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
-    csrf = String(((await (await fetch(ui.origin + "/api/session", { headers: { Cookie: cookie } })).json()) as { data: { csrf: string } }).data.csrf);
+    csrf = String(((await (await fetch(ui.origin + "/api/session", { headers: { ...CLOSE, Cookie: cookie } })).json()) as { data: { csrf: string } }).data.csrf);
   });
-  afterAll(() => ui?.stop());
-  const get = async (p: string, headers: Record<string, string> = {}) => fetch(ui.origin + p, { headers: { Cookie: cookie, ...headers } });
+  afterAll(async () => { await ui?.stop(); });
+  const get = async (p: string, headers: Record<string, string> = {}) => fetch(ui.origin + p, { headers: { ...CLOSE, Cookie: cookie, ...headers } });
   const post = async (p: string, body: unknown, headers: Record<string, string> = {}) => fetch(ui.origin + p, {
-    method: "POST", body: JSON.stringify(body), headers: { Cookie: cookie, Origin: ui.origin, "Content-Type": "application/json", "X-Duo-CSRF": csrf, ...headers },
+    method: "POST", body: JSON.stringify(body), headers: { ...CLOSE, Cookie: cookie, Origin: ui.origin, "Content-Type": "application/json", "X-Duo-CSRF": csrf, ...headers },
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API payloads, asserted by shape
   const data = async (res: Response): Promise<any> => ((await res.json()) as { data: unknown }).data;
@@ -220,11 +227,11 @@ describe("RC: local UI — same operations as CLI/MCP, security, no external res
       req.end();
     });
     expect(badHost).toBe(403);
-    expect((await fetch(ui.origin + "/api/overview")).status).toBe(401);
+    expect((await fetch(ui.origin + "/api/overview", { headers: CLOSE })).status).toBe(401);
     expect((await post("/api/proposals/P-001/reject", {}, { Origin: "http://evil.example" })).status).toBe(403);
     expect((await post("/api/proposals/P-001/reject", {}, { "X-Duo-CSRF": "" })).status).toBe(403);
     expect((await get("/api/proposals/P-001/confirm")).status).toBe(405);
-    expect((await fetch(ui.origin + "/api/context", { method: "POST", body: "{}", headers: { Cookie: cookie, "Content-Type": "application/json" } })).status).toBe(403);
+    expect((await fetch(ui.origin + "/api/context", { method: "POST", body: "{}", headers: { ...CLOSE, Cookie: cookie, "Content-Type": "application/json" } })).status).toBe(403);
   });
 
   it("no external network by default: the page and styles reference no remote origin, and CSP allows only the server itself", async () => {
