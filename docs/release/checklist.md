@@ -1,4 +1,4 @@
-# 0.1.0 Release checklist
+# Release checklist
 
 `pnpm release:preflight`가 아래 항목을 검사하고 `.dist/release-preflight.json`(`duo.release-preflight/1`)에 blocker를 기록한다. preflight는 version을 바꾸거나 commit·tag·npm scope 생성·publish를 하지 않는다. 마지막 npm 단계는 `npm publish --dry-run`이다.
 
@@ -14,7 +14,16 @@
 | `pnpm test:conformance` | RC를 격리 prefix에 설치 → shrinkwrap 트리·notices → C209 init 반복(`DUO_C209_RUNS`, 기본 20) → 설치된 duoctl로 CLI·MCP·install journey와 RC 전용 검사 → 문서·help 대조 → `.dist/release-conformance.json` | 필요(npm install) |
 | `pnpm release:verify-published` | publish **뒤** 확인(T21): registry의 name·version·integrity·license·engines·bin → 빈 npm 설정과 새 cache로 임시 prefix에 `npm install -g` → 설치된 파일 수·LICENSE·shrinkwrap → PATH의 `duoctl --version`·`--version --json`·`--help` → 새 Git 저장소에서 `init`→`status` → origin의 `v<version>` tag commit → GitHub Release(draft 아님) → `.dist/release-published.json`. 기대 integrity와 commit은 `--integrity`·`--commit` 또는 같은 version의 `.dist/release-candidate.json`. publish·tag·login을 하지 않고 npm credential을 읽지 않는다. CI와 `pnpm verify`에는 넣지 않는다 | 필요 |
 
-## 상태 (H-45 결정 반영 commit 기준)
+## 0.1.1 (H-46, 준비 중)
+
+Patch release: 사람용 CLI 안내 3개, 테스트, release tooling, 문서([release notes](notes-0.1.1.md)). 공개 형식, 명령 의미, exit code, Truth 형식은 0.1.0과 같다. 성능 후보와 새 기능은 넣지 않는다([0.1.1 hardening](../roadmap/0.1.1-hardening.md)).
+
+- [x] version 0.1.0 → 0.1.1: `apps/cli/package.json`, `apps/cli/npm-shrinkwrap.json`의 package version 두 곳. 의존성 트리는 바꾸지 않았다(`release:lock`을 다시 실행하지 않음)
+- [x] 안내 문구 regression test(`tests/cli/first-run.e2e.test.ts`, 설치본 conformance에도 포함), `--json` 출력이 0.1.0과 byte 단위로 같음
+- [ ] full CI(3 OS), `pnpm release:preflight` READY, `npm publish --dry-run`
+- [ ] 사람이 publish, tag, GitHub Release를 실행한 뒤 `pnpm release:verify-published`
+
+## 0.1.0 상태 (H-45 결정 반영 commit 기준, 2026-09-30 release)
 
 `pnpm release:preflight`가 blocker를 **code**(이 저장소에서 고치는 것, `codeReady`)와 **external**(사람이 저장소 밖에서 하는 계정·설정 작업, `externalReady`)로 나눠 계산하고 각 blocker의 다음 조치를 보여 준다. readiness는 둘 다 충족될 때만 READY다. 외부 항목이 남아 있으면 BLOCKED이며 코드나 artifact가 출시 불가능하다는 뜻이 아니다.
 
@@ -51,9 +60,12 @@
 
 ```bash
 pnpm release:preflight          # blocker 0이어야 한다
-npm publish .dist/duo-director-cli-0.1.0.tgz --access public --registry https://registry.npmjs.org/
-git tag -a v0.1.0 -m "DUO 0.1.0" <release candidate commit> && git push origin v0.1.0
+npm publish .dist/duo-director-cli-0.1.1.tgz --access public --registry https://registry.npmjs.org/
+git tag -a v0.1.1 -m "DUO 0.1.1" <release candidate commit> && git push origin v0.1.1
+pnpm release:verify-published   # GitHub Release를 만든 뒤
 ```
+
+0.1.0은 `npm publish .dist/duo-director-cli-0.1.0.tgz …`와 `v0.1.0`(`04bab58`)으로 게시했다.
 
 README와 package README는 publish 전에 이미 npm registry 설치 흐름으로 바뀌어 있고, 그 문서 전환 commit이 final release candidate다. publish 뒤 문서를 다시 바꿀 필요는 없다. GitHub Release는 tag를 push한 뒤 따로 만든다.
 

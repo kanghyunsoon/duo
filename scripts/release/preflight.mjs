@@ -21,7 +21,7 @@ const EXTERNAL = {
   "npm-scope-registry": "remove the @duo-director:registry override (npm config delete @duo-director:registry)",
   "npm-auth": "npm login --registry https://registry.npmjs.org/ (a human, with the account that will own @duo-director)",
   "npm-scope-access": "create or join the duo-director npm organization with a publish role; if impossible a human decides a new namespace (DP-3)",
-  "version-taken": "a human decides the next version; 0.1.0 already exists",
+  "version-taken": "a human decides the next version; this version already exists in the registry",
   "repository-not-public": "a human makes github.com/kanghyunsoon/duo public (package repository, homepage and bugs point there)",
   "github-private-vulnerability-reporting": "when the repository is public: Settings → Code security → enable Private vulnerability reporting (SECURITY.md names it as the reporting channel)",
 };

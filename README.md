@@ -78,7 +78,7 @@ llm:
 OPENAI_API_KEY=... duoctl review --semantic
 ```
 
-`openai-responses`는 공식 OpenAI API(`api.openai.com`)에만 연결합니다. 실제 OpenAI API 연동 smoke는 0.1.0 release 검증에 포함되지 않은 선택 검증입니다.
+`openai-responses`는 공식 OpenAI API(`api.openai.com`)에만 연결합니다. 실제 OpenAI API 연동 smoke는 release gate에 포함되지 않은 선택 검증입니다.
 
 `--semantic`(MCP `includeSemanticAssist: true`)을 줄 때만 Review의 의미 후보를 한 번 확인합니다. 이때 **선택된 Evidence 발췌(관련 Truth 문단, 바뀐 코드 부분, diff hunk)가 OpenAI API로 전송됩니다**. 파일 전체나 저장소는 보내지 않고, `store: false`로 요청합니다. 결과는 별도 `semanticAssist`로 붙고 결정적 판정을 바꾸거나 BLOCK을 만들지 않습니다. 같은 요청의 검증된 응답은 로컬 `.duo-project/cache/llm/`에 저장되며(`llm.cache: false`로 끔), 이것은 OpenAI 서버 저장과 별개입니다.
 
@@ -114,8 +114,8 @@ pnpm duoctl --version
 이 저장소에서 package tarball을 만들어 설치합니다. npm registry의 package와 같은 구성입니다.
 
 ```bash
-pnpm install && pnpm release:pack          # .dist/duo-director-cli-0.1.0.tgz
-npm install -g .dist/duo-director-cli-0.1.0.tgz
+pnpm install && pnpm release:pack          # .dist/duo-director-cli-0.1.1.tgz
+npm install -g .dist/duo-director-cli-0.1.1.tgz
 ```
 
 ## License와 보안
