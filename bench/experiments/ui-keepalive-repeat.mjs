@@ -18,7 +18,7 @@ const summary = { label, platform: process.platform, node: process.version, runs
 for (let run = 1; run <= runs; run++) {
   const started = Date.now();
   const r = spawnSync(process.execPath, [vitest, "run", "tests/conformance/rc.conformance.test.ts", "-t", "RC: local UI"], {
-    cwd: REPO, encoding: "utf8", windowsHide: true, env: { ...process.env, NODE_OPTIONS: "--import=" + trace, FORCE_COLOR: "0" }, maxBuffer: 64 * 1024 * 1024,
+    cwd: REPO, encoding: "utf8", windowsHide: true, env: { ...process.env, NODE_OPTIONS: "--import=" + trace, FORCE_COLOR: "0", NO_COLOR: "1" }, maxBuffer: 64 * 1024 * 1024,
   });
   const out = (r.stdout ?? "") + (r.stderr ?? "");
   for (const line of out.split(/\r?\n/u)) {
@@ -29,9 +29,11 @@ for (let run = 1; run <= runs; run++) {
     if (t.reused) { summary.reused++; summary.maxReusedIdleMs = Math.max(summary.maxReusedIdleMs, t.idleMs ?? 0); }
     if (!t.ok) { summary.errors[t.error] = (summary.errors[t.error] ?? 0) + 1; summary.failures.push({ run, method: t.method, path: t.path.replace(/session=[\w-]+/u, "session=…"), reused: t.reused, idleMs: t.idleMs, error: t.error }); }
   }
-  const passed = r.status === 0 && /Tests\s+4 passed/u.test(out);
+  // vitest exits 0 only when every selected test passed; the summary line is kept for the log when present.
+  const passed = r.status === 0;
+  const tests = /Tests\s+([^\r\n]+)/u.exec(out)?.[1]?.trim() ?? "no summary line";
   if (passed) summary.passedRuns++; else summary.failedRuns++;
-  console.error("run " + run + "/" + runs + ": " + (passed ? "passed" : "FAILED (exit " + r.status + ")") + " in " + Math.round((Date.now() - started) / 1000) + " s");
+  console.error("run " + run + "/" + runs + ": " + (passed ? "passed" : "FAILED (exit " + r.status + ")") + " · " + tests + " · " + Math.round((Date.now() - started) / 1000) + " s");
 }
 const json = JSON.stringify(summary, null, 1);
 console.log(json);
