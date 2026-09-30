@@ -399,7 +399,9 @@ describe("project-local install (npx --no-install duoctl)", () => {
     expect(r.code).toBe(6);
     expect(JSON.stringify(r.json().diagnostics)).toContain("AGENT_LAUNCHER_UNAVAILABLE");
     expect(fs.existsSync(path.join(p.root, ".codex"))).toBe(false);
-    const npx = runOnPath("npx", ["--no-install", "duoctl", "--version"], p.root, isolatedEnv([]));
+    // An empty global prefix: npm exec also looks at globally installed packages, and a machine that has
+    // @duo-director/cli installed globally (any developer after the 0.1.0 release) would otherwise run that one (C215).
+    const npx = runOnPath("npx", ["--no-install", "duoctl", "--version"], p.root, isolatedEnv([], { npm_config_prefix: tmp("duo-npx-empty-prefix-") }));
     expect(npx.code).not.toBe(0);
     expect(fs.existsSync(path.join(p.root, "node_modules"))).toBe(false);
   });

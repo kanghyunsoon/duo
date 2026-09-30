@@ -20,6 +20,7 @@ Patch release: 사람용 CLI 안내 3개, 테스트, release tooling, 문서([re
 
 - [x] version 0.1.0 → 0.1.1: `apps/cli/package.json`, `apps/cli/npm-shrinkwrap.json`의 package version 두 곳. 의존성 트리는 바꾸지 않았다(`release:lock`을 다시 실행하지 않음)
 - [x] 안내 문구 regression test(`tests/cli/first-run.e2e.test.ts`, 설치본 conformance에도 포함), `--json` 출력이 0.1.0과 byte 단위로 같음
+- [x] 배포 E2E의 npx 음성 검사를 개발 PC의 global 설치와 분리(C215)
 - [ ] full CI(3 OS), `pnpm release:preflight` READY, `npm publish --dry-run`
 - [ ] 사람이 publish, tag, GitHub Release를 실행한 뒤 `pnpm release:verify-published`
 
