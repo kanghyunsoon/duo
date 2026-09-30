@@ -1,5 +1,6 @@
 // T22-C probe: same-name overloads (Java run()/run(int)) and TypeScript overload signatures in the Project Graph,
-// what checkGraph reports, and whether the Context Packet contains each overload body.
+// what checkGraph reports, and whether the Context Packet contains each overload body. The analyzer merges same-name
+// declarations into one Symbol: the first body is its source, the others are payload.additionalLocations (T23).
 //   node bench/experiments/overload-probe.mjs      (needs pnpm build)
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs"; import os from "node:os"; import path from "node:path";
@@ -21,6 +22,6 @@ const diags = checkGraph(g);
 g.close();
 const ctx = spawnSync(process.execPath, [CLI, "context", "ServiceImpl run times", "--json"], { cwd: root, encoding: "utf8" });
 const packet = JSON.parse(ctx.stdout).result.context.packet;
-console.log(JSON.stringify({ symbols: nodes.map((n) => ({ id: n.id, lines: n.source ? n.source.startLine + "-" + n.source.endLine : null, overloads: n.payload?.overloads ?? null })), graphCheck: diags.map((d) => d.code), contextCode: packet.code.map((c) => ({ id: c.id, lines: c.source ? c.source.startLine + "-" + c.source.endLine : null, hasTimes: c.text.includes("times") })) }, null, 1));
+console.log(JSON.stringify({ symbols: nodes.map((n) => ({ id: n.id, lines: n.source ? n.source.startLine + "-" + n.source.endLine : null, additionalLocations: (n.payload?.additionalLocations ?? []).map((l) => l.startLine + "-" + l.endLine) })), graphCheck: diags.map((d) => d.code), contextCode: packet.code.map((c) => ({ id: c.id, lines: c.source ? c.source.startLine + "-" + c.source.endLine : null, hasTimes: c.text.includes("times") })) }, null, 1));
 fs.rmSync(root, { recursive: true, force: true });
 
