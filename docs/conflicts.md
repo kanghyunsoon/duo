@@ -281,12 +281,17 @@ T00 동결 시점에 **Proposed** 상태인 해석은 구현 기본값으로 적
 | C214 | 커밋 없는 저장소의 `duoctl init` 안내 | `git init` 직후 init은 Truth와 index를 만든 뒤 baseline 단계에서 `ADOPTION_HEAD_REQUIRED`(exit 1)가 된다(파일이 있으면 먼저 dirty 정책이 필요). 첫 commit 뒤 init을 다시 실행하면 이어서 baseline을 만든다(exit 0, T21에서 확인). 정확성 문제는 아니지만 출력이 전체 실패처럼 보이고 메시지가 다시 실행하라고 말하지 않는다. H-46: behavior bug가 아니라 onboarding limitation이다. 0.1.1은 사람용 출력에만 안내를 더한다: baseline 실패 뒤 "this repository does not have an initial commit yet. Create the first commit, then run duoctl init again (Truth and index are kept)", 파일이 있어 dirty 정책을 먼저 묻는 경우(exit 6)에도 같은 뜻의 안내. diagnostic(`ADOPTION_HEAD_REQUIRED` message 포함), exit code, `--json` 출력은 0.1.0과 byte 단위로 같다. unborn 저장소 자체 지원은 별도 feature decision | cli | Resolved (0.1.1, H-46: actionable guidance) |
 | C215 | 배포 E2E의 npx 음성 검사가 개발 PC의 global 설치를 봄 | `tests/distribution/dist.e2e.test.ts`의 "project-local package가 없으면 `npx --no-install duoctl`이 실패" 검사는 PATH와 `NPM_*` 환경 변수만 격리했다. `npm exec`는 npm global prefix의 package도 찾으므로, 0.1.0을 global로 설치한 PC(0.1.1 로컬 preflight)에서 exit 0이 되어 실패했다. CI runner에는 global 설치가 없어 통과했다. 이 검사만 빈 임시 `npm_config_prefix`를 주도록 고쳤다. 제품 코드와 installer 판정(`AGENT_LAUNCHER_UNAVAILABLE`)은 그대로다 | tests | Resolved (0.1.1) |
 | C216 | LLM provider 요청의 redaction 경계 | Context Packet만 `redactSecrets`를 거치고 Review semantic assist의 evidence 발췌는 거치지 않았다. provider를 부르는 유일한 경로인 `invokeLLM`이 모든 요청의 instructions·input을 같은 함수로 치환한 뒤 provider, response cache key, token 추정에 넘기고, semantic assist는 발췌를 자르기 전에 치환한다. 영향 조건: provider 설정과 key, `--semantic` 또는 MCP `includeSemanticAssist`. 기본값(provider none)은 provider 호출이 없다 | director, docs | Resolved (0.1.2, H-47) |
+| C217 | Java·C#·C++ overload symbol loss | 같은 이름의 overload(`run()`/`run(int)`, `Move()`/`Move(int)`, `Fire()`/`Fire(int)`)가 첫 선언의 Symbol 하나로 남고 `checkGraph` diagnostic이 없다. Context에서 두 번째 overload 본문이 빠진다. TypeScript overload signature가 implementation 하나로 합쳐지는 것은 의도된 동작이다. 해결은 random suffix가 아니라 언어별 callable signature를 쓰는 symbol identity로 하고, overload 없는 Symbol ID의 안정성을 따로 결정한다([0.2.0 audit §5.1](roadmap/0.2.0-audit.md#51-overload-symbol-loss-java-c-c-c217)) | analyzer, graph | Open (0.2.0 Milestone C) |
+| C218 | C++ 선언·정의 false ambiguity | `.h` 선언과 `.cpp` 정의가 관계없는 두 Symbol이라 "class + method" 과제가 ambiguous가 되고 Packet이 없다(ActionRoguelike `StartActionByName`). 이름만으로 합치지 않고 namespace·class·이름·signature가 모두 일치할 때만 연결한다. C217이 먼저다 | analyzer, graph | Open (0.2.0 Milestone C) |
+| C219 | Python source root | absolute import는 repository root와 `src/`에서만 해석된다. FastAPI template `backend/app`의 `from app.models import`는 IMPORTS 0개. 경로를 hard-code하지 않고 `pyproject.toml`·package 구조·src-layout·Truth 설정에서 root를 찾고, 못 찾으면 추측하지 않고 limitation을 보고한다 | analyzer | Open (0.2.0 Milestone C) |
+| C220 | 12-roadmap의 v0.2 후보와 0.2.0 계획 | T00의 "v0.1 이후" 표는 v0.2에 Jira·GitHub Issues provider를 두었다. T22 결과에 따른 0.2.0 제안은 측정 baseline, freshness, L1 correctness, onboarding, compatible provider 순서이고 Jira·GitHub Issues provider는 "이후"로 옮긴다([0.2.0 audit §13](roadmap/0.2.0-audit.md#13-020-milestones-제안)) | roadmap | Proposed (T22, Human 승인 대기) |
 
 ## 미결 사항
 
 | ID | 질문 | 현재 기본안 |
 |---|---|---|
 | Q-E | ADR-011 Codex/Claude Code 설정 형식 | TASK-017 착수 직전에 공식 문서로 확인 (H-17) |
+| Q-PROVIDER | OpenAI-compatible provider(GMS 등)에 Chat Completions를 허용하는가. H-39는 Responses API만 허용하고 ADR-012는 `OpenAICompatibleChatProvider`를 Post-MVP로 둔다. GMS의 Responses API 지원은 확인되지 않았다 | 결정 전에는 구현하지 않는다. 공식 `OpenAIResponsesProvider` 계약은 바꾸지 않는다([0.2.0 audit §10](roadmap/0.2.0-audit.md#10-provider-architecture)) |
 
 ## 해결된 미결 사항
 
