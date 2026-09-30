@@ -213,7 +213,7 @@ source 저장소에는 commit하지 않는다.
 
 | 구분 | 필드 | 비교 |
 |---|---|---|
-| deterministic | init exit·baseline, scan(total, Project Truth 파일과 경로, repository 파일 수와 경로 목록 SHA-256, 제외 사유별 수), coverage(files, 언어별 files·level·analyzer, 파일만 확장자), Graph(initial·incremental·clean full의 node·edge 수와 SHA-256, 동일 여부), no-op status·parse 수, 편집(path, EOL, byte, mode, 분석 파일 수), Context 시나리오별(status, 파일, found, missing, dependency digest, omitted, truncated), Review(verdict, claim alignment·rule·subject) | 같아야 한다 |
+| deterministic | init exit·baseline, scan(total, Project Truth 파일과 경로, repository 파일 수와 경로 목록 SHA-256, 제외 사유별 수), coverage(files, 언어별 files·level·analyzer, 파일만 확장자), Graph(initial·incremental·clean full의 node·edge 수, SHA-256, node 종류·edge type별 행 digest, 동일 여부), no-op status·parse 수, 편집(path, EOL, byte, mode, 분석 파일 수), Context 시나리오별(status, 파일, found, missing, dependency digest, omitted, truncated), Review(verdict, claim alignment·rule·subject) | 같아야 한다 |
 | build | DUO commit, uncommitted 여부, analyzer registry digest, Node, platform | 보고 |
 | environment | Git 버전, `core.symlinks`·`core.autocrlf`, 최대 경로 길이(저장소 기준·절대), 대소문자 충돌 수 | 보고 |
 | timings, memory, operations | init, import, grammar load, initial·no-op·incremental·clean full index, Context, Review, peak RSS·heap, no-op과 incremental의 git process·fs 호출 수 | gate 아님 |
@@ -280,7 +280,11 @@ compare exit code는 다음과 같다.
 
 **변화 감지(AC5).** 임시 worktree에서 Python absolute import root에 `backend/` 한 줄을 더해 build하고 FastAPI를 쟀다(commit하지 않음). compare가 exit 1로 차이를 보고했다: Graph edge 1,484 → 1,559(initial), Graph SHA-256, Context dependency digest, 경로를 쓴 과제의 파일 목록.
 
-**3 OS workflow.** manifest에서 `ci: true`인 작은 저장소 3개(spring-petclinic Java L1, bulletproof-react TypeScript L2, FastAPI template Python L1 + TypeScript polyglot, symlink 포함)를 3 OS에서 두 번씩 재고 같은 build 비교를 한다. Unity와 Unreal 저장소는 크기(indexed 합계 약 1.3 GiB)와 시간 때문에 local/manual 성능 측정으로 둔다. 실패는 step으로 나뉜다: fetch(network), measure(harness 3, correctness 1), compare(결정성), hygiene(DUO checkout에 쓴 것 없음).
+**3 OS workflow.** manifest에서 `ci: true`인 작은 저장소 3개를 3 OS에서 두 번씩 재고 같은 build 비교를 한다: spring-petclinic(Java L1), bulletproof-react(TypeScript L2), FastAPI template(Python L1 + TypeScript polyglot, symlink 포함). Unity와 Unreal 저장소는 크기(indexed 합계 약 1.3 GiB)와 시간 때문에 local/manual 성능 측정으로 둔다. 실패는 step으로 나뉜다: fetch(network), measure(harness 3, correctness 1), compare(결정성), hygiene(DUO checkout에 쓴 것 없음).
+
+- 첫 실행(run 36688846861, `618998b`): Windows는 성공했고 Ubuntu와 macOS는 harness failure(exit 3)였다. 원인은 runner의 `git config --get core.symlinks`였다. 설정이 없으면 exit 1인데 이를 예외로 처리하지 않았다. harness만 고쳤다(`17f6551`).
+- 이후 run 36689272130(`17f6551`)과 36690102700(`6cc74e5`)은 3 OS 모두 성공했다. 3개 저장소 모두 check 전부 통과, incremental = clean full, 두 실행의 결정적 필드 동일. 실행 환경은 Node 24.21.0(Ubuntu, Windows)과 24.20.0(macOS), Git 2.55.0이다.
+- OS 사이: spring-petclinic과 bulletproof-react는 경로 목록 hash와 Graph SHA-256까지 3 OS가 같았다. FastAPI는 Symbol, test, edge가 3 OS에서 같고, Windows에서 File node 4개의 contentHash만 다르다(C223, 아래 CRLF/LF). compare는 다른 platform의 결과를 비교하지 않는다(exit 2).
 
 **Cross-platform hazard.**
 
@@ -288,10 +292,10 @@ compare exit code는 다음과 같다.
 |---|---|---|
 | Windows 경로 길이 | fetch한 저장소에 `core.longpaths=true` | Windows 로컬 ECS, 최대 절대 경로 253자 |
 | path separator | 결정적 출력은 `/` repository 경로만. 절대 경로 check는 두 구분자를 모두 본다 | 5개 저장소 check 통과 |
-| CRLF/LF | `core.autocrlf=false`로 commit된 byte 그대로. 편집은 파일의 EOL을 따른다 | FastAPI CRLF 파일에서 equivalence 성립 |
+| CRLF/LF | `core.autocrlf=false`로 fetch한다. 저장소 자신의 `.gitattributes`는 바꾸지 않는다. 편집은 파일의 EOL을 따른다 | FastAPI의 `* text=auto` 때문에 Windows에서 text 파일 217개가 CRLF로 checkout된다. 편집 대상 `items.py`도 CRLF다. 이 상태에서도 equivalence가 성립한다. normalized-text 파일은 hash가 같고, 확장자로 text를 알 수 없는 raw 파일 4개(`.fastapicloudignore`, `.python-version`, `Dockerfile.playwright`, `script.py.mako`)의 contentHash만 OS마다 다르다(H-21·H-22 설계, C223) |
 | 대소문자 | 대소문자 충돌 수를 기록한다. 결정적 비교는 같은 platform끼리만 한다 | 5개 저장소 모두 0 |
-| symlink | scanner는 Git index mode로 판정한다. `core.symlinks` 값을 기록한다 | Windows(`core.symlinks=false`)에서 FastAPI symlink 4개 제외. 3 OS는 workflow |
-| 실행 방식 | `process.execPath`와 인자 배열, Git은 `execFileSync`. shell 문자열 없음 | 3 OS workflow |
+| symlink | scanner는 Git index mode로 판정한다. `core.symlinks` 값을 기록한다 | FastAPI symlink 4개가 모든 환경에서 제외된다: 로컬 Windows `false`, CI Windows `true`, Linux·macOS 미설정. Windows 로컬과 CI의 Graph가 같다 |
+| 실행 방식 | `process.execPath`와 인자 배열, Git은 `execFileSync`. shell 문자열 없음. 설정이 없는 Git key는 `unset`으로 기록 | 3 OS workflow 성공 |
 | temp 정리 | clone은 `--work`(OS temp) 아래에만 둔다. `--keep`이 없으면 지우고, `--cleanup`으로 정리한다 | workflow의 hygiene와 remove step |
 | Git 사용 가능 여부 | 시작 시 `git --version`, 없으면 exit 3 | suite 시작 검사 |
 
