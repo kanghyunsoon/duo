@@ -23,6 +23,8 @@ const DUO = fileURLToPath(new URL("..", import.meta.url));
 const CLI = fileURLToPath(new URL("../apps/cli/dist/main.js", import.meta.url));
 const STATE = ".duo-project/";
 const git = (cwd, ...a) => execFileSync("git", a, { cwd, encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024 }).trim();
+// git config --get exits 1 when the key is unset (the Linux and macOS default for core.symlinks).
+const gitConfig = (cwd, key) => { try { return git(cwd, "config", "--get", key) || "unset"; } catch { return "unset"; } };
 const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 const ms = (s) => Math.round(performance.now() - s);
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
@@ -193,7 +195,7 @@ try {
       analyzerRegistryDigest: coverage.analyzerRegistryDigest, node: process.version, platform: process.platform, arch: process.arch,
     },
     environment: {
-      git: git(root, "--version"), coreSymlinks: git(root, "config", "--get", "core.symlinks") || "unset", coreAutocrlf: git(root, "config", "--get", "core.autocrlf") || "unset",
+      git: git(root, "--version"), coreSymlinks: gitConfig(root, "core.symlinks"), coreAutocrlf: gitConfig(root, "core.autocrlf"),
       maxPath: { repository: Math.max(...repoFiles.map((p) => p.length)), absolute: root.length + 1 + Math.max(...repoFiles.map((p) => p.length)) },
       caseCollisions: repoFiles.length - lower.size,
     },
