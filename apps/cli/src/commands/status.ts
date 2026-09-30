@@ -23,6 +23,8 @@ export async function statusCommand(env: Env): Promise<Outcome> {
   const c = s.index?.changes;
   const b = s.baseline;
   const a = s.analysis;
+  // T21: a stale, missing or incompatible index says what refreshes it (status itself never indexes).
+  const indexNeedsRun = s.index?.status === "stale" || s.index?.status === "missing" || s.index?.status === "incompatible";
   const fileOnlyExts = a?.fileOnly.extensions.slice(0, 5).map((e) => (e.extension === "" ? "(none)" : `.${e.extension}`)).join(", ") ?? "";
   const analysis = a === null ? undefined : [
     ...a.languages.map((l) => `${l.language} ${l.level} (${l.files})`),
@@ -32,6 +34,7 @@ export async function statusCommand(env: Env): Promise<Outcome> {
     t(L, "status.project", { name: s.project.name, goal: s.project.vision, milestone: s.project.currentMilestone ?? "-" }),
     t(L, "status.truth", { requirements: s.truth.requirements, decisions: s.truth.decisions, constraints: s.truth.constraints, gaps: s.truth.declaredGaps }),
     t(L, "status.index", { status: s.index?.status ?? "unknown", reason: s.index?.fullRebuildReason == null ? "" : ` (full rebuild: ${s.index.fullRebuildReason})` }),
+    ...(indexNeedsRun ? [t(L, "status.index-remediation")] : []),
     ...(c === undefined ? [] : [t(L, "status.changes", { files: c.files, analysis: c.analysisStale, modules: c.modulesToResolve, calls: c.callsMaybeRecomputed })]),
     ...(analysis === undefined || analysis === "" ? [] : [t(L, "status.analysis", { languages: analysis })]),
     t(L, "status.baseline", { status: b?.status ?? "unknown", detail: b?.headOid === undefined ? "" : ` · ${b.headOid.slice(0, 12)}${b.dirtyAtAdoption === true ? " · dirty at adoption" : ""} · ${b.findings ?? 0} findings` }),

@@ -122,6 +122,8 @@ export async function initCommand(env: Env, options: InitOptions): Promise<Outco
     steps.baseline = aborted ? { status: "aborted", detail: "ABORT_AND_CLEAN" } : { status: "action-required", detail: "dirty working tree" };
     if (!aborted) diagnostics.push(createDiagnostic("ADOPTION_DIRTY_POLICY_REQUIRED", t("en", "init.dirty.policy-required")));
     human.push(t(env.locale, aborted ? "init.dirty.aborted" : "init.dirty.policy-required"));
+    // T21 (C214): with no initial commit, --baseline-policy head cannot capture a baseline either; say what to do first.
+    if (!aborted && o.git.unborn) human.push(t(env.locale, "init.unborn.dirty"));
     if (aborted) baseline = { status: "aborted" };
     report("baseline");
     return finish(EXIT.ACTION_REQUIRED);
@@ -210,6 +212,7 @@ export async function initCommand(env: Env, options: InitOptions): Promise<Outco
       report("baseline");
       if (status.value.status === "incompatible") return finish(EXIT.ERROR);
       human.push(t(env.locale, "init.done"));
+      human.push(t(env.locale, "init.agents"));
       return finish(EXIT.OK);
     }
     const captured = await withWriter(env.root, async (graph) => captureAdoptionBaseline(env.root, {
@@ -221,6 +224,8 @@ export async function initCommand(env: Env, options: InitOptions): Promise<Outco
       steps.baseline = { status: "failed" };
       report("baseline");
       human.push(...diagLines(captured.diagnostics));
+      // T21 (C214): the diagnostic stays as it is (also in --json); the human output adds the next step.
+      if (captured.diagnostics.some((d) => d.code === "ADOPTION_HEAD_REQUIRED")) human.push(t(env.locale, "init.unborn"));
       return finish(EXIT.ERROR);
     }
     if (captured.value.status === "aborted") {
@@ -235,6 +240,7 @@ export async function initCommand(env: Env, options: InitOptions): Promise<Outco
     steps.baseline = { status: "ok", detail: `${b.git.headOid.slice(0, 12)}${b.workingTree.dirty ? " · dirty at adoption (HEAD_BASELINE)" : ""} · ${b.findings.length} pre-existing findings` };
     report("baseline");
     human.push(t(env.locale, "init.done"));
+    human.push(t(env.locale, "init.agents"));
     return finish(EXIT.OK);
   });
 }

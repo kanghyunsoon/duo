@@ -13,7 +13,7 @@ export default defineConfig({
   },
   test: {
     include: [
-      "tests/cli/existing-project.e2e.test.ts", "tests/cli/languages.e2e.test.ts", "tests/cli/semantic.e2e.test.ts", "tests/cli/ui.e2e.test.ts",
+      "tests/cli/existing-project.e2e.test.ts", "tests/cli/first-run.e2e.test.ts", "tests/cli/languages.e2e.test.ts", "tests/cli/semantic.e2e.test.ts", "tests/cli/ui.e2e.test.ts",
       "tests/mcp/**/*.e2e.test.ts", "tests/install/**/*.e2e.test.ts", "tests/conformance/**/*.test.ts",
     ],
     environment: "node",
