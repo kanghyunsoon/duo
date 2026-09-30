@@ -103,6 +103,37 @@ describe("LLMProvider contract and the no-op provider (TASK-012A)", () => {
     expect(JSON.stringify(inv)).toContain("[REDACTED]");
   });
 
+  it("0.1.2 secret boundary: every provider receives instructions and input already redacted, for any purpose; the cache key and estimate use the redacted text", async () => {
+    // Test-only dummy values in formats the redactor recognizes.
+    const openaiLike = "sk-" + "proj-DUOTEST0000boundary0000dummy";
+    const awsLike = "AKIA" + "DUOTEST000000000";
+    const received: LLMRequest[] = [];
+    const capture: LLMProvider = { id: "capture", status: () => "configured", cacheIdentity: () => "capture:1", invoke: (r) => { received.push(r); return Promise.resolve(ok()); } };
+    for (const base of [TEXT, { ...TEXT, purpose: "gap-semantic-assist" as const }]) {
+      await invokeLLM(capture, { ...base, instructions: "Rules: " + awsLike, input: "const key = \"" + openaiLike + "\"; keep this" });
+    }
+    expect(received).toHaveLength(2);
+    for (const r of received) {
+      expect(JSON.stringify(r)).not.toContain(openaiLike);
+      expect(JSON.stringify(r)).not.toContain(awsLike);
+      expect(r.input).toBe("const key = \"[REDACTED]\"; keep this");
+      expect(r.instructions).toBe("Rules: [REDACTED]");
+    }
+    // Two requests that differ only in the secret value are the same request once redacted: same cache entry.
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-llm-redact-")));
+    try {
+      const a = await invokeLLM(capture, { ...TEXT, input: "x " + openaiLike }, { cache: { root } });
+      const b = await invokeLLM(capture, { ...TEXT, input: "x " + "sk-" + "proj-DUOTEST0000anotherdummy0000" }, { cache: { root } });
+      expect(a.called).toBe(true);
+      expect(b).toMatchObject({ called: false, cached: true });
+      for (const f of fs.readdirSync(path.join(root, LLM_CACHE_DIR))) expect(fs.readFileSync(path.join(root, LLM_CACHE_DIR, f), "utf8")).not.toContain(openaiLike);
+      expect(a.requestEstimate.tokens).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+
   it("AbortSignal: cancelled before the call (no call) and during it", async () => {
     const before = new AbortController();
     before.abort();

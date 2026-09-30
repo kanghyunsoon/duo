@@ -8,10 +8,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDefaultAnalyzerRegistry, type AnalyzerRegistry } from "@duo-director/analyzer";
-import { recordReview, reviewChanges, type ReviewRequest, type ReviewResult } from "@duo-director/director";
+import { recordReview, REDACTED, redactSecrets, reviewChanges, type ReviewRequest, type ReviewResult } from "@duo-director/director";
 import { indexRepository, openProjectGraphReader, openProjectGraphStore } from "@duo-director/graph";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { TOOLS, type ToolContext } from "../mcp/tools.js";
+import { projectContext } from "../operations/context.js";
 import { projectReview } from "../operations/review.js";
 import { projectStatus } from "../operations/status.js";
 import { LLMProviderPool } from "./factory.js";
@@ -26,7 +27,8 @@ const env = { ...process.env, GIT_AUTHOR_NAME: "Dev", GIT_AUTHOR_EMAIL: "dev@duo
 const temps: string[] = [];
 let registry: AnalyzerRegistry;
 
-type Mode = "aligned" | "conflict" | "bogus-evidence" | 401 | 429 | "hang";
+// echo / echo-error: a provider that repeats what it received (in the answer or in an error), to show nothing DUO did not redact can come back.
+type Mode = "aligned" | "conflict" | "bogus-evidence" | 401 | 429 | "hang" | "echo" | "echo-error";
 let mode: Mode = "aligned";
 const calls: { body: Record<string, unknown> }[] = [];
 
@@ -36,9 +38,11 @@ const fakeFetch = (async (_input: string | URL | Request, init?: RequestInit) =>
   calls.push({ body: body as unknown as Record<string, unknown> });
   if (mode === "hang") return new Promise<Response>((_r, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));
   if (typeof mode === "number") return new Response(JSON.stringify({ error: { message: `bad key ${KEY}` } }), { status: mode, headers: { "content-type": "application/json" } });
+  if (mode === "echo-error") return new Response(JSON.stringify({ error: { message: `cannot process: ${body.input.slice(0, 2000)}` } }), { status: 400, headers: { "content-type": "application/json" } });
   const claimIds = body.text.format.schema.properties.claims.items.properties.claim_id.enum;
   const evidence = [...body.input.matchAll(/^EVIDENCE (\S+)/gmu)].map((m) => m[1] as string);
-  const answer = { claims: claimIds.map((id) => ({ claim_id: id, alignment: mode === "conflict" ? "CONFLICT" : "ALIGNED", evidence_ids: mode === "bogus-evidence" ? ["ev-999"] : evidence.slice(0, 1), reason: "rounding differs from the Requirement" })) };
+  const echoed = body.input.slice(body.input.indexOf("EVIDENCE"), body.input.indexOf("EVIDENCE") + 480);
+  const answer = { claims: claimIds.map((id) => ({ claim_id: id, alignment: mode === "conflict" ? "CONFLICT" : "ALIGNED", evidence_ids: mode === "bogus-evidence" ? ["ev-999"] : evidence.slice(0, 1), reason: mode === "echo" ? echoed : "rounding differs from the Requirement" })) };
   return new Response(JSON.stringify({
     id: "resp_e2e", object: "response", created_at: 1, status: "completed", model: "gpt-test-model-2026",
     output: [{ type: "message", id: "m", status: "completed", role: "assistant", content: [{ type: "output_text", text: JSON.stringify(answer), annotations: [] }] }],
@@ -230,3 +234,109 @@ describe("TASK-012B semantic review with OpenAI Responses (fake transport)", () 
     expect(calls.length).toBe(before);
   });
 });
+
+describe("0.1.2 secret boundary: semantic requests carry the same redaction as Context Packets", () => {
+  // Test-only dummy values in formats DUO's redactor recognizes (not real credentials).
+  const OPENAI_LIKE = "sk-proj-DUOTEST0000redaction0000dummy0000";
+  const AWS_LIKE = "AKIADUOTEST000000000";
+  const CHANGED = "Math.round(cents / 100) /* " + OPENAI_LIKE + " " + AWS_LIKE + " */";
+  let secretRoot: string;
+  const sentText = (from: number) => calls.slice(from).map((c) => JSON.stringify(c.body)).join("\n");
+  const leaks = (text: string) => [OPENAI_LIKE, AWS_LIKE].filter((s) => text.includes(s));
+  const filesUnder = (dir: string): string[] => fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => path.join(e.parentPath, e.name)) : [];
+  // The LLM response cache would answer a repeated request without calling the provider; these tests need the call.
+  const uncached = () => fs.rmSync(path.join(secretRoot, ".duo-project", "cache", "llm"), { recursive: true, force: true });
+  beforeAll(async () => {
+    secretRoot = await repoWith(LLM_BLOCK);
+    const file = path.join(secretRoot, "src/report/build-report.ts");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("Math.round(cents / 100)", CHANGED));
+    const store = openProjectGraphStore(secretRoot).value;
+    if (store === undefined) throw new Error("graph");
+    try { await indexRepository(secretRoot, { store, registry }); } finally { store.close(); }
+  });
+
+  it("semantic off: the provider is never called", async () => {
+    mode = "aligned";
+    const before = calls.length;
+    const r = await review(secretRoot, REQUEST, pool());
+    expect(calls.length).toBe(before);
+    expect(r.metrics.llmCalls).toBe(0);
+  });
+
+  it("shared review operation (duoctl review --semantic): the request the provider receives has [REDACTED], no dummy secret, and the rest of the changed line intact", async () => {
+    mode = "aligned";
+    uncached();
+    const before = calls.length;
+    const r = await review(secretRoot, { ...REQUEST, includeSemanticAssist: true }, pool());
+    expect(calls.length).toBe(before + 1);
+    expect(r.semanticAssist.status).toBe("success");
+    const sent = sentText(before);
+    expect(leaks(sent)).toEqual([]);
+    expect(sent).toContain(REDACTED);
+    expect(sent).toContain("Math.round(cents / 100) /* " + REDACTED + " " + REDACTED + " */");
+  });
+
+  it("MCP duo_review_changes with includeSemanticAssist: the same redacted request, no dummy secret in the payload or metric", async () => {
+    mode = "aligned";
+    uncached();
+    const before = calls.length;
+    const p = pool();
+    const ctx: ToolContext = { root: secretRoot, agentName: "agent-test", signal: new AbortController().signal, llm: p };
+    const mcp = await TOOLS.duo_review_changes.run({ task: "RPT-01", includeSemanticAssist: true }, ctx);
+    expect(mcp.op.kind).toBe("ok");
+    const sent = sentText(before);
+    expect(sent.length).toBeGreaterThan(0);
+    expect(leaks(sent)).toEqual([]);
+    expect(sent).toContain(REDACTED);
+    expect(leaks(JSON.stringify(mcp.metric))).toEqual([]);
+  });
+
+  it("one policy: the Context Packet and the semantic request redact the changed line to the same text", async () => {
+    const expected = redactSecrets(CHANGED).text;
+    expect(expected).toBe("Math.round(cents / 100) /* " + REDACTED + " " + REDACTED + " */");
+    const ctx = await projectContext(secretRoot, { task: "RPT-01 buildReport cents" }, { registry });
+    const packet = JSON.stringify(ctx);
+    expect(leaks(packet)).toEqual([]);
+    expect(packet).toContain(expected);
+    mode = "aligned";
+    uncached();
+    const before = calls.length;
+    await review(secretRoot, { ...REQUEST, includeSemanticAssist: true }, pool());
+    expect(sentText(before)).toContain(expected);
+  });
+
+  it("the deterministic Review is the same with and without semantic assistance on the secret-bearing change", async () => {
+    mode = "conflict";
+    const plain = await review(secretRoot, REQUEST, pool());
+    const assisted = await review(secretRoot, { ...REQUEST, includeSemanticAssist: true }, pool());
+    expect(deterministic(assisted)).toBe(deterministic(plain));
+    expect(assisted.semanticAssist.verdict === undefined || assisted.semanticAssist.verdict !== "BLOCK").toBe(true);
+  });
+
+  it("a provider that echoes its input (answer or error) cannot bring a dummy secret back into results, records, caches or metrics", async () => {
+    mode = "echo";
+    uncached();
+    const echoed = await review(secretRoot, { ...REQUEST, includeSemanticAssist: true }, pool());
+    expect(echoed.semanticAssist.status).toBe("success");
+    expect(JSON.stringify(echoed.semanticAssist)).toContain(REDACTED);
+    expect(leaks(JSON.stringify(echoed))).toEqual([]);
+    const recorded = await recordReview(echoed, { root: secretRoot, actor: { kind: "human", name: "Ada" }, clock: () => new Date("2026-10-01T00:00:00Z") });
+    expect(recorded.value?.assist?.path).toBeDefined();
+    mode = "echo-error";
+    fs.cpSync(path.join(secretRoot, ".duo-project", "cache", "llm"), path.join(secretRoot, ".duo-project", "cache", "llm-echo"), { recursive: true });
+    uncached();
+    const failed = await review(secretRoot, { ...REQUEST, includeSemanticAssist: true }, new LLMProviderPool({ OPENAI_API_KEY: KEY }, { openai: { fetch: fakeFetch } }));
+    expect(failed.semanticAssist.status).toBe("failed");
+    expect(leaks(JSON.stringify(failed))).toEqual([]);
+    uncached();
+    const ctx: ToolContext = { root: secretRoot, agentName: "agent-test", signal: new AbortController().signal, llm: pool() };
+    const mcp = await TOOLS.duo_review_changes.run({ task: "RPT-01", includeSemanticAssist: true }, ctx);
+    expect(leaks(JSON.stringify(mcp))).toEqual([]);
+    // Everything DUO wrote under .duo-project: records and supplements, the LLM cache, runtime metrics, generated state.
+    const written = filesUnder(path.join(secretRoot, ".duo-project")).filter((f) => !f.endsWith(".db") && !f.endsWith(".db-wal") && !f.endsWith(".db-shm"));
+    expect(written.some((f) => f.includes(path.join("cache", "llm-echo")))).toBe(true); // the echoed answer as the cache stored it
+    for (const f of written) expect(leaks(fs.readFileSync(f, "utf8")), f).toEqual([]);
+    mode = "aligned";
+  });
+});
+

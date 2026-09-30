@@ -9,6 +9,7 @@
  * never touch Project Truth. semanticAssist.verdict raises PASS to WARN at most.
  */
 import { compareUtf8, evidenceId, sha256Text, type Evidence, type EvidenceBasis, type ProjectTruth } from "@duo-director/core";
+import { redactSecrets } from "../context/redact.js";
 import { invokeLLM, llmProviderState, type LLMInvocation } from "../llm/contract/invoke.js";
 import type { LLMJsonSchema, LLMProvider } from "../llm/contract/types.js";
 import { truncateToTokens } from "../tokens/index.js";
@@ -87,7 +88,8 @@ export async function semanticAssist(input: SemanticInput): Promise<{ assist: Se
   for (const c of candidates) lines.push(`CLAIM ${c.id} rule=${c.rule} subject=${c.subject.id}`, `expected: ${c.expected}`, `observed: ${c.observed}`, `evidence: ${c.evidenceIds.join(", ")}`, "");
   for (const id of allowed) {
     const e = input.store.get(id);
-    lines.push(`EVIDENCE ${id} [${e?.basis ?? "?"}] ${e?.summary ?? ""}`, truncateToTokens(input.store.excerpt(id) ?? "", perExcerpt).text, "");
+    // Redact before truncating: a cut could leave a partial secret the patterns no longer match (invokeLLM redacts the whole request again).
+    lines.push(`EVIDENCE ${id} [${e?.basis ?? "?"}] ${e?.summary ?? ""}`, truncateToTokens(redactSecrets(input.store.excerpt(id) ?? "").text, perExcerpt).text, "");
   }
   const ids = new Set(candidates.map((c) => c.id));
   const invocation = await invokeLLM(input.provider, {

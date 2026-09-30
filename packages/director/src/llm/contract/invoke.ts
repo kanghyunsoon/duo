@@ -2,8 +2,10 @@
  * Safe invocation (TASK-012A): the only way DUO code calls a provider. It never throws, checks
  * status and cancellation before calling, turns a rejection or a malformed answer into a
  * categorized failure, validates structured output (shape and cited evidence IDs) and redacts
- * secrets from failure messages. A failed or unavailable call leaves every deterministic result as
- * it was: see assistDeterministic().
+ * secrets from failure messages. It is also the secret boundary for what leaves DUO: instructions and
+ * input go through the same redaction as Context Packets before any provider, the response cache key or
+ * the token estimate sees them, for every purpose and every provider (docs/10-security.md, 0.1.2).
+ * A failed or unavailable call leaves every deterministic result as it was: see assistDeterministic().
  */
 import { performance } from "node:perf_hooks";
 import { redactSecrets } from "../../context/redact.js";
@@ -57,8 +59,14 @@ export function llmProviderState(config: { readonly provider: string }, provider
   return provider === undefined ? "unavailable" : provider.status();
 }
 
-export async function invokeLLM(provider: LLMProvider | undefined, request: LLMRequest, options: InvokeOptions = {}): Promise<LLMInvocation> {
+/** The request as a provider may see it: known credential formats in its text replaced with [REDACTED]. */
+export function redactLLMRequest(request: LLMRequest): LLMRequest {
+  return { ...request, instructions: redactSecrets(request.instructions).text, input: redactSecrets(request.input).text };
+}
+
+export async function invokeLLM(provider: LLMProvider | undefined, original: LLMRequest, options: InvokeOptions = {}): Promise<LLMInvocation> {
   const t0 = performance.now();
+  const request = redactLLMRequest(original);
   // A function, not a value: the signal can fire while the provider is running.
   const aborted = (): boolean => request.signal?.aborted === true;
   const requestEstimate = { tokens: countTokens(request.instructions) + countTokens(request.input), estimator: TOKEN_ESTIMATOR.name };
