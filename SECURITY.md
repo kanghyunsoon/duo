@@ -41,6 +41,16 @@ Out of scope:
 - attacks that need another account or process on the same computer: the local UI is a single-user loopback tool, not an authenticated multi-user web application (see [docs/10-security.md](docs/10-security.md))
 - the `ui:<name>` actor label on confirmed Decisions: it records who acted, it is not authentication
 
+## Past fixes and precautions
+
+### 0.1.2: requests to an optional LLM provider
+
+DUO 0.1.2 fixed secret redaction in requests to an optional LLM provider (semantic assist: `duoctl review --semantic` or the MCP option `includeSemanticAssist`). The default configuration (`llm.provider: none`) makes no provider call and was not affected.
+
+If you used semantic assist with an LLM provider on DUO 0.1.1 or earlier, you may remove `.duo-project/cache/llm/` as a precaution. The directory is local, Git-ignored, and safe to regenerate.
+
 ## 보안 문제 신고 (요약)
 
 보안 취약점은 공개 GitHub Issue로 신고하지 마세요. 이 저장소의 **Security → Report a vulnerability**(GitHub Private Vulnerability Reporting)를 사용합니다. API key, token, 비공개 코드는 신고에 넣지 않습니다.
+
+DUO 0.1.1 이하에서 LLM provider와 semantic assist를 썼다면 예방 차원에서 `.duo-project/cache/llm/`을 지워도 됩니다. 로컬 디렉터리이고 Git ignored이며 다시 만들어집니다.
