@@ -1,7 +1,8 @@
 /**
  * Shared collector of structural facts for the Java, C#, C++ and Python extractors (T18.0). Same
  * contract as the TypeScript extractor: declarations with the same identity become one symbol (the
- * first one with a body is primary, the others are additionalLocations), member identity is
+ * first one with a body is primary, the others are additionalLocations; an extractor may name the
+ * effective one instead, Python T24.4), member identity is
  * "Type.name" (instance) or "Type.static.name", nothing is resolved, and nothing is built from a
  * declaration whose own fields sit next to an ERROR node.
  */
@@ -40,6 +41,8 @@ interface Declaration extends Omit<DeclarationInput, "node"> {
 
 export class StructuralCollector {
   private readonly declarations: Declaration[] = [];
+  /** Identity → the location an extractor proved to be the effective definition (Python, T24.4). */
+  private readonly preferred = new Map<string, SourceLocation>();
   readonly moduleReferences: ModuleReference[] = [];
   readonly callSites: CallSite[] = [];
   readonly annotations: DuoAnnotation[] = [];
@@ -54,6 +57,15 @@ export class StructuralCollector {
     const { node, ...rest } = d;
     this.declarations.push({ ...rest, identity, location: location(this.path, node) });
     return symbolRef(this.path, identity);
+  }
+
+  /**
+   * The declaration at node becomes the primary location of its Symbol (T24.4, C226). Only an extractor
+   * that can show statically which definition is effective calls this; otherwise the first declaration
+   * with a body stays primary. The Symbol's identity and set of locations do not change.
+   */
+  prefer(identity: string, node: Node): void {
+    this.preferred.set(identity, location(this.path, node));
   }
 
   module(node: Node, specifier: string, kind: ModuleReferenceKind, bindings: readonly ImportBinding[], syntax: ModuleReferenceSyntax = {}): void {
@@ -91,7 +103,9 @@ export class StructuralCollector {
     const out: AnalyzedSymbol[] = [];
     for (const [identity, group] of groups) {
       const sorted = [...group].sort((a, b) => compareSourceLocations(a.location, b.location));
-      const primary = sorted.find((d) => d.hasBody) ?? (sorted[0] as Declaration);
+      const chosen = this.preferred.get(identity);
+      const primary = (chosen === undefined ? undefined : sorted.find((d) => compareSourceLocations(d.location, chosen) === 0))
+        ?? sorted.find((d) => d.hasBody) ?? (sorted[0] as Declaration);
       const others = sorted.filter((d) => d !== primary).map((d) => d.location);
       const callables = sorted.flatMap((d): CallableDeclaration[] => (d.callable === undefined ? [] : [{ location: d.location, ...d.callable }]));
       out.push({

@@ -37,8 +37,10 @@ export interface TreeSitterAnalyzerSpec {
   /** Text rewrite of the same length before parsing (C++ masks known annotation macros); locations stay exact. */
   readonly prepare?: (text: string) => string;
   /**
-   * Version of facts outside the Graph payload (C++: callable signatures, T24.3). Part of the identity, so
-   * cached analyses are made again when it changes; `version` (the Symbol payload's analyzerVersion) stays.
+   * Version of extraction rules that leave the Symbol payload's analyzerVersion as it is: facts outside the
+   * Graph payload (C++ callable signatures, T24.3) or the choice of a Symbol's primary location among its
+   * locations (Python effective definition, T24.4). Part of the identity, so cached analyses are made again
+   * when it changes; `version` stays, and Graph rows change only where the extraction result does.
    */
   readonly facts?: string;
   readonly extract: (path: RepoPath, tree: Tree, text: string) => Extraction;

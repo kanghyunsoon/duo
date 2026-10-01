@@ -41,6 +41,9 @@ export const CPP_SPEC: TreeSitterAnalyzerSpec = {
 };
 export const PYTHON_SPEC: TreeSitterAnalyzerSpec = {
   id: "python", version: PYTHON_ANALYZER_VERSION, extensions: { py: "python" }, capabilities: PYTHON_CAPABILITIES, callResolution: "same-file-functions", extract: extractPython,
+  // definitions-1: the primary location of a Symbol of several defs is the effective definition where syntax
+  // shows it (T24.4, C226). Only those Symbols' Graph rows change, so the payload analyzerVersion stays.
+  facts: "definitions-1",
 };
 
 export const createJavaAnalyzer = (o: TreeSitterAnalyzerOptions = {}): Promise<ParseResult<LanguageAnalyzer>> => createTreeSitterAnalyzer(JAVA_SPEC, o);
