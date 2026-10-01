@@ -46,6 +46,9 @@ export { applyGraphDiff, diffScopes, type GraphDiff } from "./incremental/diff.j
 export { impact, impactSeedsOfFiles, type ImpactItem, type ImpactOptions, type ImpactRelation, type ImpactResult } from "./query/impact.js";
 export { trace, TRACE_EDGE_TYPES } from "./query/trace.js";
 export { nodeLocations } from "./query/locations.js";
+export {
+  DECLARATION_LINKS_FORMAT, DECLARATION_LINKS_KEY, declarationLinks, readDeclarationLinks, type DeclarationEnd, type DeclarationLink,
+} from "./build/declaration-links.js";
 
 export const packageInfo: PackageInfo = {
   name: "@duo-director/graph",

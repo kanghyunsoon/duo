@@ -26,6 +26,7 @@ import {
 } from "@duo-director/core";
 import { replaceGraph } from "../build/apply.js";
 import { buildGraphPlan, CALL_RESOLUTION_VERSION } from "../build/builder.js";
+import { DECLARATION_LINKS_KEY, declarationLinksMeta } from "../build/declaration-links.js";
 import { HISTORY_WINDOW, summarizeHistory } from "../build/history.js";
 import { createLanguageModuleResolver } from "../build/resolve/languages.js";
 import { fileScope, scopeDigests, TRUTH_SCOPE } from "../build/scope.js";
@@ -325,6 +326,8 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
           replaceGraph(tx, plan);
         }
         tx.writeMeta(INDEX_STATE_TOKEN_KEY, state.token);
+        // Declaration links (T24.3) are rebuilt from all analyses each run and written with the token.
+        tx.writeMeta(DECLARATION_LINKS_KEY, declarationLinksMeta(plan.declarationLinks));
         if (previous === undefined || graphChanged(diff)) tx.writeMeta(GRAPH_REVISION_KEY, String(revision + 1));
       });
     } catch (error) {

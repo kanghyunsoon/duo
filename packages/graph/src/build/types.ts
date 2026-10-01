@@ -5,6 +5,7 @@
 import type { AnalyzerCapabilities, CallResolutionStrategy, CoChangeCandidate, FileFingerprint, GitRepositoryState, ModuleReferenceKind, SourceAnalysis } from "@duo-director/analyzer";
 import type { Diagnostic, EntityType, ProjectTruth, RepoPath, SourceLocation, SymbolRef, TraceModel } from "@duo-director/core";
 import type { GraphEdgeInput, GraphEdgeType, GraphNodeInput } from "../store/types.js";
+import type { DeclarationLink } from "./declaration-links.js";
 import type { ModuleResolution, ModuleResolutionStatus, ModuleResolver } from "./resolve/module-resolver.js";
 
 export interface AnalyzedFile {
@@ -148,4 +149,6 @@ export interface GraphBuildPlan {
   readonly configDiagnostics: ReadonlyMap<RepoPath, readonly Diagnostic[]>;
   /** False when validation found an error (conflicting node, invalid payload or endpoint): the plan must not be applied. */
   readonly valid: boolean;
+  /** C++ declaration links (T24.3, C218): Graph metadata, not nodes or edges. */
+  readonly declarationLinks: readonly DeclarationLink[];
 }

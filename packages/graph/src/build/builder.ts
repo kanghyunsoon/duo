@@ -21,6 +21,7 @@ import {
 import { GRAPH_EDGE_TYPES, type GraphEdgeInput, type GraphEdgeType, type GraphNodeInput, type JsonObject } from "../store/types.js";
 import { canonicalJson } from "../store/json.js";
 import { attachAnnotation, type AttachmentCandidate } from "./annotations.js";
+import { declarationLinks } from "./declaration-links.js";
 import { isEdgeEndpointAllowed } from "./endpoints.js";
 import { ExportIndex, type ExportLookup } from "./exports.js";
 import { payloadProblem } from "./payload.js";
@@ -164,6 +165,7 @@ class Builder {
       moduleResolutions: this.moduleResolutions, callResolutions: this.callResolutions,
       resolution: this.resolution, resolutionWork: { ...this.work, callFreshness: this.callFreshness }, valid: this.valid,
       configDiagnostics: this.configDiagnosticsOut,
+      declarationLinks: declarationLinks(this.input.analyses.map((a) => a.analysis), this.resolution, this.input.files.map((f) => f.path)),
     };
   }
 
