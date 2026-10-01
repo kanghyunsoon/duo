@@ -31,8 +31,8 @@ export { checkGraph, dumpGraph, type GraphCheckOptions } from "./check.js";
 export { GRAPH_DB_FILE_PATH, indexRepository, isResolutionConfigFile, openProjectGraphReader, openProjectGraphStore, type IndexOptions } from "./incremental/indexer.js";
 export { inspectIndex, type AnalysisCoverage, type IndexInspection, type IndexStatus, type InspectFreshnessRecord, type InspectOptions } from "./incremental/inspect.js";
 export {
-  createLanguageModuleResolver, CPP_INCLUDE_RESOLUTION_VERSION, MODULE_RESOLUTION_VERSION, PYTHON_RESOLUTION_VERSION, resolveCppInclude, resolvePython,
-  type LanguageResolverOptions,
+  createLanguageModuleResolver, CPP_INCLUDE_RESOLUTION_VERSION, discoverPythonRoots, MODULE_RESOLUTION_VERSION, PYTHON_RESOLUTION_VERSION, resolveCppInclude, resolvePython,
+  type LanguageResolverOptions, type PythonRoot, type PythonRootBasis, type PythonRoots,
 } from "./build/resolve/languages.js";
 export type { IndexedGraph } from "./incremental/assess.js";
 export type {
