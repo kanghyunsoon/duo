@@ -87,7 +87,10 @@ const graphOf = (store) => {
   for (const n of d.nodes) put("node:" + String(JSON.parse(n).id).split(":")[0], n);
   for (const e of d.edges) put("edge:" + JSON.parse(e).type, e);
   const byKind = Object.fromEntries([...groups].sort(([a], [b]) => byText(a, b)).map(([k, rows]) => [k, rows.length + ":" + sha256(rows.sort(byText).join("\n")).slice(0, 16)]));
-  return { summary: { nodes: d.nodes.length, edges: d.edges.length, sha256: sha256(text), byKind }, rows: d, text };
+  // C++ declaration links (T24.3): Graph metadata, not rows; null for a build that records none.
+  const rawLinks = store.readMeta("declaration_links");
+  const links = rawLinks === undefined ? null : { pairs: JSON.parse(rawLinks).pairs?.length ?? 0, sha256: sha256(rawLinks) };
+  return { summary: { nodes: d.nodes.length, edges: d.edges.length, sha256: sha256(text), byKind, links }, rows: d, text };
 };
 const index = async (label) => {
   const store = openProjectGraphStore(root).value;
@@ -177,6 +180,8 @@ try {
     graphDiff = { onlyIncremental: [...a].filter((x) => !b.has(x)).slice(0, 10), onlyFull: [...b].filter((x) => !a.has(x)).slice(0, 10) };
   }
   check("incremental-equals-clean-full", equal, graphDiff);
+  check("declaration-links-incremental-equals-clean-full", JSON.stringify(incremental.graph.summary.links) === JSON.stringify(full.graph.summary.links),
+    { incremental: incremental.graph.summary.links, cleanFull: full.graph.summary.links });
   const probe = incremental.graph.rows.nodes.map(String).filter((n) => /duo_?bench_?probe/iu.test(n)).length;
   check("edit-detected", probe > 0, probe + " Graph rows name the appended declaration");
 
