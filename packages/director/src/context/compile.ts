@@ -16,6 +16,7 @@ import { inspectIndex, type GraphReader, type IndexedGraph, type IndexInspection
 import { redactSecrets } from "./redact.js";
 import { TOKEN_ESTIMATOR, truncateToTokens } from "../tokens/index.js";
 import { readCachedPacket, writeCachedPacket } from "./cache.js";
+import { callableGroups } from "./callables.js";
 import { planContext } from "./candidates.js";
 import { packetDependencyDigest } from "./digest.js";
 import { expandCandidates } from "./expand.js";
@@ -97,7 +98,9 @@ export async function compileContext(root: string, request: ContextRequest, opti
 
   // 2. Seeds.
   t = performance.now();
-  const seeds = resolveSeeds(valid.value.task, truth, options.graph, request.explicitSeeds ?? []);
+  // Linked C++ declarations and definitions (T24.3): one logical target for seeds and the Packet.
+  const groups = callableGroups(options.graph);
+  const seeds = resolveSeeds(valid.value.task, truth, options.graph, request.explicitSeeds ?? [], groups);
   time.seedMs = performance.now() - t;
   const resolution = { seeds: seeds.seeds, ambiguities: seeds.ambiguities, unresolvedIds: seeds.unresolvedIds };
   const idSignals: KnowledgeSignal[] = seeds.unresolvedIds.length > 0 ? [{ kind: "unresolved-id", ids: seeds.unresolvedIds }] : [];
@@ -111,7 +114,10 @@ export async function compileContext(root: string, request: ContextRequest, opti
   time.traversalMs = performance.now() - t;
   const reader = new SourceReader(root);
   t = performance.now();
-  const plan = planContext({ truth, task: valid.value.task, seeds, expansion, reader });
+  const plan = planContext({
+    truth, task: valid.value.task, seeds, expansion, reader,
+    callables: { group: (id) => groups.groups.get(id), node: (id) => groups.nodes.get(id) },
+  });
   time.retrievalMs = reader.ms;
   time.rankingMs = performance.now() - t - reader.ms;
   diagnostics.push(...plan.diagnostics);

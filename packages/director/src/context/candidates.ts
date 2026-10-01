@@ -9,7 +9,7 @@
  * are never placed in the intent or decision sections (T09.1).
  */
 import {
-  compareUtf8, pendingDecisionProposals, type Constraint, type Decision, type Diagnostic, type Issue, type Milestone,
+  compareSourceLocations, compareUtf8, pendingDecisionProposals, type Constraint, type Decision, type Diagnostic, type Issue, type Milestone,
   type ProjectTruth, type Proposal, type Requirement, type SourceLocation,
 } from "@duo-director/core";
 import { DEFAULT_EXTENSION_LANGUAGES, languageProfile } from "@duo-director/analyzer";
@@ -83,6 +83,8 @@ interface Draft {
   readonly source?: SourceLocation;
   /** Every location of a Symbol that has more than one (T24.1, C217); planning only, never in the Packet. */
   readonly locations?: readonly SourceLocation[];
+  /** The linked C++ callable group the Symbol belongs to (T24.3, C218); planning only. */
+  readonly group?: readonly string[];
   readonly state?: string;
   readonly file: string;
 }
@@ -182,26 +184,37 @@ function linesOf(locs: readonly SourceLocation[], primary: SourceLocation | unde
  * Undefined when any location does not slice: the candidate then keeps its name-only
  * representation, as a single location that does not slice does.
  */
-function symbolParts(reader: SourceReader, locs: readonly SourceLocation[], diagnostics: Diagnostic[]): string[] | undefined {
+function symbolParts(reader: SourceReader, locs: readonly SourceLocation[], diagnostics: Diagnostic[], labelled = false): string[] | undefined {
   const out: string[] = [];
-  let shownEnd = 0;
+  // Lines already shown, per file (a group spans files, T24.3).
+  const shown = new Map<string, number>();
   for (const loc of locs) {
+    const shownEnd = shown.get(loc.path) ?? 0;
     const start = loc.startLine ?? 1;
+    let text: string;
     if (start <= shownEnd) {
       const exact = reader.slice(loc);
       diagnostics.push(...exact.diagnostics);
       if (exact.value === undefined) return undefined;
-      out.push(exact.value);
+      text = exact.value;
     } else {
       const ctx = reader.withLeadingContext(loc);
       diagnostics.push(...ctx.diagnostics);
       if (ctx.value === undefined) return undefined;
       const skip = Math.max(0, shownEnd - ctx.value.startLine + 1);
-      out.push(skip === 0 ? ctx.value.text : ctx.value.text.split("\n").slice(skip).join("\n"));
+      text = skip === 0 ? ctx.value.text : ctx.value.text.split("\n").slice(skip).join("\n");
     }
-    shownEnd = Math.max(shownEnd, loc.endLine ?? start);
+    // A part from a group that spans files says where it comes from.
+    out.push(labelled ? `// ${loc.path}${lines(loc)}\n${text}` : text);
+    shown.set(loc.path, Math.max(shownEnd, loc.endLine ?? start));
   }
   return out;
+}
+
+/** Every location of a linked group (T24.3): each member's locations, in canonical (path, position) order. */
+function groupLocations(nodes: readonly GraphNode[]): SourceLocation[] {
+  const all = nodes.flatMap((n) => nodeLocations(n)).sort(compareSourceLocations);
+  return all.filter((l, i) => i === 0 || compareSourceLocations(all[i - 1] as SourceLocation, l) !== 0);
 }
 
 const TIER_INDEX = new Map(TIER_ORDER.map((t, i) => [t, i] as const));
@@ -238,6 +251,11 @@ export interface PlanInput {
   readonly seeds: SeedResult;
   readonly expansion: Expansion;
   readonly reader: SourceReader;
+  /** Linked C++ declarations and definitions (T24.3, C218): a Symbol's group and the members' nodes. */
+  readonly callables?: {
+    readonly group: (id: string) => readonly string[] | undefined;
+    readonly node: (id: string) => GraphNode | undefined;
+  };
 }
 
 export function planContext(input: PlanInput): ContextPlan {
@@ -360,13 +378,20 @@ export function planContext(input: PlanInput): ContextPlan {
       }
       case "symbol": {
         const loc = node.source;
-        // Every location (T24.1, C217): merged overloads, signatures and accessor halves, in source order.
-        const locs = nodeLocations(node);
+        // Every location (T24.1, C217): merged overloads, signatures and accessor halves, in source order. A linked
+        // C++ declaration or definition (T24.3, C218): every location of its group, header and source file.
+        const members = input.callables?.group(node.id);
+        const partners = (members ?? []).filter((id) => id !== node.id).map((id) => input.callables?.node(id)).filter((n): n is GraphNode => n !== undefined);
+        const locs = partners.length === 0 ? nodeLocations(node) : groupLocations([node, ...partners]);
+        const files = [...new Set(locs.map((l) => l.path))];
         analyzedPath(ref.path);
+        for (const p of files) analyzedPath(p);
         const qn = String(node.payload.qualifiedName ?? ref.symbol);
-        const head = `${qn} (${String(node.payload.kind ?? "symbol")}) ${ref.path}${linesOf(locs, loc)}`;
+        const where = files.length <= 1 ? `${ref.path}${linesOf(locs, loc)}`
+          : files.map((p) => { const at = locs.filter((l) => l.path === p); return `${p}${linesOf(at, at[0])}`; }).join(" + ");
+        const head = `${qn} (${String(node.payload.kind ?? "symbol")}) ${where}`;
         let l2: string | undefined, l3: string | undefined;
-        const parts = locs.length === 0 ? undefined : symbolParts(reader, locs, diagnostics);
+        const parts = locs.length === 0 ? undefined : symbolParts(reader, locs, diagnostics, files.length > 1);
         if (parts !== undefined) {
           // Same separator at L2 and L3: a Symbol of declarations only has equal L2 and L3 text, which levels() keeps once (as for one location).
           l3 = `${head}\n${fence(parts.join("\n\n"), langOf(ref.path))}`;
@@ -375,7 +400,7 @@ export function planContext(input: PlanInput): ContextPlan {
         put({
           id: node.id, ref: displayRef(node.id), kind: "symbol", tier: codeTier(c), score: c.score * languageAffinity(c), depth: c.depth, mandatory: exactSeeds.has(node.id),
           levels: levels([["L1", head], ["L2", l2], ["L3", l3]]), via: via(c), ...(loc === undefined ? {} : { source: loc }),
-          ...(locs.length > 1 ? { locations: locs } : {}), file: ref.path,
+          ...(locs.length > 1 ? { locations: locs } : {}), ...(partners.length === 0 || members === undefined ? {} : { group: members }), file: ref.path,
         });
         break;
       }
@@ -451,6 +476,7 @@ export function planContext(input: PlanInput): ContextPlan {
   }
   pending.sort((a, b) => compareUtf8(a.id, b.id));
 
+  dedupeGroups(drafts);
   dedupeContainers(drafts, exactSeeds);
   const ordered = [...drafts.values()].sort((a, b) =>
     (TIER_INDEX.get(a.tier) ?? 0) - (TIER_INDEX.get(b.tier) ?? 0) || b.score - a.score || a.depth - b.depth || compareUtf8(a.id, b.id));
@@ -515,10 +541,13 @@ function dedupeContainers(drafts: Map<string, Draft>, exactSeeds: ReadonlySet<st
     }
     if (d.kind !== "symbol" || d.levels[d.levels.length - 1]?.level !== "L3") continue;
     // A member inside any location of the Symbol (T24.1) is shown on its own.
-    const ranges = d.locations ?? (d.source === undefined ? [] : [d.source]);
-    const inner = ranges.some(({ startLine, endLine }) => startLine !== undefined && endLine !== undefined && all.some((o) => o !== d && o.kind === "symbol" && o.file === d.file
-      && o.source?.startLine !== undefined && o.source.endLine !== undefined
-      && o.source.startLine >= startLine && o.source.endLine <= endLine && (o.source.startLine > startLine || o.source.endLine < endLine)));
+    const ranges = (d.locations ?? (d.source === undefined ? [] : [d.source])).filter((r) => r.path === d.file);
+    // Another Symbol item placed in this file: its primary source, or for a linked group (T24.3) any of its locations here.
+    const placed = (o: Draft) => (o.group !== undefined ? (o.locations ?? []).filter((l) => l.path === d.file)
+      : o.file === d.file && o.source !== undefined ? [o.source] : []);
+    const inner = ranges.some(({ startLine, endLine }) => startLine !== undefined && endLine !== undefined && all.some((o) => o !== d && o.kind === "symbol"
+      && placed(o).some((l) => l.startLine !== undefined && l.endLine !== undefined
+        && l.startLine >= startLine && l.endLine <= endLine && (l.startLine > startLine || l.endLine < endLine))));
     if (inner && d.levels.length > 1) drafts.set(d.id, { ...d, levels: d.levels.slice(0, -1) });
   }
 }
@@ -538,4 +567,20 @@ function signature(text: string): string {
     if (/[{;]|=>/u.test(line)) break;
   }
   return out.join("\n");
+}
+
+/**
+ * One item per linked C++ callable (T24.3, C218): the members of a group all show the whole group, so
+ * one stays, the best placed (mandatory, then order value, then depth, then ID). The others' Symbols and
+ * Evidence are unchanged; only the Packet does not repeat the same ranges.
+ */
+function dedupeGroups(drafts: Map<string, Draft>): void {
+  const better = (a: Draft, b: Draft) => (a.mandatory !== b.mandatory ? a.mandatory : a.score !== b.score ? a.score > b.score : a.depth !== b.depth ? a.depth < b.depth : compareUtf8(a.id, b.id) < 0);
+  const best = new Map<readonly string[], Draft>();
+  for (const d of drafts.values()) {
+    if (d.group === undefined) continue;
+    const b = best.get(d.group);
+    if (b === undefined || better(d, b)) best.set(d.group, d);
+  }
+  for (const d of [...drafts.values()]) if (d.group !== undefined && best.get(d.group) !== d) drafts.delete(d.id);
 }

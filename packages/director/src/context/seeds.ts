@@ -12,6 +12,7 @@ import {
 } from "@duo-director/core";
 import type { GraphNode, GraphReader } from "@duo-director/graph";
 import { searchTerms } from "../relevance/terms.js";
+import { NO_CALLABLE_GROUPS, oneGroup, type CallableGroups } from "./callables.js";
 import { KEYWORD, SEED_STRENGTH, SYMBOL_NAME_MAX_MATCHES } from "./policy.js";
 import type { ContextSeed, SeedAmbiguity, SeedMatch, SeedOption, SeedResolution } from "./types.js";
 
@@ -106,7 +107,11 @@ function option(node: GraphNode): SeedOption {
   return { id: node.id, ref: refOfNode(node), kind: node.type, ...(typeof title === "string" ? { title } : {}) };
 }
 
-export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphReader, explicit: readonly EntityRef[] = []): SeedResult {
+/**
+ * groups (T24.3, C218): linked C++ declarations and definitions. A name whose candidates are all one
+ * group is one logical callable: every member becomes a seed instead of an ambiguity.
+ */
+export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphReader, explicit: readonly EntityRef[] = [], groups: CallableGroups = NO_CALLABLE_GROUPS): SeedResult {
   const found = new Map<string, WeightedSeed>();
   const add = (node: GraphNode, match: SeedMatch, term: string, strength: number) => {
     const prev = found.get(node.id);
@@ -149,11 +154,13 @@ export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphRead
     const qualified = symbols.filter((s) => s.payload.qualifiedName === name);
     if (qualified.length === 1 && qualified[0] !== undefined) { add(qualified[0], "symbol", token, SEED_STRENGTH.symbol); exact++; continue; }
     if (qualified.length > 1 && name.includes(".")) {
+      if (oneGroup(groups, qualified)) { for (const n of qualified) add(n, "symbol", token, SEED_STRENGTH.symbol); exact++; continue; }
       if (qualified.length <= SYMBOL_NAME_MAX_MATCHES) ambiguities.push({ term: name, reason: "qualified-name", options: qualified.map(option) });
       continue;
     }
     const named = qualified.length > 1 ? qualified : symbols.filter((s) => s.payload.name === name);
     if (named.length === 1 && named[0] !== undefined) { add(named[0], "symbol-name", token, SEED_STRENGTH["symbol-name"]); exact++; }
+    else if (oneGroup(groups, named)) { for (const n of named) add(n, "symbol-name", token, SEED_STRENGTH["symbol-name"]); exact++; }
     else if (named.length > 1 && named.length <= SYMBOL_NAME_MAX_MATCHES) ambiguities.push({ term: name, reason: "symbol-name", options: named.map(option) });
   }
 
