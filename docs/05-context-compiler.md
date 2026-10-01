@@ -58,7 +58,7 @@ Compiler는 시작할 때 `inspectIndex`(T08.1)를 부르고 current일 때만 G
 
 Proposal ID(`P-018`)는 seed가 아니라 그 proposal을 PENDING HUMAN DECISIONS에 넣는 신호다.
 
-**모호함**(C87): ID, 경로, 유일한 이름처럼 정확한 신호가 하나라도 있으면 그것을 쓴다. 정확한 신호가 없고 (1) 같은 이름의 Symbol이 2~5개이거나, (2) 같은 qualifiedName이 여러 파일에 있거나, (3) 키워드 최고점이 Requirement 둘 이상에서 같으면 `ambiguous`이고 선택지를 돌려준다. 6개 이상과 맞는 이름은 너무 일반적이라 seed도 모호함도 아니다. LLM으로 억지 seed를 고르지 않는다.
+**모호함**(C87): ID, 경로, 유일한 이름처럼 정확한 신호가 하나라도 있으면 그것을 쓴다. 정확한 신호가 없고 (1) 같은 이름의 Symbol이 2~5개이거나, (2) 같은 qualifiedName이 여러 파일에 있거나, (3) 키워드 최고점이 Requirement 둘 이상에서 같으면 `ambiguous`이고 선택지를 돌려준다. 6개 이상과 맞는 이름은 너무 일반적이라 seed도 모호함도 아니다. 예외(T24.3, C218): 후보가 모두 Indexer가 기록한 C++ 선언·정의 쌍 하나의 그룹이면 같은 callable이므로 모호함이 아니고 구성원 모두가 seed다. 그 Symbol item은 그룹의 선언과 구현 범위를 함께 보이며(머리줄 `경로:줄 + 경로:줄`, 부분마다 `// 경로:줄`) 같은 그룹 item은 하나만 남는다([T24.3](roadmap/0.2.0-t24-cpp-declarations.md)). LLM으로 억지 seed를 고르지 않는다.
 
 ## 가중 탐색
 

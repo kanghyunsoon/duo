@@ -217,7 +217,7 @@ source 저장소에는 commit하지 않는다.
 | build | DUO commit, uncommitted 여부, analyzer registry digest, Node, platform | 보고 |
 | environment | Git 버전, `core.symlinks`·`core.autocrlf`, 최대 경로 길이(저장소 기준·절대), 대소문자 충돌 수 | 보고 |
 | timings, memory, operations | init, import, grammar load, initial·no-op·incremental·clean full index, Context, Review, peak RSS·heap, no-op과 incremental의 git process·fs 호출 수 | gate 아님 |
-| checks | init, initial index, no-op current, scan accounting(repository 파일 = coverage total), 기대 level, 1-file incremental, incremental 뒤 current, incremental = clean full, 편집 감지, 결정적 출력에 절대 경로 없음 | 하나라도 실패하면 DUO correctness failure |
+| checks | init, initial index, no-op current, scan accounting(repository 파일 = coverage total), 기대 level, 1-file incremental, incremental 뒤 current, incremental = clean full, C++ 선언·정의 쌍 기록의 incremental = clean full(T24.3), 편집 감지, 결정적 출력에 절대 경로 없음 | 하나라도 실패하면 DUO correctness failure |
 
 **T22의 "4개 차이"(C221).** scan 수 = repository 파일 + Project Truth 파일 4개(`.duo-project/.gitignore`, `intent/constraints.yaml`, `intent/vision.md`, `project.yaml`)다. scanner는 Truth 변경을 감지하려고 이 파일을 fingerprint하고, coverage와 Graph는 `.duo-project/`를 repository 파일로 세지 않는다(H-24). 5개 저장소 모두 `scan-accounting` check가 통과한다.
 

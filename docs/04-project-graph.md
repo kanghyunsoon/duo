@@ -201,6 +201,7 @@ Previous state(index-state.json) + 현재 Repository
 - **CHANGED_WITH**: 최근 500 commit window 전체로 매번 다시 계산한다. HEAD(와 shallow 여부)가 그대로면 저장된 window 요약을 쓰고, 바뀌면 window를 다시 읽는다. 새 commit만 누적하면 window에서 빠진 commit의 count가 남아 전체 재구축과 달라지기 때문이다(H-25). rolling window 최적화는 benchmark에서 비용이 확인되면 Post-MVP에서 검토한다.
 - **freshness**는 Indexer가 정하고 GraphStore는 판정하지 않는다([03 Freshness 책임](03-data-model.md#freshness-책임)). Analyzer나 resolver의 version이 바뀌면 그 결과 전체를 다시 계산한다. 쓰지 않고 판정만 보는 경로는 `inspectIndex()`이며 같은 판정 함수를 쓴다(T08.1).
 - **diagnostics**(T08.1): 같은 상태면 증분과 전체 재구축의 persistent diagnostics가 같다. 재사용한 계산의 diagnostics도 함께 재사용한다([03 Diagnostics](03-data-model.md#diagnostics)).
+- **declaration_links**(T24.3, C218)는 C++ header 선언과 out-of-line 정의 중 syntax로 증명된 쌍이다(같은 qualifiedName과 syntactic signature, 양방향 유일, 정의 파일의 quoted include가 선언 파일을 가리킴: 옆 파일 해석 또는 쓰인 경로가 저장소의 한 파일 경로 끝과 같음). Graph metadata라 node·edge·digest가 아니고, 매 index마다 모든 analysis에서 다시 계산해 index_state_token과 같은 transaction에 쓴다. Context Compiler만 읽는다.
 - **graph_revision**은 저장된 Project Graph 내용이 바뀐 revision이다. Requirement 본문처럼 Graph payload에 없는 내용만 바뀌면 오르지 않을 수 있고 이것은 버그가 아니다. 그런 내용에 의존하는 cache(Context Packet)는 graph_revision 외의 dependency를 봐야 한다([05](05-context-compiler.md)).
 
 ## 일관성 불변식
