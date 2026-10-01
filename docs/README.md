@@ -34,6 +34,7 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [roadmap/0.2.0-t24-python-definitions.md](roadmap/0.2.0-t24-python-definitions.md) | T24.4 Python 실효 정의(C226): primary 소비자 감사, 설계안 A·B·C·D, 일반 재정의·typing.overload·property·조건부 규칙, Evidence·Context·Review·UI·annotation, 검증, 남은 correctness 항목과 Milestone C, T24.5 제안 |
 | [roadmap/0.2.0-t24-python-roots.md](roadmap/0.2.0-t24-python-roots.md) | T24.2 Python source-root discovery(C219)와 T24.1 잔여 감사(Python 재정의, Evidence pointer·hash, 여러 범위 표기): 이전 pipeline, 발견 규칙, metadata 범위, invalidation, 검증 |
 | [roadmap/0.2.0-t24-overloads.md](roadmap/0.2.0-t24-overloads.md) | T24.1 overload evidence completeness(C217): Symbol identity lifecycle, repository evolution 실험, 설계안 A·B·C·D 비교, 위치 규칙, migration gate, 검증, signature 조사, T24.2 제안 |
+| [roadmap/0.2.0-t25-freshness.md](roadmap/0.2.0-t25-freshness.md) | T25.1 Freshness 확인 최적화(Milestone B): freshness call graph, analysis cache 확인 bounded concurrency, error semantics, show-prefix 공유, 동시성 선택, Build 0·A·B·AB 비교, Context·Review, 다음 task 제안 |
 | [conflicts.md](conflicts.md) | 원본 충돌, Human 결정 기록(H-*), 미결 사항 |
 | [adr/](adr/README.md) | ADR-001~014 |
 | [tasks/TASKS.md](tasks/TASKS.md) | TASK-000~020(TASK-012A/012B 포함), 의존성, E2E 매핑 |
