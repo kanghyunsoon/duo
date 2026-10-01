@@ -31,10 +31,10 @@ Proposal(P-*)은 Graph Node로 만들지 않는다. `duo_search_evidence`와 UI�
 |---|---|---|
 | CONTAINS | Project → Milestone, Project → File, File → Symbol, Symbol(class) → Symbol(member), File → Test | 구조 |
 | REQUIRES | Milestone → Requirement, Requirement → Requirement(depends_on), Issue → Issue(depends_on) | declared |
-| IMPLEMENTS | Symbol → Requirement, File → Requirement | declared(`implements.paths`, `implements.symbols`), static(코드 주석 `duo: AUTH-03`). 커밋과 이름 일치 근거는 만들지 않는다(C49) |
+| IMPLEMENTS | Symbol → Requirement, File → Requirement | declared(`implements.paths`, `implements.symbols`: qualifiedName 일치 하나, 또는 증명된 C++ 선언·정의 쌍 하나면 두 Symbol 모두, T24.5), static(코드 주석 `duo: AUTH-03`). 커밋과 이름 일치 근거는 만들지 않는다(C49) |
 | CALLS | Symbol → Symbol | static, exact 해석만(아래 [CALLS 해석](#calls-해석task-007)). heuristic 결과는 저장하지 않는다(C48) |
 | IMPORTS | File → File | static(그 언어의 module resolver가 Repository 안의 indexed File 하나로 해석한 경우만: TypeScript module resolution, Python 상대 module과 발견된 source root의 absolute module(C219), C++ 옆 파일 quoted include. Java·C#은 resolver가 없어 IMPORTS 없음, T18.0) |
-| GOVERNS | Decision → Requirement / Issue / File / Symbol | declared(governs, Task의 decisions, `governs.paths` 패턴, `governs.symbols`) |
+| GOVERNS | Decision → Requirement / Issue / File / Symbol | declared(governs, Task의 decisions, `governs.paths` 패턴, `governs.symbols`: `implements.symbols`와 같은 해석) |
 | TRACKED_BY | Requirement → Issue | declared(Issue의 requirements) |
 | VALIDATED_BY | Symbol → Test, Requirement → Test | static(test 범위 안 exact 호출의 대상, test에 붙은 annotation), declared(tests 패턴, 테스트 이름의 ID) |
 | CHANGED_WITH | File → File(양방향 두 개 저장) | git(최근 500 커밋 중 3회 이상 함께 변경, 50파일 초과 커밋 제외, 두 파일 모두 indexed File. 후보 계산은 TASK-006 `computeCoChangeCandidates`). 의존 관계가 아닌 historical correlation |
