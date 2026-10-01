@@ -6,6 +6,10 @@
  * text (Context, Evidence, Review diff seeds) use all of them, so a merged declaration is never
  * silently absent. The Symbol identity is unchanged.
  *
+ * Which location is primary is the analyzer's choice (Python: the effective definition where syntax
+ * shows it, T24.4, C226). The primary is what one pointer shows (Evidence pointer, UI Show lines, search
+ * location); nothing that reads or matches text depends on it, and neither does any Graph edge.
+ *
  * - order: canonical source order (core compareSourceLocations), independent of which location is
  *   primary and of the order the analyzer met the declarations
  * - duplicates: a range listed twice, or an additional location equal to the primary, appears once

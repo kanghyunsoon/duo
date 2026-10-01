@@ -682,8 +682,9 @@ class Builder {
   private annotationRelations(): void {
     for (const [path, ctx] of [...this.contexts].sort(([a], [b]) => compareUtf8(a, b))) {
       if (ctx.analysis.annotations.length === 0) continue;
+      // Every location of a Symbol is a target (T24.4): which location is primary never changes an edge.
       const candidates: AttachmentCandidate<{ kind: "symbol"; ref: SymbolRef } | { kind: "test"; fullName: string }>[] = [
-        ...ctx.analysis.symbols.map((s) => ({ value: { kind: "symbol" as const, ref: s.ref }, location: s.location })),
+        ...ctx.analysis.symbols.flatMap((s) => [s.location, ...(s.additionalLocations ?? [])].map((location) => ({ value: { kind: "symbol" as const, ref: s.ref }, location }))),
         ...ctx.tests.map((t) => ({ value: { kind: "test" as const, fullName: t.fullName }, location: t.location })),
       ];
       const text = this.input.sourceText(path);
