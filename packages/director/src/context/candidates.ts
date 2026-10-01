@@ -13,7 +13,7 @@ import {
   type ProjectTruth, type Proposal, type Requirement, type SourceLocation,
 } from "@duo-director/core";
 import { DEFAULT_EXTENSION_LANGUAGES, languageProfile } from "@duo-director/analyzer";
-import type { GraphNode } from "@duo-director/graph";
+import { nodeLocations, type GraphNode } from "@duo-director/graph";
 import { matchConstraint, type RelevanceScope, type ScopeEntry } from "../relevance/policy.js";
 import { displayRef, type Candidate, type Expansion } from "./expand.js";
 import { CROSS_LANGUAGE_FACTOR, GENERIC_FILE_WINDOW, TIER_ORDER } from "./policy.js";
@@ -81,6 +81,8 @@ interface Draft {
   readonly levels: readonly LevelText[];
   readonly via: PacketItem["via"];
   readonly source?: SourceLocation;
+  /** Every location of a Symbol that has more than one (T24.1, C217); planning only, never in the Packet. */
+  readonly locations?: readonly SourceLocation[];
   readonly state?: string;
   readonly file: string;
 }
@@ -166,6 +168,40 @@ function levels(parts: readonly (readonly [Representation, string | undefined])[
 function lines(loc: SourceLocation | undefined): string {
   if (loc?.startLine === undefined) return "";
   return loc.endLine === undefined || loc.endLine === loc.startLine ? `:${loc.startLine}` : `:${loc.startLine}-${loc.endLine}`;
+}
+
+/** Line ranges of a Symbol with more than one location (T24.1): ":4-6,8-10". One location: as lines(). */
+function linesOf(locs: readonly SourceLocation[], primary: SourceLocation | undefined): string {
+  return locs.length <= 1 ? lines(primary) : `:${locs.map((l) => lines(l).slice(1)).join(",")}`;
+}
+
+/**
+ * The text of each location of a Symbol, in source order, with its leading comment lines (T24.1,
+ * C217). No line appears twice: a location that starts on a line an earlier part already shows is
+ * taken exactly (without leading context), and leading lines an earlier part shows are cut.
+ * Undefined when any location does not slice: the candidate then keeps its name-only
+ * representation, as a single location that does not slice does.
+ */
+function symbolParts(reader: SourceReader, locs: readonly SourceLocation[], diagnostics: Diagnostic[]): string[] | undefined {
+  const out: string[] = [];
+  let shownEnd = 0;
+  for (const loc of locs) {
+    const start = loc.startLine ?? 1;
+    if (start <= shownEnd) {
+      const exact = reader.slice(loc);
+      diagnostics.push(...exact.diagnostics);
+      if (exact.value === undefined) return undefined;
+      out.push(exact.value);
+    } else {
+      const ctx = reader.withLeadingContext(loc);
+      diagnostics.push(...ctx.diagnostics);
+      if (ctx.value === undefined) return undefined;
+      const skip = Math.max(0, shownEnd - ctx.value.startLine + 1);
+      out.push(skip === 0 ? ctx.value.text : ctx.value.text.split("\n").slice(skip).join("\n"));
+    }
+    shownEnd = Math.max(shownEnd, loc.endLine ?? start);
+  }
+  return out;
 }
 
 const TIER_INDEX = new Map(TIER_ORDER.map((t, i) => [t, i] as const));
@@ -324,21 +360,22 @@ export function planContext(input: PlanInput): ContextPlan {
       }
       case "symbol": {
         const loc = node.source;
+        // Every location (T24.1, C217): merged overloads, signatures and accessor halves, in source order.
+        const locs = nodeLocations(node);
         analyzedPath(ref.path);
         const qn = String(node.payload.qualifiedName ?? ref.symbol);
-        const head = `${qn} (${String(node.payload.kind ?? "symbol")}) ${ref.path}${lines(loc)}`;
+        const head = `${qn} (${String(node.payload.kind ?? "symbol")}) ${ref.path}${linesOf(locs, loc)}`;
         let l2: string | undefined, l3: string | undefined;
-        if (loc !== undefined) {
-          const ctx = reader.withLeadingContext(loc);
-          diagnostics.push(...ctx.diagnostics);
-          if (ctx.value !== undefined) {
-            l3 = `${head}\n${fence(ctx.value.text, langOf(ref.path))}`;
-            l2 = `${head}\n${fence(signature(ctx.value.text), langOf(ref.path))}`;
-          }
+        const parts = locs.length === 0 ? undefined : symbolParts(reader, locs, diagnostics);
+        if (parts !== undefined) {
+          // Same separator at L2 and L3: a Symbol of declarations only has equal L2 and L3 text, which levels() keeps once (as for one location).
+          l3 = `${head}\n${fence(parts.join("\n\n"), langOf(ref.path))}`;
+          l2 = `${head}\n${fence(parts.map(signature).join("\n\n"), langOf(ref.path))}`;
         }
         put({
           id: node.id, ref: displayRef(node.id), kind: "symbol", tier: codeTier(c), score: c.score * languageAffinity(c), depth: c.depth, mandatory: exactSeeds.has(node.id),
-          levels: levels([["L1", head], ["L2", l2], ["L3", l3]]), via: via(c), ...(loc === undefined ? {} : { source: loc }), file: ref.path,
+          levels: levels([["L1", head], ["L2", l2], ["L3", l3]]), via: via(c), ...(loc === undefined ? {} : { source: loc }),
+          ...(locs.length > 1 ? { locations: locs } : {}), file: ref.path,
         });
         break;
       }
@@ -476,10 +513,12 @@ function dedupeContainers(drafts: Map<string, Draft>, exactSeeds: ReadonlySet<st
       drafts.delete(d.id);
       continue;
     }
-    if (d.kind !== "symbol" || d.source?.startLine === undefined || d.source.endLine === undefined || d.levels[d.levels.length - 1]?.level !== "L3") continue;
-    const { startLine, endLine } = d.source;
-    const inner = all.some((o) => o !== d && o.kind === "symbol" && o.file === d.file && o.source?.startLine !== undefined && o.source.endLine !== undefined
-      && o.source.startLine >= startLine && o.source.endLine <= endLine && (o.source.startLine > startLine || o.source.endLine < endLine));
+    if (d.kind !== "symbol" || d.levels[d.levels.length - 1]?.level !== "L3") continue;
+    // A member inside any location of the Symbol (T24.1) is shown on its own.
+    const ranges = d.locations ?? (d.source === undefined ? [] : [d.source]);
+    const inner = ranges.some(({ startLine, endLine }) => startLine !== undefined && endLine !== undefined && all.some((o) => o !== d && o.kind === "symbol" && o.file === d.file
+      && o.source?.startLine !== undefined && o.source.endLine !== undefined
+      && o.source.startLine >= startLine && o.source.endLine <= endLine && (o.source.startLine > startLine || o.source.endLine < endLine)));
     if (inner && d.levels.length > 1) drafts.set(d.id, { ...d, levels: d.levels.slice(0, -1) });
   }
 }

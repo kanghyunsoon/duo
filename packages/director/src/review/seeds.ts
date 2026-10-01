@@ -1,12 +1,14 @@
 /**
  * Diff seed resolution (TASK-013, C85): the Graph entities a diff touches become explicit Context
- * seeds. Priority: changed Symbol or Test (a hunk overlaps its current range; the innermost one when
- * ranges nest), else the changed File, and Truth definitions whose section a hunk touches. Overlap
+ * seeds. Priority: changed Symbol or Test (a hunk overlaps one of its current ranges; the innermost one
+ * when ranges nest), else the changed File, and Truth definitions whose section a hunk touches. Overlap
  * is not ownership: a seed says "these lines changed inside this entity", nothing more.
+ * A Symbol's ranges are all its locations (T24.1, C217): a hunk in a merged overload seeds that
+ * Symbol, not the enclosing class.
  * Deleted files have no current node; they stay git evidence (deleted-unresolved limitation).
  */
 import { compareUtf8, definitionRef, fileRef, nodeId, STATE_DIR_NAME, type EntityRef, type ProjectTruth, type SourceLocation } from "@duo-director/core";
-import type { GraphNode, GraphReader } from "@duo-director/graph";
+import { nodeLocations, type GraphNode, type GraphReader } from "@duo-director/graph";
 import { displayRef } from "../context/expand.js";
 import type { ChangedFile, ChangedHunk, DiffSeed } from "./types.js";
 
@@ -66,13 +68,16 @@ export function diffSeeds(files: readonly ChangedFile[], graph: GraphReader, tru
       continue;
     }
     const nodes = owned(graph, f.path).filter((n) => n.type === "symbol" || n.type === "test");
+    const ranges = new Map(nodes.map((n) => [n.id, nodeLocations(n)] as const));
     let touched = false;
     for (const h of f.hunks) {
       const range = hunkRange(h);
-      const hits = nodes.filter((n) => overlaps(n.source, range));
+      // The ranges of each node the hunk overlaps (one per node unless a Symbol has several locations).
+      const hits = nodes.map((n) => ({ n, at: (ranges.get(n.id) ?? []).filter((l) => overlaps(l, range)) })).filter((x) => x.at.length > 0);
       // Innermost: a hunk inside a method seeds the method, not also its class.
-      const inner = hits.filter((n) => !hits.some((o) => o !== n && width(o.source) < width(n.source) && overlaps(n.source, [o.source?.startLine ?? 0, o.source?.endLine ?? 0])));
-      for (const n of inner) { put(n.ref, "hunk-overlap", f.path, h.evidenceId); touched = true; }
+      const inner = hits.filter((x) => !hits.some((o) => o !== x
+        && o.at.some((ol) => x.at.some((xl) => width(ol) < width(xl) && overlaps(xl, [ol.startLine ?? 0, ol.endLine ?? 0])))));
+      for (const { n } of inner) { put(n.ref, "hunk-overlap", f.path, h.evidenceId); touched = true; }
     }
     if (!touched) for (const e of f.evidenceIds) put(fileRef(f.path), "file-changed", f.path, e);
   }

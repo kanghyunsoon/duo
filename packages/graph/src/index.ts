@@ -45,6 +45,7 @@ export { ANALYSIS_CACHE_DIR } from "./incremental/analysis-cache.js";
 export { applyGraphDiff, diffScopes, type GraphDiff } from "./incremental/diff.js";
 export { impact, impactSeedsOfFiles, type ImpactItem, type ImpactOptions, type ImpactRelation, type ImpactResult } from "./query/impact.js";
 export { trace, TRACE_EDGE_TYPES } from "./query/trace.js";
+export { nodeLocations } from "./query/locations.js";
 
 export const packageInfo: PackageInfo = {
   name: "@duo-director/graph",

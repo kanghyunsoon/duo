@@ -7,7 +7,7 @@
 import {
   canonicalSourceText, evidenceId, nodeId, sha256Text, sliceSource, type EntityRef, type EvidenceKind, type RepoPath, type SourceLocation,
 } from "@duo-director/core";
-import type { GraphNode } from "@duo-director/graph";
+import { nodeLocations, type GraphNode } from "@duo-director/graph";
 import type { SourceReader } from "../context/retrieve.js";
 import type { EvidenceStore } from "./store.js";
 
@@ -64,15 +64,24 @@ export function documentEvidence(
   }, d.text);
 }
 
-/** A symbol, test or file of the current repository state (a file is referenced, not copied). */
+/**
+ * A symbol, test or file of the current repository state (a file is referenced, not copied). A
+ * Symbol's text is every one of its locations in source order (T24.1, C217: merged overloads), so a
+ * change to any of them changes the content hash; the pointer keeps the primary line range. A
+ * Symbol with one location has the same text and hash as before.
+ */
 export function repositoryEvidence(store: EvidenceStore, reader: SourceReader, node: GraphNode, commit: string): string | undefined {
   const ref = node.ref;
   if (ref.type !== "symbol" && ref.type !== "test" && ref.type !== "file") return undefined;
   let text: string | undefined;
   if (node.source !== undefined && ref.type !== "file") {
-    const slice = reader.slice(node.source);
-    if (slice.value === undefined) return undefined;
-    text = slice.value;
+    const parts: string[] = [];
+    for (const loc of nodeLocations(node)) {
+      const slice = reader.slice(loc);
+      if (slice.value === undefined) return undefined;
+      parts.push(slice.value);
+    }
+    text = parts.join("\n");
   } else {
     text = reader.text(ref.path).value;
   }
