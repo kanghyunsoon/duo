@@ -73,7 +73,7 @@ scanner는 Git이 추적하는 파일과 ignore되지 않은 untracked 파일을
 
 ## Context와 Review
 
-- **Context**: Analyzer가 있는 파일은 Symbol·Test의 정확한 range를 쓴다. generic file 후보의 L2는 **head window**: 처음 40줄과 2,000자 중 먼저 닿는 곳까지의 온전한 줄(한 줄이 더 길면 그 줄을 surrogate pair를 깨지 않고 자름), 파일 전체는 넣지 않는다. Packet의 limitations에 후보 코드의 capability 한계가 들어간다: `structural-analysis-unavailable`, `imports-syntactic`, `imports-partial`, `calls-unresolved`, `calls-same-file`. Python은 `#` 주석 줄도 leading context다. CONTEXT_POLICY_VERSION 2.
+- **Context**: Analyzer가 있는 파일은 Symbol·Test의 정확한 range를 쓴다. 같은 이름의 overload(Java·C#·C++)는 Symbol 하나이고, Context·Evidence·Review는 그 Symbol의 모든 overload 위치를 쓴다(T24.1, C217). overload 하나만 따로 가리키는 identity는 없다(C224). generic file 후보의 L2는 **head window**: 처음 40줄과 2,000자 중 먼저 닿는 곳까지의 온전한 줄(한 줄이 더 길면 그 줄을 surrogate pair를 깨지 않고 자름), 파일 전체는 넣지 않는다. Packet의 limitations에 후보 코드의 capability 한계가 들어간다: `structural-analysis-unavailable`, `imports-syntactic`, `imports-partial`, `calls-unresolved`, `calls-same-file`. Python은 `#` 주석 줄도 leading context다. CONTEXT_POLICY_VERSION 2.
 - **Review**: 변경된 파일의 limitation이 같은 code로 붙는다(문서·데이터 파일 제외). Analyzer가 없다는 이유로 claim이 생기지 않는다: scope drift는 structural 파일만 보고, test-coverage는 바뀐 구현 파일 중 test를 볼 수 있는 언어가 없으면 PARTIAL 대신 UNKNOWN(`tests-not-analyzable`, 경고 아님)이다. PASS의 뜻은 그대로: 가진 evidence 범위에서 방향 위반을 찾지 못함.
 - **Impact**: 관련 파일 언어의 limitation을 `limitations`로 더한다(Graph에 기록된 관계만).
 - **Adoption Baseline**: `analysis.structuralLanguages`와 registry digest를 기록한다(T18.0 이전 record는 TS/JS로 본다). baseline을 다시 해석하지 않는다. baseline 당시 구조 분석이 없던 언어의 Symbol 위반이 baseline에 없으면 provenance `unverified-at-adoption`: 경고는 하되 BLOCK하지 않는다.

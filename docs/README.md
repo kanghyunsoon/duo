@@ -29,6 +29,7 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [release/product-contract.md](release/product-contract.md) | 0.1.0 제품 계약 15개와 검증 위치(RC artifact / workspace) |
 | [roadmap/0.1.1-hardening.md](roadmap/0.1.1-hardening.md) | T21 Post-release Hardening: Windows UI E2E 원인과 수정, publish 후 검증, freshness profile, Node 22 실험, UX gap, 다음 버전 후보 |
 | [roadmap/0.2.0-audit.md](roadmap/0.2.0-audit.md) | T22 0.2.0 Audit: 0.1.2 security 해결 기록, real-world 성능 5개 저장소, freshness 결론, L1 correctness issue, Context 품질, analyzer matrix, Node 22, onboarding, provider 결정점, 0.2.0 milestone 제안, T23 spec |
+| [roadmap/0.2.0-t24-overloads.md](roadmap/0.2.0-t24-overloads.md) | T24.1 overload evidence completeness(C217): Symbol identity lifecycle, repository evolution 실험, 설계안 A·B·C·D 비교, 위치 규칙, migration gate, 검증, signature 조사, T24.2 제안 |
 | [conflicts.md](conflicts.md) | 원본 충돌, Human 결정 기록(H-*), 미결 사항 |
 | [adr/](adr/README.md) | ADR-001~014 |
 | [tasks/TASKS.md](tasks/TASKS.md) | TASK-000~020(TASK-012A/012B 포함), 의존성, E2E 매핑 |
