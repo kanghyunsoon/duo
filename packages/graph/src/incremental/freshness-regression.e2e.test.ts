@@ -242,3 +242,50 @@ describe("freshness regression (T25.1)", () => {
   });
 });
 
+
+/** T25.2 scan and fingerprint inputs: each step changes one input, and the answer is checked before and after one index. */
+describe("freshness regression: scan and fingerprint inputs (T25.2)", () => {
+  it("Truth edit and delete, symlink replacement, empty file, large file, ignored file, nested .gitignore", async () => {
+    const repo = makeRepo(temps, {
+      ...FILES,
+      ".duo-project/intent/vision.md": "# Vision\n\nFresh.\n",
+      "assets/big.dat": "x".repeat(3 * 1024 * 1024),
+      ".gitignore": "*.log\n",
+    });
+    const store = memoryStore();
+    let symlinks = true;
+    try {
+      const first = await indexRepository(repo.root, { store, registry: base });
+      if (first.value === undefined) throw new Error(JSON.stringify(first.diagnostics));
+      // parse is a function so the symlink step can depend on whether this OS let the test create a symlink (Windows without the privilege: a plain edit).
+      type Step = [label: string, change: () => void, status: "current" | "stale", parse: () => string[], check?: (i: Awaited<ReturnType<typeof inspect>>) => void];
+      const steps: Step[] = [
+        ["Truth file edit", () => repo.write(".duo-project/intent/vision.md", "# Vision\n\nFresher.\n"), "stale", () => [], (i) => expect(i.wouldRebuild.projectTruth).toBe(true)],
+        ["Truth file delete", () => repo.remove(".duo-project/intent/vision.md"), "stale", () => [], (i) => expect(i.wouldRebuild.projectTruth).toBe(true)],
+        ["symlink replaces a source file", () => {
+          repo.remove("src/b.ts");
+          try { fs.symlinkSync("a.ts", path.join(repo.root, "src/b.ts")); } catch { symlinks = false; repo.write("src/b.ts", "import { a } from \"./a\";\nexport const b = (): number => a() + 1;\n"); }
+        }, "stale", () => (symlinks ? [] : ["src/b.ts"]), (i) => expect(recordOf(i, "src/b.ts")).toMatchObject(symlinks ? { file: "deleted" } : { file: "changed" })],
+        ["empty file added", () => repo.write("src/empty.ts", ""), "stale", () => ["src/empty.ts"], (i) => expect(recordOf(i, "src/empty.ts")).toMatchObject({ file: "added" })],
+        ["large file edited (last byte)", () => repo.write("assets/big.dat", "x".repeat(3 * 1024 * 1024 - 1) + "y"), "stale", () => [], (i) => expect(recordOf(i, "assets/big.dat")).toMatchObject({ file: "changed" })],
+        ["ignored binary-like file appears", () => fs.writeFileSync(path.join(repo.root, "debug.log"), Buffer.from([0, 1, 2, 255, 0, 13, 10])), "current", () => [], (i) => expect(recordOf(i, "debug.log")).toBeUndefined()],
+        ["ignored file changes", () => fs.writeFileSync(path.join(repo.root, "debug.log"), Buffer.from([9, 9, 9])), "current", () => []],
+        ["nested .gitignore hides a new file", () => { repo.write("src/gen/out.ts", "export const out = 1;\n"); repo.write("src/.gitignore", "gen/\n"); }, "stale", () => [], (i) => expect(recordOf(i, "src/gen/out.ts")).toBeUndefined()],
+        ["nested .gitignore change reveals it", () => repo.write("src/.gitignore", "other/\n"), "stale", () => ["src/gen/out.ts"], (i) => expect(recordOf(i, "src/gen/out.ts")).toMatchObject({ file: "added" })],
+      ];
+      for (const [label, change, status, parse, check] of steps) {
+        change();
+        const i = await inspect(repo, store);
+        expect(i.status, label).toBe(status);
+        expect(i.wouldRebuild.parse, label).toEqual(parse());
+        check?.(i);
+        expect(await inspect(repo, store), label).toEqual(i);
+        await indexRepository(repo.root, { store, registry: base });
+        expect((await inspect(repo, store)).status, label).toBe("current");
+        expect(dumpGraph(store), label).toEqual(await cleanRebuild(repo.root, base, 500));
+      }
+    } finally {
+      store.close();
+    }
+  });
+});
