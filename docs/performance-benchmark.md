@@ -209,7 +209,7 @@ node bench/compare.mjs a.json[,a2.json] b.json[,b2.json]
 
 source 저장소에는 commit하지 않는다.
 
-**결과 형식(internal, 공개 계약 아님).** suite 결과는 `duo.bench-realworld/1`, 저장소별 runner 출력은 `duo.bench-realworld-run/1`이다.
+**결과 형식(internal, 공개 계약 아님).** suite 결과는 `duo.bench-realworld/2`, 저장소별 runner 출력은 `duo.bench-realworld-run/2`이다. /2(T24.3, C230)는 Context 파일 집계에 File item(L1: 경로와 언어, `source` 없음)을 넣고 파일마다 가장 높은 level(`levels`)을 기록한다. /1은 `source`가 있는 item만 세서 File item으로 들어온 파일을 missing으로 보고했다. compare는 같은 형식끼리만 비교한다(섞이면 exit 2). `--duo-root`는 다른 checkout의 build(CLI와 package)를 이 checkout의 runner로 잰다: A와 B가 같은 harness와 집계를 쓴다.
 
 | 구분 | 필드 | 비교 |
 |---|---|---|

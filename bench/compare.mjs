@@ -4,7 +4,7 @@
 // TASK-019 synthetic (bench/run.mjs):  node bench/compare.mjs <before.json> <after.json>
 //   Packet dependency digests and statuses, expected-entity coverage, parse/reuse counts, Review verdicts, claims with
 //   provenance and Evidence IDs.
-// T23 real-world (bench/realworld-suite.mjs, duo.bench-realworld/1):  node bench/compare.mjs <a.json[,a2.json…]> <b.json[,b2.json…]>
+// T23 real-world (bench/realworld-suite.mjs, duo.bench-realworld/2; /1 files compare only with /1):  node bench/compare.mjs <a.json[,a2.json…]> <b.json[,b2.json…]>
 //   Every deterministic field of every repository measured on both sides. Several files per side (A/B/A/B rounds of one
 //   session) must agree among themselves; timings are then medians. B/A ratios are printed only when both sides ran
 //   on the same machine and Node; they are observations of that session, not a general speed-up claim.
@@ -15,7 +15,13 @@ if (!beforeArg || !afterArg) throw new Error('usage: node bench/compare.mjs <bef
 const read = (list) => list.split(',').filter(Boolean).map((f) => ({ file: f, json: JSON.parse(fs.readFileSync(f, 'utf8')) }));
 const beforeDocs = read(beforeArg);
 const afterDocs = read(afterArg);
-if ([...beforeDocs, ...afterDocs].every((d) => d.json.format === 'duo.bench-realworld/1')) compareRealWorld(beforeDocs, afterDocs);
+const realWorldFormats = new Set([...beforeDocs, ...afterDocs].map((d) => d.json.format).filter((f) => /^duo\.bench-realworld\/\d+$/u.test(String(f))));
+if (realWorldFormats.size > 1 || (realWorldFormats.size === 1 && [...beforeDocs, ...afterDocs].some((d) => !realWorldFormats.has(d.json.format)))) {
+  // Different harness versions account differently (/2 counts File items, C230): not comparable.
+  console.error('Not comparable: different benchmark formats ' + [...new Set([...beforeDocs, ...afterDocs].map((d) => d.json.format))].join(', '));
+  process.exit(2);
+}
+if (realWorldFormats.size === 1) compareRealWorld(beforeDocs, afterDocs);
 else compareSynthetic(beforeDocs[0].json, afterDocs[0].json);
 
 function compareSynthetic(before, after) {

@@ -2,9 +2,10 @@
 // resets it to a pristine checkout and runs bench/realworld.mjs on it, one process per repository.
 //   node bench/realworld-suite.mjs [--only id,id | --ci] [--out file] [--duo-root <DUO checkout>] [--runs N]
 //                                  [--work <dir>] [--fetch-only | --no-fetch] [--keep] [--cleanup]
-// --duo-root runs the runner of another DUO checkout (its own build) on the same pinned repositories: the A/B setup.
+// --duo-root measures another DUO checkout's build (its CLI and packages) with this checkout's runner on the same pinned
+// repositories: the A/B setup. Both sides use the same harness and accounting (T24.3, C230); the other checkout only needs pnpm build.
 // Clones live under --work (default: <OS temp>/duo-bench-repos), never inside the DUO repository; they are removed after
-// measuring unless --keep. Result (internal format duo.bench-realworld/1): --out, default bench/results/local/realworld.json.
+// measuring unless --keep. Result (internal format duo.bench-realworld/2): --out, default bench/results/local/realworld.json.
 // Exit: 0 ok, 1 DUO correctness failure (a runner check failed), 3 harness failure, 2 network failure (fetch).
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -24,14 +25,14 @@ const runs = arg("runs") ?? "3";
 const only = arg("only")?.split(",").filter(Boolean);
 const selected = REPOS.filter((r) => (only === undefined || only.includes(r.id)) && (!flag("ci") || r.ci));
 if (only !== undefined) for (const id of only) if (!REPOS.some((r) => r.id === id)) throw new Error("unknown repository id " + id);
-const runner = path.join(duoRoot, "bench", "realworld.mjs");
+const runner = path.join(here, "bench", "realworld.mjs");
 const scrub = (t) => String(t).split(work).join("<work>").split(duoRoot).join("<duo>").split(os.homedir()).join("<home>").slice(-3000);
 const git = (cwd, ...a) => execFileSync("git", a, { cwd, encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 }).trim();
 
 if (flag("cleanup")) { fs.rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); console.error("removed " + scrub(work)); process.exit(0); }
 let gitVersion;
 try { gitVersion = git(here, "--version"); } catch (e) { console.error("harness failure: git is not available: " + scrub(e.message)); process.exit(3); }
-if (!flag("fetch-only") && !fs.existsSync(runner)) { console.error("harness failure: no bench/realworld.mjs in --duo-root"); process.exit(3); }
+if (!flag("fetch-only") && !fs.existsSync(path.join(duoRoot, "package.json"))) { console.error("harness failure: --duo-root is not a DUO checkout"); process.exit(3); }
 if (!flag("fetch-only") && !fs.existsSync(path.join(duoRoot, "apps", "cli", "dist", "main.js"))) { console.error("harness failure: --duo-root is not built (pnpm build)"); process.exit(3); }
 
 // Minimal fetch of one commit. core.autocrlf=false keeps bytes as committed on every OS (no CRLF rewriting);
@@ -70,10 +71,10 @@ for (const r of selected) {
   try { head = pristine(r, dir); } catch (e) { results[r.id] = { status: "harness-failure", sha: r.sha, error: "checkout: " + scrub(e.stderr || e.message) }; fail(3); continue; }
   if (head !== r.sha) { results[r.id] = { status: "harness-failure", sha: r.sha, error: "checkout at " + head }; fail(3); continue; }
   console.error(r.id + ": measuring");
-  const p = spawnSync(process.execPath, [runner, "--repo", dir, "--id", r.id, "--runs", runs], { encoding: "utf8", windowsHide: true, maxBuffer: 256 * 1024 * 1024 });
+  const p = spawnSync(process.execPath, [runner, "--repo", dir, "--id", r.id, "--runs", runs, "--duo-root", duoRoot], { encoding: "utf8", windowsHide: true, maxBuffer: 256 * 1024 * 1024 });
   let run;
   try { run = JSON.parse(p.stdout); } catch { /* below */ }
-  if (p.status !== 0 || run?.format !== "duo.bench-realworld-run/1") {
+  if (p.status !== 0 || run?.format !== "duo.bench-realworld-run/2") {
     results[r.id] = { status: "harness-failure", sha: r.sha, error: scrub(p.stderr || p.stdout || "exit " + p.status) }; fail(3);
   } else {
     const failed = run.checks.filter((c) => !c.ok);
@@ -88,7 +89,7 @@ for (const r of selected) {
 if (!flag("fetch-only")) {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify({
-    format: "duo.bench-realworld/1", manifest: MANIFEST_FORMAT, runs: Number(runs),
+    format: "duo.bench-realworld/2", manifest: MANIFEST_FORMAT, runs: Number(runs),
     machine: { platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model ?? "unknown", cores: os.cpus().length, memGB: Math.round(os.totalmem() / 2 ** 30), node: process.version, git: gitVersion },
     results,
   }, null, 1) + "\n");

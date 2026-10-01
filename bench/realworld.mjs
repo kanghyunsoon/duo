@@ -1,6 +1,10 @@
 // T23 stable real-world runner: measures one pinned repository checkout in its own process (so RSS is its own).
-//   node bench/realworld.mjs --repo <pristine checkout of the manifest SHA> --id <manifest id> [--runs 3]
-// Prints one JSON document (internal format duo.bench-realworld-run/1, not a DUO public contract) on stdout.
+//   node bench/realworld.mjs --repo <pristine checkout of the manifest SHA> --id <manifest id> [--runs 3] [--duo-root <DUO checkout>]
+// Prints one JSON document (internal format duo.bench-realworld-run/2, not a DUO public contract) on stdout.
+// --duo-root: the DUO build to measure (its CLI and packages; default: this checkout). The harness itself is always this
+// file, so an A/B comparison measures two builds with the same accounting (T24.3, C230).
+// /2 (C230): Context file accounting counts every Packet item by its file, File items (L1: path and language, no
+// source) included, and records the best level per file; /1 counted only items with a source location.
 // "deterministic" must be identical for the same repository SHA, DUO build and scenario; "timings", "memory" and
 // "operations" are environment-dependent observations and never a gate. "checks" are the harness invariants:
 // a failed check is a DUO correctness failure. Counters wrap Node built-ins in this process only; product code is unchanged.
@@ -9,9 +13,10 @@ import cp, { execFileSync, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { EDITS, REPOS } from "./realworld-repos.mjs";
 
 const arg = (n) => { const i = process.argv.indexOf("--" + n); return i < 0 ? undefined : process.argv[i + 1]; };
@@ -19,8 +24,11 @@ const repo = REPOS.find((r) => r.id === arg("id"));
 if (repo === undefined || arg("repo") === undefined) throw new Error("usage: node bench/realworld.mjs --repo <checkout> --id <" + REPOS.map((r) => r.id).join("|") + "> [--runs N]");
 const root = fs.realpathSync(path.resolve(arg("repo")));
 const runs = Number(arg("runs") ?? 3);
-const DUO = fileURLToPath(new URL("..", import.meta.url));
-const CLI = fileURLToPath(new URL("../apps/cli/dist/main.js", import.meta.url));
+const DUO = path.resolve(arg("duo-root") ?? fileURLToPath(new URL("..", import.meta.url)));
+const CLI = path.join(DUO, "apps", "cli", "dist", "main.js");
+// The measured build's packages, resolved from its own checkout (never from this harness's node_modules).
+const duoRequire = createRequire(path.join(DUO, "package.json"));
+const product = (name) => import(pathToFileURL(duoRequire.resolve(name)).href);
 const STATE = ".duo-project/";
 const git = (cwd, ...a) => execFileSync("git", a, { cwd, encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024 }).trim();
 // git config --get exits 1 when the key is unset (the Linux and macOS default for core.symlinks).
@@ -60,10 +68,10 @@ try { initJson = JSON.parse(init.stdout); } catch { /* reported by the check bel
 check("init-succeeded", init.status === 0 && initJson !== null, init.status === 0 ? undefined : "exit " + init.status);
 
 s = performance.now();
-const { createDefaultAnalyzerRegistry, scanRepository } = await import("@duo-director/analyzer");
-const { loadProjectTruth } = await import("@duo-director/core");
-const { dumpGraph, indexRepository, inspectIndex, openProjectGraphReader, openProjectGraphStore } = await import("@duo-director/graph");
-const { projectContext, projectReview } = await import("@duo-director/integration");
+const { createDefaultAnalyzerRegistry, scanRepository } = await product("@duo-director/analyzer");
+const { loadProjectTruth } = await product("@duo-director/core");
+const { dumpGraph, indexRepository, inspectIndex, openProjectGraphReader, openProjectGraphStore } = await product("@duo-director/graph");
+const { projectContext, projectReview } = await product("@duo-director/integration");
 timings.importMs = ms(s);
 s = performance.now();
 const registry = (await createDefaultAnalyzerRegistry()).value;
@@ -137,10 +145,14 @@ try {
     timings.contextMs[sc.id] = t;
     const packet = payload?.context?.packet;
     const items = packet === undefined ? [] : [...packet.code, ...packet.tests];
-    const files = [...new Set(items.map((x) => x.source?.path).filter(Boolean))].sort(byText);
+    // A File item (kind "file") has no source: its ref is the repository path. Symbol and Test items carry their source.
+    const fileOf = (x) => (x.kind === "file" ? x.ref : x.source?.path);
+    const levelOf = new Map();
+    for (const x of items) { const f = fileOf(x); if (f !== undefined && byText(levelOf.get(f) ?? "", x.level) < 0) levelOf.set(f, x.level); }
+    const files = [...levelOf.keys()].sort(byText);
     const found = sc.expect.filter((e) => files.some((f) => f.endsWith(e)));
     contexts[sc.id] = {
-      status: payload?.status ?? "failed", files, found, missing: sc.expect.filter((e) => !found.includes(e)),
+      status: payload?.status ?? "failed", files, levels: Object.fromEntries(files.map((f) => [f, levelOf.get(f)])), found, missing: sc.expect.filter((e) => !found.includes(e)),
       dependencyDigest: packet?.dependencyDigest ?? null, omitted: packet?.omittedCandidates?.length ?? null, truncated: packet?.truncated ?? null,
     };
   }
@@ -194,7 +206,7 @@ try {
   check("no-absolute-path", !serialized.includes(root) && !serialized.includes(root.split(path.sep).join("/")));
 
   console.log(JSON.stringify({
-    format: "duo.bench-realworld-run/1",
+    format: "duo.bench-realworld-run/2",
     repo: { id: repo.id, sha: head, shape: repo.shape },
     build: {
       duoCommit: git(DUO, "rev-parse", "HEAD"), duoDirty: git(DUO, "status", "--porcelain", "--untracked-files=no") !== "",
