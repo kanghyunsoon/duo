@@ -26,7 +26,12 @@ export interface Evidence {
   readonly kind: EvidenceKind;
   readonly entity?: EntityRef;
   readonly source?: SourceLocation;
-  /** sha256 of the exact content this evidence stands for (slice, hunk lines, test result). */
+  /**
+   * sha256 of the exact content this evidence stands for (slice, hunk lines, test result). A Symbol with
+   * several locations (merged overloads, T24.1) stands for all of them: their exact slices in source order,
+   * joined by "\n". The pointer then shows its primary range only, so the pointer alone does not reproduce
+   * the hash; nothing re-verifies a hash through its pointer (C227).
+   */
   readonly contentHash?: string;
   readonly summary?: string;
   /** The pointer a recorded Review keeps instead of the content (ADR-006, AC-013-05). */

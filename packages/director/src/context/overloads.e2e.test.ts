@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { AnalyzerRegistry } from "@duo-director/analyzer";
-import { nodeId, symbolRef, type RepoPath } from "@duo-director/core";
+import { nodeId, sha256Text, symbolRef, type RepoPath } from "@duo-director/core";
 import { nodeLocations, openProjectGraphStore, type GraphNode } from "@duo-director/graph";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { repositoryEvidence } from "../evidence/sources.js";
@@ -194,6 +194,27 @@ describe.each(LANGS)("$name overloads (T24.1, C217)", (l) => {
     expect(unchanged).toBeDefined();
     expect(edited).toBeDefined();
     expect(edited).not.toBe(unchanged);
+  });
+
+  it("Evidence invariant (T24.2, C227): the hash is the Symbol aggregate, the pointer is the primary range", async () => {
+    await evolve(["one", "two"], ["one", "two"]);
+    const node = symbolNode(repo, l) as GraphNode;
+    const store = new EvidenceStore();
+    const reader = new SourceReader(repo.root);
+    const e = store.get(repositoryEvidence(store, reader, node, "WORKTREE") as string);
+    const locs = nodeLocations(node);
+    expect(locs).toHaveLength(2);
+    // contentHash: sha256 of every location's exact slice, in source order, joined by "\n".
+    expect(e?.contentHash).toBe(sha256Text(locs.map((x) => reader.slice(x).value).join("\n")));
+    // The pointer shows where the Symbol is (its primary range); re-reading it alone does not reproduce the hash.
+    expect(e?.pointer.lines).toEqual([node.source?.startLine, node.source?.endLine]);
+    expect(e?.contentHash).not.toBe(sha256Text(reader.slice(node.source as NonNullable<GraphNode["source"]>).value ?? ""));
+    // One location: the pointer slice reproduces the hash (unchanged since T24.1).
+    await evolve(["one"], ["one"]);
+    const single = symbolNode(repo, l) as GraphNode;
+    const s = new EvidenceStore();
+    const se = s.get(repositoryEvidence(s, new SourceReader(repo.root), single, "WORKTREE") as string);
+    expect(se?.contentHash).toBe(sha256Text(new SourceReader(repo.root).slice(single.source as NonNullable<GraphNode["source"]>).value ?? ""));
   });
 
   it("a Symbol without overloads keeps its text and hash; the enclosing type is unchanged", async () => {
