@@ -16,7 +16,7 @@ import { CALL_RESOLUTION_VERSION, RELATION_RULES_VERSION } from "../build/builde
 import { HISTORY_WINDOW } from "../build/history.js";
 import { MODULE_RESOLUTION_VERSION } from "../build/resolve/languages.js";
 import type { CallResolutionFreshness } from "../build/types.js";
-import { readCachedAnalysis } from "./analysis-cache.js";
+import { cachedAnalysesValid, type AnalysisCacheKey } from "./analysis-cache.js";
 import {
   analysisFreshnessOf, FILE_FRESHNESS, loadPreviousState, moduleFreshnessOf, resolutionSignals, STATE_PREFIX, type IndexedGraph,
 } from "./assess.js";
@@ -122,6 +122,8 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
   const byLanguage = new Map<string, { files: number; analyzer: string; capabilities: AnalyzerCapabilities }>();
   const fileOnly = new Map<string, number>();
   const analyzerRegistryDigest = registry.digest();
+  // Files whose freshness rests on their cache entry, checked together below (T25.1), in this loop's order.
+  const pending: { readonly path: RepoPath; readonly key: AnalysisCacheKey }[] = [];
   try {
     for (const f of current) {
       if (f.path.startsWith(STATE_PREFIX)) continue;
@@ -135,13 +137,18 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
       const language = selection.languageFor(f.path) ?? analyzer.id;
       const entry = byLanguage.get(language) ?? { files: 0, analyzer: analyzer.id, capabilities: analyzer.capabilities };
       byLanguage.set(language, { ...entry, files: entry.files + 1 });
-      let freshness = analysisFreshnessOf(previous, prevFiles.get(f.path), f, analyzer);
-      if (freshness === "fresh" && readCachedAnalysis(rootDir, { path: f.path, contentHash: f.contentHash, analyzer: analyzer.id, analyzerIdentity: analyzer.identity }) === undefined) {
-        freshness = "missing";
-      }
+      const freshness = analysisFreshnessOf(previous, prevFiles.get(f.path), f, analyzer);
+      if (freshness === "fresh") pending.push({ path: f.path, key: { path: f.path, contentHash: f.contentHash, analyzer: analyzer.id, analyzerIdentity: analyzer.identity } });
       analysis.set(f.path, freshness);
       if (freshness !== "fresh") changedFiles.add(f.path);
     }
+    // A fresh file without a valid cache entry is missing (the Indexer makes the same check).
+    const valid = await cachedAnalysesValid(rootDir, pending.map((p) => p.key));
+    pending.forEach((p, i) => {
+      if (valid[i] === true) return;
+      analysis.set(p.path, "missing");
+      changedFiles.add(p.path);
+    });
   } finally {
     if (options.registry === undefined) registry.dispose();
   }

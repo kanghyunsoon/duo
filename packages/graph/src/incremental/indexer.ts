@@ -33,7 +33,7 @@ import { fileScope, scopeDigests, TRUTH_SCOPE } from "../build/scope.js";
 import type { AnalyzedFile, FileResolution, HistorySummary, ResolutionMemo } from "../build/types.js";
 import { openNodeSqliteGraphStore } from "../store/node-sqlite/node-sqlite-graph-store.js";
 import { GraphStoreError, type GraphOpenResult, type GraphStore } from "../store/types.js";
-import { pruneAnalysisCache, readCachedAnalysis, writeCachedAnalysis, type AnalysisCacheKey } from "./analysis-cache.js";
+import { pruneAnalysisCache, readCachedAnalyses, writeCachedAnalysis, type AnalysisCacheKey } from "./analysis-cache.js";
 import {
   analysisFreshnessOf, FILE_FRESHNESS, hashOnDisk, loadPreviousState, moduleFreshnessOf, resolutionSignals, STATE_PREFIX,
 } from "./assess.js";
@@ -147,6 +147,10 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   let analyzed = 0;
   let analysisReused = 0;
   try {
+    // Pass 1: analyzer, language and freshness per file in scan order; the cache entries of fresh files are then
+    // read together (T25.1). Pass 2 handles the files in the same order as before, so the analyses, diagnostics and
+    // metrics are the same as reading each entry in turn.
+    const planned: { f: (typeof current)[number]; analyzer: NonNullable<ReturnType<typeof selection.analyzerFor>>; language: string; freshness: AnalysisFreshness; key: AnalysisCacheKey }[] = [];
     for (const f of current) {
       if (f.path.startsWith(STATE_PREFIX)) continue;
       const analyzer = selection.analyzerFor(f.path);
@@ -157,11 +161,18 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
       const language = analyzer.languages.length === 1 ? (analyzer.languages[0] as string) : analyzer.id;
       lang(language).files++;
       const prev = prevFiles.get(f.path);
-      let freshness: AnalysisFreshness = analysisFreshnessOf(previous, prev, f, analyzer);
+      const freshness: AnalysisFreshness = analysisFreshnessOf(previous, prev, f, analyzer);
       const key: AnalysisCacheKey = { path: f.path, contentHash: f.contentHash, analyzer: analyzer.id, analyzerIdentity: analyzer.identity };
+      planned.push({ f, analyzer, language, freshness, key });
+    }
+    const fresh = planned.filter((x) => x.freshness === "fresh");
+    const entries = await readCachedAnalyses(rootDir, fresh.map((x) => x.key));
+    const cachedOf = new Map(fresh.map((x, i) => [x.f.path, entries[i]] as const));
+    for (const { f, analyzer, language, key, ...rest } of planned) {
+      let freshness = rest.freshness;
       const facts = { analyzerVersion: analyzer.version, callResolution: analyzer.callResolution, capabilities: analyzer.capabilities };
       const stateOf = (status: "ok" | "failed") => ({ analyzer: analyzer.id, version: analyzer.version, identity: analyzer.identity, status });
-      const cached = freshness === "fresh" ? readCachedAnalysis(rootDir, key) : undefined;
+      const cached = freshness === "fresh" ? cachedOf.get(f.path) : undefined;
       if (freshness === "fresh" && cached === undefined) freshness = "missing";
       analysisFreshness.set(f.path, freshness);
       if (cached !== undefined) {

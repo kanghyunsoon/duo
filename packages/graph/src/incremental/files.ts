@@ -31,6 +31,30 @@ export function readRegenerable(root: string, repoPath: string): { readonly text
   }
 }
 
+/** symlinkOnPath with asynchronous lstat: the same segments, in the same order, with the same result. */
+async function symlinkOnPathAsync(root: string, repoPath: string): Promise<string | undefined> {
+  const segments = repoPath.split("/");
+  for (let i = 1; i <= segments.length; i++) {
+    const partial = segments.slice(0, i).join("/");
+    try {
+      if ((await fs.promises.lstat(path.join(root, partial))).isSymbolicLink()) return partial;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/** readRegenerable with asynchronous I/O (T25.1): the same checks and the same result for the same file system. Never rejects. */
+export async function readRegenerableAsync(root: string, repoPath: string): Promise<{ readonly text?: string; readonly error?: string }> {
+  if (await symlinkOnPathAsync(root, repoPath) !== undefined) return { error: "the path contains a symlink" };
+  try {
+    return { text: await fs.promises.readFile(path.join(root, repoPath), "utf8") };
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? {} : { error: (error as Error).message };
+  }
+}
+
 export function writeRegenerable(root: string, repoPath: string, text: string): ParseResult<RepoPath> {
   const allowed = checkWriteBoundary(root, repoPath, "regenerable");
   if (allowed.value === undefined) return failure(allowed.diagnostics);
