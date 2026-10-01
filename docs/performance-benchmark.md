@@ -64,7 +64,7 @@ large cold no-op(정상 상태): module import 0.9 s, registry 0.06 s, SQLite op
 
 `inspectIndex`(status, context, review가 공유)는 정상 상태 large에서 2.1~2.4 s, medium 0.9~1.0 s, small 0.55~0.69 s다. 내용은 scan, fingerprint, 파일별 분석 cache의 존재와 유효성 확인(각 항목을 읽고 parse), Git 상태다. 저장소 크기에 비례하며 mtime, TTL, watcher 없이 contentHash로만 판정한다.
 
-위 수치는 TASK-019 당시 값이다. T25.1(analysis cache 확인 동시성 16, show-prefix 공유) 전후의 같은 세션 비교는 [T25.1](roadmap/0.2.0-t25-freshness.md#6-build-0--a--b--ab)에 따로 두며, 판정은 바뀌지 않았다.
+위 수치는 TASK-019 당시 값이다. T25.1(analysis cache 확인 동시성 16, show-prefix 공유) 전후의 같은 세션 비교는 [T25.1](roadmap/0.2.0-t25-freshness.md#6-build-0--a--b--ab)에 따로 두며, 판정은 바뀌지 않았다. 남은 scan·fingerprint 비용의 분해(Git process, 모든 byte의 읽기와 SHA-256, 파일당 고정비)는 [T25.2](roadmap/0.2.0-t25-scan-fingerprint.md)에 있다.
 
 ## Context
 
