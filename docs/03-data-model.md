@@ -583,12 +583,12 @@ director `planInit(root, options?)`는 읽기 전용으로 `InitPlan`(`duo.init-
 
 ### Evidence
 
-core `Evidence { id, basis, kind, entity?, source?, contentHash?, summary?, pointer, metadata? }`(C44). `basis`는 `project-truth`, `repository`, `git`, `test`, `llm`이다. ID는 `ev-` + hash(basis, kind, key)이고 key는 내용 기반이다: Truth는 정의 ID + 정확한 slice hash, repository는 Node ID + slice hash, Git hunk는 경로 + 이전 경로 + hunk 줄 hash, test는 command + test + 상태. 줄 번호만으로 identity를 만들지 않는다.
+core `Evidence { id, basis, kind, entity?, source?, contentHash?, summary?, pointer, metadata? }`(C44). `basis`는 `project-truth`, `repository`, `git`, `test`, `llm`이다. ID는 `ev-` + hash(basis, kind, key)이고 key는 내용 기반이다: Truth는 정의 ID + 정확한 slice hash, repository는 Node ID + slice hash(위치가 여럿인 Symbol은 모든 위치 slice를 source 순서로 이은 text의 hash, C227), Git hunk는 경로 + 이전 경로 + hunk 줄 hash, test는 command + test + 상태. 줄 번호만으로 identity를 만들지 않는다.
 
 | basis | 내용 | pointer |
 |---|---|---|
 | project-truth | Requirement·Decision·Constraint의 정확한 정의 slice(T09.1). diff 이전 쪽 정의는 `metadata.side` | kind, id, path, lines, content_hash |
-| repository | 변경 후 Symbol·Test slice, File(내용은 참조만) | kind, path, symbol, lines, commit, content_hash |
+| repository | 변경 후 Symbol·Test slice(Symbol은 모든 위치, T24.1), File(내용은 참조만) | kind, path, symbol, lines(primary 범위, 표시용), commit, content_hash |
 | git | hunk 하나(전체 diff 문자열이 아님), 또는 hunk 없는 변경 기록(삭제, binary, rename: oldPath, similarity, old/new blob) | kind diff, path, lines, change, commit |
 | test | 호출자가 준 테스트 실행 결과. Test Node의 존재와 실행 성공은 다른 사실이다 | kind test, path, symbol(test 이름) |
 | llm | Provider 답변(`semanticAssist.evidence`에만) | kind llm |
