@@ -53,6 +53,8 @@ export interface IndexState {
   readonly graphSchemaVersion: number;
   readonly moduleResolutionVersion: string;
   readonly callResolutionVersion: number;
+  /** Graph builder relation rules (T24.5, builder RELATION_RULES_VERSION). Absent in a state written before T24.5. */
+  readonly relationRulesVersion?: number;
   /** Analyzer ID → identity of the registry that wrote this state (T18.0). */
   readonly analyzers: Readonly<Record<string, string>>;
   /** AnalyzerRegistry.digest(): changes whenever an analyzer is added, removed or changed. */
@@ -129,6 +131,7 @@ const indexState = z.strictObject({
   graphSchemaVersion: z.number().int(),
   moduleResolutionVersion: z.string(),
   callResolutionVersion: z.number().int(),
+  relationRulesVersion: z.number().int().optional(),
   analyzers: z.record(z.string(), z.string()),
   analyzerRegistryDigest: z.string(),
   historyWindow: z.number().int().positive(),

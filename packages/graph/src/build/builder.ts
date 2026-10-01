@@ -21,7 +21,7 @@ import {
 import { GRAPH_EDGE_TYPES, type GraphEdgeInput, type GraphEdgeType, type GraphNodeInput, type JsonObject } from "../store/types.js";
 import { canonicalJson } from "../store/json.js";
 import { attachAnnotation, type AttachmentCandidate } from "./annotations.js";
-import { declarationLinks } from "./declaration-links.js";
+import { declarationLinks, type DeclarationLink } from "./declaration-links.js";
 import { isEdgeEndpointAllowed } from "./endpoints.js";
 import { ExportIndex, type ExportLookup } from "./exports.js";
 import { payloadProblem } from "./payload.js";
@@ -37,6 +37,24 @@ const STATE_PREFIX = `${STATE_DIR_NAME}/`;
 
 /** Version of the call resolution rules. Stored call results with another version are recomputed (TASK-008). */
 export const CALL_RESOLUTION_VERSION = 1;
+
+/**
+ * Version of the Graph builder's relation rules that no analyzer identity or resolver version covers:
+ * declared Truth references (T24.5: a C++ declaration / definition group, C231) and annotation targets
+ * (T24.4: every Symbol location). The index state records it; an index written with another value (or
+ * none, before T24.5) is stale, and one index run applies the rules again (cached analyses are reused).
+ */
+export const RELATION_RULES_VERSION = 1;
+
+/** A declared Symbol reference with several matches, decided once the run's declaration links exist (T24.5). */
+interface PendingReference {
+  readonly owner: EntityRef;
+  readonly name: string;
+  readonly field: string;
+  readonly at: SourceLocation;
+  readonly found: readonly { file: RepoPath; symbol: AnalyzedSymbol }[];
+  readonly resolved: (s: SymbolRef) => void;
+}
 
 type Json = JsonObject;
 const json = (value: object): Json => JSON.parse(JSON.stringify(value)) as Json;
@@ -101,6 +119,9 @@ class Builder {
   private readonly callFreshness = new Map<RepoPath, CallResolutionFreshness>();
   private readonly configDiagnosticsOut = new Map<RepoPath, readonly Diagnostic[]>();
   private readonly work = { filesModulesRecomputed: 0, modulesRecomputed: 0, modulesReused: 0, filesCallsRecomputed: 0, callsRecomputed: 0, callsReused: 0 };
+  private readonly pending: PendingReference[] = [];
+  /** This run's C++ declaration links (T24.3), computed after module resolution. */
+  private links: DeclarationLink[] = [];
 
   constructor(private readonly input: GraphBuildInput, private readonly memo?: ResolutionMemo) {
     const analyses = new Map(input.analyses.map((a) => [a.analysis.path, a.analysis] as const));
@@ -154,6 +175,9 @@ class Builder {
     this.filesAndCode();
     this.declaredCodeRelations();
     this.modulesAndCalls();
+    // Declaration links of this run (never the previous index's metadata), then the references they decide.
+    this.links = declarationLinks(this.input.analyses.map((a) => a.analysis), this.resolution, this.input.files.map((f) => f.path));
+    this.pendingReferences();
     this.annotationRelations();
     this.coChange();
     this.validate();
@@ -165,7 +189,7 @@ class Builder {
       moduleResolutions: this.moduleResolutions, callResolutions: this.callResolutions,
       resolution: this.resolution, resolutionWork: { ...this.work, callFreshness: this.callFreshness }, valid: this.valid,
       configDiagnostics: this.configDiagnosticsOut,
-      declarationLinks: declarationLinks(this.input.analyses.map((a) => a.analysis), this.resolution, this.input.files.map((f) => f.path)),
+      declarationLinks: this.links,
     };
   }
 
@@ -337,23 +361,62 @@ class Builder {
     return [...this.filePaths].filter((f) => matchers.some((m) => m(f))).sort(compareUtf8);
   }
 
-  private declaredSymbol(owner: EntityRef, name: string, paths: readonly string[], field: string, at: SourceLocation): SymbolRef | undefined {
+  /**
+   * A declared Symbol reference: one match is its target. Several matches are decided after module
+   * resolution (pendingReferences): one proven C++ declaration / definition group is its target,
+   * anything else stays unresolved. No match is unresolved (or unverifiable for L0 files).
+   */
+  private declaredSymbol(owner: EntityRef, name: string, paths: readonly string[], field: string, at: SourceLocation, resolved: (s: SymbolRef) => void): void {
     const found = this.symbolsNamed(name, paths);
-    if (found.length === 1) return found[0]?.symbol.ref;
+    const one = found.length === 1 ? found[0] : undefined;
+    if (one !== undefined) { resolved(one.symbol.ref); return; }
+    if (found.length > 1) { this.pending.push({ owner, name, field, at, found, resolved }); return; }
     if (found.length === 0 && paths.length > 0) {
       // The declared files have no structural analyzer (L0): the symbol cannot be checked, which is not "missing" (T18.0).
       const matched = this.filesMatching(paths);
       if (matched.length > 0 && matched.every((f) => !this.contexts.has(f))) {
         this.diagnostics.push(createDiagnostic("DECLARED_SYMBOL_UNVERIFIABLE",
           `${nodeId(owner)} ${field} "${name}": ${matched.length === 1 ? matched[0] : `${matched.length} files`} have no structural analyzer; the symbol is not checked`, at));
-        return undefined;
+        return;
       }
     }
+    this.unresolved(owner, name, field, at, found.length);
+  }
+
+  private unresolved(owner: EntityRef, name: string, field: string, at: SourceLocation, matches: number): void {
     if (this.contexts.size > 0) {
       this.diagnostics.push(createDiagnostic("DECLARED_SYMBOL_UNRESOLVED",
-        `${nodeId(owner)} ${field} "${name}" matches ${found.length === 0 ? "no symbol" : `${found.length} symbols`}; no edge`, at));
+        `${nodeId(owner)} ${field} "${name}" matches ${matches === 0 ? "no symbol" : `${matches} symbols`}; no edge`, at));
     }
-    return undefined;
+  }
+
+  /** References with several matches (T24.5, C231): edges to every member of one proven group, else unresolved. */
+  private pendingReferences(): void {
+    for (const p of this.pending) {
+      const group = this.declarationGroup(p.found);
+      if (group === undefined) this.unresolved(p.owner, p.name, p.field, p.at, p.found.length);
+      else for (const s of group) p.resolved(s);
+    }
+  }
+
+  /**
+   * The matches when they are exactly one C++ declaration / definition pair of this run's declaration
+   * links (T24.3): two C++ Symbols, each a single declaration (one location, one callable: no overload
+   * set), joined by one link and in no other link. The link already proves the pairing (qualified name,
+   * signature, uniqueness, include); nothing is matched again here. Anything else is undefined.
+   */
+  private declarationGroup(found: readonly { file: RepoPath; symbol: AnalyzedSymbol }[]): SymbolRef[] | undefined {
+    if (found.length !== 2) return undefined;
+    for (const f of found) {
+      if (this.contexts.get(f.file)?.analysis.language !== "cpp") return undefined;
+      if ((f.symbol.additionalLocations?.length ?? 0) > 0 || f.symbol.callables?.length !== 1) return undefined;
+    }
+    const ids = found.map((f) => nodeId(f.symbol.ref));
+    if (ids[0] === ids[1]) return undefined;
+    const touching = this.links.filter((l) => ids.includes(l.declaration.symbol) || ids.includes(l.definition.symbol));
+    const link = touching.length === 1 ? touching[0] : undefined;
+    if (link === undefined || !ids.includes(link.declaration.symbol) || !ids.includes(link.definition.symbol)) return undefined;
+    return found.map((f) => f.symbol.ref);
   }
 
   private declaredCodeRelations(): void {
@@ -365,8 +428,8 @@ class Builder {
       if (!this.has(req)) continue;
       for (const f of this.filesMatching(r.implements.paths)) this.addEdge(fileRef(f), "IMPLEMENTS", req, "project-truth", { provenance: "declared", basis: ["implements.paths"] });
       for (const name of r.implements.symbols) {
-        const s = this.declaredSymbol(req, name, r.implements.paths, "implements.symbols", r.location);
-        if (s !== undefined) this.addEdge(s, "IMPLEMENTS", req, "project-truth", { provenance: "declared", basis: ["implements.symbols"] });
+        this.declaredSymbol(req, name, r.implements.paths, "implements.symbols", r.location,
+          (s) => this.addEdge(s, "IMPLEMENTS", req, "project-truth", { provenance: "declared", basis: ["implements.symbols"] }));
       }
       const patterns = r.tests.map(wildcard);
       for (const { file, test } of allTests) {
@@ -386,8 +449,8 @@ class Builder {
       if (!this.has(dec)) continue;
       for (const f of this.filesMatching(d.governs.paths)) this.addEdge(dec, "GOVERNS", fileRef(f), "project-truth", { provenance: "declared", basis: ["governs.paths"] });
       for (const name of d.governs.symbols) {
-        const s = this.declaredSymbol(dec, name, [], "governs.symbols", d.location);
-        if (s !== undefined) this.addEdge(dec, "GOVERNS", s, "project-truth", { provenance: "declared", basis: ["governs.symbols"] });
+        this.declaredSymbol(dec, name, [], "governs.symbols", d.location,
+          (s) => this.addEdge(dec, "GOVERNS", s, "project-truth", { provenance: "declared", basis: ["governs.symbols"] }));
       }
     }
   }

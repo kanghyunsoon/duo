@@ -25,7 +25,7 @@ import {
   type Diagnostic, type ParseResult, type RepoPath,
 } from "@duo-director/core";
 import { replaceGraph } from "../build/apply.js";
-import { buildGraphPlan, CALL_RESOLUTION_VERSION } from "../build/builder.js";
+import { buildGraphPlan, CALL_RESOLUTION_VERSION, RELATION_RULES_VERSION } from "../build/builder.js";
 import { DECLARATION_LINKS_KEY, declarationLinksMeta } from "../build/declaration-links.js";
 import { HISTORY_WINDOW, summarizeHistory } from "../build/history.js";
 import { createLanguageModuleResolver } from "../build/resolve/languages.js";
@@ -285,6 +285,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
     graphSchemaVersion: store.graphSchemaVersion,
     moduleResolutionVersion: resolver.version,
     callResolutionVersion: CALL_RESOLUTION_VERSION,
+    relationRulesVersion: RELATION_RULES_VERSION,
     analyzers: analyzerIdentities,
     analyzerRegistryDigest,
     historyWindow: window,

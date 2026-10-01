@@ -12,7 +12,7 @@ import {
   type AnalysisLevel, type AnalyzerCapabilities, type AnalyzerRegistry, type FileFingerprint,
 } from "@duo-director/analyzer";
 import { canonicalDiagnostics, compareUtf8, failure, loadProjectTruth, success, type Diagnostic, type ParseResult, type RepoPath } from "@duo-director/core";
-import { CALL_RESOLUTION_VERSION } from "../build/builder.js";
+import { CALL_RESOLUTION_VERSION, RELATION_RULES_VERSION } from "../build/builder.js";
 import { HISTORY_WINDOW } from "../build/history.js";
 import { MODULE_RESOLUTION_VERSION } from "../build/resolve/languages.js";
 import type { CallResolutionFreshness } from "../build/types.js";
@@ -175,6 +175,8 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
   phase("resolution-and-git");
 
   const truthChanged = changes.filter((c) => c.path.startsWith(STATE_PREFIX) && c.status !== "UNCHANGED").map((c) => c.path);
+  // Builder relation rules changed since the state was written (T24.5): Truth and annotation relations are made again.
+  const relationRulesChanged = previous !== undefined && previous.relationRulesVersion !== RELATION_RULES_VERSION;
   // A state or blob OID change with the same content is UNCHANGED for compareFingerprints but still rewrites the File payload or the state.
   const fingerprintsIdentical = changes.every((c) => c.status === "UNCHANGED" && sameFingerprint(c.previous, c.current));
   const parse = [...analysis].filter(([, f]) => f !== "fresh").map(([p]) => p).sort(compareUtf8);
@@ -185,7 +187,7 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
     status = fullRebuildReason === "no-state" || options.graph.readMeta(INDEX_STATE_TOKEN_KEY) === undefined ? "missing" : "incompatible";
   } else {
     const idle = fingerprintsIdentical && parse.length === 0 && moduleList.length === 0 && callList.length === 0 && !wouldRecomputeHistory
-      && !repositoryMoved && signals.changedConfigs.size === 0;
+      && !repositoryMoved && signals.changedConfigs.size === 0 && !relationRulesChanged;
     status = idle ? "current" : "stale";
   }
   const freshness: InspectFreshnessRecord[] = changes.map((c) => {
@@ -211,7 +213,7 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
     configs: { changed: [...signals.changedConfigs].sort(compareUtf8) },
     history: { ...(recordedHead === undefined ? {} : { recordedHead }), ...(repo?.headOid === undefined ? {} : { currentHead: repo.headOid }), wouldRecompute: wouldRecomputeHistory },
     wouldRebuild: {
-      full: previous === undefined, parse, modules: moduleList, predictedCalls: callList, history: wouldRecomputeHistory, projectTruth: truthChanged.length > 0,
+      full: previous === undefined, parse, modules: moduleList, predictedCalls: callList, history: wouldRecomputeHistory, projectTruth: truthChanged.length > 0 || relationRulesChanged,
     },
   }, canonicalDiagnostics(diagnostics));
 }
