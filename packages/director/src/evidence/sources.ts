@@ -67,8 +67,9 @@ export function documentEvidence(
 /**
  * A symbol, test or file of the current repository state (a file is referenced, not copied). A
  * Symbol's text is every one of its locations in source order (T24.1, C217: merged overloads), so a
- * change to any of them changes the content hash; the pointer keeps the primary line range. A
- * Symbol with one location has the same text and hash as before.
+ * change to any of them changes the content hash; the pointer keeps the primary line range (for
+ * Python the effective definition where syntax shows it, T24.4), which the hash does not depend on.
+ * A Symbol with one location has the same text and hash as before.
  */
 export function repositoryEvidence(store: EvidenceStore, reader: SourceReader, node: GraphNode, commit: string): string | undefined {
   const ref = node.ref;
