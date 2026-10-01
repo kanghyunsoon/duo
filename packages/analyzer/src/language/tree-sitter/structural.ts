@@ -9,7 +9,7 @@ import { compareSourceLocations, symbolRef, type Diagnostic, type RepoPath, type
 import type { Node, Tree } from "web-tree-sitter";
 import { parseDuoAnnotations } from "../annotations.js";
 import type {
-  AnalyzedSymbol, AnalyzedTest, CallSite, CallSiteKind, DuoAnnotation, ImportBinding, MemberScope, ModuleReference, ModuleReferenceKind,
+  AnalyzedSymbol, AnalyzedTest, CallableDeclaration, CallSite, CallSiteKind, DuoAnnotation, ImportBinding, MemberScope, ModuleReference, ModuleReferenceKind,
   ModuleReferenceSyntax, SymbolKind, TestConfidence, TestFrameworkHint,
 } from "../types.js";
 import { compact, location, parseErrors, reportParseErrors, sortExtraction, type Extraction } from "./syntax.js";
@@ -29,6 +29,8 @@ export interface DeclarationInput {
   readonly parent?: string;
   readonly node: Node;
   readonly hasBody: boolean;
+  /** C++ callables (T24.3): role and syntactic signature for declaration links. */
+  readonly callable?: Omit<CallableDeclaration, "location">;
 }
 
 interface Declaration extends Omit<DeclarationInput, "node"> {
@@ -91,10 +93,12 @@ export class StructuralCollector {
       const sorted = [...group].sort((a, b) => compareSourceLocations(a.location, b.location));
       const primary = sorted.find((d) => d.hasBody) ?? (sorted[0] as Declaration);
       const others = sorted.filter((d) => d !== primary).map((d) => d.location);
+      const callables = sorted.flatMap((d): CallableDeclaration[] => (d.callable === undefined ? [] : [{ location: d.location, ...d.callable }]));
       out.push({
         ref: symbolRef(this.path, identity), name: primary.name, qualifiedName: primary.qualifiedName, kind: primary.kind, exported: primary.exported,
         ...(primary.memberScope === undefined ? {} : { memberScope: primary.memberScope }), ...(primary.parent === undefined ? {} : { parent: primary.parent }),
         location: primary.location, ...(others.length === 0 ? {} : { additionalLocations: others }),
+        ...(callables.length === 0 ? {} : { callables }),
       });
     }
     return out;

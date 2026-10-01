@@ -10,7 +10,7 @@
  */
 import type { RepoPath, SymbolRef } from "@duo-director/core";
 import type { Node, Tree } from "web-tree-sitter";
-import type { SymbolKind, TestConfidence, TestFrameworkHint } from "../types.js";
+import type { CallableDeclaration, SymbolKind, TestConfidence, TestFrameworkHint } from "../types.js";
 import { StructuralCollector, walk } from "./structural.js";
 import { hasErrorChild, type Extraction } from "./syntax.js";
 
@@ -109,6 +109,83 @@ function stringArgument(args: Node | null, index: number): string | undefined {
   return arg.namedChildren.filter((c) => c?.type === "string_content").map((c) => c?.text ?? "").join("");
 }
 
+// ---- callable signatures (T24.3, C218): syntax only, no type resolution ----
+
+const same = (a: Node | null | undefined, b: Node | null | undefined) =>
+  a !== null && a !== undefined && b !== null && b !== undefined && a.type === b.type && a.startIndex === b.startIndex && a.endIndex === b.endIndex;
+
+function insideOf(node: Node, test: (n: Node) => boolean): boolean {
+  for (let n = node.parent; n !== null; n = n.parent) if (test(n)) return true;
+  return false;
+}
+
+/** The parameter's own name in its declarator chain (A* name, int (&name)[3], void (*name)(int)); undefined when abstract. */
+function parameterName(declarator: Node | null): Node | undefined {
+  let n = declarator;
+  while (n !== null) {
+    if (n.type === "identifier") return n;
+    n = n.childForFieldName("declarator")
+      ?? (n.type === "parenthesized_declarator" || n.type === "reference_declarator" || n.type === "attributed_declarator" ? n.namedChildren.find((c) => c !== null && c.type !== "attribute_declaration") ?? null : null);
+  }
+  return undefined;
+}
+
+/** A parameter's tokens without its name, its default value and comments; spaces kept only between words. */
+function parameterText(p: Node): string {
+  const name = parameterName(p.childForFieldName("declarator"));
+  const defaultValue = p.childForFieldName("default_value");
+  const tokens: string[] = [];
+  const visit = (n: Node) => {
+    if (n.type === "comment" || same(n, name)) return;
+    if (n.childCount === 0) { tokens.push(n.text); return; }
+    for (const c of n.children) if (c !== null) visit(c);
+  };
+  for (const c of p.children) {
+    if (c === null || same(c, defaultValue) || (c.type === "=" && defaultValue !== null)) continue;
+    visit(c);
+  }
+  return tokens.join(" ").replace(/\s*([*&,()[\]<>:])\s*/gu, "$1").replace(/\s+/gu, " ").trim();
+}
+
+const PARAMETER = new Set(["parameter_declaration", "optional_parameter_declaration"]);
+const LIST_PUNCTUATION = new Set(["(", ")", ",", "comment"]);
+
+/**
+ * Role and syntactic signature of one callable declaration. The signature is left out (never linked)
+ * for templates, internal linkage (static free function, anonymous namespace), friends, "= default" or
+ * "= delete", and any parameter form not read here: a missing link is allowed, a wrong one is not.
+ */
+function callableFacts(node: Node, declarator: Node, scope: Scope, isStatic: boolean, role: CallableDeclaration["role"] | "no-body"): Omit<CallableDeclaration, "location"> {
+  const r: CallableDeclaration["role"] = role === "declaration" ? "declaration" : "definition";
+  if (role === "no-body") return { role: r };
+  if (insideOf(node, (n) => n.type === "template_declaration" || n.type === "friend_declaration")) return { role: r };
+  if (insideOf(node, (n) => n.type === "namespace_definition" && n.childForFieldName("name") === null)) return { role: r };
+  const inner = declarator.childForFieldName("declarator");
+  if (inner === null || inner.descendantsOfType(["template_type", "template_argument_list"]).length > 0) return { role: r };
+  if (isStatic && scope.classes.length === 0 && inner.type !== "qualified_identifier") return { role: r };
+  const params = declarator.childForFieldName("parameters");
+  if (params === null || params.hasError) return { role: r };
+  const parts: string[] = [];
+  for (const c of params.children) {
+    if (c === null || LIST_PUNCTUATION.has(c.type)) continue;
+    if (c.type === "...") { parts.push("..."); continue; }
+    if (!PARAMETER.has(c.type)) return { role: r };
+    const text = parameterText(c);
+    if (text === "") return { role: r };
+    parts.push(text);
+  }
+  // (void) and () declare the same parameter list in C++.
+  const list = parts.length === 1 && parts[0] === "void" ? [] : parts;
+  const qualifiers: string[] = [];
+  let after = false;
+  for (const c of declarator.children) {
+    if (c === null) continue;
+    if (same(c, params)) { after = true; continue; }
+    if (after && (c.type === "type_qualifier" || c.type === "ref_qualifier")) qualifiers.push(c.text.replace(/\s+/gu, ""));
+  }
+  return { role: r, signature: `(${list.join(",")})${qualifiers.join(" ")}` };
+}
+
 class CppExtractor {
   private readonly c: StructuralCollector;
   private readonly includes: string[] = [];
@@ -148,7 +225,7 @@ class CppExtractor {
   }
 
   /** A function declarator's symbol; undefined when the name is not a plain function name. */
-  private functionSymbol(node: Node, declarator: Node, scope: Scope, hasBody: boolean, isStatic: boolean): SymbolRef | undefined {
+  private functionSymbol(node: Node, declarator: Node, scope: Scope, hasBody: boolean, isStatic: boolean, callable: Omit<CallableDeclaration, "location">): SymbolRef | undefined {
     const inner = declarator.childForFieldName("declarator");
     const parts = inner === null ? undefined : nameParts(inner);
     if (parts === undefined) return undefined;
@@ -158,16 +235,16 @@ class CppExtractor {
       const owner = qualify(ownerScope);
       const last = parts.scope.at(-1);
       const kind: SymbolKind = parts.destructor ? "destructor" : parts.name === last ? "constructor" : "method";
-      return this.c.symbol({ name: parts.name, qualifiedName: `${owner}.${parts.name}`, kind, exported: true, memberScope: "instance", parent: owner, node, hasBody });
+      return this.c.symbol({ name: parts.name, qualifiedName: `${owner}.${parts.name}`, kind, exported: true, memberScope: "instance", parent: owner, node, hasBody, callable });
     }
     if (scope.classes.length > 0) {
       const cls = scope.classes.at(-1);
       const kind: SymbolKind = parts.destructor ? "destructor" : parts.name === cls ? "constructor" : "method";
       const owner = qualify(scope);
-      return this.c.symbol({ name: parts.name, qualifiedName: `${owner}.${parts.name}`, kind, exported: true, memberScope: isStatic ? "static" : "instance", parent: owner, node, hasBody });
+      return this.c.symbol({ name: parts.name, qualifiedName: `${owner}.${parts.name}`, kind, exported: true, memberScope: isStatic ? "static" : "instance", parent: owner, node, hasBody, callable });
     }
     const parent = ownerOf(scope);
-    return this.c.symbol({ name: parts.name, qualifiedName: qualify(scope, parts.name), kind: "function", exported: !isStatic, ...(parent === undefined ? {} : { parent }), node, hasBody });
+    return this.c.symbol({ name: parts.name, qualifiedName: qualify(scope, parts.name), kind: "function", exported: !isStatic, ...(parent === undefined ? {} : { parent }), node, hasBody, callable });
   }
 
   private visit(node: Node, scope: Scope): boolean {
@@ -215,7 +292,7 @@ class CppExtractor {
           return false;
         }
         const isStatic = node.namedChildren.some((c) => c?.type === "storage_class_specifier" && c.text === "static");
-        const ref = this.functionSymbol(node, declarator, scope, true, isStatic);
+        const ref = this.functionSymbol(node, declarator, scope, true, isStatic, callableFacts(node, declarator, scope, isStatic, body === null ? "no-body" : "definition"));
         const member = ref !== undefined && (scope.classes.length > 0 || (inner !== null && inner.type === "qualified_identifier"));
         if (body !== null) this.calls(body, ref, member, this.locals(declarator, body));
         return false;
@@ -225,7 +302,9 @@ class CppExtractor {
         const isStatic = node.namedChildren.some((c) => c?.type === "storage_class_specifier" && c.text === "static");
         for (const d of node.childrenForFieldName("declarator")) {
           const fn = unwrapDeclarator(d);
-          if (fn?.type === "function_declarator" && fn.childForFieldName("declarator")?.type !== "qualified_identifier") this.functionSymbol(node, fn, scope, false, isStatic);
+          if (fn?.type === "function_declarator" && fn.childForFieldName("declarator")?.type !== "qualified_identifier") {
+            this.functionSymbol(node, fn, scope, false, isStatic, callableFacts(node, fn, scope, isStatic, "declaration"));
+          }
         }
         const type = node.childForFieldName("type");
         if (type !== null) walk(type, (n) => this.visit(n, scope));

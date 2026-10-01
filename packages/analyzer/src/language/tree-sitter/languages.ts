@@ -36,6 +36,8 @@ export const CPP_SPEC: TreeSitterAnalyzerSpec = {
   // ".h" is C or C++: the registry decides from the repository (C18.0 header rule).
   contextual: { h: "cpp" },
   capabilities: CPP_CAPABILITIES, callResolution: "same-file-functions", prepare: maskCppAnnotationMacros, extract: extractCpp,
+  // callables-1: role and syntactic signature per callable declaration (T24.3, C218).
+  facts: "callables-1",
 };
 export const PYTHON_SPEC: TreeSitterAnalyzerSpec = {
   id: "python", version: PYTHON_ANALYZER_VERSION, extensions: { py: "python" }, capabilities: PYTHON_CAPABILITIES, callResolution: "same-file-functions", extract: extractPython,

@@ -36,6 +36,11 @@ export interface TreeSitterAnalyzerSpec {
   readonly callResolution: CallResolutionStrategy;
   /** Text rewrite of the same length before parsing (C++ masks known annotation macros); locations stay exact. */
   readonly prepare?: (text: string) => string;
+  /**
+   * Version of facts outside the Graph payload (C++: callable signatures, T24.3). Part of the identity, so
+   * cached analyses are made again when it changes; `version` (the Symbol payload's analyzerVersion) stays.
+   */
+  readonly facts?: string;
   readonly extract: (path: RepoPath, tree: Tree, text: string) => Extraction;
 }
 
@@ -55,7 +60,7 @@ export function analyzerIdentity(spec: TreeSitterAnalyzerSpec, grammarDigests: R
   const parts = [
     `id=${spec.id}`, `version=${spec.version}`, `capabilities-contract=${CAPABILITY_CONTRACT_VERSION}`,
     `extensions=${Object.keys(spec.extensions).sort().join(",")}`, `contextual=${Object.keys(spec.contextual ?? {}).sort().join(",")}`,
-    `calls=${spec.callResolution}`, ...caps, ...grammars,
+    `calls=${spec.callResolution}`, ...caps, ...grammars, ...(spec.facts === undefined ? [] : [`facts=${spec.facts}`]),
   ];
   return `sha256:${createHash("sha256").update(parts.join("\n")).digest("hex")}`;
 }

@@ -48,6 +48,25 @@ export interface AnalyzedSymbol {
   readonly location: SourceLocation;
   /** Other declarations of the same symbol (overload signatures, merged declarations), in location order. */
   readonly additionalLocations?: readonly SourceLocation[];
+  /**
+   * C++ only (T24.3, C218): every callable declaration of this symbol, in location order, with its role
+   * and syntactic signature. Facts for declaration links (a header declaration and its out-of-line
+   * definition); never copied into the Graph payload.
+   */
+  readonly callables?: readonly CallableDeclaration[];
+}
+
+/**
+ * One callable declaration (T24.3, C218). role: "declaration" (no body) or "definition" (a body).
+ * signature: parameter types as written, without parameter names, default values and comments, then
+ * cv and ref qualifiers ("(const FName&,int)const"). Absent when the declaration must not be linked:
+ * a template, internal linkage (static or anonymous namespace), a friend, "= default" or "= delete",
+ * or a parameter form the analyzer does not read.
+ */
+export interface CallableDeclaration {
+  readonly location: SourceLocation;
+  readonly role: "declaration" | "definition";
+  readonly signature?: string;
 }
 
 /** import/export-from/dynamic-import/require: TypeScript/JavaScript; import: also Java and Python; using: C#; include: C++. */
