@@ -9,7 +9,8 @@ import {
   compareDiagnostics, compareUtf8, createDiagnostic, findPathPortabilityCollisions, normalizeRepoPath,
   type Diagnostic, type RepoPath,
 } from "@duo-director/core";
-import { gitWorkTreePrefix, listIndexEntries, listTypeChangedPaths, listUntrackedPaths, type GitIndexEntry } from "./git-index.js";
+import { prefixFor } from "../git/work-tree.js";
+import { listIndexEntries, listTypeChangedPaths, listUntrackedPaths, type GitIndexEntry } from "./git-index.js";
 import { createPathPolicy } from "./policy.js";
 import { buildOutputMatcher } from "./build-output.js";
 import type {
@@ -82,7 +83,7 @@ export async function scanRepository(root: string, options: ScanOptions = {}): P
   const rootDir = path.resolve(root);
   const fail = (d: Diagnostic): RepositoryScan => ({ files: [], excluded: [], typeChanges: [], diagnostics: [d] });
 
-  const prefix = await gitWorkTreePrefix(rootDir);
+  const prefix = await prefixFor(rootDir, options.workTree);
   if (!prefix.ok) {
     return fail(prefix.gitMissing === true
       ? createDiagnostic("GIT_COMMAND_FAILED", `Cannot scan "${rootDir}": ${prefix.message}`)

@@ -8,7 +8,7 @@
  */
 import path from "node:path";
 import {
-  analysisLevelOf, compareFingerprints, createDefaultAnalyzerRegistry, fingerprintRepositoryFiles, openGitProvider, scanRepository,
+  analysisLevelOf, compareFingerprints, createDefaultAnalyzerRegistry, fingerprintRepositoryFiles, openGitProvider, probeWorkTree, scanRepository,
   type AnalysisLevel, type AnalyzerCapabilities, type AnalyzerRegistry, type FileFingerprint,
 } from "@duo-director/analyzer";
 import { canonicalDiagnostics, compareUtf8, failure, loadProjectTruth, success, type Diagnostic, type ParseResult, type RepoPath } from "@duo-director/core";
@@ -92,7 +92,9 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
   if (loaded.value === undefined) return failure(diagnostics);
   const { truth } = loaded.value;
   phase("truth");
-  const scan = await scanRepository(rootDir, { include: truth.config.index.include, exclude: truth.config.index.exclude });
+  // One work-tree prefix query for this run, shared by the scan and the Git provider (T25.1).
+  const workTree = probeWorkTree(rootDir);
+  const scan = await scanRepository(rootDir, { include: truth.config.index.include, exclude: truth.config.index.exclude, workTree });
   diagnostics.push(...scan.diagnostics);
   if (scan.diagnostics.some((d) => d.severity === "error")) return failure(diagnostics);
   phase("scan");
@@ -165,7 +167,7 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
     calls.set(p, c);
   }
 
-  const git = await openGitProvider(rootDir);
+  const git = await openGitProvider(rootDir, { workTree });
   const repo = git.value === undefined ? undefined : (await git.value.repositoryState()).value;
   const recordedHead = previous?.history?.headOid;
   const wouldRecomputeHistory = repo?.headOid !== undefined

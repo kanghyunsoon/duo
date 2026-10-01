@@ -17,7 +17,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  compareFingerprints, createDefaultAnalyzerRegistry, fingerprintRepositoryFiles, openGitProvider, scanRepository, writeFingerprintFile,
+  compareFingerprints, createDefaultAnalyzerRegistry, fingerprintRepositoryFiles, openGitProvider, probeWorkTree, scanRepository, writeFingerprintFile,
   type AnalyzerRegistry, type FileFingerprint, type GitRepositoryState,
 } from "@duo-director/analyzer";
 import {
@@ -101,7 +101,9 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   if (loaded.value === undefined) return failure(diagnostics);
   const { truth, trace } = loaded.value;
   phase("truth");
-  const scan = await scanRepository(rootDir, { include: truth.config.index.include, exclude: truth.config.index.exclude });
+  // One work-tree prefix query for this run, shared by the scan and the Git provider (T25.1).
+  const workTree = probeWorkTree(rootDir);
+  const scan = await scanRepository(rootDir, { include: truth.config.index.include, exclude: truth.config.index.exclude, workTree });
   diagnostics.push(...scan.diagnostics);
   if (scan.diagnostics.some((d) => d.severity === "error")) return failure(diagnostics);
   phase("scan");
@@ -197,7 +199,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   phase("analysis");
 
   // ---- Git: the history window is recomputed whole when HEAD moves ----
-  const git = await openGitProvider(rootDir);
+  const git = await openGitProvider(rootDir, { workTree });
   diagnostics.push(...git.diagnostics);
   const repoState = git.value === undefined ? undefined : await git.value.repositoryState();
   diagnostics.push(...(repoState?.diagnostics ?? []));

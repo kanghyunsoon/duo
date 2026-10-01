@@ -14,12 +14,6 @@ export interface GitIndexEntry {
   readonly oid?: string;
 }
 
-/** Path of root relative to the work tree top level ("" at the top level). */
-export async function gitWorkTreePrefix(root: string): Promise<GitResult<string>> {
-  const result = await runGit(root, ["rev-parse", "--show-prefix"]);
-  return result.ok ? { ok: true, value: result.value.replace(/\r?\n$/, "") } : result;
-}
-
 const STAGE_RECORD = /^(\d{6}) ([0-9a-f]+) ([0-3])\t(.+)$/su;
 
 /** Every index entry, one record per path (`git ls-files -z --stage`). */

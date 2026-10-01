@@ -29,6 +29,7 @@ export type {
   GitRangeChange, GitRepositoryState, GitWorkingTreeChange,
 } from "./git/types.js";
 export { openGitProvider, type GitProvider } from "./git/provider.js";
+export { probeWorkTree, type WorkTreeProbe } from "./git/work-tree.js";
 export { findGitTopLevel, readGitUserName } from "./git/identity.js";
 export { computeCoChangeCandidates, extractIssueKeys, type CoChangeCandidate, type CoChangeOptions } from "./git/history.js";
 export type {

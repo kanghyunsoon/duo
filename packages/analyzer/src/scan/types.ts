@@ -3,6 +3,7 @@
  * (those are defined by the Graph Builder, TASK-007). Git details stay inside the scanner.
  */
 import type { Diagnostic, RepoPath } from "@duo-director/core";
+import type { WorkTreeProbe } from "../git/work-tree.js";
 
 /** Whether Git tracks the file (index entry) or it is an untracked, non-ignored file. */
 export type RepositoryFileState = "tracked" | "untracked";
@@ -61,6 +62,8 @@ export interface ScanOptions {
   readonly include?: readonly string[];
   /** project.yaml index.exclude. */
   readonly exclude?: readonly string[];
+  /** The operation's work-tree probe (T25.1): its prefix answer is used instead of asking Git again. */
+  readonly workTree?: WorkTreeProbe;
 }
 
 export interface RepositoryScan {

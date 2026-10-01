@@ -10,6 +10,7 @@ import {
   type Diagnostic, type ParseResult, type RepoPath,
 } from "@duo-director/core";
 import { runGit, runGitBytes, type GitResult } from "./exec.js";
+import { prefixFor, type WorkTreeProbe } from "./work-tree.js";
 import {
   GitOutputError, parseLogFiles, parseLogMessages, parseLsFilesStage, parseLsTree, parsePatchBlock, parseRawDiff,
   parseStatusV2, splitPatches, type PathConverter,
@@ -294,16 +295,19 @@ class Provider implements GitProvider {
   }
 }
 
-/** Opens a provider for the top level of a Git work tree (GIT_REPOSITORY_REQUIRED / SCAN_ROOT_INVALID otherwise). */
-export async function openGitProvider(root: string): Promise<ParseResult<GitProvider>> {
+/**
+ * Opens a provider for the top level of a Git work tree (GIT_REPOSITORY_REQUIRED / SCAN_ROOT_INVALID otherwise).
+ * workTree: the operation's probe (T25.1), so a scan and this check of the same root ask Git once.
+ */
+export async function openGitProvider(root: string, options: { readonly workTree?: WorkTreeProbe } = {}): Promise<ParseResult<GitProvider>> {
   const rootDir = path.resolve(root);
-  const r = await runGit(rootDir, ["rev-parse", "--show-prefix"]);
+  const r = await prefixFor(rootDir, options.workTree);
   if (!r.ok) {
     return failure([r.gitMissing === true
       ? createDiagnostic("GIT_COMMAND_FAILED", r.message)
       : createDiagnostic("GIT_REPOSITORY_REQUIRED", `"${rootDir}" is not a Git work tree; DUO requires a Git repository: ${r.message}`)]);
   }
-  const prefix = r.value.replace(/\r?\n$/u, "");
+  const prefix = r.value;
   if (prefix !== "") return failure([createDiagnostic("SCAN_ROOT_INVALID", `"${rootDir}" is not the top level of its Git work tree (it is "${prefix}")`)]);
   return success(new Provider(rootDir));
 }
