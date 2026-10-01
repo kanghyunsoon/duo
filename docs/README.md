@@ -30,6 +30,7 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [roadmap/0.1.1-hardening.md](roadmap/0.1.1-hardening.md) | T21 Post-release Hardening: Windows UI E2E 원인과 수정, publish 후 검증, freshness profile, Node 22 실험, UX gap, 다음 버전 후보 |
 | [roadmap/0.2.0-audit.md](roadmap/0.2.0-audit.md) | T22 0.2.0 Audit: 0.1.2 security 해결 기록, real-world 성능 5개 저장소, freshness 결론, L1 correctness issue, Context 품질, analyzer matrix, Node 22, onboarding, provider 결정점, 0.2.0 milestone 제안, T23 spec |
 | [roadmap/0.2.0-t24-cpp-declarations.md](roadmap/0.2.0-t24-cpp-declarations.md) | T24.3 C++ 선언·정의 연결(C218)과 C230 benchmark 집계: 이전 표현, 설계안 A·B·C·D, pairing key와 정규화, Context 표현, Evidence·Review·cache, 검증 |
+| [roadmap/0.2.0-t24-python-definitions.md](roadmap/0.2.0-t24-python-definitions.md) | T24.4 Python 실효 정의(C226): primary 소비자 감사, 설계안 A·B·C·D, 일반 재정의·typing.overload·property·조건부 규칙, Evidence·Context·Review·UI·annotation, 검증, 남은 correctness 항목과 Milestone C, T24.5 제안 |
 | [roadmap/0.2.0-t24-python-roots.md](roadmap/0.2.0-t24-python-roots.md) | T24.2 Python source-root discovery(C219)와 T24.1 잔여 감사(Python 재정의, Evidence pointer·hash, 여러 범위 표기): 이전 pipeline, 발견 규칙, metadata 범위, invalidation, 검증 |
 | [roadmap/0.2.0-t24-overloads.md](roadmap/0.2.0-t24-overloads.md) | T24.1 overload evidence completeness(C217): Symbol identity lifecycle, repository evolution 실험, 설계안 A·B·C·D 비교, 위치 규칙, migration gate, 검증, signature 조사, T24.2 제안 |
 | [conflicts.md](conflicts.md) | 원본 충돌, Human 결정 기록(H-*), 미결 사항 |

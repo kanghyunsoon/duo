@@ -110,7 +110,7 @@ SourceAnalysis 계약은 언어와 무관하다(T18.0). 아래 규칙은 TypeScr
 
 - **Symbol 범위**: top-level class, interface, type alias, enum, function 선언, initializer가 arrow function이나 function expression인 top-level 변수, 익명 default export(function, class, arrow), class의 method, constructor, getter, setter. 중첩 함수와 일반 상수(`const TIMEOUT = 5000`)는 Symbol이 아니다.
 - **qualifiedName과 identity**: qualifiedName은 표시용이다. top-level은 이름, class member는 `Class.member`(private은 `AuthService.#refresh`), 익명 default export는 `default`(member는 `default.render`). identity(`ref.symbol`)는 static member만 `Class.static.member`이고 identifier가 아닌 이름은 `Class["a.b"]`다. computed name(`[Symbol.iterator]`)은 Symbol로 만들지 않는다.
-- **overload와 병합**: 같은 identity는 한 Symbol이다. primary 위치는 본문이 있는 선언, 없으면 첫 선언이고 나머지는 `additionalLocations`다. getter와 setter는 같은 member scope 안에서만 `accessor` 한 개로 합친다(`static get name`과 `get name`은 다른 Symbol). 원문을 읽거나 줄을 맞추는 곳(Context, Evidence, Review diff seed)은 primary와 `additionalLocations`를 모두 쓴다: graph `nodeLocations`가 source 순서로 정렬하고 같은 범위와 다른 위치 안의 위치를 뺀다(T24.1, C217). 이 규칙은 Java·C#·C++·Python에도 같다.
+- **overload와 병합**: 같은 identity는 한 Symbol이다. primary 위치는 본문이 있는 선언, 없으면 첫 선언이고 나머지는 `additionalLocations`다. getter와 setter는 같은 member scope 안에서만 `accessor` 한 개로 합친다(`static get name`과 `get name`은 다른 Symbol). 원문을 읽거나 줄을 맞추는 곳(Context, Evidence, Review diff seed)은 primary와 `additionalLocations`를 모두 쓴다: graph `nodeLocations`가 source 순서로 정렬하고 같은 범위와 다른 위치 안의 위치를 뺀다(T24.1, C217). 이 규칙은 Java·C#·C++·Python에도 같다. Python은 같은 suite의 일반 재정의와 인식된 `typing.overload` + 구현 하나처럼 syntax로 실효 정의가 확실할 때만 그 정의를 primary로 둔다(T24.4, C226, [규칙](roadmap/0.2.0-t24-python-definitions.md#4-규칙)). primary는 Evidence pointer, UI, 검색 location이 보이는 위치이고 Graph edge와 text를 읽는 곳은 primary에 의존하지 않는다.
 - **exported**: `export` 선언, `export default`, `export { a }` 목록. member는 class를 따른다.
 - **ModuleReference**: 문자열 literal specifier만 기록하고 파일로 해석하지 않는다(상대 경로, tsconfig paths, package exports, node_modules 해석과 IMPORTS Edge는 TASK-007). `typeOnly`는 문장 전체가 `import type` / `export type ... from`일 때, binding의 `typeOnly`는 문장 또는 그 specifier가 type일 때다. `import x = require("y")`와 `require("y")`는 `require`다.
 - **ImportBinding**: `import foo` → `foo → default`, `import { foo as bar }` → `bar → foo`, `import * as Ns` / `import Ns = require()` / `const Ns = require()` → `Ns → *`(CommonJS는 module 객체), `const { a, b: c } = require()` → `a → a`, `c → b`. side-effect import, dynamic import, 중첩 구조 분해는 binding이 없다. Graph Builder는 AST를 다시 읽지 않고 이 값만 쓴다.
@@ -150,7 +150,7 @@ CALLS Edge의 src는 Symbol이다. 감싸는 Symbol이 없는 module 수준 exac
 
 ### Annotation attachment(TASK-007)
 
-후보는 Symbol과 Test다. (1) annotation 끝과 다음 후보 시작 사이에 공백, 주석, 선언 keyword(`export`, `default`, `declare`, `const`, `let`, `var`, `abstract`, `async`)만 있고 빈 줄이 하나 이하면 그 후보, (2) 아니면 annotation을 감싸는 가장 작은 후보, (3) 둘 다 아니면 File. AST를 다시 읽지 않고 Analyzer 위치와 working-tree 원문으로 판정하며 CRLF는 LF로 본다.
+후보는 Symbol(primary와 `additionalLocations` 모든 위치, T24.4)과 Test다. (1) annotation 끝과 다음 후보 시작 사이에 공백, 주석, 선언 keyword(`export`, `default`, `declare`, `const`, `let`, `var`, `abstract`, `async`)만 있고 빈 줄이 하나 이하면 그 후보, (2) 아니면 annotation을 감싸는 가장 작은 후보, (3) 둘 다 아니면 File. AST를 다시 읽지 않고 Analyzer 위치와 working-tree 원문으로 판정하며 CRLF는 LF로 본다.
 
 ID는 Project Truth에 있는 것만 쓰고 annotation으로 정의를 만들지 않는다. Requirement ID만 연결한다(Symbol·File → Requirement IMPLEMENTS, Requirement → Test VALIDATED_BY). 다른 정의 ID는 `ANNOTATION_TARGET_UNSUPPORTED`(info), 없는 ID는 `ANNOTATION_TARGET_UNKNOWN`(warning)이다(C50).
 

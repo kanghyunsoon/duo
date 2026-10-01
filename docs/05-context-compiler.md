@@ -161,7 +161,7 @@ TASK-011. Compiler는 무엇을 보여줄지 고르고, 무엇이 아직 정해�
 | File | 경로 (language) | Analyzer 없는 파일만(T18.0): head window. 처음 40줄과 2,000자 중 먼저 닿는 곳까지의 온전한 줄(한 줄이 더 길면 그 줄을 자름) | - |
 
 - 모든 원문은 `readSourceFile`/`sliceSource`(T09.1)로 읽어 저장소 경계와 symlink를 다시 확인하고, 맞지 않는 위치는 잘라 맞추지 않는다(`SOURCE_LOCATION_INVALID`). slice가 실패한 후보는 L1만 남는다.
-- **위치가 여럿인 Symbol(T24.1, C217)**: overload나 signature를 합친 Symbol은 primary와 `additionalLocations` 전체를 보여 준다(graph `nodeLocations`). 같은 줄은 두 번 나오지 않는다. 위치 하나라도 slice되지 않으면 L1만 남는다(본문 일부만 보여 주지 않음). level은 item 전체에 적용되고 item의 공개 `source`는 primary 하나다. 위치가 하나인 Symbol의 text는 T24.1 이전과 같고, 그래서 `CONTEXT_POLICY_VERSION`은 2 그대로다(C225).
+- **위치가 여럿인 Symbol(T24.1, C217)**: overload나 signature를 합친 Symbol은 primary와 `additionalLocations` 전체를 보여 준다(graph `nodeLocations`). 같은 줄은 두 번 나오지 않는다. 위치 하나라도 slice되지 않으면 L1만 남는다(본문 일부만 보여 주지 않음). level은 item 전체에 적용되고 item의 공개 `source`는 primary 하나다(Python은 확실할 때 실효 정의, T24.4, C226; 위치 순서는 그대로 source 순서). 위치가 하나인 Symbol의 text는 T24.1 이전과 같고, 그래서 `CONTEXT_POLICY_VERSION`은 2 그대로다(C225).
 - 파일 전체는 기본으로 넣지 않는다. 멤버가 후보인 class는 L3를 빼고, Symbol이나 Test가 후보인 File은 따로 나열하지 않는다(정확한 seed인 File은 예외, C89).
 - **Generic file(T18.0)**: Symbol이 없다고 파일 전체를 넣지 않는다. L2 head window가 상한이고 텍스트를 읽을 수 없으면(binary, UTF-8 아님) L1만 남는다. Python은 `#` 주석 줄도 바로 위 주석으로 센다.
 - **Capability limitation(T18.0)**: 후보 코드의 언어가 가진 한계를 limitation으로 알린다. `structural-analysis-unavailable`(Analyzer 없는 파일: 경로와 head window만), `imports-syntactic`(Java, C#: import가 파일을 잇지 않음), `imports-partial`(C++, Python: 확실한 대상만), `calls-unresolved`(Java, C#: CALLS 없음), `calls-same-file`(C++, Python: 같은 파일의 유일한 함수만). CALLS Edge가 없다는 것이 호출이 없다는 뜻이 아님을 Agent가 알 수 있게 한다. 언어의 capability는 File payload의 language와 기본 Analyzer profile(analyzer `DEFAULT_LANGUAGE_PROFILES`)에서 읽는다.

@@ -588,7 +588,7 @@ core `Evidence { id, basis, kind, entity?, source?, contentHash?, summary?, poin
 | basis | 내용 | pointer |
 |---|---|---|
 | project-truth | Requirement·Decision·Constraint의 정확한 정의 slice(T09.1). diff 이전 쪽 정의는 `metadata.side` | kind, id, path, lines, content_hash |
-| repository | 변경 후 Symbol·Test slice(Symbol은 모든 위치, T24.1), File(내용은 참조만) | kind, path, symbol, lines(primary 범위, 표시용), commit, content_hash |
+| repository | 변경 후 Symbol·Test slice(Symbol은 모든 위치, T24.1), File(내용은 참조만) | kind, path, symbol, lines(primary 범위, 표시용. Python은 확실할 때 실효 정의, T24.4), commit, content_hash |
 | git | hunk 하나(전체 diff 문자열이 아님), 또는 hunk 없는 변경 기록(삭제, binary, rename: oldPath, similarity, old/new blob) | kind diff, path, lines, change, commit |
 | test | 호출자가 준 테스트 실행 결과. Test Node의 존재와 실행 성공은 다른 사실이다 | kind test, path, symbol(test 이름) |
 | llm | Provider 답변(`semanticAssist.evidence`에만) | kind llm |
