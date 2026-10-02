@@ -10,7 +10,9 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { createDiagnostic, failure, guardWrite, PROJECT_FILE_NAME, STATE_DIR_NAME, success, writeFileAtomic, type Diagnostic, type ParseResult } from "@duo-director/core";
+import { redactSecrets } from "@duo-director/director";
 import { probeMcpLaunch } from "../mcp/probe.js";
+import { TOOLS } from "../mcp/tools.js";
 import { SERVER_NAME, isDuoLaunch, type AgentIntegrationAdapter } from "./adapter.js";
 import { BRIDGE_MARKERS, bridgeLines, inspectBridge } from "./bridge.js";
 import { claudeCodeAdapter } from "./claude-code.js";
@@ -24,6 +26,9 @@ import {
 
 const ADAPTERS: Readonly<Record<AgentId, AgentIntegrationAdapter>> = { codex: codexAdapter, "claude-code": claudeCodeAdapter };
 export const agentAdapter = (agent: AgentId): AgentIntegrationAdapter => ADAPTERS[agent];
+
+/** The duo-director MCP tools this build serves (sorted): what a verified launch must answer with. */
+export const EXPECTED_MCP_TOOLS: readonly string[] = Object.keys(TOOLS).sort();
 
 const BACKUP_DIR = `${STATE_DIR_NAME}/runtime/backup`;
 
@@ -281,6 +286,8 @@ export interface VerifyOptions {
   /** Start the configured launch and call initialize, tools/list, duo_get_status (default true). */
   readonly launch?: boolean;
   readonly timeoutMs?: number;
+  /** Call duo_get_status through the launch (default true). duoctl doctor turns it off: it inspects the index itself. */
+  readonly callStatus?: boolean;
 }
 
 /** Checks the installed integration: the files parse, hold the planned entry and block, the launcher resolves, the server answers. */
@@ -302,18 +309,24 @@ export async function verifyAgentIntegration(root: string, agent: AgentId, optio
   let version: string | undefined;
   if (options.launch !== false && entry !== undefined && launch.available) {
     const env = adapter.launchEnvironment(root);
-    const probe = await probeMcpLaunch({ command: entry.command, args: entry.args, cwd: env.cwd, env: { ...pathEnv(host), ...env.env }, ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }) });
+    const probe = await probeMcpLaunch({
+      command: entry.command, args: entry.args, cwd: env.cwd, env: { ...pathEnv(host), ...env.env },
+      ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }), ...(options.callStatus === false ? { callStatus: false } : {}),
+    });
     if (probe.ok) {
       version = probe.serverVersion;
       const status = probe.status as { index?: { status?: string } | null; baseline?: { status?: string } | null } | null;
       server = { name: probe.serverName, tools: probe.tools, index: status?.index?.status ?? null, baseline: status?.baseline?.status ?? null };
-      checks.push({ name: "mcp-launch", ok: probe.serverName === SERVER_NAME && probe.tools.length === 9, detail: `${probe.serverName} · ${probe.tools.length} tools` });
+      // The expected tools come from this build's tool table (T26.1), not a hard-coded count.
+      const toolsMatch = probe.tools.length === EXPECTED_MCP_TOOLS.length && probe.tools.every((t, i) => t === EXPECTED_MCP_TOOLS[i]);
+      checks.push({ name: "mcp-launch", ok: probe.serverName === SERVER_NAME && toolsMatch, detail: `${probe.serverName} · ${probe.tools.length} tools` });
     } else {
-      checks.push({ name: "mcp-launch", ok: false, detail: `${probe.error}${probe.stderr === "" ? "" : ` · ${probe.stderr.trim().split("\n").slice(-2).join(" | ")}`}` });
+      // The server's stderr is reduced to its last two lines and passed through the shared secret redaction (T26.1).
+      checks.push({ name: "mcp-launch", ok: false, detail: redactSecrets(`${probe.error}${probe.stderr === "" ? "" : ` · ${probe.stderr.trim().split("\n").slice(-2).join(" | ")}`}`).text });
     }
   }
   const nextActions: string[] = [];
-  if (server !== undefined && server.index !== "current") nextActions.push(`${launcherDisplay(launcher)} index`);
+  if (server !== undefined && options.callStatus !== false && server.index !== "current") nextActions.push(`${launcherDisplay(launcher)} index`);
   if (adapter.projectTrustRequired) nextActions.push("Trust this project in Codex so it loads .codex/config.toml.");
   if (adapter.approvalRequired) nextActions.push("Approve the duo-director server in Claude Code (it asks for project .mcp.json servers).");
   const provenance = {

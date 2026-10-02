@@ -2,6 +2,8 @@
  * Starts an MCP server exactly as a configuration describes it (executable + args, working directory,
  * environment; no shell string) and checks it with the official client: initialize, tools/list and
  * duo_get_status. Used by agent integration verification (TASK-017). The server is closed afterwards.
+ * callStatus false (duoctl doctor, T26.1) stops after tools/list: the caller already has the status, and
+ * the server then runs no freshness inspection of its own.
  */
 import { Client } from "@modelcontextprotocol/client";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/client/stdio";
@@ -13,6 +15,8 @@ export interface McpLaunchProbe {
   /** Added to a minimal inherited environment (PATH and the platform's safe variables). */
   readonly env?: Readonly<Record<string, string>>;
   readonly timeoutMs?: number;
+  /** Call duo_get_status after tools/list (default true). */
+  readonly callStatus?: boolean;
 }
 
 export type McpProbeResult =
@@ -33,10 +37,10 @@ export async function probeMcpLaunch(probe: McpLaunchProbe): Promise<McpProbeRes
     const result = await Promise.race([(async () => {
       await client.connect(transport);
       const { tools } = await client.listTools();
-      const status = await client.callTool({ name: "duo_get_status", arguments: {} });
+      const status = probe.callStatus === false ? undefined : await client.callTool({ name: "duo_get_status", arguments: {} });
       return {
         ok: true as const, serverName: client.getServerVersion()?.name ?? "", serverVersion: client.getServerVersion()?.version ?? "", tools: tools.map((t) => t.name).sort(),
-        status: status.isError === true ? null : (status.structuredContent as Record<string, unknown> | undefined) ?? null,
+        status: status === undefined || status.isError === true ? null : (status.structuredContent as Record<string, unknown> | undefined) ?? null,
       };
     })(), timeout]);
     return result;

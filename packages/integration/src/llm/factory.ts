@@ -24,7 +24,12 @@ export interface ConfiguredLLM {
   readonly model?: string;
   /** Why the provider is unavailable (never contains a secret). */
   readonly reason?: string;
+  /** The same reason as a stable code (duoctl doctor, T26.1). */
+  readonly reasonCode?: LLMUnavailableReason;
 }
+
+/** Why a configured provider is unavailable. */
+export type LLMUnavailableReason = "model-missing" | "base-url-unsupported" | "base-url-env" | "custom-headers-env" | "credential-missing";
 
 export interface LLMFactoryOptions {
   /** Tests: replaces the SDK (fake client or fake fetch). */
@@ -33,32 +38,32 @@ export interface LLMFactoryOptions {
 
 const official = (url: string) => url.trim().replace(/\/+$/u, "") === OPENAI_OFFICIAL_BASE_URL;
 
-function unavailable(kind: ConfiguredLLM["kind"], model: string | undefined, reason: string): ConfiguredLLM {
+function unavailable(kind: ConfiguredLLM["kind"], model: string | undefined, reasonCode: LLMUnavailableReason, reason: string): ConfiguredLLM {
   const provider: LLMProvider = {
     id: kind,
     status: () => "unavailable",
     invoke: () => Promise.resolve({ status: "failed", failure: { category: "not-configured", message: reason, retryable: false } }),
   };
-  return { provider, status: "unavailable", kind, ...(model === undefined ? {} : { model }), reason };
+  return { provider, status: "unavailable", kind, ...(model === undefined ? {} : { model }), reason, reasonCode };
 }
 
 export function createConfiguredLLMProvider(config: ProjectConfig["llm"], env: LLMEnvironment, options: LLMFactoryOptions = {}): ConfiguredLLM {
   if (config.provider === "none") return { provider: createNoopLLMProvider(), status: "disabled", kind: "none" };
   const model = config.model?.trim() ?? "";
-  if (model === "") return unavailable(config.provider, undefined, "llm.model is not set (DUO does not pick a model)");
+  if (model === "") return unavailable(config.provider, undefined, "model-missing", "llm.model is not set (DUO does not pick a model)");
   if (config.baseUrl !== null && !official(config.baseUrl)) {
-    return unavailable(config.provider, model, "llm.base_url is not supported: openai-responses calls the official OpenAI API only");
+    return unavailable(config.provider, model, "base-url-unsupported", "llm.base_url is not supported: openai-responses calls the official OpenAI API only");
   }
   const envBase = env.OPENAI_BASE_URL;
   if (envBase !== undefined && envBase.trim() !== "" && !official(envBase)) {
-    return unavailable(config.provider, model, "OPENAI_BASE_URL points elsewhere: openai-responses calls the official OpenAI API only");
+    return unavailable(config.provider, model, "base-url-env", "OPENAI_BASE_URL points elsewhere: openai-responses calls the official OpenAI API only");
   }
   if ((env.OPENAI_CUSTOM_HEADERS ?? "").trim() !== "") {
-    return unavailable(config.provider, model, "OPENAI_CUSTOM_HEADERS is set: openai-responses does not send environment-defined headers");
+    return unavailable(config.provider, model, "custom-headers-env", "OPENAI_CUSTOM_HEADERS is set: openai-responses does not send environment-defined headers");
   }
   const key = env[config.apiKeyEnv];
   if ((key === undefined || key.trim() === "") && options.openai?.client === undefined) {
-    return unavailable(config.provider, model, `${config.apiKeyEnv} is not set`);
+    return unavailable(config.provider, model, "credential-missing", `${config.apiKeyEnv} is not set`);
   }
   const provider = createOpenAIResponsesProvider({ model, ...(key === undefined ? {} : { apiKey: key.trim() }), ...options.openai });
   return { provider, status: provider.status(), kind: config.provider, model };
