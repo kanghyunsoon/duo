@@ -39,6 +39,7 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [roadmap/0.2.0-t26-doctor.md](roadmap/0.2.0-t26-doctor.md) | T26.1 Doctor Core + First-run State Guidance(Milestone D): 기존 진단 surface 감사, check 목록과 의존 관계, 상태 어휘, overall과 종료 코드, JSON 결정, init 다음 단계, ambiguous 안내, 성능, 검증, T26.2 제안 |
 | [roadmap/0.2.0-t26-ambiguity.md](roadmap/0.2.0-t26-ambiguity.md) | T26.2 Agent-facing Ambiguity Remediation(Milestone D 종료): ambiguity 경로 감사, handle 판정 규칙, MCP·CLI 문구, fixture A~E, resolver diff 0, Milestone E T27.1 provider spec 제안과 필요한 Human Decision |
 | [roadmap/0.2.0-t27-compatible-provider.md](roadmap/0.2.0-t27-compatible-provider.md) | T27.1 OpenAI-Compatible Provider(Milestone E): provider 구조 감사, 설정과 검증, endpoint 정책·결합, 두 transport와 세 structured_output, fallback·retry·redirect, redaction, cache identity, 오류 분류, doctor·status, 공식 provider 회귀, live smoke harness, GMS 예시 |
+| [roadmap/0.2.0-survivability-audit.md](roadmap/0.2.0-survivability-audit.md) | T27.5 DUO Survivability / Positioning Audit: Copilot·Cursor/Bugbot·Qodo·Codex·Claude Code 공식 자료 확인(2026-10-02), competitive matrix, copy·category·thesis·differentiation·moat 분리 판정, Truth authority tradeoff, killer benchmark 2개(설계), local 다섯 의미, enterprise·native·direct·DIY 위험, 12개월 bet, kill criteria, 0.2.0 영향 |
 | [conflicts.md](conflicts.md) | 원본 충돌, Human 결정 기록(H-*), 미결 사항 |
 | [adr/](adr/README.md) | ADR-001~014 |
 | [tasks/TASKS.md](tasks/TASKS.md) | TASK-000~020(TASK-012A/012B 포함), 의존성, E2E 매핑 |
