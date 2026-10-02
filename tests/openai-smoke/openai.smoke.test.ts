@@ -39,7 +39,7 @@ afterAll(() => {
 });
 
 describe.skipIf(!enabled)("OpenAI Responses smoke (opt-in)", () => {
-  const llm = { provider: "openai-responses" as const, model, apiKeyEnv: "OPENAI_API_KEY", baseUrl: null, maxCallsPerReview: 1, maxInputTokens: 4000, timeoutMs: 60_000, cache: false };
+  const llm = { provider: "openai-responses" as const, model, apiKeyEnv: "OPENAI_API_KEY", baseUrl: null, transport: null, structuredOutput: null, maxCallsPerReview: 1, maxInputTokens: 4000, timeoutMs: 60_000, cache: false };
 
   it("text and strict structured output, provider-reported usage", async () => {
     const { provider, status } = createConfiguredLLMProvider(llm, process.env, { openai: { fetch: recordingFetch } });

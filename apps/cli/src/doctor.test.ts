@@ -17,7 +17,7 @@ const REASONS: Readonly<Record<DoctorCheckId, readonly string[]>> = {
   "analysis.coverage": ["coverage"],
   "agent.codex": ["not-configured", "verified", "drifted", "conflict", "launcher-unavailable", "mcp-launch-failed", "mcp-tools-mismatch", "verify-failed"],
   "agent.claude_code": ["verified"],
-  "llm.configuration": ["disabled", "configured", "credential-missing", "model-missing", "base-url-unsupported", "base-url-env", "custom-headers-env"],
+  "llm.configuration": ["disabled", "configured", "credential-missing", "model-missing", "base-url-unsupported", "base-url-env", "custom-headers-env", "config-incomplete"],
 };
 const ACTIONS: readonly DoctorAction[] = [
   "install-node", "install-git", "git-init", "git-first-commit", "use-top-level", "init", "init-repair", "fix-truth", "index",
@@ -28,6 +28,7 @@ const FACTS = {
   name: "n", requirements: 0, decisions: 0, constraints: 0, conflicts: [{ path: "p" }], problems: [{ code: "C", path: "p" }], detail: "d", files: 3, fullRebuildReason: "corrupt",
   structural: 1, fileOnly: 2, languages: [{ language: "typescript", level: "L2", files: 1 }], fileOnlyExtensions: [{ extension: "md" }], launcher: "duoctl", tools: 9, mcp: "drifted",
   bridge: "current", target: ".mcp.json", version: "0", expected: 9, actual: 8, failed: ["launcher"], humanStep: "codex-trust", provider: "openai-responses", model: "m", credentialEnv: "OPENAI_API_KEY",
+  endpoint: "https://gateway.example", transport: "chat-completions", structuredOutput: "prompt-only",
 };
 const group = (id: DoctorCheckId) => (id.startsWith("agent.") ? "agents" : id.slice(0, id.indexOf("."))) as DoctorCheck["group"];
 

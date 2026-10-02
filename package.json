@@ -23,6 +23,7 @@
     "test:conformance": "pnpm build && node scripts/pack-cli.mjs && node scripts/release/conformance.mjs",
     "test:dist": "node scripts/pack-cli.mjs && vitest run --config vitest.dist.config.ts --reporter=verbose",
     "test:openai-smoke": "vitest run --config vitest.openai-smoke.config.ts --reporter=verbose",
+    "test:compatible-smoke": "vitest run --config vitest.compatible-smoke.config.ts --reporter=verbose",
     "benchmark": "pnpm build && node bench/run.mjs --full && node bench/check.mjs --full && node bench/cache.mjs && node bench/upgrade.mjs && node bench/incremental.mjs && node bench/invariant.mjs && node bench/self.mjs && node bench/packed.mjs",
     "benchmark:smoke": "node bench/run.mjs && node bench/check.mjs",
     "benchmark:realworld": "node bench/realworld-suite.mjs",

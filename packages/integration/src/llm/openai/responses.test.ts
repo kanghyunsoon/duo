@@ -155,7 +155,7 @@ describe("cache identity and status (T12B)", () => {
 });
 
 const llm = (over: Partial<Parameters<typeof createConfiguredLLMProvider>[0]> = {}) => ({
-  provider: "openai-responses" as const, model: "gpt-test", apiKeyEnv: "OPENAI_API_KEY", baseUrl: null, maxCallsPerReview: 1, maxInputTokens: 4000, timeoutMs: 30000, cache: true, ...over,
+  provider: "openai-responses" as const, model: "gpt-test", apiKeyEnv: "OPENAI_API_KEY", baseUrl: null, transport: null, structuredOutput: null, maxCallsPerReview: 1, maxInputTokens: 4000, timeoutMs: 30000, cache: true, ...over,
 });
 
 describe("provider factory (T12B)", () => {
