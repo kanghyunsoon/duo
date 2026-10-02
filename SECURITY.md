@@ -6,7 +6,8 @@ DUO is in 0.x. Security fixes are made for the latest released 0.x version only.
 
 | Version | Supported |
 |---|---|
-| 0.1.x | Yes |
+| 0.2.x | Yes |
+| 0.1.x | No (upgrade to 0.2.x; see docs/release/notes-0.2.0.md) |
 
 ## Reporting a vulnerability
 
@@ -31,7 +32,7 @@ In scope, for example:
 - the local UI server (`duoctl ui`): loopback binding, Host and Origin checks, session and CSRF handling, requests that change Project Truth
 - writes outside DUO's write boundary (`.duo-project/` and agent configuration files DUO manages), path traversal and symlink handling
 - secrets from the repository or the environment reaching Context Packets, Review Records, caches, metrics or logs
-- data sent to the OpenAI API when semantic assistance is enabled, beyond the documented evidence excerpts
+- data sent to an LLM provider (the official OpenAI API or an explicitly configured OpenAI-compatible endpoint) when semantic assistance is enabled, beyond the documented evidence excerpts; credentials, endpoint paths or provider errors appearing in output, caches or logs
 - the MCP server writing anything except its protocol on stdout, or acting outside the documented tools
 - the published package: contents, dependency pinning (`npm-shrinkwrap.json`), install-time behaviour
 

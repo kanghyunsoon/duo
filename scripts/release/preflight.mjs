@@ -59,6 +59,7 @@ if (skipTests) {
   step("benchmarkSmoke", ["benchmark:smoke"]);
   step("distribution", ["test:dist"]); // packs, then clean global/local install, MCP, UI, polyglot, llm off
   step("conformance", ["test:conformance"]); // TASK-020: journeys and RC-only checks against the installed release candidate
+  step("upgrade", ["release:upgrade"]); // T28: the published previous version adopts four repositories, the installed RC takes over
 }
 const testedIntegrity = fs.existsSync(path.join(DIST, "pack.json")) ? readJson(path.join(DIST, "pack.json")).integrity : undefined;
 
@@ -162,6 +163,11 @@ const conformance = fs.existsSync(conformanceFile) ? readJson(conformanceFile) :
 if (!skipTests && (conformance?.git?.commit !== git.commit || conformance.problems.length > 0 || conformance.e2e?.ok !== true)) {
   block("conformance", "no passing release conformance report for this commit");
 }
+const upgradeFile = path.join(DIST, "release-upgrade.json");
+const upgrade = fs.existsSync(upgradeFile) ? readJson(upgradeFile) : undefined;
+if (!skipTests && (upgrade?.git?.commit !== git.commit || upgrade.ok !== true || upgrade.integrity !== candidate.integrity)) {
+  block("upgrade", "no passing upgrade journey (" + (upgrade?.from ?? "previous version") + " → " + manifest.version + ") for this commit and release candidate");
+}
 
 // ---- npm identity, registry, scope, availability (C168, §23–27, network) ----
 const npmConfig = (key) => npm(["config", "get", key]).stdout.trim();
@@ -239,13 +245,14 @@ const report = {
   package: pkg, reproducibility, scan,
   dependencies, license, npm: npmState, openaiSmoke,
   blockers,
-  deferred: ["C184 optional grammar packaging", "C185 custom analyzer capability persistence", "C197 gap semantic assist", "C198 public repository benchmark", "C202 further performance candidates", "C208 real OpenAI smoke (optional integration verification, H-45)", "C212 OpenAI-compatible endpoint provider as a separate adapter (H-45)", "L2 resolvers for Java, C#, C++, Python", "REQ-NFR-004 scope (DP-1, priority should)"],
+  deferred: ["C184 optional grammar packaging", "C185 custom analyzer capability persistence", "C197 gap semantic assist", "C198 public repository benchmark", "C202 further performance candidates", "C208 real OpenAI smoke (optional integration verification, H-45)", "OpenAI-compatible endpoint live smoke (optional, pnpm test:compatible-smoke, not a release gate; H-60)", "C224 overload member identity (H-52)", "C229 polyglot Context ranking (Deferred to 0.2.x Context Quality / strategy validation, H-62)", "C232 C++ IMPORTS include paths (documented C++ L1 limitation)", "L2 resolvers for Java, C#, C++, Python", "REQ-NFR-004 scope (DP-1, priority should)"],
   ready: blockers.length === 0,
   // BLOCKED with codeReady true means the code and artifact are ready and only external human actions remain.
   codeReady: blockers.every((b) => b.kind !== "code"),
   externalReady: blockers.every((b) => b.kind !== "external"),
   readiness: blockers.length === 0 ? "READY" : "BLOCKED",
   nfrDecision,
+  upgrade: upgrade === undefined ? null : { from: upgrade.from, to: upgrade.to, commit: upgrade.git?.commit, ok: upgrade.ok, repositories: upgrade.repositories?.map((r) => ({ id: r.id, configs: r.configs, before: r.rc?.statusBefore?.index?.status, index: r.rc?.index?.mode, after: r.rc?.statusAfter?.index, truthUnchanged: r.truth?.unchanged })), problems: upgrade.problems },
   conformance: conformance === undefined ? null : { commit: conformance.git?.commit, e2e: conformance.e2e === undefined ? null : { passed: conformance.e2e.passed, failed: conformance.e2e.failed }, c209: { runs: conformance.c209?.runs, anomalies: conformance.c209?.anomalies, failures: conformance.c209?.failures }, problems: conformance.problems },
 };
 fs.writeFileSync(path.join(DIST, "release-preflight.json"), JSON.stringify(report, null, 2) + "\n");

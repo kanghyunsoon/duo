@@ -83,7 +83,7 @@ OPENAI_API_KEY=... duoctl review --semantic
 
 `openai-responses`는 공식 OpenAI API(`api.openai.com`)에만 연결합니다. 실제 OpenAI API 연동 smoke는 release gate에 포함되지 않은 선택 검증입니다.
 
-공식 OpenAI 외의 endpoint는 **명시적으로 설정한 OpenAI-compatible endpoint**로 쓸 수 있습니다(0.2.0 개발 중, T27.1). DUO가 지원하는 것은 공식 OpenAI Responses provider와, 사람이 고른 Responses 또는 Chat Completions transport로 동작하는 OpenAI-compatible endpoint입니다. 모든 OpenAI 호환 API가 동작한다는 뜻은 아니고, endpoint가 고른 transport와 structured_output을 지원하는 범위에서만 동작합니다. 다음은 GMS 같은 gateway의 **설정 예시**입니다. DUO는 이 예시의 endpoint를 직접 검증하지 않았으므로 지원하는 transport와 출력 방식을 먼저 확인하세요.
+공식 OpenAI 외의 endpoint는 **명시적으로 설정한 OpenAI-compatible endpoint**로 쓸 수 있습니다(0.2.0부터). DUO가 지원하는 것은 공식 OpenAI Responses provider와, 사람이 고른 Responses 또는 Chat Completions transport로 동작하는 OpenAI-compatible endpoint입니다. 모든 OpenAI 호환 API가 동작한다는 뜻은 아니고, endpoint가 고른 transport와 structured_output을 지원하는 범위에서만 동작합니다. 다음은 GMS 같은 gateway의 **설정 예시**입니다. DUO는 이 예시의 endpoint를 직접 검증하지 않았으므로 지원하는 transport와 출력 방식을 먼저 확인하세요.
 
 ```yaml
 llm:
@@ -97,7 +97,7 @@ llm:
 
 다섯 값은 모두 필수이고 DUO가 대신 정하거나 실패했을 때 다른 방식으로 바꿔 보내지 않습니다. `base_url`에 user 정보나 query를 쓸 수 없고 공식 OpenAI 주소는 `openai-responses`로만 씁니다. redirect는 따라가지 않으며, `duoctl status`와 `duoctl doctor`는 endpoint의 origin(`https://host`)만 보여 줍니다.
 
-`--semantic`(MCP `includeSemanticAssist: true`)을 줄 때만 Review의 의미 후보를 한 번 확인합니다. 이때 **선택된 Evidence 발췌(관련 Truth 문단, 바뀐 코드 부분, diff hunk)가 OpenAI API로 전송됩니다**. 파일 전체나 저장소는 보내지 않고, 알려진 credential 형식은 Context Packet과 같은 규칙으로 `[REDACTED]`로 바꾼 뒤 `store: false`로 요청합니다. 결과는 별도 `semanticAssist`로 붙고 결정적 판정을 바꾸거나 BLOCK을 만들지 않습니다. 같은 요청의 검증된 응답은 로컬 `.duo-project/cache/llm/`에 저장되며(`llm.cache: false`로 끔), 이것은 OpenAI 서버 저장과 별개입니다.
+`--semantic`(MCP `includeSemanticAssist: true`)을 줄 때만 Review의 의미 후보를 한 번 확인합니다. 이때 **선택된 Evidence 발췌(관련 Truth 문단, 바뀐 코드 부분, diff hunk)가 설정한 provider(공식 OpenAI API 또는 지정한 endpoint)로 전송됩니다**. 파일 전체나 저장소는 보내지 않고, 알려진 credential 형식은 Context Packet과 같은 규칙으로 `[REDACTED]`로 바꾼 뒤 `store: false`로 요청합니다(Responses transport). 결과는 별도 `semanticAssist`로 붙고 결정적 판정을 바꾸거나 BLOCK을 만들지 않습니다. 같은 요청의 검증된 응답은 로컬 `.duo-project/cache/llm/`에 저장되며(`llm.cache: false`로 끔), 이것은 OpenAI 서버 저장과 별개입니다.
 
 Agent는 MCP Tool 9개(`duo_get_status`, `duo_get_context`, `duo_review_changes`, `duo_get_requirement`, `duo_get_decision`, `duo_trace`, `duo_impact`, `duo_search_evidence`, `duo_propose_decision`)를 씁니다. Agent는 Decision을 제안만 할 수 있고 확정과 거절은 사람이 `duoctl decision`으로 합니다. Tool은 인덱싱하지 않으므로 `index-required`를 받으면 `duoctl index`를 실행합니다. 명령은 [07-cli-interface.md](docs/07-cli-interface.md), MCP와 설치 계약은 [06-mcp-interface.md](docs/06-mcp-interface.md)에 있습니다.
 
@@ -131,8 +131,8 @@ pnpm duoctl --version
 이 저장소에서 package tarball을 만들어 설치합니다. npm registry의 package와 같은 구성입니다.
 
 ```bash
-pnpm install && pnpm release:pack          # .dist/duo-director-cli-0.1.2.tgz
-npm install -g .dist/duo-director-cli-0.1.2.tgz
+pnpm install && pnpm release:pack          # .dist/duo-director-cli-0.2.0.tgz
+npm install -g .dist/duo-director-cli-0.2.0.tgz
 ```
 
 ## License와 보안

@@ -9,12 +9,25 @@
 | `pnpm release:lock` | `apps/cli/npm-shrinkwrap.json` 재생성(의존성 변경 시). diff를 검토해 커밋 | 필요 |
 | `pnpm release:pack` | clean tree 확인 → build → pack → `.dist/release-candidate.json`(commit, branch, clean, version, hash). dirty면 거부(`DUO_RELEASE_ALLOW_DIRTY=1`은 시험용) | 불필요 |
 | `pnpm release:audit` | shrinkwrap 트리의 npm advisory와 deprecated 검사 → `.dist/release-audit.json` | 필요 |
-| `pnpm release:preflight` | git·CI → verify, grammar, benchmark smoke, 배포 E2E → release:pack → 재현성 → metadata·allowlist·secret·절대경로 → dependency·license → npm identity·registry·scope·version → `npm publish --dry-run` → OpenAI smoke 결과(선택 검증, blocker 아님) | 필요 |
+| `pnpm release:preflight` | git·CI → verify, grammar, benchmark smoke, 배포 E2E → release:pack → 재현성 → metadata·allowlist·secret·절대경로 → dependency·license → npm identity·registry·scope·version → `npm publish --dry-run` → OpenAI smoke 결과(선택 검증, blocker 아님). 검증 단계에 `release:upgrade`가 포함된다 | 필요 |
+| `pnpm release:upgrade` | upgrade journey(T28): registry의 이전 version(기본 0.1.2)과 RC를 격리 prefix 두 곳에 설치 → 이전 version이 TypeScript·Python·C++·sparse 저장소를 도입(0.1.x project.yaml 변형 A~E, Codex 연결) → RC 설치본으로 `--version`·status(stale)·doctor·index·status(current)·context·review·install verify → Truth byte·baseline·re-init·migration 확인 → `.dist/release-upgrade.json`. preflight가 이 commit·RC의 성공 결과를 요구한다 | 필요(이전 version 설치) |
 | `pnpm test:openai-smoke` | 선택: 실제 OpenAI Responses 호출(공식 `api.openai.com`, `DUO_OPENAI_SMOKE=1`, `OPENAI_API_KEY`, `DUO_OPENAI_SMOKE_MODEL`). `.dist/openai-smoke.json`에 commit, model, 확인 항목만 기록 | 필요 |
 | `pnpm test:conformance` | RC를 격리 prefix에 설치 → shrinkwrap 트리·notices → C209 init 반복(`DUO_C209_RUNS`, 기본 20) → 설치된 duoctl로 CLI·MCP·install journey와 RC 전용 검사 → 문서·help 대조 → `.dist/release-conformance.json` | 필요(npm install) |
 | `pnpm release:verify-published` | publish **뒤** 확인(T21): registry의 name·version·integrity·license·engines·bin → 빈 npm 설정과 새 cache로 임시 prefix에 `npm install -g` → 설치된 파일 수·LICENSE·shrinkwrap → PATH의 `duoctl --version`·`--version --json`·`--help` → 새 Git 저장소에서 `init`→`status` → origin의 `v<version>` tag commit → GitHub Release(draft 아님) → `.dist/release-published.json`. 기대 integrity와 commit은 `--integrity`·`--commit` 또는 같은 version의 `.dist/release-candidate.json`. publish·tag·login을 하지 않고 npm credential을 읽지 않는다. CI와 `pnpm verify`에는 넣지 않는다 | 필요 |
 
-## 0.1.2 (H-47, 준비 중)
+## 0.2.0 (H-62, release candidate)
+
+Minor release: L1 correctness, freshness 최적화, doctor·onboarding, ambiguity 안내, OpenAI-compatible provider([release notes](notes-0.2.0.md), [호환성 분류](compatibility.md#020-변경-분류-t28-h-62)). 공개 형식은 additive 추가만 있고 0.1.x Truth·project.yaml은 그대로 유효하다. T28에서는 release blocker·regression·packaging 수정만 허용했다.
+
+- [x] version 0.1.2 → 0.2.0: `apps/cli/package.json`, `apps/cli/npm-shrinkwrap.json`의 package version 두 곳(의존성 트리 불변), README·07의 현재 version 예시
+- [x] upgrade journey(`pnpm release:upgrade`, preflight `upgrade` blocker): 공개 0.1.2 → RC, stale → index 한 번 → current, Truth byte 불변
+- [x] release notes, compatibility, product contract(#17 OpenAI-Compatible Provider, #18 upgrade), SECURITY 지원 version(0.2.x)
+- [ ] full CI(3 OS), real-world workflow(3 OS), `pnpm release:preflight` READY, `npm publish --dry-run`
+- [ ] 사람이 publish, tag, GitHub Release를 실행한 뒤 `pnpm release:verify-published`
+
+실제 외부 OpenAI-compatible endpoint smoke(`pnpm test:compatible-smoke`)와 실제 OpenAI smoke는 선택 검증이며 0.2.0 release gate가 아니다(NOT RUN · optional external smoke).
+
+## 0.1.2 (H-47, release, `v0.1.2` = `93010a4`)
 
 Security patch: LLM provider 요청의 secret redaction([release notes](notes-0.1.2.md)). 공개 형식, 명령 의미, exit code, Truth 형식, 결정적 Review는 0.1.1과 같다. 다른 기능 변경은 넣지 않는다.
 
@@ -68,14 +81,19 @@ Patch release: 사람용 CLI 안내 3개, 테스트, release tooling, 문서([re
 
 ## Publish 명령 (문서화만, 사람이 명시적으로 요청한 뒤에만 실행)
 
+순서(0.1.x와 같은 흐름, publish가 먼저이고 tag는 registry 확인 뒤):
+
 ```bash
-pnpm release:preflight          # blocker 0이어야 한다
-npm publish .dist/duo-director-cli-0.1.2.tgz --access public --registry https://registry.npmjs.org/
-git tag -a v0.1.2 -m "DUO 0.1.2" <release candidate commit> && git push origin v0.1.2
-pnpm release:verify-published   # GitHub Release를 만든 뒤
+pnpm release:preflight          # READY, blocker 0 (release candidate commit에서)
+npm publish .dist/duo-director-cli-0.2.0.tgz --access public --registry https://registry.npmjs.org/
+npm view @duo-director/cli@0.2.0 version dist.integrity --registry https://registry.npmjs.org/   # 전파 확인, integrity = RC
+npm install -g @duo-director/cli@0.2.0 && duoctl --version                                         # clean global install
+git tag -a v0.2.0 -m "DUO 0.2.0" <release candidate commit> && git push origin v0.2.0
+# GitHub Release v0.2.0 (본문: docs/release/notes-0.2.0.md)
+pnpm release:verify-published   # --version 0.2.0 --integrity <RC integrity> --commit <RC commit>
 ```
 
-0.1.0은 `v0.1.0`(`04bab58`), 0.1.1은 `v0.1.1`(`834bc6f`)로 게시했다.
+0.1.0은 `v0.1.0`(`04bab58`), 0.1.1은 `v0.1.1`(`834bc6f`), 0.1.2는 `v0.1.2`(`93010a4`)로 게시했다.
 
 README와 package README는 publish 전에 이미 npm registry 설치 흐름으로 바뀌어 있고, 그 문서 전환 commit이 final release candidate다. publish 뒤 문서를 다시 바꿀 필요는 없다. GitHub Release는 tag를 push한 뒤 따로 만든다.
 
