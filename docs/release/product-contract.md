@@ -19,6 +19,7 @@
 | 13 | Claude Code integration | project `.mcp.json`, CLAUDE.md 블록, 서버 승인은 사용자가 한다(approvalRequired), 생성된 명령으로 MCP가 뜬다 | RC: `tests/install`, `tests/distribution` |
 | 14 | Local UI | `127.0.0.1` loopback 로컬 도구. Host·Origin·session·CSRF 검사, GET으로 쓰기 불가, 외부 origin 자원 없음(CSP), 판단 logic 없이 CLI·MCP와 같은 operation 결과를 보여 준다 | RC: `tests/cli/ui`, conformance(parity, 보안, CSP, Decision Lock). WS: `tests/ui` browser |
 | 15 | Distribution | `@duo-director/cli` 하나, Node 24.15+, native build·install script 없음, `npm-shrinkwrap.json`으로 고정된 트리, 제3자 고지, 설치본은 workspace를 보지 못한다 | RC: `tests/distribution`, conformance runner(shrinkwrap 트리, notices), `release:preflight` |
+| 16 | Doctor (0.2.0, T26.1) | `duoctl doctor`는 읽기 전용(Truth·source·index·Agent 설정 byte 불변)이다. 선행 조건이 실패하면 뒤 check를 건너뛰고, 다음 행동을 Git → Truth → index → Agent 순서로 1~3개 보인다. 연결하지 않은 Agent와 꺼진 LLM은 정상이고, Codex와 Claude Code 중 기본 추천이 없다. 분석 수준은 L0/L1/L2 그대로이고 secret은 나오지 않는다. error check가 있을 때만 종료 코드 6 | RC: `tests/cli/doctor`(A~R lifecycle, 실제 MCP launch, no-mutation, secret canary, en/ko). WS: renderer 문구 전체(`apps/cli/src/doctor.test.ts`) |
 
 ## RC에서 검증하지 않는 것과 이유
 

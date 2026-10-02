@@ -23,15 +23,18 @@ npm install -g @duo-director/cli
 cd existing-project
 duoctl init
 duoctl install codex
+duoctl doctor
 # optional
 duoctl ui
 ```
 
-Claude Code를 쓴다면 `duoctl install codex` 대신 `duoctl install claude-code`를 실행합니다. source에서 만든 package로 설치하는 방법은 [From source](#from-source)에 있습니다.
+Claude Code를 쓴다면 `duoctl install codex` 대신 `duoctl install claude-code`를 실행합니다. 둘 중 하나면 되고 둘 다 연결해도 됩니다. source에서 만든 package로 설치하는 방법은 [From source](#from-source)에 있습니다.
 
-`duoctl init`은 이미 있는 저장소에서 시작합니다. 저장소를 관찰하고, 꼭 필요한 질문만 사람에게 묻고, 최소한의 Project Truth를 만들고, 첫 index를 만든 뒤, 지금 상태를 Adoption Baseline으로 기록합니다. 그래서 도입 전부터 있던 문제와 도입 후 새로 생긴 문제를 구분합니다. 처음부터 DUO로 만든 프로젝트가 아니어도 됩니다. 작업 중인 변경이 있으면 `--baseline-policy head|abort` 중 하나를 고릅니다.
+`duoctl init`은 이미 있는 Git 저장소에서 시작합니다(첫 commit이 있어야 합니다). 저장소를 관찰하고, 꼭 필요한 질문만 사람에게 묻고, 최소한의 Project Truth를 만들고, 첫 index를 만든 뒤, 지금 상태를 Adoption Baseline으로 기록합니다. 그래서 도입 전부터 있던 문제와 도입 후 새로 생긴 문제를 구분합니다. 처음부터 DUO로 만든 프로젝트가 아니어도 됩니다. 작업 중인 변경이 있으면 `--baseline-policy head|abort` 중 하나를 고릅니다.
 
 `duoctl install codex`와 `duoctl install claude-code`는 바꿀 파일을 먼저 보여 주고, 확인하면 MCP 설정(`.codex/config.toml` 또는 `.mcp.json`)과 짧은 안내 블록(`AGENTS.md` 또는 `CLAUDE.md`)을 추가한 뒤 DUO 서버가 실제로 뜨는지 확인합니다. 기존 설정과 사람이 쓴 글은 그대로 두고, commit은 직접 합니다. Codex는 이 project를 trust해야 하고 Claude Code는 `duo-director` 서버 승인을 묻습니다. DUO는 둘 다 대신하지 않습니다. `duoctl install status`로 연결 상태를, `duoctl install remove <agent>`로 DUO가 추가한 항목만 제거합니다. project 안에만 설치했다면 `--launcher npx`를 줍니다.
+
+`duoctl doctor`는 Git(저장소, 첫 commit, 작업 중인 변경), Project Truth, index, 언어별 분석 수준([L0/L1/L2](docs/language-support.md#analysis-level)), 연결한 Agent(MCP 서버를 실제로 띄워 봄), 선택 LLM 설정을 한 번에 확인하고 먼저 할 일을 1~3개 보여 줍니다. 읽기만 하며 init, index, 설치를 대신하지 않습니다. 문제가 있을 때만 종료 코드 6입니다. UI와 LLM은 선택 사항이라 쓰지 않아도 정상으로 보입니다.
 
 `duoctl ui`는 `127.0.0.1`에서 로컬 Console을 열고 출력된 URL로 접속합니다. UI는 현재 index를 읽기만 하므로 `index-required`가 보이면 `duoctl index`를 실행하고 Refresh합니다. UI에서 바꿀 수 있는 Truth는 사람의 Decision Confirm/Reject뿐입니다.
 

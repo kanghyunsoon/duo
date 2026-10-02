@@ -11,11 +11,14 @@ npm install -g @duo-director/cli     # 1. install the duoctl executable
 cd your-git-repository
 duoctl init                          # 2. initialize DUO in this repository (.duo-project/, first index, adoption baseline)
 duoctl install codex                 # 3. connect a coding agent (or: duoctl install claude-code)
+duoctl doctor                        # 4. check the whole setup and see what to do next (read-only)
 # optional
 duoctl ui                            # local read-only console on 127.0.0.1
 ```
 
 Step 3 shows the planned file changes first and asks before writing. Codex needs the project to be trusted; Claude Code asks you to approve the `duo-director` server. DUO never commits.
+
+`duoctl doctor` checks Git (an initial commit is required), Project Truth, the index, the analysis level per language, connected agents (it starts their MCP server) and the optional LLM settings, then lists the first one to three things to do. It never initializes, indexes, installs or changes a file. An agent you have not connected and a disabled LLM are fine.
 
 `duoctl init` works on an existing repository: it observes the repository, asks a few questions, writes a minimal Project Truth, builds the first index and records an adoption baseline, so problems that existed before DUO are told apart from new ones.
 

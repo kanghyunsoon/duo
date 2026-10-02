@@ -14,6 +14,7 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 |---|---|---|---|---|
 | `duoctl init` | 기존 저장소 adoption: plan → Truth → Index → Baseline | `--yes`, `--non-interactive`, `--answers -`, `--baseline-policy head\|abort`, `--repair` | director InitService, graph Indexer, director Adoption | Truth, generated, reviews/adoption-* |
 | `duoctl status` | 초기화 여부, Truth 개수, index freshness(변경 파일, 분석 stale, module resolution, call 재계산 후보, full rebuild 이유), adoption baseline, pending decision, LLM 상태 | | core loader, graph inspectIndex, director baseline status, core listDecisionProposals | 없음 |
+| `duoctl doctor` | 설정 전체 진단(T26.1): runtime, Git(저장소, 최상위, 첫 commit, 작업 트리), Project Truth, adoption baseline, index freshness, 분석 수준, Agent 연결(설정, launcher, MCP launch, tool 목록), 선택 LLM. 다음 행동 1~3개 | | integration `projectDoctor`(openGitProvider, loadProjectTruth, inspectStateDirectory, getAdoptionBaselineStatus, inspectIndex, inspectAgentIntegration, verifyAgentIntegration, LLMProviderPool) | 없음 |
 | `duoctl index` | Indexer 실행 | `--full`(저장된 state를 쓰지 않는 clean rebuild) | graph indexRepository | generated, cache |
 | `duoctl context <task>` | Context Packet(기본 Markdown, `--json`은 ContextResult) | `--budget <n>`, `--refresh` | director compileContext | 없음(`--refresh`만 index) |
 | `duoctl review` | 변경 검수 | `--staged`, `--from <ref>`, `--to <ref>`, `--files a,b`, `--task`, `--budget`, `--record`, `--refresh`, `--fail-on block\|ask\|warn`, `--strict`, `--semantic` | director reviewChanges, recordReview, integration LLM factory(`--semantic`만) | 없음(`--record`만 reviews/) |
@@ -35,7 +36,7 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 ## 출력과 JSON
 
 - 기본 출력은 사람이 읽는 짧은 text이며 renderer가 locale(en, ko)별 문구로 만든다. Knowledge Gap 질문은 director renderer, Review claim은 rule·subject·reason 코드로 보인다.
-- `--json`은 stdout에 envelope 하나를 출력한다: `{ format: "duo.cli.<command>/1", command, ok, exitCode, result, meta?, diagnostics }`. `result`는 integration shared operation의 semantic payload다(TASK-016, C135): status `duo.status/1`, context `duo.context/1` `{ status, context: ContextResult(performance 제외), gaps }`, review `ReviewResult`(`duo.review/1`), trace `duo.trace/1`, impact `duo.impact/1`. `meta`는 surface metadata(`performance`, review `--record`의 `record`)이며 비교 대상이 아니다. index는 `{ mode, fullRebuildReason, metrics, graphRevision }`, init은 `{ steps, plan, apply?, index?, baseline? }`. Agent는 문장을 parsing하지 않는다.
+- `--json`은 stdout에 envelope 하나를 출력한다: `{ format: "duo.cli.<command>/1", command, ok, exitCode, result, meta?, diagnostics }`. `result`는 integration shared operation의 semantic payload다(TASK-016, C135): status `duo.status/1`, doctor `duo.doctor/1`, context `duo.context/1` `{ status, context: ContextResult(performance 제외), gaps }`, review `ReviewResult`(`duo.review/1`), trace `duo.trace/1`, impact `duo.impact/1`. `meta`는 surface metadata(`performance`, review `--record`의 `record`)이며 비교 대상이 아니다. index는 `{ mode, fullRebuildReason, metrics, graphRevision }`, init은 `{ steps, plan, apply?, index?, baseline? }`. Agent는 문장을 parsing하지 않는다.
 - 질문과 확인 prompt는 stderr로 나가므로 `--json` stdout은 항상 JSON이다.
 - MCP structuredContent는 같은 shared operation의 payload다. `status|context|review|trace|impact --json`의 `result`와 해당 Tool의 structuredContent가 deep-equal임을 e2e로 확인한다(AC-015-03, C135 해결). T15의 review `result.review`·`result.record`는 `result`·`meta.record`로, context `result.packet`은 `result.context.packet`으로 옮겼다. 종료 코드는 그대로다.
 
@@ -45,13 +46,13 @@ Operational failure와 Review verdict를 섞지 않는다. Verdict는 `--fail-on
 
 | 코드 | 의미 |
 |---|---|
-| 0 | 성공. review는 verdict와 상관없이 0 |
+| 0 | 성공. review는 verdict와 상관없이 0. doctor는 error check가 없을 때(warning, 연결하지 않은 Agent, 꺼진 LLM이 있어도 0) |
 | 1 | 실행 오류, 잘못된 사용, 터미널이 필요한 명령을 비대화형으로 실행 |
 | 2 | review WARN 이상이고 `--fail-on warn` |
 | 3 | review ASK 이상이고 `--fail-on ask\|warn` |
 | 4 | review BLOCK이고 `--fail-on block\|ask\|warn` |
 | 5 | .duo-project 없음(NOT_INITIALIZED) |
-| 6 | 조치 필요: index-required(context, review), adoption policy 필요, ABORT_AND_CLEAN, partial의 repair, install의 conflict·launcher 없음·확인 필요(비대화형에서 `--yes` 없음) |
+| 6 | 조치 필요: index-required(context, review), adoption policy 필요, ABORT_AND_CLEAN, partial의 repair, install의 conflict·launcher 없음·확인 필요(비대화형에서 `--yes` 없음), doctor의 error check(초기화 전 포함: doctor는 5를 쓰지 않는다) |
 
 install은 init 전이면 5(`AGENT_NOT_INITIALIZED`), verify 실패면 1이다.
 
@@ -91,10 +92,14 @@ Index      ok · full (no-state) · 40 files
 Adoption baseline: [1] use HEAD as the baseline (current changes stay changes to review)  [2] abort and clean the repository first
 > 1
 Baseline   ok · 2f3355d5f46b · dirty at adoption (HEAD_BASELINE) · 0 pre-existing findings
-DUO is set up. Next: duoctl status · duoctl context <task> · duoctl review
+DUO is set up: Truth, index and adoption baseline are ready. Next:
+  1. Connect a coding agent (either one): duoctl install codex · duoctl install claude-code
+  2. Check the whole setup: duoctl doctor
+  Optional: duoctl ui opens a local console to look around
 ```
 
 - 단계 Repository(`planInit`), Truth(`applyInitPlan`), Index(`indexRepository`), Baseline(`captureAdoptionBaseline`)를 각각 보고한다. 한 단계가 실패하면 init은 성공이 아니며, 다시 실행하면 첫 미완료 단계부터 잇는다(기존 Truth는 `INIT_ALREADY_INITIALIZED`로 건드리지 않음, index가 current면 건너뜀, baseline이 있으면 건너뜀).
+- 성공한 init의 다음 단계(T26.1)는 Agent 연결(두 Agent를 같은 줄에, 기본 추천 없음)과 `duoctl doctor`다. init이 이미 index와 baseline을 만들었으므로 `duoctl index`를 다시 안내하지 않는다. UI는 선택으로 표시한다. 사람이 읽는 문구이며 `--json` 결과는 그대로다.
 - 질문(InitService의 `InitQuestion`)은 TTY에서만 묻는다: 프로젝트 Goal(README 첫 문단 또는 package.json description 제안, 받아들이면 README provenance), 현재 Milestone 또는 MVP 범위(제목, ID는 plan이 배정), Critical Constraint(';'로 구분, confirmed·warn). 관찰로 알 수 있는 것은 묻지 않는다. 답하지 않은 질문은 vision.md의 `UNKNOWN(<id>)` 줄이 되고 JSON `result.plan.questions`로 ASK 목록이 된다(AC-014-04).
 - 비대화형(`--non-interactive` 또는 TTY 없음)의 Human 답은 `--answers -`로 stdin JSON(`InitAnswer[]` 또는 `{ "answers": [...] }`)을 준다.
 - **`--yes`는 Human Intent를 만들어내는 옵션이 아니다.** 파일 생성 확인, partial repair 같은 operational 확인만 승인한다. README 제안 vision, 추론한 milestone, 제안 constraint, import 후보를 확정하지 않고, dirty adoption policy도 고르지 않는다.
@@ -122,6 +127,58 @@ LLM: disabled
 쓰기 0이다. Graph는 read-only로 연다(`openProjectGraphReader`: graph.db가 없으면 아무것도 만들지 않고 빈 in-memory graph로 missing을 보고). SQLite는 WAL 데이터베이스의 read-only 연결에 `graph.db-wal`/`graph.db-shm` sidecar를 만들 수 있으며 이는 regenerable 영역의 SQLite 관리 파일이고 graph.db 내용은 바뀌지 않는다(C131). baseline status는 missing, current, advanced, repository-diverged, incompatible이다.
 
 `Analysis` 줄과 JSON `result.analysis`(T18.0, `duo.status/1`에 더한 필드, MCP `duo_get_status`와 같음)는 분석 coverage 사실이다: `analyzerRegistryDigest`, `files` {total, structural, fileOnly}, 언어별 {language, files, analyzer, level, symbols, tests, imports, calls, typeResolution}, `fileOnly` {level: "L0", files, extensions}. 점수가 아니다. level과 capability의 뜻은 [language-support.md](language-support.md). `duoctl impact`와 `duo_impact`는 관련 파일 언어의 limitation을 `limitations`로 더한다.
+
+## duoctl doctor
+
+T26.1(Milestone D). 처음 설치했거나 무언가 안 될 때 여러 명령과 문서를 오가지 않고 현재 상태와 다음 행동을 한 번에 본다. 읽기 전용이다: init, index, install, commit, 설정 수정, cache 삭제, LLM 호출, network, package update를 하지 않고 metric도 쓰지 않는다.
+
+```text
+$ duoctl doctor
+DUO Doctor · ready
+
+Runtime
+  ok       duoctl 0.1.2 · Node.js v24.18.0 (supported: >=24.15.0)
+
+Git
+  ok       Git repository: /work/poly
+  ok       Initial commit present · branch main
+  info     Working tree clean
+
+Project Truth
+  ok       poly · 0 requirements · 0 decisions · 0 constraints
+  ok       Adoption baseline 88a0145ad766
+
+Index
+  ok       Index current
+
+Analysis
+  info     cpp L1 (2) · csharp L1 (1) · java L1 (1) · python L1 (2) · typescript L2 (2) · other files L0 (5: .json, .md, .toml, .xml)
+           L0 every file: Git history, diff and Truth references · L1 symbols and structure · L2 resolved imports and calls (docs/language-support.md)
+
+Coding agents (optional, either one)
+  ok       Codex: connected, the MCP server starts (duoctl · 9 tools)
+           Codex loads .codex/config.toml only in a project you trust (DUO does not change trust).
+  info     Claude Code: not connected
+           → Run duoctl install claude-code
+
+LLM (optional)
+  info     Disabled (llm.provider: none). DUO works fully without an LLM.
+
+Next
+  Nothing to do.
+```
+
+- Check(순서 = 의존 순서): `runtime.node`, `git.repository`, `git.initial_commit`, `git.working_tree`, `truth.project`, `truth.baseline`, `index.freshness`, `analysis.coverage`, `agent.codex`, `agent.claude_code`, `llm.configuration`. 선행 check가 정상이 아니면 뒤 check는 `skipped`(`requires`)이고 사람 출력에서는 한 줄로 모인다. 예: Git 저장소가 아니면 Truth·index·Agent는 확인하지 않는다.
+- 상태: `ok`, `info`(사실이나 꺼 둔 선택 기능, 문제 아님), `warning`(동작하지만 볼 것이 있음), `error`(조치 전에는 핵심 경로가 동작하지 않음), `skipped`. Review verdict(PASS/WARN/BLOCK/ASK)와 다른 어휘다. 전체: `ready`(error·warning 없음), `warnings`, `action-required`(error 하나 이상). 점수는 없다.
+- 종료 코드: error check가 없으면 0, 있으면 6(`ACTION_REQUIRED`), doctor 자체의 예기치 않은 실패는 1. 연결하지 않은 Agent, `llm.provider: none`, stale index(warning)는 0이다.
+- Index: stale은 warning(context·review가 `index-required`를 반환), missing·incompatible은 error. 셋 다 다음 행동은 `duoctl index`. index 검사(`inspectIndex`)는 한 번이고 분석 수준은 그 결과의 coverage다(index가 missing이어도 보인다).
+- 작업 트리 변경은 오류가 아니다. adoption 전이면 init이 `--baseline-policy head|abort`를 묻는다고, adoption 뒤면 review가 HEAD와 비교한다고 설명한다. 첫 commit이 없으면 commit 다음에 init을 안내한다.
+- Agent: 연결하지 않은 Agent는 `info`이고, 둘 다 연결하지 않았으면 다음 행동 하나에 두 명령을 함께 보인다(기본 추천 없음). 연결된 Agent는 install verify와 같은 방식으로 설정 parse, 계획한 항목, bridge 블록, launcher를 확인하고 설정의 command로 MCP 서버를 띄워 initialize → tools/list까지 확인한 뒤 닫는다(`duo_get_status`는 부르지 않음). 기대 tool은 이 build의 `MCP_TOOLS` 이름 목록이다. drifted는 warning(`duoctl install <agent>`, npx launcher면 `--launcher npx`), conflict·launcher 없음·launch 실패·tool 불일치는 error다. Codex trust와 Claude Code 승인은 DUO가 확인할 수 없으므로 안내만 한다.
+- LLM: `none`은 정상(info)이고 key 안내를 하지 않는다. provider를 설정했을 때만 설정과 credential 환경 변수의 존재를 본다(`configured` 또는 warning: `credential-missing`, `model-missing`, `base-url-unsupported`, `base-url-env`, `custom-headers-env`). 값, 환경 변수 목록, provider 호출은 없다. LLM 행동은 다음 행동 목록에 넣지 않는다.
+- 다음 행동: error·warning check의 행동을 check 순서(Git → Truth → baseline → index → Agent)로 모으고, init이 있으면 index를 뺀다(init이 index한다). 최대 3개.
+- Secret: facts와 params의 모든 문자열(Agent 설정 파일의 parse 오류, MCP 서버 stderr 마지막 두 줄 포함)은 Context와 같은 `redactSecrets`를 거친다.
+- `--json`: `duo.cli.doctor/1` envelope의 `result`가 `duo.doctor/1` `{ format, overall, checks: [{ id, group, status, reason, requires?, facts, actions: [{ id, commands, params? }] }], next }`다. check ID·reason·action ID는 locale과 무관한 계약이고 사람 문구는 계약이 아니다. MCP tool은 없다.
+- Ambiguous context: `duoctl context`가 `ambiguous`이면 사람 출력에 "과제에 `/`가 있는 저장소 상대 파일 경로나 Requirement·Decision ID를 넣으면 정확한 시작점이 생긴다"는 안내를 더한다. resolver·ranking·JSON은 그대로다.
 
 ## duoctl index, context, review
 

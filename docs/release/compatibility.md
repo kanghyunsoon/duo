@@ -8,6 +8,7 @@
 |---|---|---|
 | CLI `--json` | envelope `duo.cli.<command>/1` { format, command, ok, exitCode, result, diagnostics } | result는 아래 semantic payload |
 | Semantic payload (CLI result, MCP structuredContent 공통) | `duo.status/1`, `duo.context/1`, `duo.context-packet/1`, `duo.gap-assessment/1`, `duo.review/1`, `duo.trace/1`, `duo.impact/1`, `duo.requirement/1`, `duo.decision/1`, `duo.evidence-search/1`, `duo.proposal/1`, `duo.not-initialized/1`, `duo.init-plan/1`, `duo.agent-integration-plan/1`, `duo.agent-integration-status/1`, `duo.agent-integration-verify/1` | wall-clock 성능 값은 payload 밖 metadata |
+| Doctor (0.2.0 추가, T26.1) | `duoctl doctor --json` = envelope `duo.cli.doctor/1`, result `duo.doctor/1` `{ format, overall, checks, next }` | CLI 전용(MCP tool 없음). check ID, `group`, `status`(ok·info·warning·error·skipped), `reason`, `requires`, action ID·`commands`·`params`, facts 필드 이름이 계약이다. check·reason·action 추가는 additive이고 소비자는 모르는 값을 무시한다. 사람 문구는 계약이 아니다. 종료 코드 0(error 없음)·6(error check)·1(실행 오류) |
 | MCP | tool 9개의 이름, input schema, `structuredContent` 형식(위 payload) | 서버 이름 `duo-director` |
 | UI local API | `/api/*` 응답 `duo.ui.<name>/1`, 오류 `duo.ui.error/1` (`UI_API_VERSION` 1) | loopback 전용, 같은 버전의 UI만 사용 |
 | Project Truth | `.duo-project/project.yaml` `schema_version: 1`과 intent·specs·decisions·milestones 문서 형식 | 사람이 소유한 파일 |

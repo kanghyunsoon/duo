@@ -36,6 +36,7 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [roadmap/0.2.0-t24-overloads.md](roadmap/0.2.0-t24-overloads.md) | T24.1 overload evidence completeness(C217): Symbol identity lifecycle, repository evolution 실험, 설계안 A·B·C·D 비교, 위치 규칙, migration gate, 검증, signature 조사, T24.2 제안 |
 | [roadmap/0.2.0-t25-freshness.md](roadmap/0.2.0-t25-freshness.md) | T25.1 Freshness 확인 최적화(Milestone B): freshness call graph, analysis cache 확인 bounded concurrency, error semantics, show-prefix 공유, 동시성 선택, Build 0·A·B·AB 비교, Context·Review, 다음 task 제안 |
 | [roadmap/0.2.0-t25-scan-fingerprint.md](roadmap/0.2.0-t25-scan-fingerprint.md) | T25.2 Fingerprint·scan 비용 audit(Milestone B 종료): baseline, scan·fingerprint pipeline, filesystem 호출과 중복, hash CPU 대 I/O, TOCTOU, Unity·Unreal category별 비용, 후보 A·B·C와 측정, mutation regression, Milestone D 제안 |
+| [roadmap/0.2.0-t26-doctor.md](roadmap/0.2.0-t26-doctor.md) | T26.1 Doctor Core + First-run State Guidance(Milestone D): 기존 진단 surface 감사, check 목록과 의존 관계, 상태 어휘, overall과 종료 코드, JSON 결정, init 다음 단계, ambiguous 안내, 성능, 검증, T26.2 제안 |
 | [conflicts.md](conflicts.md) | 원본 충돌, Human 결정 기록(H-*), 미결 사항 |
 | [adr/](adr/README.md) | ADR-001~014 |
 | [tasks/TASKS.md](tasks/TASKS.md) | TASK-000~020(TASK-012A/012B 포함), 의존성, E2E 매핑 |
