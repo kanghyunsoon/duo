@@ -183,10 +183,14 @@ export interface ProjectConfig {
   readonly review: { readonly warnOnUntestedChange: boolean; readonly warnOnUnlinkedAddition: boolean };
   readonly testCommand: string | null;
   readonly llm: {
-    readonly provider: "none" | "openai-responses";
+    readonly provider: "none" | "openai-responses" | "openai-compatible";
     readonly model: string | null;
     readonly apiKeyEnv: string;
     readonly baseUrl: string | null;
+    /** openai-compatible only (T27.1): the wire protocol, chosen by the human; never inferred. */
+    readonly transport: "responses" | "chat-completions" | null;
+    /** openai-compatible only (T27.1): how structured output is requested; DUO validates the answer in every mode. */
+    readonly structuredOutput: "json-schema" | "json-object" | "prompt-only" | null;
     readonly maxCallsPerReview: number;
     readonly maxInputTokens: number;
     readonly timeoutMs: number;

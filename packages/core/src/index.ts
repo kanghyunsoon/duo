@@ -4,6 +4,7 @@
  */
 export * from "./constants.js";
 export * from "./diagnostics.js";
+export * from "./llm-endpoint.js";
 export * from "./evidence.js";
 export * from "./ids.js";
 export * from "./location.js";

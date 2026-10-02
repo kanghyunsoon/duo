@@ -4,6 +4,7 @@
  */
 import { z } from "zod";
 import { DEFINITION_ID_PATTERN, PROPOSAL_ID_PATTERN } from "../ids.js";
+import { COMPATIBLE_BASE_URL_PROBLEMS, ENV_NAME_PATTERN, parseCompatibleBaseUrl } from "../llm-endpoint.js";
 
 /** Sentinel message that validate.ts turns into an INVALID_ID diagnostic. */
 export const INVALID_ID_MESSAGE = "INVALID_ID";
@@ -58,17 +59,45 @@ export const ProjectConfigSchema = z.strictObject({
   }).optional(),
   test_command: text().nullable().optional(),
   llm: z.strictObject({
-    provider: z.enum(["none", "openai-responses"]).optional(),
+    provider: z.enum(["none", "openai-responses", "openai-compatible"]).optional(),
     model: text().nullable().optional(),
     api_key_env: text().optional(),
     base_url: text().nullable().optional(),
+    transport: z.enum(["responses", "chat-completions"]).optional(),
+    structured_output: z.enum(["json-schema", "json-object", "prompt-only"]).optional(),
     max_calls_per_review: z.number().int().min(0).optional(),
     max_input_tokens: z.number().int().positive().optional(),
     timeout_ms: z.number().int().positive().optional(),
     cache: z.boolean().optional(),
-  }).optional(),
+  }).superRefine(checkLlmConfig).optional(),
   extensions,
 });
+
+/**
+ * Cross-field rules of llm (T27.1, H-60). openai-compatible needs every setting written out: model,
+ * base_url (endpoint policy), transport, api_key_env (an environment variable name; no default, no
+ * OPENAI_API_KEY fallback) and structured_output. transport and structured_output belong to
+ * openai-compatible only; openai-responses keeps its own rules (base_url makes it unavailable at run time).
+ * provider none ignores the other settings. Messages never repeat the value.
+ */
+function checkLlmConfig(llm: { provider?: string | undefined; model?: string | null | undefined; api_key_env?: string | undefined; base_url?: string | null | undefined; transport?: string | undefined; structured_output?: string | undefined }, ctx: z.RefinementCtx): void {
+  const issue = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });
+  if (llm.provider === "openai-compatible") {
+    const required = "is required for provider openai-compatible (no default)";
+    if (llm.model === undefined || llm.model === null || llm.model.trim() === "") issue("model", required);
+    if (llm.transport === undefined) issue("transport", `${required}: responses or chat-completions`);
+    if (llm.structured_output === undefined) issue("structured_output", `${required}: json-schema, json-object or prompt-only`);
+    if (llm.api_key_env === undefined) issue("api_key_env", `${required}: the name of the environment variable that holds the key`);
+    else if (!ENV_NAME_PATTERN.test(llm.api_key_env)) issue("api_key_env", "must be an environment variable name (letters, digits, _; not starting with a digit)");
+    if (llm.base_url === undefined || llm.base_url === null) issue("base_url", `${required}: the endpoint's absolute URL`);
+    else {
+      const parsed = parseCompatibleBaseUrl(llm.base_url);
+      if (parsed.problem !== undefined) issue("base_url", COMPATIBLE_BASE_URL_PROBLEMS[parsed.problem]);
+    }
+  } else if (llm.provider === "openai-responses") {
+    for (const key of ["transport", "structured_output"] as const) if (llm[key] !== undefined) issue(key, "applies only to provider openai-compatible");
+  }
+}
 
 export const VisionFrontmatterSchema = z.strictObject({
   status: z.enum(["draft", "confirmed"]),

@@ -302,7 +302,9 @@ export async function projectDoctor(rootArg: string, options: DoctorOptions): Pr
   if (runs("llm.configuration", "truth.project") && project !== undefined) {
     const config = project.truth.config.llm;
     const llm = llmPoolOf(options).forConfig(config);
-    const facts = { provider: llm.kind, ...(llm.model === undefined ? {} : { model: llm.model }), credentialEnv: config.apiKeyEnv };
+    // openai-compatible (T27.1): the endpoint as its origin only (no path), the transport and output mode as configured.
+    const endpoint = llm.endpoint === undefined ? {} : { endpoint: llm.endpoint.origin, transport: llm.endpoint.transport, structuredOutput: llm.endpoint.structuredOutput };
+    const facts = { provider: llm.kind, ...(llm.model === undefined ? {} : { model: llm.model }), credentialEnv: config.apiKeyEnv, ...endpoint };
     if (llm.status === "disabled") set("llm.configuration", "info", "disabled", { provider: "none" });
     else if (llm.status === "configured") set("llm.configuration", "ok", "configured", facts);
     else {

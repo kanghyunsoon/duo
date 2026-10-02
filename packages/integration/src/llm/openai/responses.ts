@@ -3,8 +3,8 @@
  * Responses API. One stateless request per call: no tools, no conversation, no previous_response_id,
  * store: false. Official endpoint only: the client is pinned to https://api.openai.com/v1 and never
  * takes an endpoint, headers, organization, project or log level from the environment (the factory
- * refuses OPENAI_BASE_URL and OPENAI_CUSTOM_HEADERS; compatible or custom endpoints are a separate,
- * future provider). The SDK is imported on the first call only, so an unused provider costs nothing.
+ * refuses OPENAI_BASE_URL and OPENAI_CUSTOM_HEADERS; compatible endpoints are the separate
+ * openai-compatible provider, T27.1). The SDK is imported on the first call only, so an unused provider costs nothing.
  *
  * Time limits and cancellation come from invokeLLM() (the request signal); the SDK does not retry
  * (maxRetries 0) and its own per-attempt timeout is set above DUO's. Failures are provider-neutral
@@ -13,10 +13,11 @@
  * and the caller (the provider-neutral validator stays the final boundary).
  */
 import type { LLMFailureCategory, LLMJsonSchema, LLMProvider, LLMRequest, LLMResponse, LLMUsage } from "@duo-director/director";
+import { OPENAI_OFFICIAL_BASE_URL } from "@duo-director/core";
 
 export const OPENAI_RESPONSES_PROVIDER_ID = "openai-responses";
-/** The only endpoint this provider calls. */
-export const OPENAI_OFFICIAL_BASE_URL = "https://api.openai.com/v1";
+/** The only endpoint this provider calls (one source in core, shared with the openai-compatible endpoint policy). */
+export { OPENAI_OFFICIAL_BASE_URL };
 /** Bump when the request mapping or the handling of answers changes (part of the cache identity). */
 export const OPENAI_RESPONSES_ADAPTER_VERSION = "1";
 /** Bump when the structured-output conversion (strict json_schema, dropped keywords) changes. */

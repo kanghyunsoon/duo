@@ -1,4 +1,5 @@
 /** duoctl status (T15): the shared status operation, rendered. Writes nothing. */
+import { loadProjectTruth, parseCompatibleBaseUrl } from "@duo-director/core";
 import { projectStatus } from "@duo-director/integration";
 import { t } from "../messages.js";
 import { EXIT, type Outcome } from "../output.js";
@@ -39,7 +40,15 @@ export async function statusCommand(env: Env): Promise<Outcome> {
     ...(analysis === undefined || analysis === "" ? [] : [t(L, "status.analysis", { languages: analysis })]),
     t(L, "status.baseline", { status: b?.status ?? "unknown", detail: b?.headOid === undefined ? "" : ` · ${b.headOid.slice(0, 12)}${b.dirtyAtAdoption === true ? " · dirty at adoption" : ""} · ${b.findings ?? 0} findings` }),
     t(L, "status.pending", { n: s.pendingDecisions.length }), ...s.pendingDecisions.map((p) => `  ${p.id}  ${p.title}`),
-    t(L, "status.llm", { state: [s.llm, ...(s.llmProvider === undefined || s.llmProvider.provider === "none" ? [] : [`${s.llmProvider.provider}${s.llmProvider.model === undefined ? "" : ` ${s.llmProvider.model}`}`]), ...(s.llmProvider?.reason === undefined ? [] : [s.llmProvider.reason])].join(" · ") }),
+    t(L, "status.llm", { state: [s.llm, ...(s.llmProvider === undefined || s.llmProvider.provider === "none" ? [] : [`${s.llmProvider.provider}${s.llmProvider.model === undefined ? "" : ` ${s.llmProvider.model}`}`]), ...compatibleEndpoint(env, s), ...(s.llmProvider?.reason === undefined ? [] : [s.llmProvider.reason])].join(" · ") }),
   ];
   return { command: "status", exitCode: EXIT.OK, result: op.payload, diagnostics: op.diagnostics, human };
+}
+
+/** openai-compatible (T27.1): transport and the endpoint's origin only, human output only (duo.status/1 is unchanged). */
+function compatibleEndpoint(env: Env, s: StatusPayload): string[] {
+  if (s.llmProvider?.provider !== "openai-compatible") return [];
+  const llm = loadProjectTruth(env.root).value?.truth.config.llm;
+  const origin = llm?.baseUrl === null || llm?.baseUrl === undefined ? undefined : parseCompatibleBaseUrl(llm.baseUrl).value?.origin;
+  return [...(llm?.transport === null || llm?.transport === undefined ? [] : [llm.transport]), ...(origin === undefined ? [] : [origin])];
 }

@@ -32,7 +32,8 @@ function checkLine(L: Locale, c: DoctorCheck): string {
   const p = params(c);
   if (c.id === "git.initial_commit" && c.reason === "present") p.branch = typeof c.facts.branch === "string" && c.facts.detached !== true ? "branch " + c.facts.branch : "detached HEAD";
   if (c.id === "analysis.coverage") return coverageLine(L, c);
-  const key = (c.group === "agents" ? "doctor.agent." + c.reason : c.group === "llm" ? "doctor.llm." + c.reason : "doctor." + c.id + "." + c.reason) as MessageKey;
+  const compatible = c.group === "llm" && c.reason === "configured" && typeof c.facts.endpoint === "string";
+  const key = (c.group === "agents" ? "doctor.agent." + c.reason : compatible ? "doctor.llm.configured-endpoint" : c.group === "llm" ? "doctor.llm." + c.reason : "doctor." + c.id + "." + c.reason) as MessageKey;
   return t(L, key, p);
 }
 

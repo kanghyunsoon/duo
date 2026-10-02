@@ -11,7 +11,8 @@
  * evidence never goes to an endpoint the user did not expect.
  */
 import { createNoopLLMProvider, type LLMProvider, type LLMProviderStatus } from "@duo-director/director";
-import type { ProjectConfig } from "@duo-director/core";
+import { parseCompatibleBaseUrl, type ProjectConfig } from "@duo-director/core";
+import { createOpenAICompatibleProvider } from "./compatible/provider.js";
 import { createOpenAIResponsesProvider, OPENAI_OFFICIAL_BASE_URL, type OpenAIResponsesProviderOptions } from "./openai/responses.js";
 
 export type LLMEnvironment = Readonly<Record<string, string | undefined>>;
@@ -26,14 +27,18 @@ export interface ConfiguredLLM {
   readonly reason?: string;
   /** The same reason as a stable code (duoctl doctor, T26.1). */
   readonly reasonCode?: LLMUnavailableReason;
+  /** openai-compatible (T27.1): the endpoint origin (scheme://host[:port]) and transport, for human output. */
+  readonly endpoint?: { readonly origin: string; readonly transport: "responses" | "chat-completions"; readonly structuredOutput: "json-schema" | "json-object" | "prompt-only" };
 }
 
 /** Why a configured provider is unavailable. */
-export type LLMUnavailableReason = "model-missing" | "base-url-unsupported" | "base-url-env" | "custom-headers-env" | "credential-missing";
+export type LLMUnavailableReason = "model-missing" | "base-url-unsupported" | "base-url-env" | "custom-headers-env" | "credential-missing" | "config-incomplete";
 
 export interface LLMFactoryOptions {
   /** Tests: replaces the SDK (fake client or fake fetch). */
   readonly openai?: Pick<OpenAIResponsesProviderOptions, "client" | "fetch">;
+  /** Tests: the openai-compatible provider over a fake transport. */
+  readonly compatible?: { readonly fetch?: typeof fetch };
 }
 
 const official = (url: string) => url.trim().replace(/\/+$/u, "") === OPENAI_OFFICIAL_BASE_URL;
@@ -49,6 +54,7 @@ function unavailable(kind: ConfiguredLLM["kind"], model: string | undefined, rea
 
 export function createConfiguredLLMProvider(config: ProjectConfig["llm"], env: LLMEnvironment, options: LLMFactoryOptions = {}): ConfiguredLLM {
   if (config.provider === "none") return { provider: createNoopLLMProvider(), status: "disabled", kind: "none" };
+  if (config.provider === "openai-compatible") return compatible(config, env, options);
   const model = config.model?.trim() ?? "";
   if (model === "") return unavailable(config.provider, undefined, "model-missing", "llm.model is not set (DUO does not pick a model)");
   if (config.baseUrl !== null && !official(config.baseUrl)) {
@@ -70,6 +76,31 @@ export function createConfiguredLLMProvider(config: ProjectConfig["llm"], env: L
 }
 
 /**
+ * openai-compatible (T27.1, H-60): every setting comes from project.yaml (core validated them); the key comes
+ * only from the environment variable llm.api_key_env names (no OPENAI_API_KEY fallback). The environment
+ * cannot move the endpoint (the SDK gets base_url explicitly, OPENAI_BASE_URL is not read); environment-defined
+ * headers make it unavailable like the official provider.
+ */
+function compatible(config: ProjectConfig["llm"], env: LLMEnvironment, options: LLMFactoryOptions): ConfiguredLLM {
+  const model = config.model?.trim() ?? "";
+  const endpoint = config.baseUrl === null ? undefined : parseCompatibleBaseUrl(config.baseUrl).value;
+  if (model === "" || endpoint === undefined || config.transport === null || config.structuredOutput === null) {
+    return unavailable(config.provider, model === "" ? undefined : model, "config-incomplete", "llm settings of openai-compatible are incomplete");
+  }
+  const shown = { origin: endpoint.origin, transport: config.transport, structuredOutput: config.structuredOutput };
+  if ((env.OPENAI_CUSTOM_HEADERS ?? "").trim() !== "") {
+    return { ...unavailable(config.provider, model, "custom-headers-env", "OPENAI_CUSTOM_HEADERS is set: openai-compatible does not send environment-defined headers"), endpoint: shown };
+  }
+  const key = env[config.apiKeyEnv];
+  if (key === undefined || key.trim() === "") return { ...unavailable(config.provider, model, "credential-missing", `${config.apiKeyEnv} is not set`), endpoint: shown };
+  const provider = createOpenAICompatibleProvider({
+    baseUrl: endpoint.baseUrl, origin: endpoint.origin, transport: config.transport, structuredOutput: config.structuredOutput, model, apiKey: key.trim(),
+    ...(options.compatible?.fetch === undefined ? {} : { fetch: options.compatible.fetch }),
+  });
+  return { provider, status: provider.status(), kind: config.provider, model, endpoint: shown };
+}
+
+/**
  * Providers by configuration, over one environment snapshot. The MCP server keeps one pool for its
  * lifetime (environment read at startup; restart to pick up a new key) and reuses the provider,
  * which holds no review or conversation state. The CLI makes one per invocation.
@@ -83,7 +114,7 @@ export class LLMProviderPool {
   }
 
   forConfig(config: ProjectConfig["llm"]): ConfiguredLLM {
-    const key = JSON.stringify([config.provider, config.model, config.apiKeyEnv, config.baseUrl]);
+    const key = JSON.stringify([config.provider, config.model, config.apiKeyEnv, config.baseUrl, config.transport, config.structuredOutput]);
     let configured = this.byConfig.get(key);
     if (configured === undefined) {
       configured = createConfiguredLLMProvider(config, this.env, this.options);
