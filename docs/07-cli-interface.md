@@ -178,7 +178,7 @@ Next
 - 다음 행동: error·warning check의 행동을 check 순서(Git → Truth → baseline → index → Agent)로 모으고, init이 있으면 index를 뺀다(init이 index한다). 최대 3개.
 - Secret: facts와 params의 모든 문자열(Agent 설정 파일의 parse 오류, MCP 서버 stderr 마지막 두 줄 포함)은 Context와 같은 `redactSecrets`를 거친다.
 - `--json`: `duo.cli.doctor/1` envelope의 `result`가 `duo.doctor/1` `{ format, overall, checks: [{ id, group, status, reason, requires?, facts, actions: [{ id, commands, params? }] }], next }`다. check ID·reason·action ID는 locale과 무관한 계약이고 사람 문구는 계약이 아니다. MCP tool은 없다.
-- Ambiguous context: `duoctl context`가 `ambiguous`이면 사람 출력에 "과제에 `/`가 있는 저장소 상대 파일 경로나 Requirement·Decision ID를 넣으면 정확한 시작점이 생긴다"는 안내를 더한다. resolver·ranking·JSON은 그대로다.
+- Ambiguous context: `duoctl context`가 `ambiguous`이면 사람 출력에 후보를 실제로 구분하는 handle만 안내한다(T26.2, MCP `duo_get_context` summary와 같은 `ambiguityRemediation`): 다른 파일의 후보는 저장소 상대 경로(`/` 포함, 앞에 `./` 없이), 같은 파일의 후보는 qualified name, keyword가 같은 Requirement는 ID, 구분할 handle이 없으면 어느 대상인지 정하라는 안내. 경로나 이름이 있으면 Requirement·Decision ID도 정확한 시작점이라고 덧붙인다. resolver·ranking·JSON은 그대로다(T26.1의 고정 문구를 대체).
 
 ## duoctl index, context, review
 

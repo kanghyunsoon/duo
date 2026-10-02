@@ -60,6 +60,7 @@ Tool은 9개로 고정한다(H-10). 새 Tool이 필요하면 별도 Spec과 ADR�
 - 입력: `{ task: string (1..20000자), budget?: int (MIN_BUDGET..MAX_BUDGET), profile?: "default" | "review" }`
 - 출력: `{ format: "duo.context/1", status, context, gaps }`. `context`는 `ContextResult`에서 performance를 뺀 것(packet 포함), `gaps`는 `{ requiresHumanInput, primaryQuestion?, additionalQuestions, surfaced, notice, assessment }` 또는 null. `notice`와 description이 surfaced gap은 확정 지시가 아니며 `requiresHumanInput`이 true일 때만 Human에게 묻는다고 밝힌다. pending proposal은 confirmed Decision이 아니다.
 - index가 current가 아니면 `status: "index-required"`(인덱싱하지 않음).
+- `status: "ambiguous"`(T26.2): summary 텍스트 끝에 `AMBIGUOUS:` 줄을 더한다. 후보(`context.resolution.ambiguities`)를 실제로 구분하는 handle만 안내한다(director `ambiguityRemediation`, seed tokenizer와 같은 규칙): 모든 후보가 다른 파일이고 경로가 path token이면(`/` 포함, 앞에 `./` 없음) 저장소 상대 경로, qualified name이 모두 다르면 qualified name, keyword가 같은 Requirement들이면 Requirement ID. 경로나 이름이 있으면 "과제가 특정 Requirement·Decision에 관한 것이면 그 ID도 정확한 시작점"을 덧붙인다. 어느 것으로도 구분되지 않으면 사람에게 물으라고만 한다. 항상 추측하지 말고 ID를 만들지 말라고 한다. structuredContent, schema, resolver는 그대로다.
 
 ### duo_review_changes
 
