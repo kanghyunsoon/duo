@@ -11,7 +11,7 @@
 | Doctor (0.2.0 추가, T26.1) | `duoctl doctor --json` = envelope `duo.cli.doctor/1`, result `duo.doctor/1` `{ format, overall, checks, next }` | CLI 전용(MCP tool 없음). check ID, `group`, `status`(ok·info·warning·error·skipped), `reason`, `requires`, action ID·`commands`·`params`, facts 필드 이름이 계약이다. check·reason·action 추가는 additive이고 소비자는 모르는 값을 무시한다. 사람 문구는 계약이 아니다. 종료 코드 0(error 없음)·6(error check)·1(실행 오류) |
 | MCP | tool 9개의 이름, input schema, `structuredContent` 형식(위 payload) | 서버 이름 `duo-director` |
 | UI local API | `/api/*` 응답 `duo.ui.<name>/1`, 오류 `duo.ui.error/1` (`UI_API_VERSION` 1) | loopback 전용, 같은 버전의 UI만 사용 |
-| Project Truth | `.duo-project/project.yaml` `schema_version: 1`과 intent·specs·decisions·milestones 문서 형식 | 사람이 소유한 파일 |
+| Project Truth | `.duo-project/project.yaml` `schema_version: 1`과 intent·specs·decisions·milestones 문서 형식 | 사람이 소유한 파일. 0.2.0(T27.1): `llm.provider`에 `openai-compatible`, `llm.transport`, `llm.structured_output`을 더했다(additive). 기존 `none`·`openai-responses` 설정은 그대로 유효하고 의미도 같다 |
 | Review Record | `duo.review-record/1` | `.duo-project/reviews/` |
 | Adoption Baseline | `duo.adoption-baseline/2` | /1은 이미 incompatible로 읽음(재해석 없음) |
 

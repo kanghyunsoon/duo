@@ -418,15 +418,21 @@ review:
   warn_on_unlinked_addition: true
 test_command: null            # 설정 시에만 duoctl review --run-tests가 실행
 llm:                          # ADR-012
-  provider: none              # none | openai-responses
+  provider: none              # none | openai-responses | openai-compatible (T27.1)
   model: null
   api_key_env: OPENAI_API_KEY
   base_url: null              # null이면 OpenAI 기본 endpoint
+  # openai-compatible만(T27.1, H-60): 아래 다섯 값을 모두 직접 쓴다(기본값 없음)
+  # model, base_url(https 또는 loopback http, user info·query·fragment 없음, 공식 OpenAI API 금지),
+  # api_key_env(환경 변수 이름, OPENAI_API_KEY로 대신하지 않음),
+  # transport: responses | chat-completions, structured_output: json-schema | json-object | prompt-only
   max_calls_per_review: 1
   max_input_tokens: 4000
   timeout_ms: 30000
 extensions: {}
 ```
+
+`llm` 규칙(T27.1): `openai-compatible`에서 위 다섯 값 중 하나라도 없거나, `api_key_env`가 환경 변수 이름이 아니거나, `base_url`이 endpoint 정책을 어기면 project.yaml 검증 오류다(`SCHEMA_INVALID_VALUE`, 값은 되풀이하지 않음). `transport`·`structured_output`은 `openai-compatible`에만 쓰며 `openai-responses`에 쓰면 오류다. `provider: none`은 다른 값을 무시한다. 기존 `none`·`openai-responses` 설정의 의미는 그대로다(`openai-responses`의 `base_url`은 실행 시 unavailable). key가 없는 것처럼 환경에 따라 달라지는 문제는 오류가 아니라 provider `unavailable`이다.
 
 ## intent/vision.md
 

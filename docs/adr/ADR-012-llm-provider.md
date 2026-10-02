@@ -111,6 +111,18 @@ llm:
 - **factory**(`createConfiguredLLMProvider`, `LLMProviderPool`): 설정 + 환경 → `{ provider, status, kind, model?, reason? }`. CLI는 호출마다 환경을 읽고, MCP 서버는 시작할 때 환경을 snapshot하고 provider를 서버 수명 동안 재사용한다(새 key는 재시작, C192). provider는 review나 대화 상태를 쌓지 않는다.
 - **연결**: production 경로는 Review의 `review-semantic-check` 하나다(`duoctl review --semantic`, MCP `duo_review_changes`의 `includeSemanticAssist`). `gap-semantic-assist`는 연결하지 않았다.
 
+## OpenAI-compatible provider (T27.1, H-49, H-60)
+
+`OpenAICompatibleProvider`(`packages/integration/src/llm/compatible/provider.ts`)는 공식 provider와 별도다. 공식 provider는 바뀌지 않았다(endpoint 상수를 core `llm-endpoint.ts`에서 가져오는 것만 달라졌고, 같은 상수로 compatible 설정이 공식 OpenAI API를 거부한다).
+
+- **설정**: `provider: openai-compatible`, `model`, `base_url`, `transport`(`responses` | `chat-completions`), `api_key_env`, `structured_output`(`json-schema` | `json-object` | `prompt-only`). 모두 필수, 기본값·추측 없음(core 검증). key는 `api_key_env`가 가리키는 환경 변수에서만 읽는다(`OPENAI_API_KEY` fallback 없음).
+- **endpoint 정책**(core `parseCompatibleBaseUrl`, WHATWG URL): 절대 URL, `https` 또는 strict loopback(`localhost`, `127.0.0.0/8`, `[::1]`)의 `http`. user info, query, fragment, 빈 path segment, 공식 OpenAI host(`api.openai.com`과 그 하위 domain)는 거부. canonical = origin + path(끝 `/` 제거). SDK `baseURL`이 canonical이고 `/responses`·`/chat/completions`가 그 뒤에 붙는다(prefix 유지).
+- **요청**: 한 호출에 한 요청. Responses: `{ model, instructions, input, store: false, max_output_tokens?, text? }`. Chat Completions: `{ model, messages: [system: instructions, user: input], max_tokens?, response_format? }`. structured_output: `json-schema` = native JSON Schema(strict, 공식 provider와 같은 schema 변환), `json-object` = native JSON object + 지시문에 schema, `prompt-only` = native format 없음 + 지시문에 schema. tools, function call, conversation, `previous_response_id`, stream 없음. transport·mode fallback, `/models` 조회, capability 추측 없음.
+- **client**: `maxRetries: 0`, SDK timeout은 DUO보다 길게, `organization/project/adminAPIKey/webhookSecret: null`, `logLevel: "off"`, 주입한 fetch가 `redirect: "manual"`을 강제(3xx는 따라가지 않고 `provider-error`, key가 다른 origin으로 가지 않음). `OPENAI_BASE_URL`은 읽히지 않고(`baseURL`을 명시), `OPENAI_CUSTOM_HEADERS`가 있으면 unavailable.
+- **응답**: Responses는 공식 provider와 같은 판정. Chat Completions는 `choices[0].message.content`가 비어 있지 않은 text여야 하고 refusal, `finish_reason` length·content_filter, choice 없음, text 아닌 content는 `invalid-response`. 모든 mode에서 JSON parse 뒤 `invokeLLM` schema·Evidence 검증(native mode를 믿고 생략하지 않음).
+- **failure**: 공식 provider와 같은 category(3xx만 추가로 `provider-error`), message는 "the endpoint …"로 DUO가 만든다. URL path, key, SDK message 없음.
+- **cache identity**: `openai-compatible;origin=<origin>;endpoint=<canonical URL sha256 앞 16자>;transport=…;structured=…;policy=strict-1;adapter=1;model=…`. key와 `api_key_env`는 없다. path는 hash로만 들어간다(Review의 `semanticAssist.provider.cacheIdentity`에도 path가 나오지 않음).
+
 ## 결과
 
 - 추가 Adapter는 REQ-POST-004로 다룬다. 추가할 때 `LLMProvider` 계약은 바뀌지 않아야 한다.

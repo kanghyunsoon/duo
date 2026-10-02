@@ -67,7 +67,7 @@ Tool은 9개로 고정한다(H-10). 새 Tool이 필요하면 별도 Spec과 ADR�
 - 입력: `{ task?, from? = "HEAD", to? = "WORKTREE", files?: RepoPath[], budget?, includeSemanticAssist?: boolean }`
 - 출력: `ReviewResult`(`duo.review/1`): request, baseline, freshness, diff(파일별 `provenance: "adoption-bootstrap"` 포함), seeds, verdict, verdictBasis, claims(`provenance`, `violationKey`, `blockEligible`), evidence, gaps, limitations, semanticAssist, metrics(`llmCalls`).
 - index-required는 정상 결과다. Review Record를 쓰지 않는다. PASS는 사용 가능한 evidence에서 방향 위반을 찾지 못했다는 뜻이다.
-- **의미 보조(T12B)**: `includeSemanticAssist`의 기본값은 false이고, 켜지 않으면 OpenAI 호출이 없다(`llmCalls = 0`). 켜면 project.yaml의 provider(`openai-responses`)가 configured일 때만 한 번 호출하고, 결과는 `semanticAssist`에 따로 둔다. 결정적 claims·verdict는 바뀌지 않고 LLM만의 결과는 BLOCK·ASK를 만들지 않는다(최대 PASS → WARN). CLI `duoctl review --semantic --json`과 같은 shared operation이다. MCP 서버는 시작할 때 환경(API key)을 snapshot하고 provider를 서버 수명 동안 재사용한다: key를 바꾸면 서버를 다시 시작한다(C192). SDK는 integration의 llm 계층에만 있고 mcp 계층은 import하지 않는다. summary 텍스트에 의미 보조 상태와 LLM claim이 따로 붙는다.
+- **의미 보조(T12B)**: `includeSemanticAssist`의 기본값은 false이고, 켜지 않으면 LLM 호출이 없다(`llmCalls = 0`). 켜면 project.yaml의 provider(`openai-responses` 또는 T27.1의 `openai-compatible`)가 configured일 때만 CLI와 같은 `invokeLLM` 경계로 한 번 호출하고, 결과는 `semanticAssist`에 따로 둔다. 결정적 claims·verdict는 바뀌지 않고 LLM만의 결과는 BLOCK·ASK를 만들지 않는다(최대 PASS → WARN). CLI `duoctl review --semantic --json`과 같은 shared operation이다. MCP 서버는 시작할 때 환경(API key)을 snapshot하고 provider를 서버 수명 동안 재사용한다: key를 바꾸면 서버를 다시 시작한다(C192). SDK는 integration의 llm 계층에만 있고 mcp 계층은 import하지 않는다. summary 텍스트에 의미 보조 상태와 LLM claim이 따로 붙는다.
 
 ### duo_get_requirement / duo_get_decision
 

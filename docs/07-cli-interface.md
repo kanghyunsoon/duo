@@ -122,7 +122,7 @@ Pending decisions: 0
 LLM: disabled
 ```
 
-`LLM` 줄은 disabled, configured, unavailable과 provider·model, unavailable이면 이유(예: `LLM: unavailable · openai-responses gpt-… · OPENAI_API_KEY is not set`)를 보인다. 설정과 환경만 보고 네트워크를 쓰지 않는다. key 값은 보이지 않는다.
+`LLM` 줄은 disabled, configured, unavailable과 provider·model, unavailable이면 이유(예: `LLM: unavailable · openai-responses gpt-… · OPENAI_API_KEY is not set`)를 보인다. `openai-compatible`은 transport와 endpoint의 origin(`scheme://host[:port]`, path 없음)을 더한다(예: `LLM: configured · openai-compatible m-1 · chat-completions · https://gateway.example`, T27.1, 사람 출력만). 설정과 환경만 보고 네트워크를 쓰지 않는다. key 값은 보이지 않는다.
 
 쓰기 0이다. Graph는 read-only로 연다(`openProjectGraphReader`: graph.db가 없으면 아무것도 만들지 않고 빈 in-memory graph로 missing을 보고). SQLite는 WAL 데이터베이스의 read-only 연결에 `graph.db-wal`/`graph.db-shm` sidecar를 만들 수 있으며 이는 regenerable 영역의 SQLite 관리 파일이고 graph.db 내용은 바뀌지 않는다(C131). baseline status는 missing, current, advanced, repository-diverged, incompatible이다.
 
@@ -186,7 +186,7 @@ Next
 - `context`와 `review`는 index가 current가 아니면 자동으로 index하지 않고 `INDEX_REQUIRED`(종료 코드 6)를 보인다. `--refresh`를 줄 때만 index → compile/review를 명시적으로 이어서 한다. Review 도메인 계약(읽기 전용)은 그대로다.
 - `review` 출력은 verdict 줄, ALIGNED가 아닌 claim(규칙, subject, reason, blocking·provenance·drift 표시, Evidence pointer 최대 3개), ALIGNED 개수(`--verbose`면 목록), Knowledge Gap, limitation, baseline이 없을 때의 안내, PASS의 의미("현재 Evidence 범위에서 프로젝트 방향 위반을 찾지 못함, 버그 없음이 아님")다. Adoption Baseline이 있으면 `introduced`, `pre-existing`, `pre-existing-touched`를 표시해 기존 기술 부채와 새 위반을 구분한다.
 - `review --record`만 `recordReview()`(Human 명시 행동)로 `reviews/review-*.json`을 쓴다. 기본 review는 기록하지 않는다. 의미 보조가 성공한 review는 같은 결정적 record(같은 ID)에 별도 supplement `review-<id>.assist-<id>.json`을 더한다: claim ID, alignment, Evidence ID, provider(id, model, cache identity)뿐이고 LLM 문장, 소스, prompt는 없다.
-- **`--semantic`(T12B)**: `project.yaml`의 `llm.provider: openai-responses`와 `llm.model`, 환경의 API key(`llm.api_key_env`, 기본 `OPENAI_API_KEY`)가 있을 때만 의미 후보 claim을 한 번의 structured 요청으로 확인한다. 선택한 Evidence 발췌(Truth slice, 바뀐 코드 slice, diff hunk)가 OpenAI API로 전송되며 `store: false`로 보낸다. 결과는 사람 출력의 별도 절("Semantic assistance …")과 JSON `result.semanticAssist`에 있고 결정적 claim과 verdict는 그대로다. 같은 요청은 로컬 cache(`.duo-project/cache/llm/`, `llm.cache: false`로 끔)로 다시 호출하지 않는다. Provider가 disabled, unavailable, 실패여도 review는 결정적 결과로 끝나고 종료 코드도 결정적 verdict를 따른다.
+- **`--semantic`(T12B)**: `project.yaml`의 `llm.provider: openai-responses`와 `llm.model`, 환경의 API key(`llm.api_key_env`, 기본 `OPENAI_API_KEY`)가 있을 때만 의미 후보 claim을 한 번의 structured 요청으로 확인한다. 선택한 Evidence 발췌(Truth slice, 바뀐 코드 slice, diff hunk)가 OpenAI API로 전송되며 `store: false`로 보낸다. `llm.provider: openai-compatible`(T27.1)이면 같은 발췌가 project.yaml의 `base_url`로, 설정한 `transport`와 `structured_output` 하나로 전송된다(Responses transport는 `store: false`, fallback 없음). 결과는 사람 출력의 별도 절("Semantic assistance …")과 JSON `result.semanticAssist`에 있고 결정적 claim과 verdict는 그대로다. 같은 요청은 로컬 cache(`.duo-project/cache/llm/`, `llm.cache: false`로 끔)로 다시 호출하지 않는다. Provider가 disabled, unavailable, 실패여도 review는 결정적 결과로 끝나고 종료 코드도 결정적 verdict를 따른다.
 
 ```text
 $ duoctl review
