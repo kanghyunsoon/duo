@@ -75,8 +75,10 @@ describe("AC-001-02 check-boundaries validates package manifests", () => {
 
   it("passes on this repository", () => {
     expect(runCheck(root).code).toBe(0);
-  });
+  }, 60_000);
 
+  // Copies packages/ and apps/ before running the script: seconds of file I/O on a busy Windows runner (the default
+  // 5 s timeout failed once in CI, run 36982582774). The same 60 s budget as the lint warm-up above.
   it("fails when core declares a dependency on graph", () => {
     for (const dir of ["packages", "apps"]) {
       cpSync(join(root, dir), join(temp, dir), {
@@ -90,5 +92,5 @@ describe("AC-001-02 check-boundaries validates package manifests", () => {
     const result = runCheck(temp);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("@duo-director/core: dependencies -> @duo-director/graph");
-  });
+  }, 60_000);
 });
