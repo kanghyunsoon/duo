@@ -211,8 +211,7 @@ export async function initCommand(env: Env, options: InitOptions): Promise<Outco
       steps.baseline = { status: status.value.status === "incompatible" ? "failed" : "existing", detail: status.value.status };
       report("baseline");
       if (status.value.status === "incompatible") return finish(EXIT.ERROR);
-      human.push(t(env.locale, "init.done"));
-      human.push(t(env.locale, "init.agents"));
+      human.push(...nextSteps(env));
       return finish(EXIT.OK);
     }
     const captured = await withWriter(env.root, async (graph) => captureAdoptionBaseline(env.root, {
@@ -239,8 +238,15 @@ export async function initCommand(env: Env, options: InitOptions): Promise<Outco
     baseline = { status: captured.value.status, id: b.id, path: captured.value.path, dirtyAtAdoption: b.workingTree.dirty, findings: b.findings.length, headOid: b.git.headOid };
     steps.baseline = { status: "ok", detail: `${b.git.headOid.slice(0, 12)}${b.workingTree.dirty ? " · dirty at adoption (HEAD_BASELINE)" : ""} · ${b.findings.length} pre-existing findings` };
     report("baseline");
-    human.push(t(env.locale, "init.done"));
-    human.push(t(env.locale, "init.agents"));
+    human.push(...nextSteps(env));
     return finish(EXIT.OK);
   });
+}
+
+/**
+ * What to do after a successful init (T26.1): init has already indexed and recorded the baseline, so the
+ * steps are connecting an agent (either supported one, no default) and checking the setup; the UI is optional.
+ */
+function nextSteps(env: Env): string[] {
+  return (["init.done", "init.next.agent", "init.next.doctor", "init.next.ui"] as const).map((k) => t(env.locale, k));
 }

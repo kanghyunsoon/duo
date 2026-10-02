@@ -14,6 +14,7 @@ import { GRAPH_SCHEMA_VERSION, packageInfo as graph } from "@duo-director/graph"
 import { packageInfo as integration } from "@duo-director/integration";
 import { contextCommand } from "./commands/context.js";
 import { decisionCommand } from "./commands/decision.js";
+import { doctorCommand } from "./commands/doctor.js";
 import { graphCommand } from "./commands/graph.js";
 import { indexCommand } from "./commands/index-command.js";
 import { initCommand } from "./commands/init.js";
@@ -31,9 +32,9 @@ import { VERSION } from "./version.js";
 
 export type { Io } from "./io.js";
 
-export const COMMANDS = ["init", "status", "index", "context", "review", "trace", "impact", "decision", "stats", "ui", "install", "mcp"] as const;
+export const COMMANDS = ["init", "status", "doctor", "index", "context", "review", "trace", "impact", "decision", "stats", "ui", "install", "mcp"] as const;
 const LATER: Readonly<Record<string, string>> = {};
-/** Commands that append runtime/metrics.jsonl. Read-only commands (status, trace, impact, stats) write nothing. */
+/** Commands that append runtime/metrics.jsonl. Read-only commands (status, doctor, trace, impact, stats) write nothing. */
 const METERED = new Set(["init", "index", "context", "review", "decision", "install"]);
 
 const WORKSPACE: readonly PackageInfo[] = [core, analyzer, graph, director, integration];
@@ -46,6 +47,7 @@ const GLOBAL: Options = {
 const COMMAND_OPTIONS: Readonly<Record<string, Options>> = {
   init: { yes: { type: "boolean", short: "y" }, repair: { type: "boolean" }, answers: { type: "string" }, "baseline-policy": { type: "string" } },
   status: {},
+  doctor: {},
   index: { full: { type: "boolean" } },
   context: { budget: { type: "string" }, refresh: { type: "boolean" } },
   review: {
@@ -69,6 +71,7 @@ const HELP = [
   "Commands:",
   "  init        adopt this Git repository: plan, Truth, index, adoption baseline",
   "  status      Truth, index freshness, adoption baseline, pending decisions (read-only)",
+  "  doctor      check the whole setup (Git, Truth, index, analysis, agents, optional LLM) and print the next steps (read-only)",
   "  index       update the Project Graph (--full: clean rebuild)",
   "  context     Context Packet for a task (--budget, --refresh)",
   "  review      review changes (--staged, --from, --to, --files, --task, --budget, --refresh, --record, --fail-on block|ask|warn, --strict = --fail-on warn, --semantic: optional LLM assistance)",
@@ -104,6 +107,7 @@ async function dispatch(env: Env, command: string, positionals: readonly string[
       return initCommand(env, { repair: bool(v.repair), answersFromStdin: answers === "-", ...(policy === undefined ? {} : { baselinePolicy: policy }) });
     }
     case "status": return statusCommand(env);
+    case "doctor": return doctorCommand(env);
     case "index": return indexCommand(env, bool(v.full));
     case "context": {
       const task = positionals.slice(1).join(" ").trim();

@@ -6,3 +6,4 @@ export * from "./graph.js";
 export * from "./truth.js";
 export * from "./search.js";
 export * from "./propose.js";
+export * from "./doctor.js";

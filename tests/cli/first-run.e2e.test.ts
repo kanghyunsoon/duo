@@ -36,6 +36,10 @@ describe("first-run guidance (0.1.1)", () => {
     expect(human.code).toBe(0);
     const line = text(human).split(/\r?\n/u).find((l) => l.includes("duoctl install codex")) ?? "";
     expect(line).toContain("duoctl install claude-code");
+    // T26.1: init already indexed, so the next steps are an agent and doctor; the UI is marked optional.
+    expect(text(human)).toMatch(/duoctl doctor/u);
+    expect(text(human)).not.toMatch(/duoctl index/u);
+    expect(text(human)).toMatch(/Optional: duoctl ui/u);
     const json = duoctl(repo(), [...INIT, "--json"], "[]", env);
     expect(json.code).toBe(0);
     expect(json.json().format).toBe("duo.cli.init/1");

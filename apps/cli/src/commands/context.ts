@@ -32,6 +32,8 @@ export async function contextCommand(env: Env, task: string, options: { readonly
       if (q.primaryQuestion !== undefined) human.push(`? ${q.primaryQuestion}`);
       human.push(...q.additionalQuestions.map((a) => `? ${a.question}`), ...q.notes.map((n) => `- ${n.note}`));
     }
+    // T26.1: an ambiguous seed stops only while the task has no exact signal; a path or an ID is one (human output only).
+    if (p.status === "ambiguous") human.push(t(env.locale, "context.ambiguous-hint"));
     return { command: "context", exitCode: EXIT.OK, result: p, meta, diagnostics: op.diagnostics, human, metric };
   });
 }

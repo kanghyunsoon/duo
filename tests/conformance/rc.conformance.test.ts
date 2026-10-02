@@ -85,6 +85,10 @@ describe("RC: JSON contracts and Context quality (context fixture)", () => {
       expect(p.metrics.budget.used).toBeLessThanOrEqual(budget);
     }
     expect(cli(r, ["context", "fix normalize", "--json"]).json().result.status).toBe("ambiguous");
+    // T26.1: the human output says how to give an exact starting point, and that advice holds (a path is one).
+    const hint = cli(r, ["context", "fix normalize"]);
+    expect(hint.stdout).toMatch(/repository-relative file path/u);
+    expect(cli(r, ["context", "fix normalize src/util/text.ts", "--json"]).json().result.status).not.toBe("ambiguous");
   });
 });
 
