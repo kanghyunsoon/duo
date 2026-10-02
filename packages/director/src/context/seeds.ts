@@ -44,6 +44,22 @@ function rawTokens(task: string): string[] {
   return task.split(/[\s,;:!?()[\]{}<>"'`]+/u).map((t) => t.replace(/^[.]+|[.]+$/gu, "")).filter((t) => t.length > 0);
 }
 
+/** A symbol name or qualified name the task can name (one token). */
+const NAME_TOKEN = /^[A-Za-z_$][\w$]*(?:\.#?[A-Za-z_$][\w$]*)*$/u;
+
+/** The path, written as is in a task, is read as a path seed: one token with a / (T26.2 remediation). */
+export function isPathSignal(path: string): boolean {
+  const tokens = rawTokens(path);
+  return tokens.length === 1 && tokens[0] === path && path.includes("/") && normalizeRepoPath(path).value === path;
+}
+
+/** The name, written as is in a task, is read as a symbol name and not as an ID (T26.2 remediation). */
+export function isNameSignal(name: string): boolean {
+  const tokens = rawTokens(name);
+  const upper = name.toUpperCase();
+  return tokens.length === 1 && tokens[0] === name && NAME_TOKEN.test(name) && name.length >= 3 && !isDefinitionId(upper) && !PROPOSAL_ID_PATTERN.test(upper);
+}
+
 function listAll(store: GraphReader, type: EntityType): GraphNode[] {
   const out: GraphNode[] = [];
   let afterId: string | undefined;
@@ -150,7 +166,7 @@ export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphRead
       continue;
     }
     const name = token.replace(/\(\)$/u, "");
-    if (!/^[A-Za-z_$][\w$]*(?:\.#?[A-Za-z_$][\w$]*)*$/u.test(name) || name.length < 3) continue;
+    if (!NAME_TOKEN.test(name) || name.length < 3) continue;
     const qualified = symbols.filter((s) => s.payload.qualifiedName === name);
     if (qualified.length === 1 && qualified[0] !== undefined) { add(qualified[0], "symbol", token, SEED_STRENGTH.symbol); exact++; continue; }
     if (qualified.length > 1 && name.includes(".")) {

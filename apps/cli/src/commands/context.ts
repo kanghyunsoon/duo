@@ -2,10 +2,10 @@
  * duoctl context <task> (T15): the shared context operation (Context Packet + Knowledge Gap
  * assessment), rendered as Markdown. A stale index is INDEX_REQUIRED; only --refresh indexes first.
  */
-import { renderContextMarkdown, renderGapQuestions } from "@duo-director/director";
+import { ambiguityRemediation, redactSecrets, renderContextMarkdown, renderGapQuestions, type SeedAmbiguity } from "@duo-director/director";
 import { indexRepository } from "@duo-director/graph";
 import { projectContext, withGraphWriter } from "@duo-director/integration";
-import { t } from "../messages.js";
+import { t, type Locale } from "../messages.js";
 import { EXIT, failed, type Outcome } from "../output.js";
 import { diagLines, operationFailure, requireProject, withRegistry, type Env } from "./shared.js";
 
@@ -32,8 +32,16 @@ export async function contextCommand(env: Env, task: string, options: { readonly
       if (q.primaryQuestion !== undefined) human.push(`? ${q.primaryQuestion}`);
       human.push(...q.additionalQuestions.map((a) => `? ${a.question}`), ...q.notes.map((n) => `- ${n.note}`));
     }
-    // T26.1: an ambiguous seed stops only while the task has no exact signal; a path or an ID is one (human output only).
-    if (p.status === "ambiguous") human.push(t(env.locale, "context.ambiguous-hint"));
+    // T26.1/T26.2: only the handles that tell the candidates apart (human output only; the result is unchanged).
+    if (p.status === "ambiguous") human.push(...(p.context.resolution?.ambiguities ?? []).flatMap((a) => ambiguityHint(env.locale, a)));
     return { command: "context", exitCode: EXIT.OK, result: p, meta, diagnostics: op.diagnostics, human, metric };
   });
+}
+
+function ambiguityHint(L: Locale, a: SeedAmbiguity): string[] {
+  const r = ambiguityRemediation(a);
+  const has = (h: string) => r.handles.includes(h as never);
+  const key = has("definition-id") ? "context.ambiguous.definition-id" : has("path") && has("qualified-name") ? "context.ambiguous.both"
+    : has("path") ? "context.ambiguous.path" : has("qualified-name") ? "context.ambiguous.qualified-name" : "context.ambiguous.none";
+  return [t(L, key, { term: a.term }), ...(r.definitionIdAlso ? [t(L, "context.ambiguous.id-also")] : [])].map((line) => redactSecrets(line).text);
 }

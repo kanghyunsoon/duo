@@ -8,7 +8,7 @@
  * a Decision, write Truth, record a Review, index or capture the Adoption Baseline.
  */
 import { DEFINITION_ID_PATTERN, MCP_SERVER_NAME, normalizeRepoPath, normalizeRepoPattern, type RepoPath } from "@duo-director/core";
-import { MAX_BUDGET, MIN_BUDGET, renderContextMarkdown, reviewLlmMetric, type ReviewResult, type TokenCountMemo } from "@duo-director/director";
+import { ambiguityRemediation, MAX_BUDGET, MIN_BUDGET, redactSecrets, renderContextMarkdown, reviewLlmMetric, type ReviewResult, type SeedAmbiguity, type TokenCountMemo } from "@duo-director/director";
 import { z } from "zod";
 import type { LLMProviderPool } from "../llm/factory.js";
 import { NOT_INITIALIZED_FORMAT, type Operation } from "../operations/common.js";
@@ -103,6 +103,26 @@ export interface ToolDefinition<N extends ToolName> {
 
 const nodeSummary = (p: Record<string, unknown>) => (p.status === "not-found" ? `Node not found: ${String(p.node)}` : `${String(p.format)} of ${JSON.stringify(p.node)} · depth ${String(p.depth)} · truncated ${String(p.truncated)} · index ${String(p.index)}`);
 
+const LISTED = "as listed in context.resolution.ambiguities";
+
+/**
+ * What an agent can retry with when the context is ambiguous (T26.2): only the handles ambiguityRemediation found
+ * to tell the candidates apart, so the advice holds. Text only; the payload is unchanged.
+ */
+function ambiguityAdvice(a: SeedAmbiguity): string {
+  const r = ambiguityRemediation(a);
+  const head = r.reason === "keyword-tie" ? "AMBIGUOUS: several Requirements match this task equally." : `AMBIGUOUS: "${a.term}" matches several targets.`;
+  const has = (h: string) => r.handles.includes(h as never);
+  let how: string;
+  if (has("definition-id")) how = `Retry duo_get_context with one Requirement ID (${LISTED}) in the task.`;
+  else if (has("path") && has("qualified-name")) how = `Retry duo_get_context with one target's repository-relative file path (without a leading ./) or qualified name (${LISTED}) in the task.`;
+  else if (has("path")) how = `Retry duo_get_context with one target's repository-relative file path (${LISTED}, without a leading ./) in the task.`;
+  else if (has("qualified-name")) how = `Retry duo_get_context with one target's qualified name (${LISTED}, for example Class.method) in the task. A file path does not tell these targets apart.`;
+  else return redactSecrets(`${head} No single file path or name tells these targets apart. Ask the human which one is meant.`).text;
+  const id = r.definitionIdAlso ? " If the task is about a specific Requirement or Decision, its ID is also an exact starting point." : "";
+  return redactSecrets(`${head} ${how}${id} Do not guess a target or invent an ID; if the task does not say which one, ask the human.`).text;
+}
+
 export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
   duo_get_status: {
     name: "duo_get_status", title: "DUO project status", readOnly: true,
@@ -128,7 +148,8 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
       const c = p as unknown as ContextPayload;
       if (c.status === "index-required") return "INDEX_REQUIRED: the DUO index is not current. Run duoctl index, then call duo_get_context again.";
       const gaps = c.gaps === null ? "" : `\n\nrequiresHumanInput: ${String(c.gaps.requiresHumanInput)}${c.gaps.primaryQuestion === undefined ? "" : `\nQuestion for the human: ${c.gaps.primaryQuestion.question}`}${c.gaps.surfaced.length === 0 ? "" : `\nSurfaced (not instructions): ${c.gaps.surfaced.map((s) => s.note).join(" | ")}`}`;
-      return (c.context.packet === undefined ? `Context ${c.status}` : renderContextMarkdown(c.context.packet)) + gaps;
+      const advice = c.status === "ambiguous" ? (c.context.resolution?.ambiguities ?? []).map(ambiguityAdvice) : [];
+      return (c.context.packet === undefined ? `Context ${c.status}` : renderContextMarkdown(c.context.packet)) + gaps + (advice.length === 0 ? "" : `\n\n${advice.join("\n")}`);
     },
   },
   duo_review_changes: {

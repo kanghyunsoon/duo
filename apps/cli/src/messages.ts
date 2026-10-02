@@ -162,7 +162,12 @@ const EN = {
   "doctor.action.fix-llm-config": "Optional: fix llm in .duo-project/project.yaml",
   "doctor.next": "Next",
   "doctor.next.none": "Nothing to do.",
-  "context.ambiguous-hint": "Several targets match. A repository-relative file path (with a /, for example src/app/weapon.ts) or a Requirement or Decision ID in the task gives DUO an exact starting point.",
+  "context.ambiguous.path": "\"{term}\": add one target's repository-relative file path, as listed above (with its /, without a leading ./), to the task.",
+  "context.ambiguous.qualified-name": "\"{term}\": add one target's qualified name, as listed above (for example Class.method), to the task; a file path does not tell these targets apart.",
+  "context.ambiguous.both": "\"{term}\": add one target's repository-relative file path (with its /, without a leading ./) or its qualified name, as listed above, to the task.",
+  "context.ambiguous.definition-id": "Several Requirements match equally: add one Requirement ID, as listed above, to the task.",
+  "context.ambiguous.none": "\"{term}\": no single file path or name tells these targets apart; say which one you mean.",
+  "context.ambiguous.id-also": "If the task is about a specific Requirement or Decision, its ID is also an exact starting point.",
 } as const;
 
 export type MessageKey = keyof typeof EN;
@@ -324,7 +329,12 @@ const KO: Record<MessageKey, string> = {
   "doctor.action.fix-llm-config": "선택: .duo-project/project.yaml의 llm을 고치세요",
   "doctor.next": "다음",
   "doctor.next.none": "할 일이 없습니다.",
-  "context.ambiguous-hint": "여러 대상이 일치합니다. 과제에 저장소 상대 파일 경로(/ 포함, 예: src/app/weapon.ts)나 Requirement·Decision ID를 넣으면 DUO가 정확한 시작점을 얻습니다.",
+  "context.ambiguous.path": "\"{term}\": 위 목록에 있는 대상 하나의 저장소 상대 파일 경로(/ 포함, 앞에 ./ 없이)를 과제에 넣으세요.",
+  "context.ambiguous.qualified-name": "\"{term}\": 위 목록에 있는 대상 하나의 qualified name(예: Class.method)을 과제에 넣으세요. 파일 경로로는 이 대상들을 구분할 수 없습니다.",
+  "context.ambiguous.both": "\"{term}\": 위 목록에 있는 대상 하나의 저장소 상대 파일 경로(/ 포함, 앞에 ./ 없이)나 qualified name을 과제에 넣으세요.",
+  "context.ambiguous.definition-id": "여러 Requirement가 똑같이 일치합니다: 위 목록의 Requirement ID 하나를 과제에 넣으세요.",
+  "context.ambiguous.none": "\"{term}\": 하나의 파일 경로나 이름으로는 이 대상들을 구분할 수 없습니다. 어느 대상인지 직접 정해 주세요.",
+  "context.ambiguous.id-also": "과제가 특정 Requirement나 Decision에 관한 것이면 그 ID도 정확한 시작점입니다.",
 };
 
 const TABLES: Record<Locale, Record<MessageKey, string>> = { en: EN, ko: KO };

@@ -6,5 +6,6 @@ export { TOKEN_COUNT_CACHE_PATH, type TokenCountMemo } from "./metrics.js";
 export { redactSecrets, REDACTED } from "./redact.js";
 export { CONTEXT_POLICY_VERSION, EDGE_WEIGHTS, GENERIC_FILE_WINDOW, MAX_BUDGET, MIN_BUDGET, TIER_ORDER, TIER_SHARE } from "./policy.js";
 export { analysisLimitations } from "./candidates.js";
+export { ambiguityRemediation, type AmbiguityHandle, type AmbiguityRemediation } from "./remediation.js";
 export { SEED_PROVENANCE } from "./types.js";
 export type * from "./types.js";
