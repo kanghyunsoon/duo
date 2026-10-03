@@ -311,12 +311,15 @@ describe("RC: sparse Truth, language matrix, privacy", () => {
     expect(run(["impact", "src/scheduler.ts", "--json"]).json().result.format).toBe("duo.impact/1");
   });
 
-  it("the README language table is what the RC reports: TS/JS L2, Java/C#/C++/Python L1, anything else file-level L0", () => {
-    const readme = fs.readFileSync(path.join(REPO, "README.md"), "utf8");
-    const row = (level: string) => readme.split(/\r?\n/u).find((l) => l.startsWith("| " + level + " |")) ?? "";
-    expect(row("L2")).toMatch(/TypeScript \/ JavaScript/u);
-    expect(row("L1")).toMatch(/TypeScript \/ JavaScript \/ Java \/ C# \/ C\+\+ \/ Python/u);
-    expect(row("L0")).toMatch(/모든 Git repository/u);
+  it("the README language tables (English and Korean) state what the RC reports: TS/JS L2, Java/C#/C++/Python L1, any Git repository file-level L0", () => {
+    // The contract is the levels per language, not a phrase: each README states it in its own language (C238).
+    for (const [file, anyRepository] of [["README.md", /Any Git repository/u], ["README.ko.md", /모든 Git repository/u]] as const) {
+      const readme = fs.readFileSync(path.join(REPO, file), "utf8");
+      const row = (level: string) => readme.split(/\r?\n/u).find((l) => l.startsWith("| " + level + " |")) ?? "";
+      expect(row("L2"), file).toMatch(/\| TypeScript \/ JavaScript \|/u);
+      expect(row("L1"), file).toMatch(/\| TypeScript \/ JavaScript \/ Java \/ C# \/ C\+\+ \/ Python \|/u);
+      expect(row("L0"), file).toMatch(anyRepository);
+    }
     const r = fixture("languages/polyglot");
     expect(cli(r, ["init", "--non-interactive", "--answers", "-", "--json"], "[]").code).toBe(0);
     const analysis = cli(r, ["status", "--json"]).json().result.analysis;

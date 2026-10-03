@@ -156,7 +156,7 @@ Built-in setup and verification: **Codex** and **Claude Code** (`duoctl install`
 
 | Level | Covers | What DUO does |
 |---|---|---|
-| L0 | Any Git repository (모든 Git repository): every file, including languages without an analyzer | files, fingerprints, Git history and diffs, Project Truth references, file-level context and review |
+| L0 | Any Git repository: every file, including languages without an analyzer | files, fingerprints, Git history and diffs, Project Truth references, file-level context and review |
 | L1 | TypeScript / JavaScript / Java / C# / C++ / Python | symbols, tests, imports·includes·usings, call sites, exact source locations |
 | L2 | TypeScript / JavaScript | module resolution for every import, CALLS edges proven by bindings |
 

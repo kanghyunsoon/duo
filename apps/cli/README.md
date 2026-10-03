@@ -1,10 +1,10 @@
 # @duo-director/cli
 
-**DUO — AI Project Direction Layer for Coding Agents.** `duoctl` keeps coding agents (Codex, Claude Code) aligned with a project's confirmed intent: it observes the Git repository, gives the agent only the context a task needs, and reviews changes against confirmed decisions with evidence. DUO does not write code.
+**DUO — Decision compliance for coding agents.** Keep coding agents aligned with human-confirmed engineering decisions. You confirm the decisions, coding agents (Codex, Claude Code) implement, and `duoctl` reviews repository changes against those decisions with file and line evidence. It also gives the agent only the context a task needs. DUO does not write code.
 
 Requires Node.js 24.15 or later. No native build, no install script. LLM use is optional and off by default: indexing, context, review, the MCP server and the local UI work without an API key and without network access.
 
-## Three steps, three different things
+## Install and set up
 
 ```sh
 npm install -g @duo-director/cli     # 1. install the duoctl executable
