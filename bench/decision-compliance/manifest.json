@@ -1,0 +1,64 @@
+{
+  "format": "duo-bench.decision-compliance-manifest/1",
+  "note": "Benchmark-local format; not a DUO public contract.",
+  "benchmark": "decision-compliance-01",
+  "benchmarkVersion": 1,
+  "fixture": "decision-compliance-01/1",
+  "language": "TypeScript",
+  "policy": "Decision D-001, stateless authentication: authentication must keep no server-side session state. Code must not add or change any class, function or other symbol whose name contains `SessionStore`. Session stores that already existed when this decision was adopted are known legacy debt: when a change touches one, report it, but do not block the change for it. A change that adds a new symbol whose name contains `SessionStore` violates the decision and must be blocked.",
+  "commits": {
+    "baseline": "718eae280ebdf4f62acab47660f30d521bf925ad",
+    "change": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+    "controlOnly": "b9beaa78b5d0171cdc09de4c123b9364a8120fa4"
+  },
+  "branches": {
+    "baseline": "baseline",
+    "change": "main",
+    "controlOnly": "control-only"
+  },
+  "roles": [
+    {
+      "id": "A",
+      "role": "legacy-untouched",
+      "path": "src/legacy/memory-session-store.ts",
+      "symbol": "MemorySessionStore"
+    },
+    {
+      "id": "B/E",
+      "role": "legacy-touched",
+      "path": "src/legacy/cookie-session-store.ts",
+      "symbol": "CookieSessionStore"
+    },
+    {
+      "id": "D",
+      "role": "introduced",
+      "path": "src/auth/redis-session-store.ts",
+      "symbol": "RedisSessionStore"
+    },
+    {
+      "id": "C/F",
+      "role": "valid-control",
+      "path": "src/auth/token.ts",
+      "symbol": "verifyToken"
+    },
+    {
+      "id": "F",
+      "role": "valid-control",
+      "path": "src/auth/token-signer.ts",
+      "symbol": "TokenSigner"
+    }
+  ],
+  "expected": {
+    "legacy-untouched": "existed at adoption, not changed: known debt, nothing to block",
+    "legacy-touched": "existed at adoption, changed: report, do not block",
+    "introduced": "new SessionStore symbol: violation, block",
+    "valid-control": "no violation"
+  },
+  "date": "2026-10-04",
+  "duoUnderTest": {
+    "package": "@duo-director/cli",
+    "version": "0.2.0",
+    "integrity": "sha512-CFqbBpfxDwHpl03v4a39cGAD++Lw94okXM9Im//Wko64jhnTXMEmYKMC6cEG0vOOPhLqL8DcL7ap9SwOmJrdcA==",
+    "shasum": "4b9ae403abce5cf8f6af1ce6e595ed87145762f1"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "rule": "no symbol whose name contains SessionStore (D-001)",
+  "base": "718eae280ebdf4f62acab47660f30d521bf925ad",
+  "head": "b9beaa78b5d0171cdc09de4c123b9364a8120fa4",
+  "verdict": "PASS",
+  "findings": [
+    {
+      "classification": "pre-existing",
+      "blocking": false,
+      "file": "src/legacy/cookie-session-store.ts",
+      "symbol": "CookieSessionStore",
+      "lines": [
+        1,
+        6
+      ]
+    },
+    {
+      "classification": "pre-existing",
+      "blocking": false,
+      "file": "src/legacy/memory-session-store.ts",
+      "symbol": "MemorySessionStore",
+      "lines": [
+        1,
+        6
+      ]
+    }
+  ]
+}

@@ -1,0 +1,195 @@
+{
+  "format": "duo.review/1",
+  "status": "ready",
+  "verdict": "BLOCK",
+  "verdictBasis": {
+    "blocking": [
+      "claim-f4b0b7dad3dcb7c8"
+    ],
+    "ask": [],
+    "warn": [
+      "claim-2222d4a10092843a",
+      "rgap-36c80752dfbc"
+    ]
+  },
+  "baseline": {
+    "status": "present",
+    "id": "adoption-f3ee71ac7bb38195"
+  },
+  "diff": {
+    "from": "718eae280ebdf4f62acab47660f30d521bf925ad",
+    "to": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+    "files": [
+      {
+        "path": "src/auth/redis-session-store.ts",
+        "kind": "added"
+      },
+      {
+        "path": "src/auth/token-signer.ts",
+        "kind": "added"
+      },
+      {
+        "path": "src/auth/token.ts",
+        "kind": "modified"
+      },
+      {
+        "path": "src/legacy/cookie-session-store.ts",
+        "kind": "modified"
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "claim-2222d4a10092843a",
+      "rule": "decision-forbids",
+      "subject": {
+        "kind": "decision",
+        "id": "D-001"
+      },
+      "alignment": "CONFLICT",
+      "reason": "forbidden-symbol",
+      "provenance": "pre-existing-touched",
+      "enforced": true,
+      "blockEligible": false,
+      "drift": false,
+      "expected": "no symbol matching *SessionStore* (D-001)",
+      "observed": "CookieSessionStore.save changed in src/legacy/cookie-session-store.ts",
+      "evidence": [
+        {
+          "kind": "decision",
+          "basis": "project-truth",
+          "path": ".duo-project/decisions/D-001.yaml",
+          "symbol": null,
+          "id": "D-001",
+          "evidenceId": "ev-9130d1a243ee3054",
+          "lines": [
+            1,
+            14
+          ],
+          "change": null,
+          "commit": null,
+          "contentHash": "sha256:634ba75a7164919f1407857973300f1e653d1ba8b45a0546cd03a4048eef47e9"
+        },
+        {
+          "kind": "diff",
+          "basis": "git",
+          "path": "src/legacy/cookie-session-store.ts",
+          "symbol": null,
+          "id": null,
+          "evidenceId": "ev-e07b864b67358e55",
+          "lines": [
+            4,
+            4
+          ],
+          "change": "modified",
+          "commit": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+          "contentHash": "sha256:4629ec9d63f149b4734f7c263c3369f02ec25a1258a956743e70095b13c48d05"
+        },
+        {
+          "kind": "symbol",
+          "basis": "repository",
+          "path": "src/legacy/cookie-session-store.ts",
+          "symbol": "CookieSessionStore.save",
+          "id": null,
+          "evidenceId": "ev-98faa94c33df9166",
+          "lines": [
+            3,
+            5
+          ],
+          "change": null,
+          "commit": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+          "contentHash": "sha256:bcf1af12738d86c3c95e5a7b8bdbda0d6c303c67c320c2ca438d43a9603032bb"
+        }
+      ]
+    },
+    {
+      "id": "claim-f4b0b7dad3dcb7c8",
+      "rule": "decision-forbids",
+      "subject": {
+        "kind": "decision",
+        "id": "D-001"
+      },
+      "alignment": "CONFLICT",
+      "reason": "forbidden-symbol",
+      "provenance": "introduced",
+      "enforced": true,
+      "blockEligible": true,
+      "drift": false,
+      "expected": "no symbol matching *SessionStore* (D-001)",
+      "observed": "RedisSessionStore.put changed in src/auth/redis-session-store.ts",
+      "evidence": [
+        {
+          "kind": "decision",
+          "basis": "project-truth",
+          "path": ".duo-project/decisions/D-001.yaml",
+          "symbol": null,
+          "id": "D-001",
+          "evidenceId": "ev-9130d1a243ee3054",
+          "lines": [
+            1,
+            14
+          ],
+          "change": null,
+          "commit": null,
+          "contentHash": "sha256:634ba75a7164919f1407857973300f1e653d1ba8b45a0546cd03a4048eef47e9"
+        },
+        {
+          "kind": "diff",
+          "basis": "git",
+          "path": "src/auth/redis-session-store.ts",
+          "symbol": null,
+          "id": null,
+          "evidenceId": "ev-c89cfbd34fbc51e2",
+          "lines": [
+            1,
+            6
+          ],
+          "change": "added",
+          "commit": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+          "contentHash": "sha256:98b4349a619ee28c60a23ba227f357f0ff88e3aaa8fd8ef0bd889bef3b6b81f3"
+        },
+        {
+          "kind": "symbol",
+          "basis": "repository",
+          "path": "src/auth/redis-session-store.ts",
+          "symbol": "RedisSessionStore.put",
+          "id": null,
+          "evidenceId": "ev-d97ca7c94fd138a5",
+          "lines": [
+            3,
+            5
+          ],
+          "change": null,
+          "commit": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+          "contentHash": "sha256:33e44af5a3498dd0fb7801891f0772e9d11ab328cf69450d3fe7b1be04447878"
+        }
+      ]
+    }
+  ],
+  "gaps": {
+    "status": "assessed",
+    "requiresHumanInput": false,
+    "items": [
+      {
+        "id": "rgap-36c80752dfbc",
+        "kind": "missing-intent",
+        "relevance": "direct",
+        "action": "surface",
+        "reasons": [
+          "no-confirmed-intent"
+        ],
+        "anchors": [
+          "symbol:src/auth/redis-session-store.ts:RedisSessionStore.put",
+          "symbol:src/auth/token-signer.ts:TokenSigner.sign",
+          "symbol:src/auth/token.ts:verifyToken",
+          "symbol:src/legacy/cookie-session-store.ts:CookieSessionStore.save"
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "calls-exact-only",
+    "no-task-scope"
+  ],
+  "semanticAssist": "present"
+}

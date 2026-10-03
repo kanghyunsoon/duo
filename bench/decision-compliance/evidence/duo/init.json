@@ -1,0 +1,187 @@
+{
+  "format": "duo.cli.init/1",
+  "command": "init",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "steps": {
+      "repository": {
+        "status": "ok",
+        "detail": "session-fixture · typescript · 4 files · branch baseline"
+      },
+      "truth": {
+        "status": "existing"
+      },
+      "index": {
+        "status": "ok",
+        "detail": "full (no-state) · 7 files"
+      },
+      "baseline": {
+        "status": "ok",
+        "detail": "718eae280ebd · 4 pre-existing findings"
+      }
+    },
+    "plan": {
+      "state": "initialized",
+      "observed": {
+        "provenance": "observed",
+        "name": {
+          "value": "session-fixture",
+          "source": {
+            "path": "package.json",
+            "field": "name",
+            "kind": "manifest"
+          }
+        },
+        "git": {
+          "branch": "baseline",
+          "headOid": "718eae280ebdf4f62acab47660f30d521bf925ad",
+          "detached": false,
+          "unborn": false,
+          "shallow": false
+        },
+        "files": {
+          "indexable": 4,
+          "excluded": {
+            "duo-agent-integration": 2
+          }
+        },
+        "languages": [
+          {
+            "language": "typescript",
+            "files": 3,
+            "analyzed": true
+          }
+        ],
+        "manifests": [
+          {
+            "path": "package.json",
+            "kind": "npm"
+          }
+        ],
+        "packages": [
+          {
+            "manifest": "package.json",
+            "name": "session-fixture"
+          }
+        ],
+        "workspaces": [],
+        "packageManager": {
+          "value": "npm",
+          "source": {
+            "kind": "scan"
+          }
+        },
+        "scripts": [],
+        "technical": [],
+        "stack": {
+          "provenance": "observed",
+          "ecosystems": [
+            {
+              "ecosystem": "npm",
+              "manifests": [
+                "package.json"
+              ]
+            }
+          ],
+          "frameworks": []
+        },
+        "sourceRoots": [
+          {
+            "path": "src",
+            "files": 3
+          }
+        ],
+        "testRoots": [],
+        "colocatedTests": 0,
+        "workingTree": {
+          "workingTreeDirty": false,
+          "dirty": false,
+          "staged": [],
+          "unstaged": [],
+          "untracked": [],
+          "conflicted": [],
+          "counts": {
+            "staged": 0,
+            "unstaged": 0,
+            "untracked": 0,
+            "conflicted": 0
+          },
+          "excludedSecrets": 0,
+          "truncated": false
+        }
+      },
+      "documents": [],
+      "importCandidates": 0,
+      "questions": [],
+      "willCreate": [],
+      "conflicts": []
+    },
+    "index": {
+      "mode": "full",
+      "fullRebuildReason": "no-state",
+      "metrics": {
+        "mode": "full",
+        "fullRebuildReason": "no-state",
+        "files": {
+          "total": 7,
+          "unchanged": 0,
+          "changed": 0,
+          "added": 7,
+          "deleted": 0,
+          "analyzed": 3,
+          "analysisReused": 0,
+          "analysisFailed": 0
+        },
+        "resolution": {
+          "filesModulesRecomputed": 3,
+          "modulesRecomputed": 0,
+          "modulesReused": 0,
+          "filesCallsRecomputed": 3,
+          "callsRecomputed": 4,
+          "callsReused": 0
+        },
+        "history": {
+          "recomputed": true,
+          "commits": 1
+        },
+        "languages": {
+          "file-only": {
+            "files": 1,
+            "parsed": 0,
+            "reused": 0,
+            "failed": 0,
+            "parseMs": 0
+          },
+          "typescript": {
+            "files": 3,
+            "parsed": 3,
+            "reused": 0,
+            "failed": 0,
+            "parseMs": 12
+          }
+        },
+        "graph": {
+          "scopes": 5,
+          "scopesChanged": 5,
+          "nodesAdded": 11,
+          "nodesRemoved": 0,
+          "nodesUpdated": 0,
+          "edgesAdded": 11,
+          "edgesRemoved": 0,
+          "edgesUpdated": 0,
+          "written": true
+        }
+      }
+    },
+    "baseline": {
+      "status": "captured",
+      "id": "adoption-f3ee71ac7bb38195",
+      "path": ".duo-project/reviews/adoption-f3ee71ac7bb38195.json",
+      "dirtyAtAdoption": false,
+      "findings": 4,
+      "headOid": "718eae280ebdf4f62acab47660f30d521bf925ad"
+    }
+  },
+  "diagnostics": []
+}

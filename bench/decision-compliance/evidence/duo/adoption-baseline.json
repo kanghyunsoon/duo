@@ -1,0 +1,91 @@
+{
+  "id": "adoption-f3ee71ac7bb38195",
+  "recorded": {
+    "by": "강형순",
+    "at": "2026-10-03T15:10:52.252Z"
+  },
+  "format": "duo.adoption-baseline/2",
+  "project": {
+    "name": "session-fixture",
+    "rootCommits": [
+      "718eae280ebdf4f62acab47660f30d521bf925ad"
+    ]
+  },
+  "git": {
+    "headOid": "718eae280ebdf4f62acab47660f30d521bf925ad",
+    "branch": "baseline",
+    "detached": false
+  },
+  "truth": {
+    "digest": "sha256:37a9e9e128c0c0d4a64ac7f1326354ba80b9e26facc533570b82ecb6ce4ed400"
+  },
+  "index": {
+    "graphSchemaVersion": 2,
+    "stateToken": "sha256:618837341e09f32c59a5beb7cde9975b18151fcfae4b4ddea4f25b8a8ea2d3d5"
+  },
+  "workingTree": {
+    "dirty": false,
+    "policy": "HEAD_BASELINE",
+    "staged": [],
+    "unstaged": [],
+    "untracked": [],
+    "conflicted": [],
+    "counts": {
+      "staged": 0,
+      "unstaged": 0,
+      "untracked": 0,
+      "conflicted": 0
+    },
+    "excludedSecrets": 0,
+    "truncated": false
+  },
+  "bootstrapTruth": [],
+  "findingsAt": "HEAD",
+  "findings": [
+    {
+      "key": "vk-1f4bf0131d75d164",
+      "rule": "decision-forbids",
+      "governing": "D-001",
+      "offending": "sym:src/legacy/memory-session-store.ts#MemorySessionStore",
+      "path": "src/legacy/memory-session-store.ts",
+      "enforced": true
+    },
+    {
+      "key": "vk-495a8831fd1644f6",
+      "rule": "decision-forbids",
+      "governing": "D-001",
+      "offending": "sym:src/legacy/cookie-session-store.ts#CookieSessionStore.save",
+      "path": "src/legacy/cookie-session-store.ts",
+      "enforced": true
+    },
+    {
+      "key": "vk-6292ca2aa928d3f6",
+      "rule": "decision-forbids",
+      "governing": "D-001",
+      "offending": "sym:src/legacy/cookie-session-store.ts#CookieSessionStore",
+      "path": "src/legacy/cookie-session-store.ts",
+      "enforced": true
+    },
+    {
+      "key": "vk-bde819f22c59146b",
+      "rule": "decision-forbids",
+      "governing": "D-001",
+      "offending": "sym:src/legacy/memory-session-store.ts#MemorySessionStore.get",
+      "path": "src/legacy/memory-session-store.ts",
+      "enforced": true
+    }
+  ],
+  "limitations": [],
+  "analysis": {
+    "analyzerRegistryDigest": "sha256:6f648a4f847e6dfa9220a8a738e2be227bfe50e05f831469cb75b9de19114d0b",
+    "structuralLanguages": [
+      "cpp",
+      "csharp",
+      "java",
+      "javascript",
+      "python",
+      "tsx",
+      "typescript"
+    ]
+  }
+}

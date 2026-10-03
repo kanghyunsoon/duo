@@ -1,0 +1,6 @@
+WARN  0 claims · 2 files · llm_calls 0
+Knowledge gaps:
+  - No confirmed Requirement or Decision is linked to this task.
+Limitations:
+  calls-exact-only
+  no-task-scope

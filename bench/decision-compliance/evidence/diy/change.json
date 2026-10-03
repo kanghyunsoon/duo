@@ -1,0 +1,38 @@
+{
+  "rule": "no symbol whose name contains SessionStore (D-001)",
+  "base": "718eae280ebdf4f62acab47660f30d521bf925ad",
+  "head": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+  "verdict": "BLOCK",
+  "findings": [
+    {
+      "classification": "introduced",
+      "blocking": true,
+      "file": "src/auth/redis-session-store.ts",
+      "symbol": "RedisSessionStore",
+      "lines": [
+        1,
+        6
+      ]
+    },
+    {
+      "classification": "pre-existing-touched",
+      "blocking": false,
+      "file": "src/legacy/cookie-session-store.ts",
+      "symbol": "CookieSessionStore",
+      "lines": [
+        1,
+        6
+      ]
+    },
+    {
+      "classification": "pre-existing",
+      "blocking": false,
+      "file": "src/legacy/memory-session-store.ts",
+      "symbol": "MemorySessionStore",
+      "lines": [
+        1,
+        6
+      ]
+    }
+  ]
+}

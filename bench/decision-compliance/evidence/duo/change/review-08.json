@@ -1,0 +1,547 @@
+{
+  "format": "duo.cli.review/1",
+  "command": "review",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "format": "duo.review/1",
+    "status": "ready",
+    "request": {
+      "identity": "sha256:7ea2b474df83957b40efb924debd9d6bd83d8719b3b5dcd703ff7e16428396e3",
+      "task": "",
+      "from": "commit:718eae280ebdf4f62acab47660f30d521bf925ad",
+      "to": "commit:f062976dc4a4edbe89a9de372bdd44a38120b54e"
+    },
+    "baseline": {
+      "status": "present",
+      "id": "adoption-f3ee71ac7bb38195"
+    },
+    "freshness": {
+      "status": "current",
+      "fullRebuildRequired": false
+    },
+    "diff": {
+      "identity": "sha256:e47e360eb2151552d94f79806d35e7aa6110628054d9f721bfc633e571b028b7",
+      "from": "718eae280ebdf4f62acab47660f30d521bf925ad",
+      "to": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+      "files": [
+        {
+          "path": "src/auth/redis-session-store.ts",
+          "kind": "added",
+          "binary": false,
+          "newOid": "0d5ed4638a54a191903225bbe171d8e3d7db50fb",
+          "hunks": [
+            {
+              "oldStart": 0,
+              "oldLines": 0,
+              "newStart": 1,
+              "newLines": 6,
+              "evidenceId": "ev-c89cfbd34fbc51e2"
+            }
+          ],
+          "evidenceIds": [
+            "ev-c89cfbd34fbc51e2"
+          ]
+        },
+        {
+          "path": "src/auth/token-signer.ts",
+          "kind": "added",
+          "binary": false,
+          "newOid": "4bc86f92471e0f5a4f1008f30a1d31a885c4a37d",
+          "hunks": [
+            {
+              "oldStart": 0,
+              "oldLines": 0,
+              "newStart": 1,
+              "newLines": 5,
+              "evidenceId": "ev-52245f3c3658506f"
+            }
+          ],
+          "evidenceIds": [
+            "ev-52245f3c3658506f"
+          ]
+        },
+        {
+          "path": "src/auth/token.ts",
+          "kind": "modified",
+          "binary": false,
+          "oldOid": "654ad231e706decc371227b098da3484157f035b",
+          "newOid": "04a31164dd1166312f36a898b0a1e14c93e3f135",
+          "hunks": [
+            {
+              "oldStart": 2,
+              "oldLines": 1,
+              "newStart": 2,
+              "newLines": 1,
+              "evidenceId": "ev-197d446607b92ec6"
+            }
+          ],
+          "evidenceIds": [
+            "ev-197d446607b92ec6"
+          ]
+        },
+        {
+          "path": "src/legacy/cookie-session-store.ts",
+          "kind": "modified",
+          "binary": false,
+          "oldOid": "47025095ce5f12bf0d66f80aed88a3d23c0aa808",
+          "newOid": "87a3eef56a42fbb747d065be661e93701971c29c",
+          "hunks": [
+            {
+              "oldStart": 4,
+              "oldLines": 1,
+              "newStart": 4,
+              "newLines": 1,
+              "evidenceId": "ev-e07b864b67358e55"
+            }
+          ],
+          "evidenceIds": [
+            "ev-e07b864b67358e55"
+          ]
+        }
+      ]
+    },
+    "seeds": [
+      {
+        "id": "sym:src/auth/redis-session-store.ts#RedisSessionStore.put",
+        "ref": "src/auth/redis-session-store.ts#RedisSessionStore.put",
+        "entity": {
+          "type": "symbol",
+          "path": "src/auth/redis-session-store.ts",
+          "symbol": "RedisSessionStore.put"
+        },
+        "reason": "hunk-overlap",
+        "path": "src/auth/redis-session-store.ts",
+        "evidenceIds": [
+          "ev-c89cfbd34fbc51e2"
+        ]
+      },
+      {
+        "id": "sym:src/auth/token-signer.ts#TokenSigner.sign",
+        "ref": "src/auth/token-signer.ts#TokenSigner.sign",
+        "entity": {
+          "type": "symbol",
+          "path": "src/auth/token-signer.ts",
+          "symbol": "TokenSigner.sign"
+        },
+        "reason": "hunk-overlap",
+        "path": "src/auth/token-signer.ts",
+        "evidenceIds": [
+          "ev-52245f3c3658506f"
+        ]
+      },
+      {
+        "id": "sym:src/auth/token.ts#verifyToken",
+        "ref": "src/auth/token.ts#verifyToken",
+        "entity": {
+          "type": "symbol",
+          "path": "src/auth/token.ts",
+          "symbol": "verifyToken"
+        },
+        "reason": "hunk-overlap",
+        "path": "src/auth/token.ts",
+        "evidenceIds": [
+          "ev-197d446607b92ec6"
+        ]
+      },
+      {
+        "id": "sym:src/legacy/cookie-session-store.ts#CookieSessionStore.save",
+        "ref": "src/legacy/cookie-session-store.ts#CookieSessionStore.save",
+        "entity": {
+          "type": "symbol",
+          "path": "src/legacy/cookie-session-store.ts",
+          "symbol": "CookieSessionStore.save"
+        },
+        "reason": "hunk-overlap",
+        "path": "src/legacy/cookie-session-store.ts",
+        "evidenceIds": [
+          "ev-e07b864b67358e55"
+        ]
+      }
+    ],
+    "verdict": "BLOCK",
+    "verdictBasis": {
+      "blocking": [
+        "claim-f4b0b7dad3dcb7c8"
+      ],
+      "ask": [],
+      "warn": [
+        "claim-2222d4a10092843a",
+        "rgap-36c80752dfbc"
+      ]
+    },
+    "claims": [
+      {
+        "id": "claim-2222d4a10092843a",
+        "rule": "decision-forbids",
+        "subject": {
+          "kind": "decision",
+          "id": "D-001"
+        },
+        "expected": "no symbol matching *SessionStore* (D-001)",
+        "observed": "CookieSessionStore.save changed in src/legacy/cookie-session-store.ts",
+        "alignment": "CONFLICT",
+        "evidenceIds": [
+          "ev-9130d1a243ee3054",
+          "ev-98faa94c33df9166",
+          "ev-e07b864b67358e55"
+        ],
+        "basis": [
+          "project-truth",
+          "repository",
+          "git"
+        ],
+        "reason": "forbidden-symbol",
+        "enforced": true,
+        "blockEligible": false,
+        "drift": false,
+        "semanticCandidate": false,
+        "violationKey": "vk-495a8831fd1644f6",
+        "provenance": "pre-existing-touched"
+      },
+      {
+        "id": "claim-f4b0b7dad3dcb7c8",
+        "rule": "decision-forbids",
+        "subject": {
+          "kind": "decision",
+          "id": "D-001"
+        },
+        "expected": "no symbol matching *SessionStore* (D-001)",
+        "observed": "RedisSessionStore.put changed in src/auth/redis-session-store.ts",
+        "alignment": "CONFLICT",
+        "evidenceIds": [
+          "ev-9130d1a243ee3054",
+          "ev-c89cfbd34fbc51e2",
+          "ev-d97ca7c94fd138a5"
+        ],
+        "basis": [
+          "project-truth",
+          "repository",
+          "git"
+        ],
+        "reason": "forbidden-symbol",
+        "enforced": true,
+        "blockEligible": true,
+        "drift": false,
+        "semanticCandidate": false,
+        "violationKey": "vk-afe38ea71a3b1531",
+        "provenance": "introduced"
+      }
+    ],
+    "evidence": [
+      {
+        "id": "ev-197d446607b92ec6",
+        "basis": "git",
+        "kind": "diff",
+        "contentHash": "sha256:bc8c095cdcba0244ad23bc9dfddb24a81732ea1bf218245b9851e2e0a0f07173",
+        "summary": "src/auth/token.ts @@ -2,1 +2,1",
+        "pointer": {
+          "kind": "diff",
+          "path": "src/auth/token.ts",
+          "lines": [
+            2,
+            2
+          ],
+          "change": "modified",
+          "commit": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+          "contentHash": "sha256:bc8c095cdcba0244ad23bc9dfddb24a81732ea1bf218245b9851e2e0a0f07173"
+        },
+        "metadata": {
+          "oldStart": 2,
+          "oldLines": 1,
+          "newStart": 2,
+          "newLines": 1,
+          "oldBlob": "654ad231e706decc371227b098da3484157f035b",
+          "newBlob": "04a31164dd1166312f36a898b0a1e14c93e3f135"
+        }
+      },
+      {
+        "id": "ev-52245f3c3658506f",
+        "basis": "git",
+        "kind": "diff",
+        "contentHash": "sha256:dc5f6ac117fca143f0f6b2e219a0f07fd8307834ada025340758e9b733d8313c",
+        "summary": "src/auth/token-signer.ts @@ -0,0 +1,5",
+        "pointer": {
+          "kind": "diff",
+          "path": "src/auth/token-signer.ts",
+          "lines": [
+            1,
+            5
+          ],
+          "change": "added",
+          "commit": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+          "contentHash": "sha256:dc5f6ac117fca143f0f6b2e219a0f07fd8307834ada025340758e9b733d8313c"
+        },
+        "metadata": {
+          "oldStart": 0,
+          "oldLines": 0,
+          "newStart": 1,
+          "newLines": 5,
+          "newBlob": "4bc86f92471e0f5a4f1008f30a1d31a885c4a37d"
+        }
+      },
+      {
+        "id": "ev-9130d1a243ee3054",
+        "basis": "project-truth",
+        "kind": "decision",
+        "entity": {
+          "type": "decision",
+          "id": "D-001"
+        },
+        "source": {
+          "path": ".duo-project/decisions/D-001.yaml",
+          "startLine": 1,
+          "startColumn": 1,
+          "endLine": 14,
+          "endColumn": 82
+        },
+        "contentHash": "sha256:634ba75a7164919f1407857973300f1e653d1ba8b45a0546cd03a4048eef47e9",
+        "summary": "D-001 Stateless authentication",
+        "pointer": {
+          "kind": "decision",
+          "id": "D-001",
+          "path": ".duo-project/decisions/D-001.yaml",
+          "lines": [
+            1,
+            14
+          ],
+          "contentHash": "sha256:634ba75a7164919f1407857973300f1e653d1ba8b45a0546cd03a4048eef47e9"
+        }
+      },
+      {
+        "id": "ev-98faa94c33df9166",
+        "basis": "repository",
+        "kind": "symbol",
+        "entity": {
+          "type": "symbol",
+          "path": "src/legacy/cookie-session-store.ts",
+          "symbol": "CookieSessionStore.save"
+        },
+        "source": {
+          "path": "src/legacy/cookie-session-store.ts",
+          "startLine": 3,
+          "startColumn": 3,
+          "endLine": 5,
+          "endColumn": 4
+        },
+        "contentHash": "sha256:bcf1af12738d86c3c95e5a7b8bdbda0d6c303c67c320c2ca438d43a9603032bb",
+        "summary": "src/legacy/cookie-session-store.ts#CookieSessionStore.save",
+        "pointer": {
+          "kind": "symbol",
+          "path": "src/legacy/cookie-session-store.ts",
+          "symbol": "CookieSessionStore.save",
+          "lines": [
+            3,
+            5
+          ],
+          "commit": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+          "contentHash": "sha256:bcf1af12738d86c3c95e5a7b8bdbda0d6c303c67c320c2ca438d43a9603032bb"
+        }
+      },
+      {
+        "id": "ev-c89cfbd34fbc51e2",
+        "basis": "git",
+        "kind": "diff",
+        "contentHash": "sha256:98b4349a619ee28c60a23ba227f357f0ff88e3aaa8fd8ef0bd889bef3b6b81f3",
+        "summary": "src/auth/redis-session-store.ts @@ -0,0 +1,6",
+        "pointer": {
+          "kind": "diff",
+          "path": "src/auth/redis-session-store.ts",
+          "lines": [
+            1,
+            6
+          ],
+          "change": "added",
+          "commit": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+          "contentHash": "sha256:98b4349a619ee28c60a23ba227f357f0ff88e3aaa8fd8ef0bd889bef3b6b81f3"
+        },
+        "metadata": {
+          "oldStart": 0,
+          "oldLines": 0,
+          "newStart": 1,
+          "newLines": 6,
+          "newBlob": "0d5ed4638a54a191903225bbe171d8e3d7db50fb"
+        }
+      },
+      {
+        "id": "ev-d97ca7c94fd138a5",
+        "basis": "repository",
+        "kind": "symbol",
+        "entity": {
+          "type": "symbol",
+          "path": "src/auth/redis-session-store.ts",
+          "symbol": "RedisSessionStore.put"
+        },
+        "source": {
+          "path": "src/auth/redis-session-store.ts",
+          "startLine": 3,
+          "startColumn": 3,
+          "endLine": 5,
+          "endColumn": 4
+        },
+        "contentHash": "sha256:33e44af5a3498dd0fb7801891f0772e9d11ab328cf69450d3fe7b1be04447878",
+        "summary": "src/auth/redis-session-store.ts#RedisSessionStore.put",
+        "pointer": {
+          "kind": "symbol",
+          "path": "src/auth/redis-session-store.ts",
+          "symbol": "RedisSessionStore.put",
+          "lines": [
+            3,
+            5
+          ],
+          "commit": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+          "contentHash": "sha256:33e44af5a3498dd0fb7801891f0772e9d11ab328cf69450d3fe7b1be04447878"
+        }
+      },
+      {
+        "id": "ev-e07b864b67358e55",
+        "basis": "git",
+        "kind": "diff",
+        "contentHash": "sha256:4629ec9d63f149b4734f7c263c3369f02ec25a1258a956743e70095b13c48d05",
+        "summary": "src/legacy/cookie-session-store.ts @@ -4,1 +4,1",
+        "pointer": {
+          "kind": "diff",
+          "path": "src/legacy/cookie-session-store.ts",
+          "lines": [
+            4,
+            4
+          ],
+          "change": "modified",
+          "commit": "f062976dc4a4edbe89a9de372bdd44a38120b54e",
+          "contentHash": "sha256:4629ec9d63f149b4734f7c263c3369f02ec25a1258a956743e70095b13c48d05"
+        },
+        "metadata": {
+          "oldStart": 4,
+          "oldLines": 1,
+          "newStart": 4,
+          "newLines": 1,
+          "oldBlob": "47025095ce5f12bf0d66f80aed88a3d23c0aa808",
+          "newBlob": "87a3eef56a42fbb747d065be661e93701971c29c"
+        }
+      }
+    ],
+    "gaps": {
+      "format": "duo.gap-assessment/1",
+      "status": "assessed",
+      "gaps": [
+        {
+          "id": "rgap-36c80752dfbc",
+          "source": "runtime",
+          "kind": "missing-intent",
+          "anchors": [
+            {
+              "type": "symbol",
+              "path": "src/auth/redis-session-store.ts",
+              "symbol": "RedisSessionStore.put"
+            },
+            {
+              "type": "symbol",
+              "path": "src/auth/token-signer.ts",
+              "symbol": "TokenSigner.sign"
+            },
+            {
+              "type": "symbol",
+              "path": "src/auth/token.ts",
+              "symbol": "verifyToken"
+            },
+            {
+              "type": "symbol",
+              "path": "src/legacy/cookie-session-store.ts",
+              "symbol": "CookieSessionStore.save"
+            }
+          ],
+          "relevance": "direct",
+          "reasons": [
+            {
+              "code": "no-confirmed-intent"
+            }
+          ],
+          "action": "surface"
+        }
+      ],
+      "requiresHumanInput": false,
+      "additional": [],
+      "technicalLimitations": [
+        "calls-exact-only",
+        "files-by-path",
+        "no-diff"
+      ],
+      "metrics": {
+        "declaredConsidered": 0,
+        "runtime": 1,
+        "direct": 1,
+        "related": 0,
+        "none": 0,
+        "ask": 0,
+        "surface": 1,
+        "ignore": 0,
+        "llmCalls": 0
+      }
+    },
+    "context": {
+      "profile": "review",
+      "seeds": [
+        "sym:src/auth/redis-session-store.ts#RedisSessionStore.put",
+        "sym:src/auth/token-signer.ts#TokenSigner.sign",
+        "sym:src/auth/token.ts#verifyToken",
+        "sym:src/legacy/cookie-session-store.ts#CookieSessionStore.save"
+      ],
+      "review": "sha256:ac7eec117498ab50f8594f30dd7e5cbe928e1d16b5d17fe56e8454049cd31288"
+    },
+    "limitations": [
+      {
+        "code": "calls-exact-only",
+        "message": "CALLS edges exist only for exactly resolved calls; instance, dynamic and injected calls are not in the graph."
+      },
+      {
+        "code": "no-task-scope",
+        "message": "No task was given, so scope drift against a task context is not checked."
+      }
+    ],
+    "semanticAssist": {
+      "candidates": [],
+      "claims": [],
+      "evidence": [],
+      "calls": 0,
+      "cacheHits": 0,
+      "status": "not-requested",
+      "skippedChecks": []
+    },
+    "metrics": {
+      "changedFiles": 4,
+      "changedHunks": 4,
+      "diffSeeds": 4,
+      "claims": {
+        "ALIGNED": 0,
+        "PARTIAL": 0,
+        "CONFLICT": 2,
+        "UNKNOWN": 0
+      },
+      "evidence": {
+        "project-truth": 1,
+        "repository": 2,
+        "git": 4,
+        "test": 0,
+        "llm": 0
+      },
+      "contextTokens": 606,
+      "taskContextTokens": 0,
+      "semanticCandidates": 0,
+      "llmCalls": 0,
+      "llmCacheHits": 0
+    },
+    "diagnostics": []
+  },
+  "meta": {
+    "performance": {
+      "totalMs": 1466,
+      "freshnessMs": 421,
+      "diffMs": 1004,
+      "contextMs": 29,
+      "gapMs": 1,
+      "rulesMs": 6,
+      "semanticMs": 0
+    }
+  },
+  "diagnostics": []
+}

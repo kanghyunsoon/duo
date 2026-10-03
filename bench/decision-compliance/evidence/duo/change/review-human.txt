@@ -1,0 +1,10 @@
+BLOCK  2 claims · 4 files · llm_calls 0
+  CONFLICT  decision-forbids           D-001 · forbidden-symbol [pre-existing-touched]
+            evidence: .duo-project/decisions/D-001.yaml:1-14, src/legacy/cookie-session-store.ts:3-5, src/legacy/cookie-session-store.ts:4-4
+  CONFLICT  decision-forbids           D-001 · forbidden-symbol [blocking, introduced]
+            evidence: .duo-project/decisions/D-001.yaml:1-14, src/auth/redis-session-store.ts:1-6, src/auth/redis-session-store.ts:3-5
+Knowledge gaps:
+  - No confirmed Requirement or Decision is linked to this task.
+Limitations:
+  calls-exact-only
+  no-task-scope

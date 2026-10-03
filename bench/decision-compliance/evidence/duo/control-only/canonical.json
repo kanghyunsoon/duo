@@ -1,0 +1,55 @@
+{
+  "format": "duo.review/1",
+  "status": "ready",
+  "verdict": "WARN",
+  "verdictBasis": {
+    "blocking": [],
+    "ask": [],
+    "warn": [
+      "rgap-6ae1a488baf1"
+    ]
+  },
+  "baseline": {
+    "status": "present",
+    "id": "adoption-f3ee71ac7bb38195"
+  },
+  "diff": {
+    "from": "718eae280ebdf4f62acab47660f30d521bf925ad",
+    "to": "b9beaa78b5d0171cdc09de4c123b9364a8120fa4",
+    "files": [
+      {
+        "path": "src/auth/token-signer.ts",
+        "kind": "added"
+      },
+      {
+        "path": "src/auth/token.ts",
+        "kind": "modified"
+      }
+    ]
+  },
+  "claims": [],
+  "gaps": {
+    "status": "assessed",
+    "requiresHumanInput": false,
+    "items": [
+      {
+        "id": "rgap-6ae1a488baf1",
+        "kind": "missing-intent",
+        "relevance": "direct",
+        "action": "surface",
+        "reasons": [
+          "no-confirmed-intent"
+        ],
+        "anchors": [
+          "symbol:src/auth/token-signer.ts:TokenSigner.sign",
+          "symbol:src/auth/token.ts:verifyToken"
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "calls-exact-only",
+    "no-task-scope"
+  ],
+  "semanticAssist": "present"
+}
