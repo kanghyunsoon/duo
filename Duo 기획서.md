@@ -1,3 +1,7 @@
+> **Historical design input.** This document records the original concept (2026-09) and is not the current product specification. Names, interfaces and scope changed during development (for example `duo` → `duoctl`, `.duo/` → `.duo-project/`). For current behavior see [README.md](README.md), [docs/README.md](docs/README.md) and [docs/release/product-contract.md](docs/release/product-contract.md).
+>
+> **초기 설계 입력 기록.** 이 문서는 처음 구상(2026-09)을 보존한 것이며 현재 제품 사양이 아닙니다. 개발 중 이름, 인터페이스, 범위가 바뀌었습니다(예: `duo` → `duoctl`, `.duo/` → `.duo-project/`). 현재 동작은 [README.ko.md](README.ko.md), [docs/README.md](docs/README.md), [docs/release/product-contract.md](docs/release/product-contract.md)를 보세요.
+
 # DUO
 
 ## AI Project Direction Layer for Coding Agents

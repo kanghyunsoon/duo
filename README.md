@@ -1,109 +1,217 @@
 # DUO
 
-**AI Project Direction Layer for Coding Agents**
+[![npm](https://img.shields.io/npm/v/@duo-director/cli)](https://www.npmjs.com/package/@duo-director/cli)
+[![CI](https://github.com/kanghyunsoon/duo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kanghyunsoon/duo/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-> Human defines intent. Agent performs implementation. DUO maintains direction.
+**Decision compliance for coding agents.**
 
-DUO는 Codex, Claude Code 같은 AI Coding Agent가 프로젝트의 목표와 결정사항에서 벗어나지 않게 돕는 로컬 도구입니다. DUO는 코드를 작성하지 않습니다. 하는 일은 네 가지입니다.
+Keep coding agents aligned with human-confirmed engineering decisions. You confirm the decisions. Coding agents such as Codex and Claude Code implement. DUO checks repository changes against those decisions on its own and reports what it found, with file and line evidence. DUO does not write code.
 
-- **Project Direction**: 사람이 확정한 목표, 요구사항, Decision을 `.duo-project/`에 Project Truth로 둡니다. Agent는 제안만 하고 확정은 사람이 합니다.
-- **Deterministic evidence**: 파일, Git history, 코드 구조를 결정적으로 분석해 Graph와 근거(Evidence)를 만듭니다.
-- **Context Compiler**: 작업에 필요한 Truth, 코드, 테스트만 골라 작은 Context Packet으로 Agent에게 줍니다.
-- **Drift Review**: 변경을 확정된 방향과 대조해 PASS / WARN / BLOCK / ASK를 근거와 함께 보고합니다.
+[한국어](README.ko.md) · [Latest release](https://github.com/kanghyunsoon/duo/releases/latest) · [npm](https://www.npmjs.com/package/@duo-director/cli)
 
-LLM은 선택 사항입니다. API key 없이도 index, Context, Review, MCP, UI가 모두 동작하고, 기본값에서는 네트워크를 쓰지 않습니다.
+## Why not just AGENTS.md, CLAUDE.md or repository rules?
 
-## 빠른 시작
+Instruction files and rules tell an agent what it should do. They are a good place for conventions, and DUO adds a short block to them when you connect an agent.
 
-Node.js 24.15 이상이 필요합니다. native build나 install script는 없습니다.
+DUO works on the other side of the change. It keeps human-confirmed Requirements and Decisions as Project Truth in your repository and reviews what actually changed against them, whichever agent made the change. What DUO adds on top of instructions:
+
+- **Decision lifecycle.** Agents can only propose a Decision. A person confirms or rejects it, and a confirmed Decision is locked with a digest so later edits are visible.
+- **Deterministic evidence.** Review claims point to files, line ranges, Git diff hunks and the Decision itself. The core review does not use an LLM, so the same repository state gives the same result.
+- **Adoption baseline.** When you adopt DUO in an existing repository, it records the violations that already exist. Later reviews tell a violation that was already there (pre-existing) from one a change introduced.
+- **One Project Truth for every connected agent.** Codex and Claude Code read the same Truth through DUO's MCP server.
+
+## A Decision drift example
+
+This runs on a two-file TypeScript repository with the published `duoctl` 0.2.0. The output below is unedited.
+
+**1. A person confirms a Decision.** Decisions usually start as an agent proposal; here the file is written by hand:
+
+```yaml
+# .duo-project/decisions/D-001.yaml
+id: D-001
+title: Stateless authentication
+kind: decision
+state: proposed
+question: session_state
+answer: tokens are verified without a server-side session store
+forbids:
+  symbols: ["*SessionStore*"]
+enforcement: block
+```
+
+```text
+$ duoctl decision confirm D-001
+D-001  "Stateless authentication"
+  question  session_state
+  answer    tokens are verified without a server-side session store
+Type the ID to confirm: D-001
+
+confirmed as D-001 · .duo-project/decisions/D-001.yaml
+```
+
+Confirmation only happens in an interactive terminal (or the local UI), and the person types the ID again.
+
+**2. The team adopts DUO.** The repository already contains a `LegacySessionStore` class, which breaks D-001. `duoctl init` records it in the adoption baseline instead of reporting it as new:
+
+```text
+$ duoctl init
+Repository ok · duo-t30-demo · typescript · 2 files · branch main
+Truth      already done
+Index      ok · full (no-state) · 4 files
+Baseline   ok · a0bfda12ccc7 · 2 pre-existing findings
+```
+
+**3. A coding agent changes the code.** It adds `src/auth/server-session-store.ts` with a new `ServerSessionStore` class and edits one line in the legacy store.
+
+**4. DUO reviews the change.**
+
+```text
+$ duoctl index
+Indexed (incremental) · 5 files · 2 parsed · 2 changed · graph updated
+$ duoctl review
+BLOCK  2 claims · 2 files · llm_calls 0
+  CONFLICT  decision-forbids           D-001 · forbidden-symbol [blocking, introduced]
+            evidence: src/auth/server-session-store.ts:3-5, src/auth/server-session-store.ts:1-6, .duo-project/decisions/D-001.yaml:1-14
+  CONFLICT  decision-forbids           D-001 · forbidden-symbol [pre-existing-touched]
+            evidence: src/auth/legacy-session-store.ts:3-5, .duo-project/decisions/D-001.yaml:1-14, src/auth/legacy-session-store.ts:4-4
+Knowledge gaps:
+  - No confirmed Requirement or Decision is linked to this task.
+Limitations:
+  calls-exact-only
+  no-task-scope
+```
+
+The new store is **introduced** and blocks. The legacy store existed before adoption, so touching it is **pre-existing-touched**, which is reported but never blocks. A pre-existing violation that the change does not touch is not reported as a new problem. Each claim names the Decision and points at the source lines.
+
+The verdict is not an exit code by default. In CI, `duoctl review --fail-on block` exits with code 4 on BLOCK. `--json` returns the same claims with `expected` ("no symbol matching *SessionStore* (D-001)"), `observed`, `provenance` and the Evidence records.
+
+## Quick start
+
+Node.js 24.15 or later. No native build and no install script.
 
 ```bash
 npm install -g @duo-director/cli
 
 cd existing-project
 duoctl init
-duoctl install codex
+duoctl install codex    # or: duoctl install claude-code
 duoctl doctor
-# optional
-duoctl ui
 ```
 
-Claude Code를 쓴다면 `duoctl install codex` 대신 `duoctl install claude-code`를 실행합니다. 둘 중 하나면 되고 둘 다 연결해도 됩니다. source에서 만든 package로 설치하는 방법은 [From source](#from-source)에 있습니다.
+- `duoctl init` adopts an existing Git repository (it needs a first commit). It observes the repository, asks only what it cannot infer, writes a minimal Project Truth under `.duo-project/`, builds the first index and records the adoption baseline. With uncommitted changes, choose `--baseline-policy head` or `--baseline-policy abort`.
+- `duoctl install codex` or `duoctl install claude-code` shows the files it will change, then adds the MCP configuration (`.codex/config.toml` or `.mcp.json`) and a short instruction block (`AGENTS.md` or `CLAUDE.md`), and checks that the DUO server starts. Codex must trust the project; Claude Code asks you to approve the `duo-director` server. You commit the changes yourself.
+- `duoctl doctor` checks Git, Project Truth, the index, the analysis level per language, connected agents and the optional LLM settings, and lists the next one to three steps. It only reads.
 
-`duoctl init`은 이미 있는 Git 저장소에서 시작합니다(첫 commit이 있어야 합니다). 저장소를 관찰하고, 꼭 필요한 질문만 사람에게 묻고, 최소한의 Project Truth를 만들고, 첫 index를 만든 뒤, 지금 상태를 Adoption Baseline으로 기록합니다. 그래서 도입 전부터 있던 문제와 도입 후 새로 생긴 문제를 구분합니다. 처음부터 DUO로 만든 프로젝트가 아니어도 됩니다. 작업 중인 변경이 있으면 `--baseline-policy head|abort` 중 하나를 고릅니다.
+The local UI (`duoctl ui`) and LLM assistance are optional.
 
-`duoctl install codex`와 `duoctl install claude-code`는 바꿀 파일을 먼저 보여 주고, 확인하면 MCP 설정(`.codex/config.toml` 또는 `.mcp.json`)과 짧은 안내 블록(`AGENTS.md` 또는 `CLAUDE.md`)을 추가한 뒤 DUO 서버가 실제로 뜨는지 확인합니다. 기존 설정과 사람이 쓴 글은 그대로 두고, commit은 직접 합니다. Codex는 이 project를 trust해야 하고 Claude Code는 `duo-director` 서버 승인을 묻습니다. DUO는 둘 다 대신하지 않습니다. `duoctl install status`로 연결 상태를, `duoctl install remove <agent>`로 DUO가 추가한 항목만 제거합니다. project 안에만 설치했다면 `--launcher npx`를 줍니다.
+## How DUO works
 
-`duoctl doctor`는 Git(저장소, 첫 commit, 작업 중인 변경), Project Truth, index, 언어별 분석 수준([L0/L1/L2](docs/language-support.md#analysis-level)), 연결한 Agent(MCP 서버를 실제로 띄워 봄), 선택 LLM 설정을 한 번에 확인하고 먼저 할 일을 1~3개 보여 줍니다. 읽기만 하며 init, index, 설치를 대신하지 않습니다. 문제가 있을 때만 종료 코드 6입니다. UI와 LLM은 선택 사항이라 쓰지 않아도 정상으로 보입니다.
+```text
+Person ── confirms ──▶ Project Truth (.duo-project/: Requirements, Decisions, Constraints)
+                              │
+          Git repository ──▶ Index (Project Graph: files, symbols, tests, history)
+                              │
+                     Context Compiler ──▶ Context Packet ──▶ Coding agent
+                                                                  │ changes the repository
+                     Drift Review ◀──────────────────────────────┘
+                              │
+                     Claim → Evidence → Verdict (PASS · WARN · BLOCK · ASK)
+```
 
-`duoctl ui`는 `127.0.0.1`에서 로컬 Console을 열고 출력된 URL로 접속합니다. UI는 현재 index를 읽기만 하므로 `index-required`가 보이면 `duoctl index`를 실행하고 Refresh합니다. UI에서 바꿀 수 있는 Truth는 사람의 Decision Confirm/Reject뿐입니다.
+Agents reach DUO through the `duo-director` MCP server (`duoctl mcp`, nine tools). The tools read; the only write an agent can make is a Decision proposal.
 
-Windows에서는 설치 직후 첫 명령이 오래 걸릴 수 있습니다(기준 PC에서 약 18초, 이후 약 1.5초). 새로 설치된 JavaScript 파일을 처음 열 때 드는 외부 비용이며 한 번만 생깁니다([측정](docs/performance-benchmark.md#설치-직후-첫-실행-release-hardening)).
+## Core concepts
 
-## 지원 범위
+- **Project Truth**: the Requirements, Decisions and Constraints a person has confirmed, kept as plain files in `.duo-project/` and committed with the code. It is the reference every review uses.
+- **Requirement**: what the project must do, with an ID that code, tests and Decisions can point to.
+- **Decision**: an engineering choice with an answer and, optionally, what it forbids (paths, symbols, dependencies) and how strictly (`enforcement: warn` or `block`).
+- **Decision Lock**: confirming a Decision records a digest of its content. Review reports a Decision whose content no longer matches its lock.
+- **Adoption Baseline**: the state of the repository when DUO was adopted, so existing problems are not reported as new ones.
+- **Context Compiler**: builds a small Context Packet for a task (the relevant Truth, code and tests) instead of having the agent read the whole repository.
+- **Drift Review**: compares a change with Project Truth and returns PASS, WARN, BLOCK or ASK.
+- **Evidence**: what each claim rests on, such as a file and line range with a content hash, a Git diff hunk or a Truth entry.
 
-| 수준 | 대상 | 하는 일 |
+Details: [architecture](docs/02-system-architecture.md) · [data model](docs/03-data-model.md) · [product contract](docs/release/product-contract.md).
+
+## What DUO is not
+
+- Not a code generator. It never edits your source code or commits.
+- Not a replacement for tests or linters. Review does not run tests.
+- Not proof that code is correct. PASS means no Project Direction violation was found in the available evidence.
+- Not an enterprise policy platform. There is no hosted service, account, RBAC or SSO.
+- Not dependent on an LLM. The core works without one.
+
+## Local, with an optional LLM
+
+Project Truth lives in your repository. Indexing, context, review, the MCP server and the local UI need no account and no LLM API, and with the default configuration (`llm.provider: none`) DUO makes no network calls.
+
+Semantic assistance is optional. If you configure a provider and run `duoctl review --semantic`, selected evidence excerpts (relevant Truth paragraphs, changed code, diff hunks) are sent to that provider after DUO's secret redaction. The semantic result is attached separately and never creates a BLOCK. Setup: [LLM configuration](#optional-llm-assistance).
+
+## Agent support
+
+Built-in setup and verification: **Codex** and **Claude Code** (`duoctl install`). Both can be connected to the same repository. Project Truth and the review logic do not depend on the agent, and other MCP clients can launch the same stdio server with `duoctl mcp`, but DUO only sets up and checks the two agents above.
+
+## Language support
+
+| Level | Covers | What DUO does |
 |---|---|---|
-| L0 | 모든 Git repository의 모든 파일(분석기 없는 언어 포함) | 파일, fingerprint, Git history와 diff, Project Truth 참조, 파일 수준 Context와 Review |
-| L1 | TypeScript / JavaScript / Java / C# / C++ / Python | Symbol, Test, import·include·using, call site, 정확한 source 위치 |
-| L2 | TypeScript / JavaScript | 모든 import의 module resolution, binding으로 확실한 CALLS |
+| L0 | Any Git repository (모든 Git repository): every file, including languages without an analyzer | files, fingerprints, Git history and diffs, Project Truth references, file-level context and review |
+| L1 | TypeScript / JavaScript / Java / C# / C++ / Python | symbols, tests, imports·includes·usings, call sites, exact source locations |
+| L2 | TypeScript / JavaScript | module resolution for every import, CALLS edges proven by bindings |
 
-모든 언어를 의미 수준으로 이해한다는 뜻은 아닙니다. Analyzer가 없거나 얕은 언어에서는 확신이 낮아질 뿐 DUO가 실패하거나 WARN·BLOCK이 생기지 않습니다. 자세한 범위와 한계는 [docs/language-support.md](docs/language-support.md)에 있습니다.
+This is not semantic understanding of every language. Where an analyzer is missing or shallow, DUO is less certain, but it does not fail or raise WARN or BLOCK because of it. See [language support](docs/language-support.md).
 
-## Benchmark
+## Performance
 
-수치는 한 기준 환경(Windows 11, Intel Core Ultra 7 155H, Node 24.18)과 DUO의 synthetic fixture `duo-bench-fixture/1`에서 잰 값이며 다른 프로젝트나 성능 보장으로 일반화하지 않습니다. 방법과 전체 결과는 [docs/performance-benchmark.md](docs/performance-benchmark.md)에 있습니다.
+Measured on one reference machine (Windows 11, Intel Core Ultra 7 155H, Node 24.18) with DUO's synthetic 5,000-source-file fixture: in a long-running process (MCP, UI) `context` takes about 2.5 s, `review` about 3.9 s, and `index` after a one-file change about 2.4 s. Most of that is the freshness check DUO runs on every call to keep results exact. These are measurements, not guarantees. Method, real-world repositories and full results: [performance benchmark](docs/performance-benchmark.md).
 
-- On DUO's synthetic 5,000-source-file fixture on Windows 11 / Core Ultra 7 155H, the `AUTH-03` packet contained 2,023 o200k_base tokens from a 137,048-token analyzed source corpus and included all expected entities (Requirement, Decision, Symbol, Test). 100개 파일 fixture에서도 같은 Packet(같은 digest)이 나옵니다.
-- 같은 fixture에서 Packet은 관련 파일 원문 합(1,602 token)보다 26% 큽니다. 절감은 저장소 전체를 읽는 경우와 비교한 값입니다.
-- 같은 환경의 5,000파일 fixture에서 장기 실행(MCP·UI) `context`는 약 2.5초, `review`는 약 3.9초, 파일 하나를 바꾼 뒤 `index`는 약 2.4초입니다. 대부분은 결과를 정확하게 유지하려고 매 호출 수행하는 freshness 확인입니다.
+On Windows the first command after installation can take much longer than later ones (about 18 s vs 1.5 s on the reference machine) while freshly installed files are opened for the first time.
 
-## 사용
+## Everyday commands
 
 ```bash
-duoctl status
-duoctl context "작업 설명"
-duoctl index        # 코드를 바꾼 뒤
-duoctl review
+duoctl status                      # Truth, index freshness, baseline, pending Decisions
+duoctl context "what you are about to do"
+duoctl index                       # after code changes
+duoctl review                      # or: duoctl review --fail-on block in CI
+duoctl decision list               # pending proposals; confirm or reject in a terminal
 ```
 
-### LLM은 선택 사항입니다
+The MCP tools do not index; when an agent gets `index-required`, run `duoctl index`. Commands: [CLI reference](docs/07-cli-interface.md). MCP tools and install contract: [MCP interface](docs/06-mcp-interface.md).
 
-LLM is optional. DUO's indexing, context selection and deterministic review work without an API key. 기본값은 꺼짐(`llm.provider: none`)이고, 켜지 않으면 네트워크 호출이 없습니다. 켜려면 `.duo-project/project.yaml`에 provider와 model을 명시하고 key는 환경 변수로만 줍니다(파일에 쓰지 않음).
+## Optional LLM assistance
+
+The official OpenAI Responses API:
 
 ```yaml
+# .duo-project/project.yaml
 llm:
-  provider: openai-responses   # 공식 OpenAI Responses API
-  model: <사용할 model ID>      # DUO는 model을 고르지 않습니다
+  provider: openai-responses   # official api.openai.com only
+  model: <model ID>            # DUO does not pick a model
 ```
 
 ```bash
 OPENAI_API_KEY=... duoctl review --semantic
 ```
 
-`openai-responses`는 공식 OpenAI API(`api.openai.com`)에만 연결합니다. 실제 OpenAI API 연동 smoke는 release gate에 포함되지 않은 선택 검증입니다.
-
-공식 OpenAI 외의 endpoint는 **명시적으로 설정한 OpenAI-compatible endpoint**로 쓸 수 있습니다(0.2.0부터). DUO가 지원하는 것은 공식 OpenAI Responses provider와, 사람이 고른 Responses 또는 Chat Completions transport로 동작하는 OpenAI-compatible endpoint입니다. 모든 OpenAI 호환 API가 동작한다는 뜻은 아니고, endpoint가 고른 transport와 structured_output을 지원하는 범위에서만 동작합니다. 다음은 GMS 같은 gateway의 **설정 예시**입니다. DUO는 이 예시의 endpoint를 직접 검증하지 않았으므로 지원하는 transport와 출력 방식을 먼저 확인하세요.
+An explicitly configured OpenAI-compatible endpoint (since 0.2.0):
 
 ```yaml
 llm:
   provider: openai-compatible
-  model: <endpoint의 model ID>
-  base_url: https://<gateway host>/<path>/v1   # https, 또는 localhost·127.x·[::1]의 http
-  transport: chat-completions                  # 또는 responses (endpoint가 지원할 때만)
-  api_key_env: GMS_API_KEY                     # 기본값 없음: key가 있는 환경 변수 이름
+  model: <model ID on that endpoint>
+  base_url: https://<gateway host>/<path>/v1   # https, or http on localhost, 127.x or [::1]
+  transport: chat-completions                  # or responses, if the endpoint supports it
+  api_key_env: MY_GATEWAY_KEY                  # name of the variable that holds the key
   structured_output: prompt-only               # json-schema | json-object | prompt-only
 ```
 
-다섯 값은 모두 필수이고 DUO가 대신 정하거나 실패했을 때 다른 방식으로 바꿔 보내지 않습니다. `base_url`에 user 정보나 query를 쓸 수 없고 공식 OpenAI 주소는 `openai-responses`로만 씁니다. redirect는 따라가지 않으며, `duoctl status`와 `duoctl doctor`는 endpoint의 origin(`https://host`)만 보여 줍니다.
+All five fields are required, and DUO never falls back to another transport or output mode. It works with endpoints that support the transport and mode you choose; not every OpenAI-compatible API is expected to work, and DUO has not verified specific external gateways. Keys come only from environment variables, and `duoctl status` and `duoctl doctor` show only the endpoint origin.
 
-`--semantic`(MCP `includeSemanticAssist: true`)을 줄 때만 Review의 의미 후보를 한 번 확인합니다. 이때 **선택된 Evidence 발췌(관련 Truth 문단, 바뀐 코드 부분, diff hunk)가 설정한 provider(공식 OpenAI API 또는 지정한 endpoint)로 전송됩니다**. 파일 전체나 저장소는 보내지 않고, 알려진 credential 형식은 Context Packet과 같은 규칙으로 `[REDACTED]`로 바꾼 뒤 `store: false`로 요청합니다(Responses transport). 결과는 별도 `semanticAssist`로 붙고 결정적 판정을 바꾸거나 BLOCK을 만들지 않습니다. 같은 요청의 검증된 응답은 로컬 `.duo-project/cache/llm/`에 저장되며(`llm.cache: false`로 끔), 이것은 OpenAI 서버 저장과 별개입니다.
+## Development
 
-Agent는 MCP Tool 9개(`duo_get_status`, `duo_get_context`, `duo_review_changes`, `duo_get_requirement`, `duo_get_decision`, `duo_trace`, `duo_impact`, `duo_search_evidence`, `duo_propose_decision`)를 씁니다. Agent는 Decision을 제안만 할 수 있고 확정과 거절은 사람이 `duoctl decision`으로 합니다. Tool은 인덱싱하지 않으므로 `index-required`를 받으면 `duoctl index`를 실행합니다. 명령은 [07-cli-interface.md](docs/07-cli-interface.md), MCP와 설치 계약은 [06-mcp-interface.md](docs/06-mcp-interface.md)에 있습니다.
-
-## 개발
-
-Node.js 24(`>=24.15.0`)와 pnpm 11이 필요합니다.
+Node.js 24 (`>=24.15.0`) and pnpm 11.
 
 ```bash
 pnpm install
@@ -111,45 +219,41 @@ pnpm verify        # check:boundaries → lint → typecheck → build → test 
 pnpm duoctl --version
 ```
 
-| 명령 | 내용 |
+| Command | What it does |
 |---|---|
-| `pnpm check:boundaries` | 패키지 의존 방향(package.json, tsconfig references) 검사 |
-| `pnpm lint` | ESLint(패키지 경계, `node:sqlite` 격리 포함) |
-| `pnpm typecheck` | 테스트를 포함한 전체 타입 검사 |
-| `pnpm build` | `tsc -b` project references 빌드 |
+| `pnpm check:boundaries` | package dependency direction (package.json, tsconfig references) |
+| `pnpm lint` | ESLint, including package boundaries and `node:sqlite` isolation |
+| `pnpm typecheck` | type check including tests |
+| `pnpm build` | `tsc -b` project references build |
 | `pnpm test` | Vitest |
-| `pnpm docs:validate` | Requirement/ADR/Task/AC 추적성 검사 |
-| `pnpm pack:cli` | 배포 package(`.dist/cli-package/`)와 tarball 생성(publish는 하지 않음) |
-| `pnpm test:dist` | tarball을 임시 prefix·project에 설치해 배포본만으로 E2E(npm registry 접근 필요) |
-| `pnpm release:pack` · `release:preflight` · `release:audit` · `release:lock` | release tarball 생성과 검사([checklist](docs/release/checklist.md), publish는 하지 않음) |
-| `pnpm release:verify-published` | publish한 version을 registry에서 받아 임시 prefix에 설치하고 확인(integrity, `duoctl --version`, init·status, tag, GitHub Release) |
-| `pnpm benchmark:smoke` | 100파일 fixture benchmark와 결과 계약 검사(CI) |
-| `pnpm benchmark` | 100/1,000/5,000파일 full benchmark, 결과는 Git 제외 `bench/results/local/` |
+| `pnpm docs:validate` | Requirement/ADR/Task/AC traceability, links and anchors |
+| `pnpm pack:cli` | package directory (`.dist/cli-package/`) and tarball, no publish |
+| `pnpm test:dist` | installs the tarball into a temporary prefix and runs end-to-end tests (needs the npm registry) |
+| `pnpm release:pack` · `release:preflight` · `release:audit` · `release:lock` | release tarball and checks ([checklist](docs/release/checklist.md)), no publish |
+| `pnpm release:verify-published` | installs a published version from the registry and checks integrity, `duoctl --version`, init·status, tag and GitHub Release |
+| `pnpm benchmark:smoke` | 100-file fixture benchmark and result contract (CI) |
+| `pnpm benchmark` | full 100/1,000/5,000-file benchmark; results go to the Git-ignored `bench/results/local/` |
 
 ### From source
 
-이 저장소에서 package tarball을 만들어 설치합니다. npm registry의 package와 같은 구성입니다.
+Build the same package as the npm registry's and install it:
 
 ```bash
-pnpm install && pnpm release:pack          # .dist/duo-director-cli-0.2.0.tgz
-npm install -g .dist/duo-director-cli-0.2.0.tgz
+pnpm install && pnpm release:pack          # writes .dist/duo-director-cli-<version>.tgz
+npm install -g .dist/duo-director-cli-<version>.tgz
 ```
 
-## License와 보안
+## License and security
 
-DUO는 [Apache License 2.0](LICENSE)으로 배포합니다. 배포 package에 들어 있는 제3자 소프트웨어(UI에 bundle된 React 등, Tree-sitter grammar, npm 의존성)의 license는 `dist/THIRD_PARTY_NOTICES.md`와 `dist/grammars/LICENSE-*`에 따로 있습니다.
+DUO is released under the [Apache License 2.0](LICENSE). Third-party licenses for bundled software (React in the UI, Tree-sitter grammars, npm dependencies) are in `dist/THIRD_PARTY_NOTICES.md` and `dist/grammars/LICENSE-*` inside the package.
 
-보안 취약점은 공개 Issue로 올리지 말고 GitHub Private Vulnerability Reporting으로 신고해 주세요([SECURITY.md](SECURITY.md)).
+Please report vulnerabilities through GitHub Private Vulnerability Reporting, not public issues ([SECURITY.md](SECURITY.md)).
 
-## 문서
+## Documentation
 
-- [문서 지도](docs/README.md)
-- [제품 비전](docs/00-product-vision.md) · [요구사항](docs/01-requirements.md) · [아키텍처](docs/02-system-architecture.md)
-- [충돌 및 미결 사항](docs/conflicts.md)
-- Release: [checklist](docs/release/checklist.md) · [제품 계약](docs/release/product-contract.md) · [결정 요청](docs/release/decision-packets.md) · [호환성 계약](docs/release/compatibility.md) · [benchmark](docs/performance-benchmark.md)
-- [ADR](docs/adr/README.md)
+- [Documentation map](docs/README.md) (the design documents are written in Korean)
+- [Release notes 0.2.0](docs/release/notes-0.2.0.md) · [Compatibility](docs/release/compatibility.md) · [Product contract](docs/release/product-contract.md) · [Release checklist](docs/release/checklist.md)
+- [Product vision](docs/00-product-vision.md) · [Requirements](docs/01-requirements.md) · [Architecture](docs/02-system-architecture.md) · [ADRs](docs/adr/README.md)
+- [Open questions and decisions](docs/conflicts.md)
 
-## 원본 입력
-
-- [Duo 기획서.md](Duo%20기획서.md): 제품 기획서
-- [docs/references/development-directive.md](docs/references/development-directive.md): 개발 지시문
+The original Korean concept document, [Duo 기획서.md](Duo%20기획서.md), is kept as historical design input and is not the current specification.

@@ -21,13 +21,13 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [12-roadmap.md](12-roadmap.md) | Milestone(M0~M4)과 MVP 이후 |
 | [language-support.md](language-support.md) | Analysis Level(L0~L3), AnalyzerCapabilities, 언어별 지원·한계, stack·build output 판별, grammar (T18.0) |
 | [performance-benchmark.md](performance-benchmark.md) | TASK-019 benchmark 방법, 기준 환경, index·Context·Review·MCP·UI 측정, C145 원인, 적용한 최적화, T23 real-world baseline(고정 SHA 5개 저장소, A/B 비교, 3 OS 수동 workflow) |
-| [release/checklist.md](release/checklist.md) | release 명령, 0.1.1 준비와 0.1.0 상태, 사람이 확인할 항목, publish 명령(실행하지 않음), limitation |
-| [release/notes-0.1.1.md](release/notes-0.1.1.md) | 0.1.1 release notes 초안 |
+| [release/checklist.md](release/checklist.md) | release 명령, version별 release 기록(0.2.0, 0.1.2, 0.1.1, 0.1.0: 준비 항목과 최종 상태), publish 순서, limitation |
+| [release/notes-0.1.1.md](release/notes-0.1.1.md) | 0.1.1 release notes |
 | [release/notes-0.1.2.md](release/notes-0.1.2.md) | 0.1.2 release notes |
 | [release/notes-0.2.0.md](release/notes-0.2.0.md) | 0.2.0 release notes: correctness, freshness, doctor, ambiguity 안내, OpenAI-compatible provider, 호환성, upgrade, known limitations |
 | [release/decision-packets.md](release/decision-packets.md) | 사람 결정 요청: REQ-NFR-004, DUO LICENSE, npm scope·공개 저장소, 실제 OpenAI smoke |
-| [release/compatibility.md](release/compatibility.md) | 0.1.0 format freeze와 breaking change 정책 |
-| [release/product-contract.md](release/product-contract.md) | 0.1.0 제품 계약 15개와 검증 위치(RC artifact / workspace) |
+| [release/compatibility.md](release/compatibility.md) | 0.1.0 format freeze, breaking change 정책, 0.2.0 변경 분류(additive, behavior correction, internal) |
+| [release/product-contract.md](release/product-contract.md) | 제품 계약 18개(0.1.0의 #1~#15, 0.2.0에서 더한 #16 Doctor, #17 OpenAI-Compatible Provider, #18 0.1.x upgrade)와 검증 위치(RC artifact / workspace) |
 | [roadmap/0.1.1-hardening.md](roadmap/0.1.1-hardening.md) | T21 Post-release Hardening: Windows UI E2E 원인과 수정, publish 후 검증, freshness profile, Node 22 실험, UX gap, 다음 버전 후보 |
 | [roadmap/0.2.0-audit.md](roadmap/0.2.0-audit.md) | T22 0.2.0 Audit: 0.1.2 security 해결 기록, real-world 성능 5개 저장소, freshness 결론, L1 correctness issue, Context 품질, analyzer matrix, Node 22, onboarding, provider 결정점, 0.2.0 milestone 제안, T23 spec |
 | [roadmap/0.2.0-t24-cpp-declarations.md](roadmap/0.2.0-t24-cpp-declarations.md) | T24.3 C++ 선언·정의 연결(C218)과 C230 benchmark 집계: 이전 표현, 설계안 A·B·C·D, pairing key와 정규화, Context 표현, Evidence·Review·cache, 검증 |

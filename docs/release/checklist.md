@@ -30,24 +30,31 @@ Minor release: L1 correctness, freshness 최적화, doctor·onboarding, ambiguit
 
 실제 외부 OpenAI-compatible endpoint smoke(`pnpm test:compatible-smoke`)와 실제 OpenAI smoke는 선택 검증이며 0.2.0 release gate가 아니다(NOT RUN · optional external smoke).
 
-## 0.1.2 (H-47, release, `v0.1.2` = `93010a4`)
+## 0.1.2 (H-47, 2026-09-30 release, `v0.1.2` = `93010a4`)
 
 Security patch: LLM provider 요청의 secret redaction([release notes](notes-0.1.2.md)). 공개 형식, 명령 의미, exit code, Truth 형식, 결정적 Review는 0.1.1과 같다. 다른 기능 변경은 넣지 않는다.
 
+준비 항목:
+
 - [x] version 0.1.1 → 0.1.2: `apps/cli/package.json`, `apps/cli/npm-shrinkwrap.json`의 package version 두 곳(의존성 트리 불변)
 - [x] regression test: `packages/director/src/llm/llm.test.ts`(provider 경계), `packages/integration/src/llm/semantic.e2e.test.ts`(shared review operation, MCP, Context와 같은 정책, 결정적 결과, echo 응답과 오류, 기록된 파일)
-- [ ] full CI(3 OS), `pnpm release:preflight` READY, `npm publish --dry-run`
-- [ ] 사람이 publish, tag, GitHub Release를 실행한 뒤 `pnpm release:verify-published`
+- [x] full CI(3 OS) at `93010a4`: run 36669896094 success
+
+최종 상태(2026-10-03 확인, T30): npm `@duo-director/cli@0.1.2` 게시, `v0.1.2` → `93010a4`, GitHub Release 게시(2026-09-30). 2026-10-03에 `pnpm release:verify-published --version 0.1.2 --commit 93010a4…`로 다시 확인했다: OK(registry, 빈 npm 설정 설치, `duoctl 0.1.2`, init·status, tag commit, GitHub Release). 당시 release candidate의 integrity 기록이 없어 registry integrity(`sha512-vFDkYOMx…4AUbCw==`)를 RC와 비교하지는 않았다. 그 release candidate의 `pnpm release:preflight` READY와 `npm publish --dry-run` 결과는 남아 있지 않아 완료로 표시하지 않는다.
 
 ## 0.1.1 (H-46, 2026-09-30 release)
 
 Patch release: 사람용 CLI 안내 3개, 테스트, release tooling, 문서([release notes](notes-0.1.1.md)). 공개 형식, 명령 의미, exit code, Truth 형식은 0.1.0과 같다. 성능 후보와 새 기능은 넣지 않는다([0.1.1 hardening](../roadmap/0.1.1-hardening.md)).
 
+준비 항목:
+
 - [x] version 0.1.0 → 0.1.1: `apps/cli/package.json`, `apps/cli/npm-shrinkwrap.json`의 package version 두 곳. 의존성 트리는 바꾸지 않았다(`release:lock`을 다시 실행하지 않음)
 - [x] 안내 문구 regression test(`tests/cli/first-run.e2e.test.ts`, 설치본 conformance에도 포함), `--json` 출력이 0.1.0과 byte 단위로 같음
 - [x] 배포 E2E의 npx 음성 검사를 개발 PC의 global 설치와 분리(C215)
-- [ ] full CI(3 OS), `pnpm release:preflight` READY, `npm publish --dry-run`
-- [ ] 사람이 publish, tag, GitHub Release를 실행한 뒤 `pnpm release:verify-published`
+- [x] full CI(3 OS) at `834bc6f`: run 36660964359 success
+- [x] `pnpm release:preflight` READY at `834bc6f`(blocker 0, 마지막 단계 `npm publish --dry-run` 포함; maintainer release 기록 2026-09-30). RC integrity `sha512-UJ+AIh9a…5zgmQ==`
+
+최종 상태(2026-10-03 확인, T30): npm `@duo-director/cli@0.1.1` 게시, `v0.1.1` → `834bc6f`, GitHub Release 게시(2026-09-30). 2026-10-03에 `pnpm release:verify-published --version 0.1.1 --integrity <RC integrity> --commit 834bc6f…`로 다시 확인했다: OK(registry integrity = RC, 빈 npm 설정 설치, `duoctl 0.1.1`, init·status, tag commit, GitHub Release).
 
 ## 0.1.0 상태 (H-45 결정 반영 commit 기준, 2026-09-30 release)
 
