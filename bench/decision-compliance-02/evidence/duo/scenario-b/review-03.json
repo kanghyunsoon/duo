@@ -1,0 +1,360 @@
+{
+  "format": "duo.cli.review/1",
+  "command": "review",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "format": "duo.review/1",
+    "status": "ready",
+    "request": {
+      "identity": "sha256:8789e27bf77953a98bf9ba4913e9cb4e5fdcc99506818027615bb06f3f46cd84",
+      "task": "",
+      "from": "commit:782799df93dc7050db192f9b2b52fc9b39ef2730",
+      "to": "commit:2927f2358f11bf5101a4e626521bece7152baae7"
+    },
+    "baseline": {
+      "status": "present",
+      "id": "adoption-91fb28cfe189f2bc"
+    },
+    "freshness": {
+      "status": "current",
+      "fullRebuildRequired": false
+    },
+    "diff": {
+      "identity": "sha256:68805de7e9e5b93d49cdeaca58d9810b2f3ca72fee85e360e6e6586b9d4168d3",
+      "from": "782799df93dc7050db192f9b2b52fc9b39ef2730",
+      "to": "2927f2358f11bf5101a4e626521bece7152baae7",
+      "files": [
+        {
+          "path": "src/auth/global-auth-cache.ts",
+          "kind": "added",
+          "binary": false,
+          "newOid": "e68881653d432d43b5665f010c88628e3467717e",
+          "hunks": [
+            {
+              "oldStart": 0,
+              "oldLines": 0,
+              "newStart": 1,
+              "newLines": 6,
+              "evidenceId": "ev-78835d1680f051ed"
+            }
+          ],
+          "evidenceIds": [
+            "ev-78835d1680f051ed"
+          ]
+        },
+        {
+          "path": "src/legacy/memory-session-store.ts",
+          "kind": "modified",
+          "binary": false,
+          "oldOid": "cfdeabd52370a7e31f649c4761ef5c9721e77ad6",
+          "newOid": "6ac5d3c81679e45db0df310b5488b849d6630465",
+          "hunks": [
+            {
+              "oldStart": 4,
+              "oldLines": 1,
+              "newStart": 4,
+              "newLines": 1,
+              "evidenceId": "ev-0c9366464853c778"
+            }
+          ],
+          "evidenceIds": [
+            "ev-0c9366464853c778"
+          ]
+        }
+      ]
+    },
+    "seeds": [
+      {
+        "id": "sym:src/auth/global-auth-cache.ts#GlobalAuthCache.remember",
+        "ref": "src/auth/global-auth-cache.ts#GlobalAuthCache.remember",
+        "entity": {
+          "type": "symbol",
+          "path": "src/auth/global-auth-cache.ts",
+          "symbol": "GlobalAuthCache.remember"
+        },
+        "reason": "hunk-overlap",
+        "path": "src/auth/global-auth-cache.ts",
+        "evidenceIds": [
+          "ev-78835d1680f051ed"
+        ]
+      },
+      {
+        "id": "sym:src/legacy/memory-session-store.ts#MemorySessionStore.get",
+        "ref": "src/legacy/memory-session-store.ts#MemorySessionStore.get",
+        "entity": {
+          "type": "symbol",
+          "path": "src/legacy/memory-session-store.ts",
+          "symbol": "MemorySessionStore.get"
+        },
+        "reason": "hunk-overlap",
+        "path": "src/legacy/memory-session-store.ts",
+        "evidenceIds": [
+          "ev-0c9366464853c778"
+        ]
+      }
+    ],
+    "verdict": "BLOCK",
+    "verdictBasis": {
+      "blocking": [
+        "claim-e928213e05d82dc6"
+      ],
+      "ask": [],
+      "warn": [
+        "rgap-b8f33f44892c"
+      ]
+    },
+    "claims": [
+      {
+        "id": "claim-e928213e05d82dc6",
+        "rule": "decision-forbids",
+        "subject": {
+          "kind": "decision",
+          "id": "D-002"
+        },
+        "expected": "no symbol matching *GlobalAuthCache* (D-002)",
+        "observed": "GlobalAuthCache.remember changed in src/auth/global-auth-cache.ts",
+        "alignment": "CONFLICT",
+        "evidenceIds": [
+          "ev-78835d1680f051ed",
+          "ev-9cf1391404fcbf0f",
+          "ev-ee7a91a9245f9132"
+        ],
+        "basis": [
+          "project-truth",
+          "repository",
+          "git"
+        ],
+        "reason": "forbidden-symbol",
+        "enforced": true,
+        "blockEligible": true,
+        "drift": false,
+        "semanticCandidate": false,
+        "violationKey": "vk-0298fa01994d706c",
+        "provenance": "introduced"
+      }
+    ],
+    "evidence": [
+      {
+        "id": "ev-0c9366464853c778",
+        "basis": "git",
+        "kind": "diff",
+        "contentHash": "sha256:536c55be89402c11b92533a056cc6a3bf9c698d31ffe6ecd2d17565be2c71720",
+        "summary": "src/legacy/memory-session-store.ts @@ -4,1 +4,1",
+        "pointer": {
+          "kind": "diff",
+          "path": "src/legacy/memory-session-store.ts",
+          "lines": [
+            4,
+            4
+          ],
+          "change": "modified",
+          "commit": "2927f2358f11bf5101a4e626521bece7152baae7",
+          "contentHash": "sha256:536c55be89402c11b92533a056cc6a3bf9c698d31ffe6ecd2d17565be2c71720"
+        },
+        "metadata": {
+          "oldStart": 4,
+          "oldLines": 1,
+          "newStart": 4,
+          "newLines": 1,
+          "oldBlob": "cfdeabd52370a7e31f649c4761ef5c9721e77ad6",
+          "newBlob": "6ac5d3c81679e45db0df310b5488b849d6630465"
+        }
+      },
+      {
+        "id": "ev-78835d1680f051ed",
+        "basis": "git",
+        "kind": "diff",
+        "contentHash": "sha256:c179977b8753104eba72c445f334df7afef413bc77b9237343b5dd3eab7a0b46",
+        "summary": "src/auth/global-auth-cache.ts @@ -0,0 +1,6",
+        "pointer": {
+          "kind": "diff",
+          "path": "src/auth/global-auth-cache.ts",
+          "lines": [
+            1,
+            6
+          ],
+          "change": "added",
+          "commit": "2927f2358f11bf5101a4e626521bece7152baae7",
+          "contentHash": "sha256:c179977b8753104eba72c445f334df7afef413bc77b9237343b5dd3eab7a0b46"
+        },
+        "metadata": {
+          "oldStart": 0,
+          "oldLines": 0,
+          "newStart": 1,
+          "newLines": 6,
+          "newBlob": "e68881653d432d43b5665f010c88628e3467717e"
+        }
+      },
+      {
+        "id": "ev-9cf1391404fcbf0f",
+        "basis": "project-truth",
+        "kind": "decision",
+        "entity": {
+          "type": "decision",
+          "id": "D-002"
+        },
+        "source": {
+          "path": ".duo-project/decisions/D-002.yaml",
+          "startLine": 1,
+          "startColumn": 1,
+          "endLine": 15,
+          "endColumn": 82
+        },
+        "contentHash": "sha256:dae63ed4bb7490e37bbff1168f4fe741c693e41553d8b0101b62e3dfbdb61c24",
+        "summary": "D-002 Shared auth cache instead of a session-store ban",
+        "pointer": {
+          "kind": "decision",
+          "id": "D-002",
+          "path": ".duo-project/decisions/D-002.yaml",
+          "lines": [
+            1,
+            15
+          ],
+          "contentHash": "sha256:dae63ed4bb7490e37bbff1168f4fe741c693e41553d8b0101b62e3dfbdb61c24"
+        }
+      },
+      {
+        "id": "ev-ee7a91a9245f9132",
+        "basis": "repository",
+        "kind": "symbol",
+        "entity": {
+          "type": "symbol",
+          "path": "src/auth/global-auth-cache.ts",
+          "symbol": "GlobalAuthCache.remember"
+        },
+        "source": {
+          "path": "src/auth/global-auth-cache.ts",
+          "startLine": 3,
+          "startColumn": 3,
+          "endLine": 5,
+          "endColumn": 4
+        },
+        "contentHash": "sha256:4fa03a52c3f8507d64b1d24bc7fe1d6c2618813a649503d5196ee69fc23ceed9",
+        "summary": "src/auth/global-auth-cache.ts#GlobalAuthCache.remember",
+        "pointer": {
+          "kind": "symbol",
+          "path": "src/auth/global-auth-cache.ts",
+          "symbol": "GlobalAuthCache.remember",
+          "lines": [
+            3,
+            5
+          ],
+          "commit": "2927f2358f11bf5101a4e626521bece7152baae7",
+          "contentHash": "sha256:4fa03a52c3f8507d64b1d24bc7fe1d6c2618813a649503d5196ee69fc23ceed9"
+        }
+      }
+    ],
+    "gaps": {
+      "format": "duo.gap-assessment/1",
+      "status": "assessed",
+      "gaps": [
+        {
+          "id": "rgap-b8f33f44892c",
+          "source": "runtime",
+          "kind": "missing-intent",
+          "anchors": [
+            {
+              "type": "symbol",
+              "path": "src/auth/global-auth-cache.ts",
+              "symbol": "GlobalAuthCache.remember"
+            },
+            {
+              "type": "symbol",
+              "path": "src/legacy/memory-session-store.ts",
+              "symbol": "MemorySessionStore.get"
+            }
+          ],
+          "relevance": "direct",
+          "reasons": [
+            {
+              "code": "no-confirmed-intent"
+            }
+          ],
+          "action": "surface"
+        }
+      ],
+      "requiresHumanInput": false,
+      "additional": [],
+      "technicalLimitations": [
+        "calls-exact-only",
+        "files-by-path",
+        "no-diff"
+      ],
+      "metrics": {
+        "declaredConsidered": 0,
+        "runtime": 1,
+        "direct": 1,
+        "related": 0,
+        "none": 0,
+        "ask": 0,
+        "surface": 1,
+        "ignore": 0,
+        "llmCalls": 0
+      }
+    },
+    "context": {
+      "profile": "review",
+      "seeds": [
+        "sym:src/auth/global-auth-cache.ts#GlobalAuthCache.remember",
+        "sym:src/legacy/memory-session-store.ts#MemorySessionStore.get"
+      ],
+      "review": "sha256:39eecb4936240777704c9e20fd36a04d7c87675fb94be3b4cb4cc5d8ece45520"
+    },
+    "limitations": [
+      {
+        "code": "calls-exact-only",
+        "message": "CALLS edges exist only for exactly resolved calls; instance, dynamic and injected calls are not in the graph."
+      },
+      {
+        "code": "no-task-scope",
+        "message": "No task was given, so scope drift against a task context is not checked."
+      }
+    ],
+    "semanticAssist": {
+      "candidates": [],
+      "claims": [],
+      "evidence": [],
+      "calls": 0,
+      "cacheHits": 0,
+      "status": "not-requested",
+      "skippedChecks": []
+    },
+    "metrics": {
+      "changedFiles": 2,
+      "changedHunks": 2,
+      "diffSeeds": 2,
+      "claims": {
+        "ALIGNED": 0,
+        "PARTIAL": 0,
+        "CONFLICT": 1,
+        "UNKNOWN": 0
+      },
+      "evidence": {
+        "project-truth": 1,
+        "repository": 1,
+        "git": 2,
+        "test": 0,
+        "llm": 0
+      },
+      "contextTokens": 443,
+      "taskContextTokens": 0,
+      "semanticCandidates": 0,
+      "llmCalls": 0,
+      "llmCacheHits": 0
+    },
+    "diagnostics": []
+  },
+  "meta": {
+    "performance": {
+      "totalMs": 1558,
+      "freshnessMs": 518,
+      "diffMs": 1002,
+      "contextMs": 25,
+      "gapMs": 1,
+      "rulesMs": 7,
+      "semanticMs": 0
+    }
+  },
+  "diagnostics": []
+}

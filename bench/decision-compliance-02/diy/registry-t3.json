@@ -1,0 +1,16 @@
+[
+  {
+    "id": "D-001",
+    "status": "superseded",
+    "symbolContains": "SessionStore",
+    "enforcement": "block",
+    "supersededBy": "D-002"
+  },
+  {
+    "id": "D-002",
+    "status": "confirmed",
+    "symbolContains": "GlobalAuthCache",
+    "enforcement": "block",
+    "supersedes": "D-001"
+  }
+]

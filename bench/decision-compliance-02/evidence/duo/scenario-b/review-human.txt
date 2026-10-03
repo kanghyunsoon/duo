@@ -1,0 +1,8 @@
+BLOCK  1 claims · 2 files · llm_calls 0
+  CONFLICT  decision-forbids           D-002 · forbidden-symbol [blocking, introduced]
+            evidence: src/auth/global-auth-cache.ts:1-6, .duo-project/decisions/D-002.yaml:1-15, src/auth/global-auth-cache.ts:3-5
+Knowledge gaps:
+  - No confirmed Requirement or Decision is linked to this task.
+Limitations:
+  calls-exact-only
+  no-task-scope

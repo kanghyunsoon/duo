@@ -1,0 +1,8 @@
+[
+  {
+    "id": "D-001",
+    "status": "confirmed",
+    "symbolContains": "SessionStore",
+    "enforcement": "block"
+  }
+]

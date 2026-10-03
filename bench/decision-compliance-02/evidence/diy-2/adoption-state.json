@@ -1,0 +1,8 @@
+{
+  "adoptedAt": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+  "known": {
+    "D-001": [
+      "src/legacy/memory-session-store.ts#MemorySessionStore"
+    ]
+  }
+}

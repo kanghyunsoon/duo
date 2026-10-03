@@ -1,0 +1,643 @@
+{
+  "format": "duo-bench.decision-compliance/1",
+  "benchmark": "decision-compliance-02",
+  "fixture": "decision-compliance-02/1",
+  "policies": {
+    "D-001": "Decision D-001, stateless authentication: authentication must keep no server-side session state. Code must not add or change any class, function or other symbol whose name contains `SessionStore`. Session stores that already existed when this decision was adopted are known legacy debt: when a change touches one, report it, but do not block the change for it. A change that adds a new symbol whose name contains `SessionStore` violates the decision and must be blocked.",
+    "D-002": "Decision D-002 supersedes D-001: session stores are no longer the forbidden pattern. Code must not add or change any class, function or other symbol whose name contains `GlobalAuthCache`. There was no GlobalAuthCache code when D-002 was adopted, so every GlobalAuthCache symbol is a violation: a change that adds one must be blocked."
+  },
+  "commits": {
+    "T0": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+    "T1": "a1f589279841677c8af47eebe169b74c7e0c8155",
+    "T2": "a005baaff53bb6a5b5931da448d47ec06a17f5f4",
+    "A-control": "69715f3b95b0c50ed131ea97f3ed0c540a1327e9",
+    "T3": "782799df93dc7050db192f9b2b52fc9b39ef2730",
+    "T4": "2927f2358f11bf5101a4e626521bece7152baae7",
+    "B-control": "de084dd541c6692127c897e0cd0a35fc3f6396f7"
+  },
+  "timeline": [
+    {
+      "step": "T0",
+      "branch": "t0-adoption",
+      "parent": null,
+      "message": "adopt decision enforcement (D-001)",
+      "files": [
+        ".duo-project/.gitignore",
+        ".duo-project/project.yaml",
+        ".duo-project/decisions/D-001.yaml",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "docs/decisions/D-001.md",
+        "docs/adoption.md",
+        "package.json",
+        "src/auth/token.ts",
+        "src/legacy/memory-session-store.ts"
+      ]
+    },
+    {
+      "step": "T1",
+      "branch": "t1-late-violation",
+      "parent": "T0",
+      "message": "feat(auth): add LateSessionStore",
+      "files": [
+        "src/auth/late-session-store.ts"
+      ]
+    },
+    {
+      "step": "T2",
+      "branch": "t2-late-touch",
+      "parent": "T1",
+      "message": "fix(auth): trim user ids in LateSessionStore",
+      "files": [
+        "src/auth/late-session-store.ts"
+      ]
+    },
+    {
+      "step": "A-control",
+      "branch": "a-control",
+      "parent": "T1",
+      "message": "fix(auth): ignore whitespace-only tokens",
+      "files": [
+        "src/auth/token.ts"
+      ]
+    },
+    {
+      "step": "T3",
+      "branch": "t3-supersede",
+      "parent": "T2",
+      "message": "adopt D-002, superseding D-001",
+      "files": [
+        ".duo-project/decisions/D-001.yaml",
+        ".duo-project/decisions/D-002.yaml",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "docs/decisions/D-001.md",
+        "docs/decisions/D-002.md",
+        "docs/adoption.md"
+      ]
+    },
+    {
+      "step": "T4",
+      "branch": "main",
+      "parent": "T3",
+      "message": "feat(auth): global auth cache, trim legacy session ids",
+      "files": [
+        "src/legacy/memory-session-store.ts",
+        "src/auth/global-auth-cache.ts"
+      ]
+    },
+    {
+      "step": "B-control",
+      "branch": "b-control",
+      "parent": "T3",
+      "message": "fix(auth): ignore whitespace-only tokens",
+      "files": [
+        "src/auth/token.ts"
+      ]
+    }
+  ],
+  "roles": {
+    "legacy-at-adoption": {
+      "path": "src/legacy/memory-session-store.ts",
+      "symbol": "MemorySessionStore",
+      "decision": "D-001"
+    },
+    "post-adoption-debt": {
+      "path": "src/auth/late-session-store.ts",
+      "symbol": "LateSessionStore",
+      "decision": "D-001",
+      "entered": "T1",
+      "touched": "T2"
+    },
+    "valid-control": {
+      "path": "src/auth/token.ts",
+      "symbol": "verifyToken"
+    },
+    "superseded-rule-touch": {
+      "path": "src/legacy/memory-session-store.ts",
+      "symbol": "MemorySessionStore",
+      "decision": "D-001 (superseded at T3)",
+      "touched": "T4"
+    },
+    "current-rule-violation": {
+      "path": "src/auth/global-auth-cache.ts",
+      "symbol": "GlobalAuthCache",
+      "decision": "D-002",
+      "entered": "T4"
+    }
+  },
+  "scenarios": [
+    {
+      "id": "t1-bypassed",
+      "branch": "t1-late-violation",
+      "from": "T0",
+      "to": "T1",
+      "role": "context: the post-adoption violation enters (a review here was skipped in the story)",
+      "registry": "registry-t0.json"
+    },
+    {
+      "id": "scenario-a",
+      "branch": "t2-late-touch",
+      "from": "T1",
+      "to": "T2",
+      "role": "post-adoption debt touched; it already exists at the diff base",
+      "registry": "registry-t0.json"
+    },
+    {
+      "id": "a-control",
+      "branch": "a-control",
+      "from": "T1",
+      "to": "A-control",
+      "role": "valid control after T1",
+      "registry": "registry-t0.json"
+    },
+    {
+      "id": "scenario-b",
+      "branch": "main",
+      "from": "T3",
+      "to": "T4",
+      "role": "superseded-rule touch plus current-rule violation",
+      "registry": "registry-t3.json"
+    },
+    {
+      "id": "b-control",
+      "branch": "b-control",
+      "from": "T3",
+      "to": "B-control",
+      "role": "valid control after supersession",
+      "registry": "registry-t3.json"
+    }
+  ],
+  "environment": {
+    "date": "2026-10-03",
+    "os": "Windows_NT 10.0.26200 x64",
+    "node": "v24.18.0",
+    "git": "git version 2.55.0.windows.3",
+    "cpu": "Intel(R) Core(TM) Ultra 7 155H",
+    "logicalCpus": 22,
+    "memoryGiB": 31.5
+  },
+  "subject": {
+    "package": "@duo-director/cli",
+    "version": "0.2.0",
+    "integrity": "sha512-CFqbBpfxDwHpl03v4a39cGAD++Lw94okXM9Im//Wko64jhnTXMEmYKMC6cEG0vOOPhLqL8DcL7ap9SwOmJrdcA==",
+    "shasum": "4b9ae403abce5cf8f6af1ce6e595ed87145762f1",
+    "installedVersion": "0.2.0",
+    "duoctlVersion": "duoctl 0.2.0"
+  },
+  "runsPerScenario": 10,
+  "duo": {
+    "adoption": {
+      "baselineId": "adoption-91fb28cfe189f2bc",
+      "commit": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+      "findings": [
+        {
+          "governing": "D-001",
+          "offending": "sym:src/legacy/memory-session-store.ts#MemorySessionStore"
+        },
+        {
+          "governing": "D-001",
+          "offending": "sym:src/legacy/memory-session-store.ts#MemorySessionStore.get"
+        }
+      ]
+    },
+    "traceAtT4": {
+      "D-001": [
+        {
+          "from": "dec:D-002",
+          "type": "SUPERSEDES",
+          "to": "dec:D-001"
+        }
+      ],
+      "D-002": [
+        {
+          "from": "dec:D-002",
+          "type": "SUPERSEDES",
+          "to": "dec:D-001"
+        }
+      ]
+    },
+    "t1-bypassed": {
+      "range": "T0..T1",
+      "verdict": "BLOCK",
+      "claims": [
+        {
+          "decision": "D-001",
+          "rule": "decision-forbids",
+          "reason": "forbidden-symbol",
+          "provenance": "introduced",
+          "blockEligible": true,
+          "observed": "LateSessionStore.put changed in src/auth/late-session-store.ts"
+        }
+      ],
+      "gaps": [
+        "missing-intent"
+      ],
+      "baseline": {
+        "status": "present",
+        "id": "adoption-91fb28cfe189f2bc"
+      },
+      "runs": 10,
+      "identical": true,
+      "canonicalHash": "sha256:d025c9619d3630c75a1bb1117218fddf22117582382bc17a019f9c39b2699d19",
+      "exitCodeDefault": 0,
+      "exitCodeFailOnBlock": 4
+    },
+    "scenario-a": {
+      "range": "T1..T2",
+      "verdict": "BLOCK",
+      "claims": [
+        {
+          "decision": "D-001",
+          "rule": "decision-forbids",
+          "reason": "forbidden-symbol",
+          "provenance": "introduced",
+          "blockEligible": true,
+          "observed": "LateSessionStore.put changed in src/auth/late-session-store.ts"
+        }
+      ],
+      "gaps": [
+        "missing-intent"
+      ],
+      "baseline": {
+        "status": "present",
+        "id": "adoption-91fb28cfe189f2bc"
+      },
+      "runs": 10,
+      "identical": true,
+      "canonicalHash": "sha256:1d0c6e442654ea6d4302bec49499708310ee6c26533a06441cb56bf7b79933f6",
+      "exitCodeDefault": 0,
+      "exitCodeFailOnBlock": 4
+    },
+    "a-control": {
+      "range": "T1..A-control",
+      "verdict": "WARN",
+      "claims": [],
+      "gaps": [
+        "missing-intent"
+      ],
+      "baseline": {
+        "status": "present",
+        "id": "adoption-91fb28cfe189f2bc"
+      },
+      "runs": 10,
+      "identical": true,
+      "canonicalHash": "sha256:78b47303a18fc2694d1fe39a01e74c92cf1e9c641027c70809e84f9fc53d4090",
+      "exitCodeDefault": 0,
+      "exitCodeFailOnBlock": 0
+    },
+    "scenario-b": {
+      "range": "T3..T4",
+      "verdict": "BLOCK",
+      "claims": [
+        {
+          "decision": "D-002",
+          "rule": "decision-forbids",
+          "reason": "forbidden-symbol",
+          "provenance": "introduced",
+          "blockEligible": true,
+          "observed": "GlobalAuthCache.remember changed in src/auth/global-auth-cache.ts"
+        }
+      ],
+      "gaps": [
+        "missing-intent"
+      ],
+      "baseline": {
+        "status": "present",
+        "id": "adoption-91fb28cfe189f2bc"
+      },
+      "runs": 10,
+      "identical": true,
+      "canonicalHash": "sha256:5e52e97bbaf298c48503b2bb0fbc607e7055b0493d9cbfd604f58cf3eef9c50c",
+      "exitCodeDefault": 0,
+      "exitCodeFailOnBlock": 4
+    },
+    "b-control": {
+      "range": "T3..B-control",
+      "verdict": "WARN",
+      "claims": [],
+      "gaps": [
+        "missing-intent"
+      ],
+      "baseline": {
+        "status": "present",
+        "id": "adoption-91fb28cfe189f2bc"
+      },
+      "runs": 10,
+      "identical": true,
+      "canonicalHash": "sha256:3dc47f59119cf05e01cf5bedce26cbde2fcc4a486ea81736290990b14211f559",
+      "exitCodeDefault": 0,
+      "exitCodeFailOnBlock": 0
+    }
+  },
+  "diy": {
+    "cost": {
+      "diy-0": {
+        "files": 1,
+        "lines": 70,
+        "codeLines": 57,
+        "state": "none"
+      },
+      "diy-1": {
+        "files": 1,
+        "lines": 65,
+        "codeLines": 54,
+        "state": "adoption state JSON (7 lines, generated once at adoption)"
+      },
+      "diy-2": {
+        "files": 1,
+        "lines": 88,
+        "codeLines": 73,
+        "state": "registry JSON edited by people (8 lines at T0, 16 lines after the supersession) + adoption state JSON (8 lines)"
+      }
+    },
+    "diy-0": {
+      "t1-bypassed": {
+        "verdict": "BLOCK",
+        "findings": [
+          {
+            "classification": "introduced",
+            "blocking": true,
+            "file": "src/auth/late-session-store.ts",
+            "symbol": "LateSessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          },
+          {
+            "classification": "pre-existing",
+            "blocking": false,
+            "file": "src/legacy/memory-session-store.ts",
+            "symbol": "MemorySessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          }
+        ],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 1
+      },
+      "scenario-a": {
+        "verdict": "WARN",
+        "findings": [
+          {
+            "classification": "pre-existing-touched",
+            "blocking": false,
+            "file": "src/auth/late-session-store.ts",
+            "symbol": "LateSessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          },
+          {
+            "classification": "pre-existing",
+            "blocking": false,
+            "file": "src/legacy/memory-session-store.ts",
+            "symbol": "MemorySessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          }
+        ],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 0
+      },
+      "a-control": {
+        "verdict": "PASS",
+        "findings": [
+          {
+            "classification": "pre-existing",
+            "blocking": false,
+            "file": "src/auth/late-session-store.ts",
+            "symbol": "LateSessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          },
+          {
+            "classification": "pre-existing",
+            "blocking": false,
+            "file": "src/legacy/memory-session-store.ts",
+            "symbol": "MemorySessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          }
+        ],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 0
+      },
+      "scenario-b": {
+        "verdict": "WARN",
+        "findings": [
+          {
+            "classification": "pre-existing",
+            "blocking": false,
+            "file": "src/auth/late-session-store.ts",
+            "symbol": "LateSessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          },
+          {
+            "classification": "pre-existing-touched",
+            "blocking": false,
+            "file": "src/legacy/memory-session-store.ts",
+            "symbol": "MemorySessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          }
+        ],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 0
+      },
+      "b-control": {
+        "verdict": "PASS",
+        "findings": [
+          {
+            "classification": "pre-existing",
+            "blocking": false,
+            "file": "src/auth/late-session-store.ts",
+            "symbol": "LateSessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          },
+          {
+            "classification": "pre-existing",
+            "blocking": false,
+            "file": "src/legacy/memory-session-store.ts",
+            "symbol": "MemorySessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          }
+        ],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 0
+      }
+    },
+    "diy-1": {
+      "t1-bypassed": {
+        "verdict": "BLOCK",
+        "findings": [
+          {
+            "classification": "not-known-at-adoption",
+            "blocking": true,
+            "file": "src/auth/late-session-store.ts",
+            "symbol": "LateSessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          }
+        ],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 1
+      },
+      "scenario-a": {
+        "verdict": "BLOCK",
+        "findings": [
+          {
+            "classification": "not-known-at-adoption",
+            "blocking": true,
+            "file": "src/auth/late-session-store.ts",
+            "symbol": "LateSessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          }
+        ],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 1
+      },
+      "a-control": {
+        "verdict": "PASS",
+        "findings": [],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 0
+      },
+      "scenario-b": {
+        "verdict": "WARN",
+        "findings": [
+          {
+            "classification": "known-at-adoption-touched",
+            "blocking": false,
+            "file": "src/legacy/memory-session-store.ts",
+            "symbol": "MemorySessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          }
+        ],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 0
+      },
+      "b-control": {
+        "verdict": "PASS",
+        "findings": [],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 0
+      }
+    },
+    "diy-2": {
+      "t1-bypassed": {
+        "verdict": "BLOCK",
+        "findings": [
+          {
+            "decision": "D-001",
+            "supersedes": null,
+            "classification": "not-known-at-adoption",
+            "blocking": true,
+            "file": "src/auth/late-session-store.ts",
+            "symbol": "LateSessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          }
+        ],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 1
+      },
+      "scenario-a": {
+        "verdict": "BLOCK",
+        "findings": [
+          {
+            "decision": "D-001",
+            "supersedes": null,
+            "classification": "not-known-at-adoption",
+            "blocking": true,
+            "file": "src/auth/late-session-store.ts",
+            "symbol": "LateSessionStore",
+            "lines": [
+              1,
+              6
+            ]
+          }
+        ],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 1
+      },
+      "a-control": {
+        "verdict": "PASS",
+        "findings": [],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 0
+      },
+      "scenario-b": {
+        "verdict": "BLOCK",
+        "findings": [
+          {
+            "decision": "D-002",
+            "supersedes": "D-001",
+            "classification": "not-known-at-adoption",
+            "blocking": true,
+            "file": "src/auth/global-auth-cache.ts",
+            "symbol": "GlobalAuthCache",
+            "lines": [
+              1,
+              6
+            ]
+          }
+        ],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 1
+      },
+      "b-control": {
+        "verdict": "PASS",
+        "findings": [],
+        "runs": 10,
+        "identical": true,
+        "exitCode": 0
+      }
+    }
+  }
+}

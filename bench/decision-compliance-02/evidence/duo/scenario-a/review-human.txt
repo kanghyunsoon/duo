@@ -1,0 +1,8 @@
+BLOCK  1 claims · 1 files · llm_calls 0
+  CONFLICT  decision-forbids           D-001 · forbidden-symbol [blocking, introduced]
+            evidence: src/auth/late-session-store.ts:4-4, .duo-project/decisions/D-001.yaml:1-14, src/auth/late-session-store.ts:3-5
+Knowledge gaps:
+  - No confirmed Requirement or Decision is linked to this task.
+Limitations:
+  calls-exact-only
+  no-task-scope

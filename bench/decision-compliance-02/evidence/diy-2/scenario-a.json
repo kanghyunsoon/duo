@@ -1,0 +1,23 @@
+{
+  "current": [
+    "D-001"
+  ],
+  "adoptedAt": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+  "base": "a1f589279841677c8af47eebe169b74c7e0c8155",
+  "head": "a005baaff53bb6a5b5931da448d47ec06a17f5f4",
+  "verdict": "BLOCK",
+  "findings": [
+    {
+      "decision": "D-001",
+      "supersedes": null,
+      "classification": "not-known-at-adoption",
+      "blocking": true,
+      "file": "src/auth/late-session-store.ts",
+      "symbol": "LateSessionStore",
+      "lines": [
+        1,
+        6
+      ]
+    }
+  ]
+}

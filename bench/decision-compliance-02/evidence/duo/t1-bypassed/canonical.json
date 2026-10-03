@@ -1,0 +1,116 @@
+{
+  "format": "duo.review/1",
+  "status": "ready",
+  "verdict": "BLOCK",
+  "verdictBasis": {
+    "blocking": [
+      "claim-2f0e27b295d8b262"
+    ],
+    "ask": [],
+    "warn": [
+      "rgap-9a182c1b3f2a"
+    ]
+  },
+  "baseline": {
+    "status": "present",
+    "id": "adoption-91fb28cfe189f2bc"
+  },
+  "diff": {
+    "from": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+    "to": "a1f589279841677c8af47eebe169b74c7e0c8155",
+    "files": [
+      {
+        "path": "src/auth/late-session-store.ts",
+        "kind": "added"
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "claim-2f0e27b295d8b262",
+      "rule": "decision-forbids",
+      "subject": {
+        "kind": "decision",
+        "id": "D-001"
+      },
+      "alignment": "CONFLICT",
+      "reason": "forbidden-symbol",
+      "provenance": "introduced",
+      "enforced": true,
+      "blockEligible": true,
+      "drift": false,
+      "expected": "no symbol matching *SessionStore* (D-001)",
+      "observed": "LateSessionStore.put changed in src/auth/late-session-store.ts",
+      "evidence": [
+        {
+          "kind": "decision",
+          "basis": "project-truth",
+          "path": ".duo-project/decisions/D-001.yaml",
+          "symbol": null,
+          "id": "D-001",
+          "evidenceId": "ev-9130d1a243ee3054",
+          "lines": [
+            1,
+            14
+          ],
+          "change": null,
+          "commit": null,
+          "contentHash": "sha256:634ba75a7164919f1407857973300f1e653d1ba8b45a0546cd03a4048eef47e9"
+        },
+        {
+          "kind": "diff",
+          "basis": "git",
+          "path": "src/auth/late-session-store.ts",
+          "symbol": null,
+          "id": null,
+          "evidenceId": "ev-14c1da8722f52732",
+          "lines": [
+            1,
+            6
+          ],
+          "change": "added",
+          "commit": "a1f589279841677c8af47eebe169b74c7e0c8155",
+          "contentHash": "sha256:fc86385961dde19ac120ac40529217a0f77e54c72a0f094c2c149ef1e3ea2c1a"
+        },
+        {
+          "kind": "symbol",
+          "basis": "repository",
+          "path": "src/auth/late-session-store.ts",
+          "symbol": "LateSessionStore.put",
+          "id": null,
+          "evidenceId": "ev-ea454d379ccb6bfa",
+          "lines": [
+            3,
+            5
+          ],
+          "change": null,
+          "commit": "a1f589279841677c8af47eebe169b74c7e0c8155",
+          "contentHash": "sha256:33e44af5a3498dd0fb7801891f0772e9d11ab328cf69450d3fe7b1be04447878"
+        }
+      ]
+    }
+  ],
+  "gaps": {
+    "status": "assessed",
+    "requiresHumanInput": false,
+    "items": [
+      {
+        "id": "rgap-9a182c1b3f2a",
+        "kind": "missing-intent",
+        "relevance": "direct",
+        "action": "surface",
+        "reasons": [
+          "no-confirmed-intent"
+        ],
+        "anchors": [
+          "symbol:src/auth/late-session-store.ts:LateSessionStore.put"
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "calls-exact-only",
+    "no-task-scope"
+  ],
+  "semanticAssist": "present"
+}

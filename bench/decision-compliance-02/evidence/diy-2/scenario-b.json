@@ -1,0 +1,23 @@
+{
+  "current": [
+    "D-002"
+  ],
+  "adoptedAt": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+  "base": "782799df93dc7050db192f9b2b52fc9b39ef2730",
+  "head": "2927f2358f11bf5101a4e626521bece7152baae7",
+  "verdict": "BLOCK",
+  "findings": [
+    {
+      "decision": "D-002",
+      "supersedes": "D-001",
+      "classification": "not-known-at-adoption",
+      "blocking": true,
+      "file": "src/auth/global-auth-cache.ts",
+      "symbol": "GlobalAuthCache",
+      "lines": [
+        1,
+        6
+      ]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "rule": "no symbol whose name contains SessionStore (D-001)",
+  "adoptedAt": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+  "known": [
+    "src/legacy/memory-session-store.ts#MemorySessionStore"
+  ]
+}

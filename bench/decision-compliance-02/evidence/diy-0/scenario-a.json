@@ -1,0 +1,28 @@
+{
+  "rule": "no symbol whose name contains SessionStore (D-001)",
+  "base": "a1f589279841677c8af47eebe169b74c7e0c8155",
+  "head": "a005baaff53bb6a5b5931da448d47ec06a17f5f4",
+  "verdict": "WARN",
+  "findings": [
+    {
+      "classification": "pre-existing-touched",
+      "blocking": false,
+      "file": "src/auth/late-session-store.ts",
+      "symbol": "LateSessionStore",
+      "lines": [
+        1,
+        6
+      ]
+    },
+    {
+      "classification": "pre-existing",
+      "blocking": false,
+      "file": "src/legacy/memory-session-store.ts",
+      "symbol": "MemorySessionStore",
+      "lines": [
+        1,
+        6
+      ]
+    }
+  ]
+}

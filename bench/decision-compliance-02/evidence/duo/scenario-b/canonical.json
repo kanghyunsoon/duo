@@ -1,0 +1,121 @@
+{
+  "format": "duo.review/1",
+  "status": "ready",
+  "verdict": "BLOCK",
+  "verdictBasis": {
+    "blocking": [
+      "claim-e928213e05d82dc6"
+    ],
+    "ask": [],
+    "warn": [
+      "rgap-b8f33f44892c"
+    ]
+  },
+  "baseline": {
+    "status": "present",
+    "id": "adoption-91fb28cfe189f2bc"
+  },
+  "diff": {
+    "from": "782799df93dc7050db192f9b2b52fc9b39ef2730",
+    "to": "2927f2358f11bf5101a4e626521bece7152baae7",
+    "files": [
+      {
+        "path": "src/auth/global-auth-cache.ts",
+        "kind": "added"
+      },
+      {
+        "path": "src/legacy/memory-session-store.ts",
+        "kind": "modified"
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "claim-e928213e05d82dc6",
+      "rule": "decision-forbids",
+      "subject": {
+        "kind": "decision",
+        "id": "D-002"
+      },
+      "alignment": "CONFLICT",
+      "reason": "forbidden-symbol",
+      "provenance": "introduced",
+      "enforced": true,
+      "blockEligible": true,
+      "drift": false,
+      "expected": "no symbol matching *GlobalAuthCache* (D-002)",
+      "observed": "GlobalAuthCache.remember changed in src/auth/global-auth-cache.ts",
+      "evidence": [
+        {
+          "kind": "decision",
+          "basis": "project-truth",
+          "path": ".duo-project/decisions/D-002.yaml",
+          "symbol": null,
+          "id": "D-002",
+          "evidenceId": "ev-9cf1391404fcbf0f",
+          "lines": [
+            1,
+            15
+          ],
+          "change": null,
+          "commit": null,
+          "contentHash": "sha256:dae63ed4bb7490e37bbff1168f4fe741c693e41553d8b0101b62e3dfbdb61c24"
+        },
+        {
+          "kind": "diff",
+          "basis": "git",
+          "path": "src/auth/global-auth-cache.ts",
+          "symbol": null,
+          "id": null,
+          "evidenceId": "ev-78835d1680f051ed",
+          "lines": [
+            1,
+            6
+          ],
+          "change": "added",
+          "commit": "2927f2358f11bf5101a4e626521bece7152baae7",
+          "contentHash": "sha256:c179977b8753104eba72c445f334df7afef413bc77b9237343b5dd3eab7a0b46"
+        },
+        {
+          "kind": "symbol",
+          "basis": "repository",
+          "path": "src/auth/global-auth-cache.ts",
+          "symbol": "GlobalAuthCache.remember",
+          "id": null,
+          "evidenceId": "ev-ee7a91a9245f9132",
+          "lines": [
+            3,
+            5
+          ],
+          "change": null,
+          "commit": "2927f2358f11bf5101a4e626521bece7152baae7",
+          "contentHash": "sha256:4fa03a52c3f8507d64b1d24bc7fe1d6c2618813a649503d5196ee69fc23ceed9"
+        }
+      ]
+    }
+  ],
+  "gaps": {
+    "status": "assessed",
+    "requiresHumanInput": false,
+    "items": [
+      {
+        "id": "rgap-b8f33f44892c",
+        "kind": "missing-intent",
+        "relevance": "direct",
+        "action": "surface",
+        "reasons": [
+          "no-confirmed-intent"
+        ],
+        "anchors": [
+          "symbol:src/auth/global-auth-cache.ts:GlobalAuthCache.remember",
+          "symbol:src/legacy/memory-session-store.ts:MemorySessionStore.get"
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "calls-exact-only",
+    "no-task-scope"
+  ],
+  "semanticAssist": "present"
+}

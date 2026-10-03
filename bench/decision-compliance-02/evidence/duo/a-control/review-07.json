@@ -1,0 +1,236 @@
+{
+  "format": "duo.cli.review/1",
+  "command": "review",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "format": "duo.review/1",
+    "status": "ready",
+    "request": {
+      "identity": "sha256:290b8ff0c585e576b5ae11eeaf734377fc3360c25a26bc9921ee4491b3a9746e",
+      "task": "",
+      "from": "commit:a1f589279841677c8af47eebe169b74c7e0c8155",
+      "to": "commit:69715f3b95b0c50ed131ea97f3ed0c540a1327e9"
+    },
+    "baseline": {
+      "status": "present",
+      "id": "adoption-91fb28cfe189f2bc"
+    },
+    "freshness": {
+      "status": "current",
+      "fullRebuildRequired": false
+    },
+    "diff": {
+      "identity": "sha256:2d94374defe3de7fb45fae025f6ac656da71736a2fc47e39c20442165a2a9c27",
+      "from": "a1f589279841677c8af47eebe169b74c7e0c8155",
+      "to": "69715f3b95b0c50ed131ea97f3ed0c540a1327e9",
+      "files": [
+        {
+          "path": "src/auth/token.ts",
+          "kind": "modified",
+          "binary": false,
+          "oldOid": "654ad231e706decc371227b098da3484157f035b",
+          "newOid": "04a31164dd1166312f36a898b0a1e14c93e3f135",
+          "hunks": [
+            {
+              "oldStart": 2,
+              "oldLines": 1,
+              "newStart": 2,
+              "newLines": 1,
+              "evidenceId": "ev-197d446607b92ec6"
+            }
+          ],
+          "evidenceIds": [
+            "ev-197d446607b92ec6"
+          ]
+        }
+      ]
+    },
+    "seeds": [
+      {
+        "id": "sym:src/auth/token.ts#verifyToken",
+        "ref": "src/auth/token.ts#verifyToken",
+        "entity": {
+          "type": "symbol",
+          "path": "src/auth/token.ts",
+          "symbol": "verifyToken"
+        },
+        "reason": "hunk-overlap",
+        "path": "src/auth/token.ts",
+        "evidenceIds": [
+          "ev-197d446607b92ec6"
+        ]
+      }
+    ],
+    "verdict": "WARN",
+    "verdictBasis": {
+      "blocking": [],
+      "ask": [],
+      "warn": [
+        "rgap-5194d78da394"
+      ]
+    },
+    "claims": [],
+    "evidence": [
+      {
+        "id": "ev-197d446607b92ec6",
+        "basis": "git",
+        "kind": "diff",
+        "contentHash": "sha256:bc8c095cdcba0244ad23bc9dfddb24a81732ea1bf218245b9851e2e0a0f07173",
+        "summary": "src/auth/token.ts @@ -2,1 +2,1",
+        "pointer": {
+          "kind": "diff",
+          "path": "src/auth/token.ts",
+          "lines": [
+            2,
+            2
+          ],
+          "change": "modified",
+          "commit": "69715f3b95b0c50ed131ea97f3ed0c540a1327e9",
+          "contentHash": "sha256:bc8c095cdcba0244ad23bc9dfddb24a81732ea1bf218245b9851e2e0a0f07173"
+        },
+        "metadata": {
+          "oldStart": 2,
+          "oldLines": 1,
+          "newStart": 2,
+          "newLines": 1,
+          "oldBlob": "654ad231e706decc371227b098da3484157f035b",
+          "newBlob": "04a31164dd1166312f36a898b0a1e14c93e3f135"
+        }
+      },
+      {
+        "id": "ev-9130d1a243ee3054",
+        "basis": "project-truth",
+        "kind": "decision",
+        "entity": {
+          "type": "decision",
+          "id": "D-001"
+        },
+        "source": {
+          "path": ".duo-project/decisions/D-001.yaml",
+          "startLine": 1,
+          "startColumn": 1,
+          "endLine": 14,
+          "endColumn": 82
+        },
+        "contentHash": "sha256:634ba75a7164919f1407857973300f1e653d1ba8b45a0546cd03a4048eef47e9",
+        "summary": "D-001 Stateless authentication",
+        "pointer": {
+          "kind": "decision",
+          "id": "D-001",
+          "path": ".duo-project/decisions/D-001.yaml",
+          "lines": [
+            1,
+            14
+          ],
+          "contentHash": "sha256:634ba75a7164919f1407857973300f1e653d1ba8b45a0546cd03a4048eef47e9"
+        }
+      }
+    ],
+    "gaps": {
+      "format": "duo.gap-assessment/1",
+      "status": "assessed",
+      "gaps": [
+        {
+          "id": "rgap-5194d78da394",
+          "source": "runtime",
+          "kind": "missing-intent",
+          "anchors": [
+            {
+              "type": "symbol",
+              "path": "src/auth/token.ts",
+              "symbol": "verifyToken"
+            }
+          ],
+          "relevance": "direct",
+          "reasons": [
+            {
+              "code": "no-confirmed-intent"
+            }
+          ],
+          "action": "surface"
+        }
+      ],
+      "requiresHumanInput": false,
+      "additional": [],
+      "technicalLimitations": [
+        "calls-exact-only",
+        "files-by-path",
+        "no-diff"
+      ],
+      "metrics": {
+        "declaredConsidered": 0,
+        "runtime": 1,
+        "direct": 1,
+        "related": 0,
+        "none": 0,
+        "ask": 0,
+        "surface": 1,
+        "ignore": 0,
+        "llmCalls": 0
+      }
+    },
+    "context": {
+      "profile": "review",
+      "seeds": [
+        "sym:src/auth/token.ts#verifyToken"
+      ],
+      "review": "sha256:eebfd2c03f8c98e66ad95c45818a77ac6dd2dd8829006b1460a6959a0fb7cba2"
+    },
+    "limitations": [
+      {
+        "code": "calls-exact-only",
+        "message": "CALLS edges exist only for exactly resolved calls; instance, dynamic and injected calls are not in the graph."
+      },
+      {
+        "code": "no-task-scope",
+        "message": "No task was given, so scope drift against a task context is not checked."
+      }
+    ],
+    "semanticAssist": {
+      "candidates": [],
+      "claims": [],
+      "evidence": [],
+      "calls": 0,
+      "cacheHits": 0,
+      "status": "not-requested",
+      "skippedChecks": []
+    },
+    "metrics": {
+      "changedFiles": 1,
+      "changedHunks": 1,
+      "diffSeeds": 1,
+      "claims": {
+        "ALIGNED": 0,
+        "PARTIAL": 0,
+        "CONFLICT": 0,
+        "UNKNOWN": 0
+      },
+      "evidence": {
+        "project-truth": 1,
+        "repository": 0,
+        "git": 1,
+        "test": 0,
+        "llm": 0
+      },
+      "contextTokens": 262,
+      "taskContextTokens": 0,
+      "semanticCandidates": 0,
+      "llmCalls": 0,
+      "llmCacheHits": 0
+    },
+    "diagnostics": []
+  },
+  "meta": {
+    "performance": {
+      "totalMs": 1698,
+      "freshnessMs": 565,
+      "diffMs": 1096,
+      "contextMs": 25,
+      "gapMs": 2,
+      "rulesMs": 4,
+      "semanticMs": 1
+    }
+  },
+  "diagnostics": []
+}

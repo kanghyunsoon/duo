@@ -1,0 +1,136 @@
+{
+  "format": "duo-bench.decision-compliance-manifest/1",
+  "note": "Benchmark-local format; not a DUO public contract.",
+  "benchmark": "decision-compliance-02",
+  "benchmarkVersion": 1,
+  "fixture": "decision-compliance-02/1",
+  "language": "TypeScript",
+  "policies": {
+    "D-001": "Decision D-001, stateless authentication: authentication must keep no server-side session state. Code must not add or change any class, function or other symbol whose name contains `SessionStore`. Session stores that already existed when this decision was adopted are known legacy debt: when a change touches one, report it, but do not block the change for it. A change that adds a new symbol whose name contains `SessionStore` violates the decision and must be blocked.",
+    "D-002": "Decision D-002 supersedes D-001: session stores are no longer the forbidden pattern. Code must not add or change any class, function or other symbol whose name contains `GlobalAuthCache`. There was no GlobalAuthCache code when D-002 was adopted, so every GlobalAuthCache symbol is a violation: a change that adds one must be blocked."
+  },
+  "commits": {
+    "T0": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+    "T1": "a1f589279841677c8af47eebe169b74c7e0c8155",
+    "T2": "a005baaff53bb6a5b5931da448d47ec06a17f5f4",
+    "A-control": "69715f3b95b0c50ed131ea97f3ed0c540a1327e9",
+    "T3": "782799df93dc7050db192f9b2b52fc9b39ef2730",
+    "T4": "2927f2358f11bf5101a4e626521bece7152baae7",
+    "B-control": "de084dd541c6692127c897e0cd0a35fc3f6396f7"
+  },
+  "timeline": [
+    {
+      "step": "T0",
+      "branch": "t0-adoption",
+      "parent": null,
+      "message": "adopt decision enforcement (D-001)"
+    },
+    {
+      "step": "T1",
+      "branch": "t1-late-violation",
+      "parent": "T0",
+      "message": "feat(auth): add LateSessionStore"
+    },
+    {
+      "step": "T2",
+      "branch": "t2-late-touch",
+      "parent": "T1",
+      "message": "fix(auth): trim user ids in LateSessionStore"
+    },
+    {
+      "step": "A-control",
+      "branch": "a-control",
+      "parent": "T1",
+      "message": "fix(auth): ignore whitespace-only tokens"
+    },
+    {
+      "step": "T3",
+      "branch": "t3-supersede",
+      "parent": "T2",
+      "message": "adopt D-002, superseding D-001"
+    },
+    {
+      "step": "T4",
+      "branch": "main",
+      "parent": "T3",
+      "message": "feat(auth): global auth cache, trim legacy session ids"
+    },
+    {
+      "step": "B-control",
+      "branch": "b-control",
+      "parent": "T3",
+      "message": "fix(auth): ignore whitespace-only tokens"
+    }
+  ],
+  "adoptionCommit": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+  "decisions": {
+    "D-001": {
+      "atT0": "confirmed",
+      "atT3": "superseded",
+      "supersededBy": "D-002"
+    },
+    "D-002": {
+      "atT3": "confirmed",
+      "supersedes": "D-001"
+    }
+  },
+  "scenarios": {
+    "scenario-a": {
+      "range": "T1..T2",
+      "intent": "post-adoption debt (entered at T1 without a decision review) is touched; it exists at the diff base but did not exist at adoption"
+    },
+    "a-control": {
+      "range": "T1..A-control",
+      "intent": "valid change"
+    },
+    "scenario-b": {
+      "range": "T3..T4",
+      "intent": "D-002 is current: touching a session store is no longer a violation; a new GlobalAuthCache symbol violates D-002"
+    },
+    "b-control": {
+      "range": "T3..B-control",
+      "intent": "valid change after supersession"
+    },
+    "t1-bypassed": {
+      "range": "T0..T1",
+      "intent": "context only: the commit whose review was skipped in the story"
+    }
+  },
+  "roles": {
+    "legacy-at-adoption": {
+      "path": "src/legacy/memory-session-store.ts",
+      "symbol": "MemorySessionStore",
+      "decision": "D-001"
+    },
+    "post-adoption-debt": {
+      "path": "src/auth/late-session-store.ts",
+      "symbol": "LateSessionStore",
+      "decision": "D-001",
+      "entered": "T1",
+      "touched": "T2"
+    },
+    "valid-control": {
+      "path": "src/auth/token.ts",
+      "symbol": "verifyToken"
+    },
+    "superseded-rule-touch": {
+      "path": "src/legacy/memory-session-store.ts",
+      "symbol": "MemorySessionStore",
+      "decision": "D-001 (superseded at T3)",
+      "touched": "T4"
+    },
+    "current-rule-violation": {
+      "path": "src/auth/global-auth-cache.ts",
+      "symbol": "GlobalAuthCache",
+      "decision": "D-002",
+      "entered": "T4"
+    }
+  },
+  "date": "2026-10-04",
+  "duoUnderTest": {
+    "package": "@duo-director/cli",
+    "version": "0.2.0",
+    "integrity": "sha512-CFqbBpfxDwHpl03v4a39cGAD++Lw94okXM9Im//Wko64jhnTXMEmYKMC6cEG0vOOPhLqL8DcL7ap9SwOmJrdcA==",
+    "shasum": "4b9ae403abce5cf8f6af1ce6e595ed87145762f1"
+  }
+}

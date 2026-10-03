@@ -1,0 +1,19 @@
+{
+  "rule": "no symbol whose name contains SessionStore (D-001)",
+  "adoptedAt": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+  "base": "782799df93dc7050db192f9b2b52fc9b39ef2730",
+  "head": "2927f2358f11bf5101a4e626521bece7152baae7",
+  "verdict": "WARN",
+  "findings": [
+    {
+      "classification": "known-at-adoption-touched",
+      "blocking": false,
+      "file": "src/legacy/memory-session-store.ts",
+      "symbol": "MemorySessionStore",
+      "lines": [
+        1,
+        6
+      ]
+    }
+  ]
+}

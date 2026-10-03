@@ -1,0 +1,64 @@
+{
+  "format": "duo.cli.index/1",
+  "command": "index",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "mode": "incremental",
+    "fullRebuildReason": null,
+    "metrics": {
+      "mode": "incremental",
+      "files": {
+        "total": 9,
+        "unchanged": 7,
+        "changed": 2,
+        "added": 0,
+        "deleted": 0,
+        "analyzed": 2,
+        "analysisReused": 1,
+        "analysisFailed": 0
+      },
+      "resolution": {
+        "filesModulesRecomputed": 2,
+        "modulesRecomputed": 0,
+        "modulesReused": 0,
+        "filesCallsRecomputed": 2,
+        "callsRecomputed": 3,
+        "callsReused": 2
+      },
+      "history": {
+        "recomputed": true,
+        "commits": 3
+      },
+      "languages": {
+        "file-only": {
+          "files": 3,
+          "parsed": 0,
+          "reused": 0,
+          "failed": 0,
+          "parseMs": 0
+        },
+        "typescript": {
+          "files": 3,
+          "parsed": 2,
+          "reused": 1,
+          "failed": 0,
+          "parseMs": 10
+        }
+      },
+      "graph": {
+        "scopes": 7,
+        "scopesChanged": 3,
+        "nodesAdded": 0,
+        "nodesRemoved": 0,
+        "nodesUpdated": 6,
+        "edgesAdded": 0,
+        "edgesRemoved": 0,
+        "edgesUpdated": 0,
+        "written": true
+      }
+    },
+    "graphRevision": 4
+  },
+  "diagnostics": []
+}

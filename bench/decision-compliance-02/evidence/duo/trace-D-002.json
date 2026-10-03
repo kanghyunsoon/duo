@@ -1,0 +1,37 @@
+{
+  "format": "duo.cli.trace/1",
+  "command": "trace",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "format": "duo.trace/1",
+    "status": "found",
+    "index": "current",
+    "node": {
+      "type": "decision",
+      "id": "D-002"
+    },
+    "depth": 2,
+    "truncated": false,
+    "nodes": [
+      {
+        "id": "dec:D-002",
+        "type": "decision",
+        "depth": 0
+      },
+      {
+        "id": "dec:D-001",
+        "type": "decision",
+        "depth": 1
+      }
+    ],
+    "edges": [
+      {
+        "from": "dec:D-002",
+        "type": "SUPERSEDES",
+        "to": "dec:D-001"
+      }
+    ]
+  },
+  "diagnostics": []
+}

@@ -1,0 +1,8 @@
+Project session-fixture-02 · goal missing · milestone -
+Truth: 0 requirements · 2 decisions · 0 constraints · 0 declared gaps
+Index: current
+Changed since index: 0 files · analysis stale 0 · module resolution 0 · calls may be recomputed 0
+Analysis: typescript L2 (4) · file-only L0 (4: .md, .json)
+Adoption baseline: advanced · 19a1f84c6019 · 2 findings
+Pending decisions: 0
+LLM: disabled

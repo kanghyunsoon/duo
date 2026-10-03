@@ -1,0 +1,297 @@
+{
+  "format": "duo.cli.review/1",
+  "command": "review",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "format": "duo.review/1",
+    "status": "ready",
+    "request": {
+      "identity": "sha256:330ebadefc8175c6b7aef42c2f02d9a0a0b16decf863194c61bb0e941d27fd1c",
+      "task": "",
+      "from": "commit:a1f589279841677c8af47eebe169b74c7e0c8155",
+      "to": "commit:a005baaff53bb6a5b5931da448d47ec06a17f5f4"
+    },
+    "baseline": {
+      "status": "present",
+      "id": "adoption-91fb28cfe189f2bc"
+    },
+    "freshness": {
+      "status": "current",
+      "fullRebuildRequired": false
+    },
+    "diff": {
+      "identity": "sha256:cea92c3c6b952fe6499cee4a34d1552053a120e486901a15bbafef51789ad402",
+      "from": "a1f589279841677c8af47eebe169b74c7e0c8155",
+      "to": "a005baaff53bb6a5b5931da448d47ec06a17f5f4",
+      "files": [
+        {
+          "path": "src/auth/late-session-store.ts",
+          "kind": "modified",
+          "binary": false,
+          "oldOid": "2ee10ea3d2114c7dcbe84c03b74fd5b68a8e5177",
+          "newOid": "1c82400897271287bfe0e99d55af20287b1a0900",
+          "hunks": [
+            {
+              "oldStart": 4,
+              "oldLines": 1,
+              "newStart": 4,
+              "newLines": 1,
+              "evidenceId": "ev-1de52c17d4ff8f01"
+            }
+          ],
+          "evidenceIds": [
+            "ev-1de52c17d4ff8f01"
+          ]
+        }
+      ]
+    },
+    "seeds": [
+      {
+        "id": "sym:src/auth/late-session-store.ts#LateSessionStore.put",
+        "ref": "src/auth/late-session-store.ts#LateSessionStore.put",
+        "entity": {
+          "type": "symbol",
+          "path": "src/auth/late-session-store.ts",
+          "symbol": "LateSessionStore.put"
+        },
+        "reason": "hunk-overlap",
+        "path": "src/auth/late-session-store.ts",
+        "evidenceIds": [
+          "ev-1de52c17d4ff8f01"
+        ]
+      }
+    ],
+    "verdict": "BLOCK",
+    "verdictBasis": {
+      "blocking": [
+        "claim-c337c437064babc0"
+      ],
+      "ask": [],
+      "warn": [
+        "rgap-9a182c1b3f2a"
+      ]
+    },
+    "claims": [
+      {
+        "id": "claim-c337c437064babc0",
+        "rule": "decision-forbids",
+        "subject": {
+          "kind": "decision",
+          "id": "D-001"
+        },
+        "expected": "no symbol matching *SessionStore* (D-001)",
+        "observed": "LateSessionStore.put changed in src/auth/late-session-store.ts",
+        "alignment": "CONFLICT",
+        "evidenceIds": [
+          "ev-1de52c17d4ff8f01",
+          "ev-9130d1a243ee3054",
+          "ev-d9379f2e32b289be"
+        ],
+        "basis": [
+          "project-truth",
+          "repository",
+          "git"
+        ],
+        "reason": "forbidden-symbol",
+        "enforced": true,
+        "blockEligible": true,
+        "drift": false,
+        "semanticCandidate": false,
+        "violationKey": "vk-623e0521454d61e9",
+        "provenance": "introduced"
+      }
+    ],
+    "evidence": [
+      {
+        "id": "ev-1de52c17d4ff8f01",
+        "basis": "git",
+        "kind": "diff",
+        "contentHash": "sha256:27a3485aa079399fffd1784a1554ed866405ad940d778a0ca0aa40fc3f79121b",
+        "summary": "src/auth/late-session-store.ts @@ -4,1 +4,1",
+        "pointer": {
+          "kind": "diff",
+          "path": "src/auth/late-session-store.ts",
+          "lines": [
+            4,
+            4
+          ],
+          "change": "modified",
+          "commit": "a005baaff53bb6a5b5931da448d47ec06a17f5f4",
+          "contentHash": "sha256:27a3485aa079399fffd1784a1554ed866405ad940d778a0ca0aa40fc3f79121b"
+        },
+        "metadata": {
+          "oldStart": 4,
+          "oldLines": 1,
+          "newStart": 4,
+          "newLines": 1,
+          "oldBlob": "2ee10ea3d2114c7dcbe84c03b74fd5b68a8e5177",
+          "newBlob": "1c82400897271287bfe0e99d55af20287b1a0900"
+        }
+      },
+      {
+        "id": "ev-9130d1a243ee3054",
+        "basis": "project-truth",
+        "kind": "decision",
+        "entity": {
+          "type": "decision",
+          "id": "D-001"
+        },
+        "source": {
+          "path": ".duo-project/decisions/D-001.yaml",
+          "startLine": 1,
+          "startColumn": 1,
+          "endLine": 14,
+          "endColumn": 82
+        },
+        "contentHash": "sha256:634ba75a7164919f1407857973300f1e653d1ba8b45a0546cd03a4048eef47e9",
+        "summary": "D-001 Stateless authentication",
+        "pointer": {
+          "kind": "decision",
+          "id": "D-001",
+          "path": ".duo-project/decisions/D-001.yaml",
+          "lines": [
+            1,
+            14
+          ],
+          "contentHash": "sha256:634ba75a7164919f1407857973300f1e653d1ba8b45a0546cd03a4048eef47e9"
+        }
+      },
+      {
+        "id": "ev-d9379f2e32b289be",
+        "basis": "repository",
+        "kind": "symbol",
+        "entity": {
+          "type": "symbol",
+          "path": "src/auth/late-session-store.ts",
+          "symbol": "LateSessionStore.put"
+        },
+        "source": {
+          "path": "src/auth/late-session-store.ts",
+          "startLine": 3,
+          "startColumn": 3,
+          "endLine": 5,
+          "endColumn": 4
+        },
+        "contentHash": "sha256:5238c8ee9485224639f5449d502416af0b22aec5858b11266757770588bfae73",
+        "summary": "src/auth/late-session-store.ts#LateSessionStore.put",
+        "pointer": {
+          "kind": "symbol",
+          "path": "src/auth/late-session-store.ts",
+          "symbol": "LateSessionStore.put",
+          "lines": [
+            3,
+            5
+          ],
+          "commit": "a005baaff53bb6a5b5931da448d47ec06a17f5f4",
+          "contentHash": "sha256:5238c8ee9485224639f5449d502416af0b22aec5858b11266757770588bfae73"
+        }
+      }
+    ],
+    "gaps": {
+      "format": "duo.gap-assessment/1",
+      "status": "assessed",
+      "gaps": [
+        {
+          "id": "rgap-9a182c1b3f2a",
+          "source": "runtime",
+          "kind": "missing-intent",
+          "anchors": [
+            {
+              "type": "symbol",
+              "path": "src/auth/late-session-store.ts",
+              "symbol": "LateSessionStore.put"
+            }
+          ],
+          "relevance": "direct",
+          "reasons": [
+            {
+              "code": "no-confirmed-intent"
+            }
+          ],
+          "action": "surface"
+        }
+      ],
+      "requiresHumanInput": false,
+      "additional": [],
+      "technicalLimitations": [
+        "calls-exact-only",
+        "files-by-path",
+        "no-diff"
+      ],
+      "metrics": {
+        "declaredConsidered": 0,
+        "runtime": 1,
+        "direct": 1,
+        "related": 0,
+        "none": 0,
+        "ask": 0,
+        "surface": 1,
+        "ignore": 0,
+        "llmCalls": 0
+      }
+    },
+    "context": {
+      "profile": "review",
+      "seeds": [
+        "sym:src/auth/late-session-store.ts#LateSessionStore.put"
+      ],
+      "review": "sha256:1781cf33c82f1771075be1297afee27ee03c68d368acf2e757ae8ce14f9b28e6"
+    },
+    "limitations": [
+      {
+        "code": "calls-exact-only",
+        "message": "CALLS edges exist only for exactly resolved calls; instance, dynamic and injected calls are not in the graph."
+      },
+      {
+        "code": "no-task-scope",
+        "message": "No task was given, so scope drift against a task context is not checked."
+      }
+    ],
+    "semanticAssist": {
+      "candidates": [],
+      "claims": [],
+      "evidence": [],
+      "calls": 0,
+      "cacheHits": 0,
+      "status": "not-requested",
+      "skippedChecks": []
+    },
+    "metrics": {
+      "changedFiles": 1,
+      "changedHunks": 1,
+      "diffSeeds": 1,
+      "claims": {
+        "ALIGNED": 0,
+        "PARTIAL": 0,
+        "CONFLICT": 1,
+        "UNKNOWN": 0
+      },
+      "evidence": {
+        "project-truth": 1,
+        "repository": 1,
+        "git": 1,
+        "test": 0,
+        "llm": 0
+      },
+      "contextTokens": 324,
+      "taskContextTokens": 0,
+      "semanticCandidates": 0,
+      "llmCalls": 0,
+      "llmCacheHits": 0
+    },
+    "diagnostics": []
+  },
+  "meta": {
+    "performance": {
+      "totalMs": 2551,
+      "freshnessMs": 737,
+      "diffMs": 1784,
+      "contextMs": 20,
+      "gapMs": 1,
+      "rulesMs": 5,
+      "semanticMs": 0
+    }
+  },
+  "diagnostics": []
+}

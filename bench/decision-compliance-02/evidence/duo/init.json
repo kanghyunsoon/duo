@@ -1,0 +1,209 @@
+{
+  "format": "duo.cli.init/1",
+  "command": "init",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "steps": {
+      "repository": {
+        "status": "ok",
+        "detail": "session-fixture-02 · typescript · 5 files · branch t0-adoption"
+      },
+      "truth": {
+        "status": "existing"
+      },
+      "index": {
+        "status": "ok",
+        "detail": "full (no-state) · 8 files"
+      },
+      "baseline": {
+        "status": "ok",
+        "detail": "19a1f84c6019 · 2 pre-existing findings"
+      }
+    },
+    "plan": {
+      "state": "initialized",
+      "observed": {
+        "provenance": "observed",
+        "name": {
+          "value": "session-fixture-02",
+          "source": {
+            "path": "package.json",
+            "field": "name",
+            "kind": "manifest"
+          }
+        },
+        "git": {
+          "branch": "t0-adoption",
+          "headOid": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+          "detached": false,
+          "unborn": false,
+          "shallow": false
+        },
+        "files": {
+          "indexable": 5,
+          "excluded": {
+            "duo-agent-integration": 2
+          }
+        },
+        "languages": [
+          {
+            "language": "typescript",
+            "files": 2,
+            "analyzed": true
+          }
+        ],
+        "manifests": [
+          {
+            "path": "package.json",
+            "kind": "npm"
+          }
+        ],
+        "packages": [
+          {
+            "manifest": "package.json",
+            "name": "session-fixture-02"
+          }
+        ],
+        "workspaces": [],
+        "packageManager": {
+          "value": "npm",
+          "source": {
+            "kind": "scan"
+          }
+        },
+        "scripts": [],
+        "technical": [],
+        "stack": {
+          "provenance": "observed",
+          "ecosystems": [
+            {
+              "ecosystem": "npm",
+              "manifests": [
+                "package.json"
+              ]
+            }
+          ],
+          "frameworks": []
+        },
+        "sourceRoots": [
+          {
+            "path": "src",
+            "files": 2
+          }
+        ],
+        "testRoots": [],
+        "colocatedTests": 0,
+        "workingTree": {
+          "workingTreeDirty": false,
+          "dirty": false,
+          "staged": [],
+          "unstaged": [],
+          "untracked": [],
+          "conflicted": [],
+          "counts": {
+            "staged": 0,
+            "unstaged": 0,
+            "untracked": 0,
+            "conflicted": 0
+          },
+          "excludedSecrets": 0,
+          "truncated": false
+        }
+      },
+      "documents": [
+        {
+          "path": "docs/decisions/D-001.md",
+          "kind": "design",
+          "score": 75,
+          "reasons": [
+            "docs-nested",
+            "keyword:decisions"
+          ],
+          "hash": "sha256:87c7fae09d2605dadefd8be9317560efa2f69727ca4cbf56c0c3c585f017b35a",
+          "definitions": 0
+        },
+        {
+          "path": "docs/adoption.md",
+          "kind": "docs",
+          "score": 60,
+          "reasons": [
+            "docs"
+          ],
+          "hash": "sha256:9aee16fcae4eb73b0fd9887e80ef5318f4586ef6bb8358d30f94376a4ee31c50",
+          "definitions": 0
+        }
+      ],
+      "importCandidates": 0,
+      "questions": [],
+      "willCreate": [],
+      "conflicts": []
+    },
+    "index": {
+      "mode": "full",
+      "fullRebuildReason": "no-state",
+      "metrics": {
+        "mode": "full",
+        "fullRebuildReason": "no-state",
+        "files": {
+          "total": 8,
+          "unchanged": 0,
+          "changed": 0,
+          "added": 8,
+          "deleted": 0,
+          "analyzed": 2,
+          "analysisReused": 0,
+          "analysisFailed": 0
+        },
+        "resolution": {
+          "filesModulesRecomputed": 2,
+          "modulesRecomputed": 0,
+          "modulesReused": 0,
+          "filesCallsRecomputed": 2,
+          "callsRecomputed": 2,
+          "callsReused": 0
+        },
+        "history": {
+          "recomputed": true,
+          "commits": 1
+        },
+        "languages": {
+          "file-only": {
+            "files": 3,
+            "parsed": 0,
+            "reused": 0,
+            "failed": 0,
+            "parseMs": 0
+          },
+          "typescript": {
+            "files": 2,
+            "parsed": 2,
+            "reused": 0,
+            "failed": 0,
+            "parseMs": 10
+          }
+        },
+        "graph": {
+          "scopes": 6,
+          "scopesChanged": 6,
+          "nodesAdded": 10,
+          "nodesRemoved": 0,
+          "nodesUpdated": 0,
+          "edgesAdded": 9,
+          "edgesRemoved": 0,
+          "edgesUpdated": 0,
+          "written": true
+        }
+      }
+    },
+    "baseline": {
+      "status": "captured",
+      "id": "adoption-91fb28cfe189f2bc",
+      "path": ".duo-project/reviews/adoption-91fb28cfe189f2bc.json",
+      "dirtyAtAdoption": false,
+      "findings": 2,
+      "headOid": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421"
+    }
+  },
+  "diagnostics": []
+}

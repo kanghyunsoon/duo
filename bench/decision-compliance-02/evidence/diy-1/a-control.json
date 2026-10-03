@@ -1,0 +1,8 @@
+{
+  "rule": "no symbol whose name contains SessionStore (D-001)",
+  "adoptedAt": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+  "base": "a1f589279841677c8af47eebe169b74c7e0c8155",
+  "head": "69715f3b95b0c50ed131ea97f3ed0c540a1327e9",
+  "verdict": "PASS",
+  "findings": []
+}
