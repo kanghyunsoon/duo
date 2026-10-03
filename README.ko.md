@@ -21,7 +21,10 @@ DUO는 변경이 일어난 뒤를 봅니다. 사람이 확정한 Requirement와 
 - **Adoption Baseline.** 기존 저장소에 DUO를 도입할 때 이미 있던 위반을 기록합니다. 이후 Review는 원래 있던 위반(pre-existing)과 변경이 새로 만든 위반(introduced)을 구분합니다.
 - **연결한 모든 Agent에 같은 Project Truth.** Codex와 Claude Code는 DUO의 MCP 서버로 같은 Truth를 읽습니다.
 
-[Decision Compliance Benchmark](docs/benchmarks/decision-compliance-01.md)는 고정된 legacy + 새 위반 fixture에서 공개된 DUO와, 대조군으로 한 규칙용 script와 AI 리뷰를 실행해 이 차이를 시험합니다. 그 fixture에서는 셋 모두 변경을 같은 방식으로 분류했고, 문서에 무엇이 달랐는지와 raw evidence, 한계를 적었습니다.
+두 Decision Compliance Benchmark가 고정된 fixture에서 공개된 DUO와, 대조군으로 직접 만든 script와 AI 리뷰를 실행해 이 주장들을 시험하고 raw evidence와 한계를 공개합니다. 두 benchmark 모두 대조군이 DUO와 같은 판정에 이르렀고, 무엇이 달랐는지를 기록했습니다.
+
+- [Benchmark 1: Legacy + New Violation](docs/benchmarks/decision-compliance-01.md)
+- [Benchmark 2: Adoption Provenance + Supersession](docs/benchmarks/decision-compliance-02.md)
 
 ## Decision drift 예시
 
@@ -255,7 +258,7 @@ DUO는 [Apache License 2.0](LICENSE)으로 배포합니다. 배포 package에 �
 
 - [문서 지도](docs/README.md)
 - [0.2.0 release notes](docs/release/notes-0.2.0.md) · [호환성](docs/release/compatibility.md) · [제품 계약](docs/release/product-contract.md) · [release checklist](docs/release/checklist.md)
-- [Decision Compliance Benchmark](docs/benchmarks/decision-compliance-01.md) · [Performance benchmark](docs/performance-benchmark.md)
+- Decision Compliance Benchmarks: [1](docs/benchmarks/decision-compliance-01.md) · [2](docs/benchmarks/decision-compliance-02.md) · [Performance benchmark](docs/performance-benchmark.md)
 - [제품 비전](docs/00-product-vision.md) · [요구사항](docs/01-requirements.md) · [아키텍처](docs/02-system-architecture.md) · [ADR](docs/adr/README.md)
 - [미결 사항과 결정 기록](docs/conflicts.md)
 

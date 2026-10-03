@@ -168,6 +168,7 @@ node bench/decision-compliance/external.mjs --tool codex --scenario control-only
 - The adoption baseline and the diff base are the same commit here. The fixture does not separate "existed at adoption" (DUO) from "existed before this change" (the DIY gate and the AI review). A violation added after adoption and touched by a later change would tell them apart; that case is not tested.
 - The Codex runs went through a local proxy, and the serving model was not independently verified.
 - The Codex review command cannot take extra instructions with `--commit`, so Codex and DUO got the intent through different channels (instruction file versus Decision file).
+- Correction found during Benchmark 2 (2026-10-04): the three recorded control-only Codex runs had the change commit checked out while reviewing the control-only commit. `AGENTS.md` is identical in both commits, so the policy text was the same, but the working tree also held the change commit's files. The change-commit runs were not affected (the reviewed commit was checked out). [external.mjs](../../bench/decision-compliance/external.mjs) now checks out the reviewed commit; the recorded runs were not repeated.
 - The DIY gate was written knowing the fixture. It is meant as an upper bound on how little code one fixed rule needs, not as a general tool.
 - Decision lifecycle, locks and supersession (DUO's other claims) are not exercised; a decision-history benchmark is the next step.
 

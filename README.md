@@ -21,7 +21,10 @@ DUO works on the other side of the change. It keeps human-confirmed Requirements
 - **Adoption baseline.** When you adopt DUO in an existing repository, it records the violations that already exist. Later reviews tell a violation that was already there (pre-existing) from one a change introduced.
 - **One Project Truth for every connected agent.** Codex and Claude Code read the same Truth through DUO's MCP server.
 
-The [Decision Compliance Benchmark](docs/benchmarks/decision-compliance-01.md) tests this on a fixed legacy + new violation fixture with the published DUO, a one-rule script and an AI review as controls. In that fixture all three classified the change the same way; the benchmark lists what differed, its raw evidence and its limits.
+Two Decision Compliance Benchmarks test these claims on fixed fixtures with the published DUO, bespoke scripts and an AI review as controls, and publish raw evidence and limits. In both, the controls reached the same decisions as DUO; the benchmarks record what differed.
+
+- [Benchmark 1: Legacy + New Violation](docs/benchmarks/decision-compliance-01.md)
+- [Benchmark 2: Adoption Provenance + Supersession](docs/benchmarks/decision-compliance-02.md)
 
 ## A Decision drift example
 
@@ -255,7 +258,7 @@ Please report vulnerabilities through GitHub Private Vulnerability Reporting, no
 
 - [Documentation map](docs/README.md) (the design documents are written in Korean)
 - [Release notes 0.2.0](docs/release/notes-0.2.0.md) · [Compatibility](docs/release/compatibility.md) · [Product contract](docs/release/product-contract.md) · [Release checklist](docs/release/checklist.md)
-- [Decision Compliance Benchmark](docs/benchmarks/decision-compliance-01.md) · [Performance benchmark](docs/performance-benchmark.md)
+- Decision Compliance Benchmarks: [1](docs/benchmarks/decision-compliance-01.md) · [2](docs/benchmarks/decision-compliance-02.md) · [Performance benchmark](docs/performance-benchmark.md)
 - [Product vision](docs/00-product-vision.md) · [Requirements](docs/01-requirements.md) · [Architecture](docs/02-system-architecture.md) · [ADRs](docs/adr/README.md)
 - [Open questions and decisions](docs/conflicts.md)
 
