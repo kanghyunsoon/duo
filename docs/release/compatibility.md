@@ -45,3 +45,16 @@
 **0.1.x project.yaml.** llm 절 없음, `provider: none`, `provider: openai-responses`(key 없으면 LLM만 unavailable) 모두 0.2.0에서 그대로 parse되고 status·doctor·index·context·review가 동작한다. 새 필드는 `openai-compatible`에서만 필수다.
 
 **0.1.2에서 만든 index.** 첫 확인은 `stale`이다(silent current 없음). `duoctl index` 한 번(incremental, 유효한 analysis cache 재사용)으로 `current`가 된다. Truth 파일, Requirement·Decision 상태, adoption baseline은 그대로 읽히며 re-init·re-adoption·migration이 없다.
+
+## 0.2.1 변경 분류 (T32.4, H-65)
+
+0.2.0 → 0.2.1은 packaging-only patch다. 위 freeze 대상은 하나도 바뀌지 않았다.
+
+| 분류 | 내용 |
+|---|---|
+| Packaging | runtime dependency 트리를 package가 직접 싣는다(`bundleDependencies`, `node_modules/` 67 package, `dist/runtime-tree.json`). `npm-shrinkwrap.json`은 package에 없고 저장소의 build-time release lock으로 남는다. 설치 트리 = runtime tree를 npm 10/11/12의 global·project-local 설치에서 검증한다(C242) |
+| Unchanged | 모든 CLI·MCP·UI API 형식, MCP tool 9개와 input schema, `duo.review-record/1`, `duo.adoption-baseline/2`, project.yaml `schema_version: 1`, 명령·옵션·종료 코드, runtime 동작 |
+| Runtime | Node.js `>=24.15.0`. runtime dependency version은 0.2.0 lock과 같다(release lock diff는 package version 두 곳) |
+| Internal-only | `dist/runtime-tree.json`(`duo.runtime-tree/1`)은 release tooling metadata이며 공개 계약이 아니다. `.dist/release-candidate.json`은 `duo.release-candidate/2`, `.dist/release-audit.json`은 `duo.release-audit/2` |
+
+**0.2.0에서 만든 index.** analysis identity(analyzer·resolution·relation rules version)가 같으므로 0.2.1의 첫 확인은 `current`이고, 그 뒤 `duoctl index`는 parse 0·Graph 쓰기 없이 끝난다. Truth, adoption baseline, agent 설정은 그대로이며 re-init·re-adoption·migration이 없다.

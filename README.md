@@ -257,7 +257,7 @@ Please report vulnerabilities through GitHub Private Vulnerability Reporting, no
 ## Documentation
 
 - [Documentation map](docs/README.md) (the design documents are written in Korean)
-- [Release notes 0.2.0](docs/release/notes-0.2.0.md) · [Compatibility](docs/release/compatibility.md) · [Product contract](docs/release/product-contract.md) · [Release checklist](docs/release/checklist.md)
+- [Release notes 0.2.1](docs/release/notes-0.2.1.md) · [0.2.0](docs/release/notes-0.2.0.md) · [Compatibility](docs/release/compatibility.md) · [Product contract](docs/release/product-contract.md) · [Release checklist](docs/release/checklist.md)
 - Decision Compliance Benchmarks: [1](docs/benchmarks/decision-compliance-01.md) · [2](docs/benchmarks/decision-compliance-02.md) · [Performance benchmark](docs/performance-benchmark.md)
 - [Product vision](docs/00-product-vision.md) · [Requirements](docs/01-requirements.md) · [Architecture](docs/02-system-architecture.md) · [ADRs](docs/adr/README.md)
 - [Open questions and decisions](docs/conflicts.md)

@@ -23,12 +23,13 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [performance-benchmark.md](performance-benchmark.md) | TASK-019 benchmark 방법, 기준 환경, index·Context·Review·MCP·UI 측정, C145 원인, 적용한 최적화, T23 real-world baseline(고정 SHA 5개 저장소, A/B 비교, 3 OS 수동 workflow) |
 | [benchmarks/decision-compliance-01.md](benchmarks/decision-compliance-01.md) | Decision Compliance Benchmark 1 (Legacy + New Violation, T31, H-64): 고정 TypeScript fixture에서 published DUO 0.2.0, 한 규칙용 DIY gate, Codex review를 축별로 비교(종합 점수 없음), raw evidence, 재현 방법, 한계, 반증 기준. performance benchmark와 별개 |
 | [benchmarks/decision-compliance-02.md](benchmarks/decision-compliance-02.md) | Decision Compliance Benchmark 2 (Adoption Provenance + Supersession, T32, H-64): adoption 뒤 debt(diff base ≠ adoption)와 D-001 → D-002 supersede timeline에서 published DUO 0.2.0, DIY-0/1/2, Codex + 문서를 축별 비교, 반증 결과, product-thesis checkpoint(C) |
-| [release/checklist.md](release/checklist.md) | release 명령, version별 release 기록(0.2.0, 0.1.2, 0.1.1, 0.1.0: 준비 항목과 최종 상태), publish 순서, limitation |
+| [release/checklist.md](release/checklist.md) | release 명령, version별 release 기록(0.2.1 RC, 0.2.0, 0.1.2, 0.1.1, 0.1.0: 준비 항목과 최종 상태), publish 순서, limitation |
 | [release/notes-0.1.1.md](release/notes-0.1.1.md) | 0.1.1 release notes |
 | [release/notes-0.1.2.md](release/notes-0.1.2.md) | 0.1.2 release notes |
+| [release/notes-0.2.1.md](release/notes-0.2.1.md) | 0.2.1 release notes: packaging patch(C242). runtime dependency 트리를 package가 직접 싣는다(bundleDependencies, dist/runtime-tree.json), 영향, 호환성 |
 | [release/notes-0.2.0.md](release/notes-0.2.0.md) | 0.2.0 release notes: correctness, freshness, doctor, ambiguity 안내, OpenAI-compatible provider, 호환성, upgrade, known limitations |
 | [release/decision-packets.md](release/decision-packets.md) | 사람 결정 요청: REQ-NFR-004, DUO LICENSE, npm scope·공개 저장소, 실제 OpenAI smoke |
-| [release/compatibility.md](release/compatibility.md) | 0.1.0 format freeze, breaking change 정책, 0.2.0 변경 분류(additive, behavior correction, internal) |
+| [release/compatibility.md](release/compatibility.md) | 0.1.0 format freeze, breaking change 정책, 0.2.0 변경 분류(additive, behavior correction, internal), 0.2.1 분류(packaging only) |
 | [release/product-contract.md](release/product-contract.md) | 제품 계약 18개(0.1.0의 #1~#15, 0.2.0에서 더한 #16 Doctor, #17 OpenAI-Compatible Provider, #18 0.1.x upgrade)와 검증 위치(RC artifact / workspace) |
 | [roadmap/0.1.1-hardening.md](roadmap/0.1.1-hardening.md) | T21 Post-release Hardening: Windows UI E2E 원인과 수정, publish 후 검증, freshness profile, Node 22 실험, UX gap, 다음 버전 후보 |
 | [roadmap/0.2.0-audit.md](roadmap/0.2.0-audit.md) | T22 0.2.0 Audit: 0.1.2 security 해결 기록, real-world 성능 5개 저장소, freshness 결론, L1 correctness issue, Context 품질, analyzer matrix, Node 22, onboarding, provider 결정점, 0.2.0 milestone 제안, T23 spec |

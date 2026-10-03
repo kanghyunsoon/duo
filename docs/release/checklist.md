@@ -6,14 +6,30 @@
 
 | 명령 | 내용 | network |
 |---|---|---|
-| `pnpm release:lock` | `apps/cli/npm-shrinkwrap.json` 재생성(의존성 변경 시). diff를 검토해 커밋 | 필요 |
-| `pnpm release:pack` | clean tree 확인 → build → pack → `.dist/release-candidate.json`(commit, branch, clean, version, hash). dirty면 거부(`DUO_RELEASE_ALLOW_DIRTY=1`은 시험용) | 불필요 |
-| `pnpm release:audit` | shrinkwrap 트리의 npm advisory와 deprecated 검사 → `.dist/release-audit.json` | 필요 |
+| `pnpm release:lock` | build-time release lock `apps/cli/npm-shrinkwrap.json` 재생성(의존성·version 변경 시, H-65). 기존 lock을 seed로 써서 바뀌어야 하는 항목만 다시 고른다. diff를 검토해 커밋 | 필요 |
+| `pnpm release:pack` | clean tree 확인 → build → pack(release lock을 격리 `npm ci`로 설치해 `node_modules/`에 bundle, `dist/runtime-tree.json`) → `.dist/release-candidate.json`(`duo.release-candidate/2`: commit, branch, clean, version, hash, runtime tree). dirty면 거부(`DUO_RELEASE_ALLOW_DIRTY=1`은 시험용) | 필요(release lock 설치, npm cache가 있으면 cache) |
+| `pnpm release:audit` | source: release lock의 npm advisory와 deprecated 검사. artifact: pack한 runtime tree(`dist/runtime-tree.json`)가 그 lock과 같은 package(경로·version·integrity)인지 → `.dist/release-audit.json`(`duo.release-audit/2`) | 필요 |
 | `pnpm release:preflight` | git·CI → verify, grammar, benchmark smoke, 배포 E2E → release:pack → 재현성 → metadata·allowlist·secret·절대경로 → dependency·license → npm identity·registry·scope·version → `npm publish --dry-run` → OpenAI smoke 결과(선택 검증, blocker 아님). 검증 단계에 `release:upgrade`가 포함된다 | 필요 |
-| `pnpm release:upgrade` | upgrade journey(T28): registry의 이전 version(기본 0.1.2)과 RC를 격리 prefix 두 곳에 설치 → 이전 version이 TypeScript·Python·C++·sparse 저장소를 도입(0.1.x project.yaml 변형 A~E, Codex 연결) → RC 설치본으로 `--version`·status(stale)·doctor·index·status(current)·context·review·install verify → Truth byte·baseline·re-init·migration 확인 → `.dist/release-upgrade.json`. preflight가 이 commit·RC의 성공 결과를 요구한다 | 필요(이전 version 설치) |
+| `pnpm release:upgrade` | upgrade journey(T28): registry의 이전 version(기본 0.2.0)과 RC를 격리 prefix 두 곳에 설치 → 이전 version이 TypeScript·Python·C++·sparse 저장소를 도입(0.1.x project.yaml 변형 A~E, Codex 연결) → RC 설치본으로 `--version`·status·doctor·index·status(current)·context·review·install verify. 이전 index가 stale·incompatible이면 index 한 번으로 current, current로 보고되면 다음 index가 parse 0·Graph 쓰기 없음이어야 한다 → Truth byte·baseline·re-init·migration 확인 → `.dist/release-upgrade.json`. preflight가 이 commit·RC의 성공 결과를 요구한다 | 필요(이전 version 설치) |
 | `pnpm test:openai-smoke` | 선택: 실제 OpenAI Responses 호출(공식 `api.openai.com`, `DUO_OPENAI_SMOKE=1`, `OPENAI_API_KEY`, `DUO_OPENAI_SMOKE_MODEL`). `.dist/openai-smoke.json`에 commit, model, 확인 항목만 기록 | 필요 |
-| `pnpm test:conformance` | RC를 격리 prefix에 설치 → shrinkwrap 트리·notices → C209 init 반복(`DUO_C209_RUNS`, 기본 20) → 설치된 duoctl로 CLI·MCP·install journey와 RC 전용 검사 → 문서·help 대조 → `.dist/release-conformance.json` | 필요(npm install) |
-| `pnpm release:verify-published` | publish **뒤** 확인(T21): registry의 name·version·integrity·license·engines·bin → 빈 npm 설정과 새 cache로 임시 prefix에 `npm install -g` → 설치된 파일 수·LICENSE·shrinkwrap → PATH의 `duoctl --version`·`--version --json`·`--help` → 새 Git 저장소에서 `init`→`status` → origin의 `v<version>` tag commit → GitHub Release(draft 아님) → `.dist/release-published.json`. 기대 integrity와 commit은 `--integrity`·`--commit` 또는 같은 version의 `.dist/release-candidate.json`. publish·tag·login을 하지 않고 npm credential을 읽지 않는다. CI와 `pnpm verify`에는 넣지 않는다 | 필요 |
+| `pnpm test:conformance` | RC를 격리 prefix에 설치 → runtime tree(설치 트리 = `dist/runtime-tree.json`, package 밖 설치 0)·notices → C209 init 반복(`DUO_C209_RUNS`, 기본 20) → 설치된 duoctl로 CLI·MCP·install journey와 RC 전용 검사 → 문서·help 대조 → `.dist/release-conformance.json` | 필요(npm install) |
+| `pnpm release:verify-published` | publish **뒤** 확인(T21): registry의 name·version·integrity·license·engines·bin → 빈 npm 설정과 새 cache로 임시 prefix에 `npm install -g` → 설치된 파일 수(bundled `node_modules/` 포함, npm이 만든 `.bin` 제외)·LICENSE·runtime tree(0.2.1부터 설치 트리 = `dist/runtime-tree.json`, 그 전 version은 `npm-shrinkwrap.json` 존재) → PATH의 `duoctl --version`·`--version --json`·`--help` → 새 Git 저장소에서 `init`→`status` → origin의 `v<version>` tag commit → GitHub Release(draft 아님) → `.dist/release-published.json`. 기대 integrity와 commit은 `--integrity`·`--commit` 또는 같은 version의 `.dist/release-candidate.json`. publish·tag·login을 하지 않고 npm credential을 읽지 않는다. CI와 `pnpm verify`에는 넣지 않는다 | 필요 |
+
+## 0.2.1 (H-65, C242, release candidate)
+
+Packaging patch([release notes](notes-0.2.1.md), [호환성 분류](compatibility.md#021-변경-분류-t324-h-65)). npm 12와 local tarball 설치가 package 안의 `npm-shrinkwrap.json`을 따르지 않아 0.2.0의 release-locked tree가 깨졌다(C242, 공개 0.2.0 영향 B). runtime code, 공개 형식, Truth, 명령은 0.2.0과 같다. 다른 변경은 넣지 않는다(C229·C239·C240·C241, package description, `--help` 첫 줄, README 재설계는 범위 밖).
+
+- [x] PoC(임시 사본): `bundleDependencies` B1(`true`)·B2(직접 의존성 12개 목록) 모두 tarball에 67 package(transitive 포함, 중첩 0, symlink 0), 서로 다른 두 `npm ci` 결과로 다시 pack해도 integrity 동일, npm 10.9.9/11.21.0/12.2.0 global·project-local 설치 트리 = lock
+- [x] 대안 비교: A exact pin(mitigation), C esbuild bundle(typescript external·WASM vendoring 필요, runtime 형태 변경), D custom vendoring(기각). H-65 (6)
+- [x] regression test(mechanism 비종속): 설치 트리 = artifact가 기록한 트리(`dist/runtime-tree.json`), global·project-local, package 밖 설치 0
+- [x] pack: release lock → 격리 `npm ci` → `bundleDependencies` + `dist/runtime-tree.json`, bundled package 67개의 notices(license 원문). preflight(runtime tree = lock, `node_modules/` allowlist = 기록한 package, notices, audit), conformance, verify-published, audit(source·artifact)
+- [x] Contract #15 문구(invariant 유지, mechanism은 검증 열)
+- [x] version 0.2.0 → 0.2.1: `apps/cli/package.json`, release lock의 package version 두 곳(의존성 트리 불변), README·07의 현재 version 예시
+- [ ] upgrade journey(`pnpm release:upgrade`, 공개 0.2.0 → RC): 이전 index current 유지(다음 index parse 0·Graph 쓰기 없음), Truth byte 불변
+- [ ] RC tarball 설치 matrix: npm 10/11/12 × global·project-local·`npx --no-install duoctl`, 설치 트리 = `dist/runtime-tree.json`
+- [ ] full CI(3 OS), `pnpm release:preflight` READY(blocker 0), `npm publish --dry-run`(목록 = release candidate)
+- [ ] npm publish, registry 확인, `v0.2.1` tag, GitHub Release, `pnpm release:verify-published`: 사람이 승인한 뒤에만
+
 
 ## 0.2.0 (H-62, 2026-10-03 release, `v0.2.0` = `90a506b`)
 
@@ -95,12 +111,12 @@ Patch release: 사람용 CLI 안내 3개, 테스트, release tooling, 문서([re
 
 ```bash
 pnpm release:preflight          # READY, blocker 0 (release candidate commit에서)
-npm publish .dist/duo-director-cli-0.2.0.tgz --access public --registry https://registry.npmjs.org/
-npm view @duo-director/cli@0.2.0 version dist.integrity --registry https://registry.npmjs.org/   # 전파 확인, integrity = RC
-npm install -g @duo-director/cli@0.2.0 && duoctl --version                                         # clean global install
-git tag -a v0.2.0 -m "DUO 0.2.0" <release candidate commit> && git push origin v0.2.0
-# GitHub Release v0.2.0 (본문: docs/release/notes-0.2.0.md)
-pnpm release:verify-published   # --version 0.2.0 --integrity <RC integrity> --commit <RC commit>
+npm publish .dist/duo-director-cli-0.2.1.tgz --access public --registry https://registry.npmjs.org/
+npm view @duo-director/cli@0.2.1 version dist.integrity --registry https://registry.npmjs.org/   # 전파 확인, integrity = RC
+npm install -g @duo-director/cli@0.2.1 && duoctl --version                                         # clean global install
+git tag -a v0.2.1 -m "DUO 0.2.1" <release candidate commit> && git push origin v0.2.1
+# GitHub Release v0.2.1 (본문: docs/release/notes-0.2.1.md)
+pnpm release:verify-published   # --version 0.2.1 --integrity <RC integrity> --commit <RC commit>
 ```
 
 0.1.0은 `v0.1.0`(`04bab58`), 0.1.1은 `v0.1.1`(`834bc6f`), 0.1.2는 `v0.1.2`(`93010a4`), 0.2.0은 `v0.2.0`(`90a506b`)로 게시했다.
@@ -112,4 +128,4 @@ publish 전후 검증은 짝을 이룬다. publish 전에는 `pnpm release:prefl
 ## 알려진 limitation
 
 - Windows에서 설치 직후 첫 명령이 오래 걸릴 수 있다(기준 환경 17~19 s, 이후 1.4~1.5 s). 새로 설치된 JavaScript 파일의 첫 open 비용이며 DUO 작업과 무관하다([performance-benchmark](../performance-benchmark.md#설치-직후-첫-실행-release-hardening)).
-- shrinkwrap을 쓰므로 transitive dependency의 보안 수정은 새 DUO release 전까지 반영되지 않는다(C163).
+- runtime dependency 트리를 package에 고정해 싣으므로(H-65) transitive dependency의 보안 수정은 새 DUO release 전까지 반영되지 않는다(C163). bundled package도 사용자 프로젝트의 `npm audit` 집계에 포함된다(npm 11 관찰).

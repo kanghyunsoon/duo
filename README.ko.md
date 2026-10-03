@@ -257,7 +257,7 @@ DUO는 [Apache License 2.0](LICENSE)으로 배포합니다. 배포 package에 �
 ## 문서
 
 - [문서 지도](docs/README.md)
-- [0.2.0 release notes](docs/release/notes-0.2.0.md) · [호환성](docs/release/compatibility.md) · [제품 계약](docs/release/product-contract.md) · [release checklist](docs/release/checklist.md)
+- [0.2.1 release notes](docs/release/notes-0.2.1.md) · [0.2.0](docs/release/notes-0.2.0.md) · [호환성](docs/release/compatibility.md) · [제품 계약](docs/release/product-contract.md) · [release checklist](docs/release/checklist.md)
 - Decision Compliance Benchmarks: [1](docs/benchmarks/decision-compliance-01.md) · [2](docs/benchmarks/decision-compliance-02.md) · [Performance benchmark](docs/performance-benchmark.md)
 - [제품 비전](docs/00-product-vision.md) · [요구사항](docs/01-requirements.md) · [아키텍처](docs/02-system-architecture.md) · [ADR](docs/adr/README.md)
 - [미결 사항과 결정 기록](docs/conflicts.md)

@@ -137,7 +137,7 @@ $ duoctl doctor
 DUO Doctor · ready
 
 Runtime
-  ok       duoctl 0.2.0 · Node.js v24.18.0 (supported: >=24.15.0)
+  ok       duoctl 0.2.1 · Node.js v24.18.0 (supported: >=24.15.0)
 
 Git
   ok       Git repository: /work/poly
@@ -239,10 +239,10 @@ DUO 실행 파일 설치, 저장소 초기화, Agent 연결은 서로 다른 단
 3. Coding Agent 연결          duoctl install codex | claude-code
 ```
 
-- **공개 package**: `@duo-director/cli` 하나, bin `duoctl`. 내부 package(`@duo-director/core`, analyzer, graph, director, integration)는 esbuild로 bundle되어 사용자가 따로 설치하지 않는다(C158). 외부 runtime 의존성은 exact version: `@modelcontextprotocol/client`·`server` 2.1.0, `gpt-tokenizer` 4.0.0, `mdast-util-from-markdown` 2.0.3, `mdast-util-frontmatter` 2.0.1, `micromark-extension-frontmatter` 2.0.0, `openai` 7.23.0(T12B, bundle하지 않고 `--semantic`의 첫 호출에서만 불러옴, C193), `smol-toml` 1.9.0, `typescript` 6.0.3, `web-tree-sitter` 0.27.0, `yaml` 2.9.1, `zod` 4.6.5.
-- **포함**: `dist/duoctl.js`(Node 확인 후 CLI를 부르는 실행 파일, shebang), `dist/cli-*.js`(bundle), `dist/grammars/` WASM 일곱 개(typescript, tsx, javascript, java, c_sharp, cpp, python)와 grammar package별 MIT license, `grammars.json`(package, version, repository, license, sha256, bytes, ABI; grammar npm package는 native install script 때문에 의존성이 아님, C159, T18.0), README, package.json. grammar 목록은 analyzer의 `GRAMMAR_FILES` 하나에서 온다. `files` allowlist이며 테스트가 금지 경로(`.env`, credentials, key, `.worklog`, fixtures, `.duo-project`, metrics, coverage, source map)를 검사한다.
+- **공개 package**: `@duo-director/cli` 하나, bin `duoctl`. 내부 package(`@duo-director/core`, analyzer, graph, director, integration)는 esbuild로 bundle되어 사용자가 따로 설치하지 않는다(C158). 외부 runtime 의존성은 exact version: `@modelcontextprotocol/client`·`server` 2.1.0, `gpt-tokenizer` 4.0.0, `mdast-util-from-markdown` 2.0.3, `mdast-util-frontmatter` 2.0.1, `micromark-extension-frontmatter` 2.0.0, `openai` 7.23.0(T12B, esbuild bundle에 넣지 않고 `--semantic`의 첫 호출에서만 불러옴, C193), `smol-toml` 1.9.0, `typescript` 6.0.3, `web-tree-sitter` 0.27.0, `yaml` 2.9.1, `zod` 4.6.5. 0.2.1부터 이 의존성과 transitive 트리(build-time release lock `apps/cli/npm-shrinkwrap.json`, 67 package)는 package 안 `node_modules/`에 그대로 실린다(`bundleDependencies`, H-65, C242). npm은 설치 때 version을 다시 고르지 않고, `dist/runtime-tree.json`이 package별 경로·version·lock integrity·license·content hash를 기록한다.
+- **포함**: `dist/duoctl.js`(Node 확인 후 CLI를 부르는 실행 파일, shebang), `dist/cli-*.js`(bundle), `dist/grammars/` WASM 일곱 개(typescript, tsx, javascript, java, c_sharp, cpp, python)와 grammar package별 MIT license, `grammars.json`(package, version, repository, license, sha256, bytes, ABI; grammar npm package는 native install script 때문에 의존성이 아님, C159, T18.0), `dist/THIRD_PARTY_NOTICES.md`, `dist/runtime-tree.json`, bundled `node_modules/`, README, package.json. grammar 목록은 analyzer의 `GRAMMAR_FILES` 하나에서 온다. `files` allowlist이며 테스트가 DUO 파일의 금지 경로(`.env`, credentials, key, `.worklog`, fixtures, `.duo-project`, metrics, coverage, source map)를 검사하고, `node_modules/`에는 runtime tree가 기록한 package만 있어야 한다(`.npmrc`, `.env`, key, native addon, `binding.gyp` 금지).
 - **요구 사항**: Node.js `>=24.15.0`(package.json `engines`, 실행 파일이 먼저 확인). native build, install script, postinstall, 실행 중 network 없음. pnpm은 개발에만 쓴다.
-- **version**: `apps/cli/package.json` 하나(현재 0.2.0). `duoctl --version`은 같은 값, `--version --json`은 graph·project schema version과 Node version도 보인다.
+- **version**: `apps/cli/package.json` 하나(현재 0.2.1). `duoctl --version`은 같은 값, `--version --json`은 graph·project schema version과 Node version도 보인다.
 - **launcher**: global 설치면 Agent 설정은 `duoctl`. project에 `npm install -D`로 설치했으면 `--launcher npx`가 `npx --no-install duoctl`을 기록하며, `node_modules/.bin/duoctl`이 없으면 installer가 unavailable로 막는다(download하지 않음, C162). `duoctl install`의 verify는 `launcher: {kind, resolved, localBin, version}`을 보인다.
 - **실패 메시지**: Node가 낮음(요구 범위와 현재 version), 설치가 불완전함(빠진 모듈, 재설치 안내), grammar 자산 없음·로드 실패(`ANALYZER_INIT_FAILED`, 자산 이름), launcher 없음(`AGENT_LAUNCHER_UNAVAILABLE`), project schema 불일치(`UNSUPPORTED_SCHEMA_VERSION`, migration 없음). monorepo build를 안내하지 않는다.
 - **만들기와 검증**: `pnpm build` 뒤 `pnpm pack:cli`가 `.dist/cli-package/`와 `.dist/duo-director-cli-<version>.tgz`, `.dist/pack.json`을 만든다. `pnpm test:dist`는 그 tarball을 임시 npm prefix(global)와 임시 project(`npm install -D`)에 설치하고, 저장소와 workspace가 보이지 않는 환경에서 init → index → status → context → review → install codex·claude-code → 생성된 설정으로 MCP 서버 실행, clone 이동, 실패 메시지를 확인한다. 3 OS CI에서 실행한다.
@@ -252,3 +252,5 @@ DUO 실행 파일 설치, 저장소 초기화, Agent 연결은 서로 다른 단
 | tarball | 500,057 B | 1,247,988 B |
 | unpacked | 3,930,557 B(WASM 약 3.27 MB, bundle 약 652 KB) | 13,676,280 B(WASM 12,929,293 B, bundle 약 734 KB, 19 files) |
 | global 설치 | package 70개, 약 83.8 MB(대부분 `typescript`, `gpt-tokenizer`) | package 70개, 약 93.6 MB; T12B: 71개, 약 113.5 MB(`openai` 7.23.0 약 20 MB, tarball 1,250,899 B) |
+
+0.2.1(H-65): tarball 24,333,166 B, unpacked 114,025,940 B, 7,468 files(bundled `node_modules/` 67 package, 7,443 files). global 설치의 디스크 사용량은 0.2.0과 거의 같다(Windows, npm 11: 0.2.0 registry 설치 7,481 files 113,917,442 B, bundled 방식 7,479 files 113,876,352 B). 다운로드만 커진다.
