@@ -1,0 +1,25 @@
+{
+  "tool": "claude-code",
+  "status": "NOT RUN",
+  "reason": "account/session unavailable",
+  "date": "2026-10-04",
+  "client": "Claude Code 2.1.258",
+  "checks": [
+    {
+      "command": "claude auth status",
+      "observed": {
+        "loggedIn": false,
+        "authMethod": "none"
+      }
+    },
+    {
+      "command": "ocx claude -p '<one-word test prompt>' --output-format json",
+      "observed": {
+        "is_error": true,
+        "terminal_reason": "api_error",
+        "result": "Failed to authenticate: OAuth session expired and could not be refreshed"
+      }
+    }
+  ],
+  "note": "No review prompt was sent. Authentication was not bypassed; a later run needs a working Claude Code session (see docs/benchmarks/decision-compliance-01.md, External tool protocol)."
+}

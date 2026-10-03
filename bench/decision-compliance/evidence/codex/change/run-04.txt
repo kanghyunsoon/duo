@@ -1,0 +1,9 @@
+The patch introduces a new `RedisSessionStore`, which directly violates the repository's stateless-authentication decision and is a blocking issue. The legacy session store edit is also reportable per the same rule, though non-blocking on its own.
+
+Full review comments:
+
+- [P1] Remove the new RedisSessionStore symbol — <fixture>/src/auth/redis-session-store.ts:1-1
+  This adds a new authentication class whose name contains `SessionStore`, and it stores user state server-side in a `Map`; D-001 explicitly says stateless authentication must not add new `SessionStore` symbols and that such additions must be blocked (`AGENTS.md:5-7`).
+
+- [P3] Avoid modifying the legacy CookieSessionStore — <fixture>/src/legacy/cookie-session-store.ts:4-4
+  This changes an existing `SessionStore` implementation; D-001 identifies existing session stores as legacy debt and asks reviewers to report touches to them, even though this should not block the change by itself (`AGENTS.md:5-7`).

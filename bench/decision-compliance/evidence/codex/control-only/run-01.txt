@@ -1,0 +1,1 @@
+The commit does not add or modify any SessionStore symbols and the token trimming change is consistent with rejecting blank tokens. No actionable correctness issue is evident from the changed code.

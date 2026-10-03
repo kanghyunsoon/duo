@@ -1,0 +1,6 @@
+The new token signer does not perform a secure signature and would allow forged auth tokens if used for authentication. The trim change itself appears intentional.
+
+Review comment:
+
+- [P1] Use a keyed signature for auth tokens — <fixture>\src\auth\token-signer.ts:3-3
+  When `TokenSigner.sign()` is used to protect an auth token, reversing the payload is deterministic and requires no secret, so anyone who can see or choose a payload can forge the same “signature”. This should use a keyed MAC/signature such as HMAC with a server-side secret to provide integrity.

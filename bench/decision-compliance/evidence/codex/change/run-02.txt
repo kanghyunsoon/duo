@@ -1,0 +1,9 @@
+The patch adds a new SessionStore class in auth code, which is explicitly blocked by the repository's stateless authentication decision. The legacy store modification is also reportable, though not independently blocking.
+
+Full review comments:
+
+- [P1] Remove the new SessionStore symbol — <fixture>\src\auth\redis-session-store.ts:1-1
+  For this new auth code, adding `RedisSessionStore` creates a new server-side session store symbol, which directly violates the stateless-auth decision that forbids new symbols whose name contains `SessionStore` and says such additions must be blocked (`AGENTS.md:7`). Use stateless token handling instead of introducing this store.
+
+- [P3] Avoid changing legacy SessionStore behavior — <fixture>\src\legacy\cookie-session-store.ts:4-4
+  Because this change touches the existing `CookieSessionStore`, it falls under the stateless-auth guidance to report modifications to legacy `SessionStore` symbols even though they are not blocking by themselves (`AGENTS.md:7`). If trimming is needed, keep it outside this legacy store or leave the persisted cookie value unchanged.

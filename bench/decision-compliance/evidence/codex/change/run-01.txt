@@ -1,0 +1,9 @@
+The patch introduces a new `SessionStore` symbol and server-side auth state, which the repository’s D-001 rule marks as blocking. The legacy store touch is non-blocking, but the new store makes the patch incorrect.
+
+Full review comments:
+
+- [P1] Remove the new session store — <fixture>\src\auth\redis-session-store.ts:1-1
+  This adds a new authentication class whose name contains `SessionStore` and stores users in a server-side `Map`, which violates the stateless-auth decision and is explicitly blocking for new `*SessionStore*` symbols (`AGENTS.md:7`). Use the token-based/stateless path instead of introducing `RedisSessionStore`.
+
+- [P3] Avoid touching the legacy session store — <fixture>\src\legacy\cookie-session-store.ts:4-4
+  Because this commit modifies the pre-existing `CookieSessionStore`, it touches known legacy session-store debt; D-001 says these touches must be reported even though they are non-blocking (`AGENTS.md:7`). If this trimming behavior is needed, move it outside the legacy store or include it as part of a migration away from the session store.
