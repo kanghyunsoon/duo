@@ -227,8 +227,10 @@ const openaiSmoke = {
 log("OpenAI smoke " + openaiSmoke.status + " (optional, not a release blocker)");
 
 // ---- CI for this exact commit, checked last (the steps above take long enough for CI to finish) ----
+// Only the ci workflow (3 OS verify) counts: realworld-benchmark runs on the same commit when dispatched and must not
+// stand in for it (T28: a finished real-world run could hide a failed or still running ci run).
 let ci = { status: "unknown" };
-const runs = run("gh", ["run", "list", "--commit", git.commit, "--json", "databaseId,status,conclusion", "--limit", "5"]);
+const runs = run("gh", ["run", "list", "--commit", git.commit, "--workflow", "ci.yml", "--json", "databaseId,status,conclusion", "--limit", "5"]);
 if (runs.code === 0) {
   const list = JSON.parse(runs.stdout || "[]");
   const done = list.find((r) => r.status === "completed");
