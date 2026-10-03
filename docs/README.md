@@ -21,6 +21,7 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [12-roadmap.md](12-roadmap.md) | Milestone(M0~M4)과 MVP 이후 |
 | [language-support.md](language-support.md) | Analysis Level(L0~L3), AnalyzerCapabilities, 언어별 지원·한계, stack·build output 판별, grammar (T18.0) |
 | [performance-benchmark.md](performance-benchmark.md) | TASK-019 benchmark 방법, 기준 환경, index·Context·Review·MCP·UI 측정, C145 원인, 적용한 최적화, T23 real-world baseline(고정 SHA 5개 저장소, A/B 비교, 3 OS 수동 workflow) |
+| [benchmarks/decision-compliance-01.md](benchmarks/decision-compliance-01.md) | Decision Compliance Benchmark 1 (Legacy + New Violation, T31, H-64): 고정 TypeScript fixture에서 published DUO 0.2.0, 한 규칙용 DIY gate, Codex review를 축별로 비교(종합 점수 없음), raw evidence, 재현 방법, 한계, 반증 기준. performance benchmark와 별개 |
 | [release/checklist.md](release/checklist.md) | release 명령, version별 release 기록(0.2.0, 0.1.2, 0.1.1, 0.1.0: 준비 항목과 최종 상태), publish 순서, limitation |
 | [release/notes-0.1.1.md](release/notes-0.1.1.md) | 0.1.1 release notes |
 | [release/notes-0.1.2.md](release/notes-0.1.2.md) | 0.1.2 release notes |
