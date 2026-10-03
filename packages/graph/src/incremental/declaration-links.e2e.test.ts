@@ -7,15 +7,18 @@
 import fs from "node:fs";
 import type { AnalyzerRegistry } from "@duo-director/analyzer";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { applyGraphPlan } from "../build/apply.js";
 import { buildGraphPlan } from "../build/builder.js";
 import { collectGraphFacts } from "../build/collect.js";
 import { readDeclarationLinks, type DeclarationLink } from "../build/declaration-links.js";
 import { dumpGraph } from "../check.js";
 import type { GraphStore } from "../store/types.js";
 import { indexRepository } from "./indexer.js";
-import { baseRegistry, cleanRebuild, makeRepo, memoryStore, type TestRepo } from "./testing.js";
+import { baseRegistry, makeRepo, memoryStore, type TestRepo } from "./testing.js";
 
-vi.setConfig({ testTimeout: 240_000, hookTimeout: 240_000 });
+// 300 s like the other e2e files that index real repositories: the evolution test is the slowest file of the suite
+// when every worker is busy (T28 timeout audit: about 45 s alone, over 240 s under full-suite load on Windows).
+vi.setConfig({ testTimeout: 300_000, hookTimeout: 300_000 });
 
 const temps: string[] = [];
 let base: AnalyzerRegistry;
@@ -55,10 +58,19 @@ const FORMS: Record<string, string> = {
 };
 
 const show = (links: readonly DeclarationLink[]) => links.map((l) => `${l.declaration.symbol.slice(4)}@${l.declaration.startLine} -> ${l.definition.symbol.slice(4)}@${l.definition.startLine}`);
-async function cleanLinks(root: string): Promise<string[]> {
+/** The oracle: one clean full build (collect + build + apply into a fresh database), its links and its Graph rows. */
+async function cleanBuild(root: string): Promise<{ links: string[]; graph: ReturnType<typeof dumpGraph> }> {
   const facts = await collectGraphFacts(root, { registry: base, maxCommits: 500 });
   if (facts.value === undefined) throw new Error(JSON.stringify(facts.diagnostics));
-  return show(buildGraphPlan(facts.value).declarationLinks);
+  const plan = buildGraphPlan(facts.value);
+  const store = memoryStore();
+  try {
+    const applied = applyGraphPlan(store, plan);
+    if (applied.value === undefined) throw new Error(JSON.stringify(applied.diagnostics));
+    return { links: show(plan.declarationLinks), graph: dumpGraph(store) };
+  } finally {
+    store.close();
+  }
 }
 async function index(repo: TestRepo, store: GraphStore) {
   const r = await indexRepository(repo.root, { store, registry: base });
@@ -95,8 +107,9 @@ describe("C++ declaration links (T24.3, C218)", () => {
       ]);
       // Not linked: internal linkage (k), template (l), macro (m), header inline body (o), no include (p),
       // different spelling (q), two definitions of one declaration (t), an include path that ends two files (u).
-      expect(await cleanLinks(repo.root)).toEqual(show(readDeclarationLinks(store)));
-      expect(dumpGraph(store)).toEqual(await cleanRebuild(repo.root, base, 500));
+      const clean = await cleanBuild(repo.root);
+      expect(clean.links).toEqual(show(readDeclarationLinks(store)));
+      expect(dumpGraph(store)).toEqual(clean.graph);
     } finally {
       store.close();
     }
@@ -136,8 +149,9 @@ describe("C++ declaration links (T24.3, C218)", () => {
         expect(r.mode, label).toBe("incremental");
         const links = show(readDeclarationLinks(store));
         expect(links, label).toHaveLength(count);
-        expect(links, label).toEqual(await cleanLinks(repo.root));
-        expect(dumpGraph(store), label).toEqual(await cleanRebuild(repo.root, base, 500));
+        const clean = await cleanBuild(repo.root);
+        expect(links, label).toEqual(clean.links);
+        expect(dumpGraph(store), label).toEqual(clean.graph);
       }
       expect(show(readDeclarationLinks(store))).toEqual(["src/BasicApi.h#ns.Basik.Fooz@4 -> src/BasicImpl.cpp#ns.Basik.Fooz@2"]);
     } finally {
