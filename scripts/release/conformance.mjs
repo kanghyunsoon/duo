@@ -2,7 +2,8 @@
 /**
  * pnpm test:conformance — TASK-020 release conformance against the installed release candidate.
  *   1. install the packed tarball into an isolated npm prefix (no workspace, pnpm or NODE_PATH)
- *   2. the installed tree equals npm-shrinkwrap.json; THIRD_PARTY_NOTICES.md covers the UI bundle
+ *   2. the installed runtime tree equals the one the package carries (dist/runtime-tree.json, H-65); THIRD_PARTY_NOTICES.md
+ *      covers the UI bundle and every bundled npm package
  *   3. C209 targeted reproduction (installed duoctl init, --runs N)
  *   4. the subprocess journeys + RC-only checks (vitest.conformance.config.ts) with DUO_CONFORMANCE_CLI
  *   5. README / 07-cli-interface.md commands and options against the installed duoctl --help; old-design phrases
@@ -13,7 +14,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DIST, gitState, npm, readJson, ROOT, run } from "./common.mjs";
+import { compareInstalledTree, DIST, gitState, npm, readJson, ROOT, run } from "./common.mjs";
 
 const args = process.argv.slice(2);
 // CI sets DUO_C209_RUNS (a shorter targeted smoke per OS); the reference environment uses 20.
@@ -37,23 +38,19 @@ if (inst.code !== 0) { console.error(inst.stderr); process.exit(2); }
 const pkgDir = path.join(prefix, ...(IS_WIN ? [] : ["lib"]), "node_modules", "@duo-director", "cli");
 const entry = path.join(pkgDir, "dist", "duoctl.js");
 
-// ---- 2. shrinkwrap tree and notices ----
-const lock = readJson(path.join(pkgDir, "npm-shrinkwrap.json"));
-const treeMismatch = [];
-for (const [k, v] of Object.entries(lock.packages)) {
-  if (k === "") continue;
-  const f = path.join(pkgDir, ...k.split("/"), "package.json");
-  if (!fs.existsSync(f)) { if (!v.optional) treeMismatch.push(k + ": missing"); continue; }
-  const version = readJson(f).version;
-  if (version !== v.version) treeMismatch.push(k + ": " + version + " != " + v.version);
-}
-if (treeMismatch.length > 0) problems.push("installed tree differs from npm-shrinkwrap.json: " + treeMismatch.join(", "));
+// ---- 2. runtime tree and notices ----
+const tree = compareInstalledTree(pkgDir, path.dirname(path.dirname(pkgDir)));
+const treeMismatch = [...tree.mismatches, ...tree.extra.map((d) => d + ": not in the runtime tree"), ...tree.outside.map((d) => d + ": installed outside the package")];
+if (treeMismatch.length > 0) problems.push("installed tree differs from dist/runtime-tree.json: " + treeMismatch.slice(0, 20).join(", "));
 const notices = fs.readFileSync(path.join(pkgDir, "dist", "THIRD_PARTY_NOTICES.md"), "utf8");
 const noticePackages = ["react", "react-dom", "scheduler"].filter((n) => new RegExp("### " + n + "@\\d").test(notices));
 if (noticePackages.length !== 3) problems.push("THIRD_PARTY_NOTICES.md misses a UI bundle package");
+const runtimeTree = readJson(path.join(pkgDir, "dist", "runtime-tree.json"));
+const withoutNotice = runtimeTree.packages.filter((p) => !notices.includes("### " + p.name + "@" + p.version + " (")).map((p) => p.name + "@" + p.version);
+if (withoutNotice.length > 0) problems.push("THIRD_PARTY_NOTICES.md misses bundled packages: " + withoutNotice.join(", "));
 const artifact = { tarball: path.basename(pack.tarball), size: pack.size, unpackedSize: pack.unpackedSize, entryCount: pack.entryCount, integrity: pack.integrity,
-  shrinkwrap: { packages: Object.keys(lock.packages).length - 1, installedTreeMatches: treeMismatch.length === 0 }, notices: noticePackages };
-log("shrinkwrap " + artifact.shrinkwrap.packages + " packages, installed tree " + (treeMismatch.length === 0 ? "matches" : "DIFFERS") + "; notices " + noticePackages.join(", "));
+  runtimeTree: { packages: tree.packages, treeHash: tree.treeHash, installedTreeMatches: treeMismatch.length === 0, outside: tree.outside.length }, notices: noticePackages, bundledNotices: runtimeTree.packages.length - withoutNotice.length };
+log("runtime tree " + artifact.runtimeTree.packages + " packages, installed tree " + (treeMismatch.length === 0 ? "matches" : "DIFFERS") + "; notices " + noticePackages.join(", ") + " + " + artifact.bundledNotices + " bundled");
 
 // ---- 3. C209 ----
 log("C209: " + runs + " installed duoctl init runs");

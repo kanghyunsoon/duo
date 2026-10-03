@@ -50,3 +50,43 @@ export function stagedFiles(stage) {
   }
   return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : 1)));
 }
+
+/**
+ * H-65: an installed @duo-director/cli against the runtime tree it carries (dist/runtime-tree.json): every recorded
+ * package at its recorded path inside the package with the recorded version and content hash (the same hash pack-cli
+ * writes), no other package directory inside it, and no third-party package next to it in the install root
+ * (nothing hoisted or fetched). Returns { packages, checked, mismatches, extra, outside }.
+ */
+export function compareInstalledTree(pkgDir, installRoot) {
+  const tree = readJson(path.join(pkgDir, "dist", "runtime-tree.json"));
+  const byCode = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  const dirs = (nm, rel) => {
+    const out = [];
+    if (!fs.existsSync(nm)) return out;
+    for (const e of fs.readdirSync(nm, { withFileTypes: true })) {
+      if (e.name.startsWith(".")) continue;
+      const names = e.name.startsWith("@") ? fs.readdirSync(path.join(nm, e.name)).map((s) => e.name + "/" + s) : [e.name];
+      for (const n of names) { out.push(rel + "/" + n); out.push(...dirs(path.join(nm, ...n.split("/"), "node_modules"), rel + "/" + n + "/node_modules")); }
+    }
+    return out;
+  };
+  const mismatches = [];
+  for (const p of tree.packages) {
+    const dir = path.join(pkgDir, ...p.path.split("/"));
+    if (!fs.existsSync(path.join(dir, "package.json"))) { mismatches.push(p.path + ": missing"); continue; }
+    const version = readJson(path.join(dir, "package.json")).version;
+    if (version !== p.version) { mismatches.push(p.path + ": " + version + " != " + p.version); continue; }
+    const files = [];
+    for (const e of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
+      const rel = path.relative(dir, path.join(e.parentPath, e.name)).replaceAll("\\", "/");
+      if (e.isFile() && !rel.split("/").includes("node_modules")) files.push(rel);
+    }
+    files.sort(byCode);
+    const hash = createHash("sha256").update(files.map((f) => f + "\0" + sha256(path.join(dir, ...f.split("/"))) + "\n").join("")).digest("hex");
+    if (files.length !== p.files || hash !== p.contentHash) mismatches.push(p.path + ": content differs (" + files.length + " files, recorded " + p.files + ")");
+  }
+  const recorded = new Set(tree.packages.map((p) => p.path));
+  const extra = dirs(path.join(pkgDir, "node_modules"), "node_modules").filter((d) => !recorded.has(d));
+  const outside = dirs(installRoot, "node_modules").filter((d) => d !== "node_modules/@duo-director/cli" && !d.startsWith("node_modules/@duo-director/cli/"));
+  return { format: tree.format, packages: tree.packages.length, treeHash: tree.treeHash, checked: tree.packages.length - mismatches.filter((m) => m.endsWith(": missing")).length, mismatches, extra, outside };
+}

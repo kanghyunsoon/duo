@@ -14,7 +14,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DIST, npm, readJson, REGISTRY, ROOT, run } from "./common.mjs";
+import { compareInstalledTree, DIST, npm, readJson, REGISTRY, ROOT, run } from "./common.mjs";
 
 const flag = (name) => { const i = process.argv.indexOf("--" + name); return i < 0 ? undefined : process.argv[i + 1]; };
 const cliManifest = readJson(path.join(ROOT, "apps", "cli", "package.json"));
@@ -74,11 +74,21 @@ try {
     if (!install.ok) problem("install", "npm install -g of the published package failed");
     if (install.ok) {
       const installed = readJson(path.join(pkgDir, "package.json"));
-      const files = fs.readdirSync(pkgDir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile() && !path.relative(pkgDir, e.parentPath).split(path.sep).includes("node_modules"));
-      install.package = { name: installed.name, version: installed.version, license: installed.license, files: installed.files, fileCount: files.length, hasLicense: fs.existsSync(path.join(pkgDir, "LICENSE")), hasShrinkwrap: fs.existsSync(path.join(pkgDir, "npm-shrinkwrap.json")) };
+      // The package's files as the tarball held them: bundled dependencies (node_modules/, H-65) included, the bin links
+      // npm creates for them (node_modules/.bin) excluded.
+      const files = fs.readdirSync(pkgDir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile() && !path.relative(pkgDir, e.parentPath).split(path.sep).some((s, i, all) => s === ".bin" && all[i - 1] === "node_modules"));
+      const hasRuntimeTree = fs.existsSync(path.join(pkgDir, "dist", "runtime-tree.json"));
+      install.package = { name: installed.name, version: installed.version, license: installed.license, files: installed.files, fileCount: files.length, hasLicense: fs.existsSync(path.join(pkgDir, "LICENSE")), hasRuntimeTree, hasShrinkwrap: fs.existsSync(path.join(pkgDir, "npm-shrinkwrap.json")) };
       if (installed.name !== name || installed.version !== version) problem("installed-version", "installed " + installed.name + "@" + installed.version);
       if (registry.fileCount !== undefined && files.length !== registry.fileCount) problem("installed-files", "installed " + files.length + " files, registry lists " + registry.fileCount);
-      if (!install.package.hasLicense || !install.package.hasShrinkwrap) problem("installed-contents", "LICENSE or npm-shrinkwrap.json missing from the installed package");
+      // 0.2.1 and later carry their runtime tree (H-65): the installed tree must be exactly it. Earlier versions pinned
+      // the tree with npm-shrinkwrap.json (C163), which is only checked for presence here.
+      if (hasRuntimeTree) {
+        const tree = compareInstalledTree(pkgDir, path.dirname(path.dirname(pkgDir)));
+        install.runtimeTree = { packages: tree.packages, treeHash: tree.treeHash, mismatches: tree.mismatches, extra: tree.extra, outside: tree.outside };
+        if (tree.mismatches.length + tree.extra.length + tree.outside.length > 0) problem("runtime-tree", "the installed dependency tree differs from dist/runtime-tree.json: " + [...tree.mismatches, ...tree.extra, ...tree.outside].slice(0, 10).join(", "));
+      }
+      if (!install.package.hasLicense || !(hasRuntimeTree || install.package.hasShrinkwrap)) problem("installed-contents", "LICENSE or the runtime tree (dist/runtime-tree.json; npm-shrinkwrap.json before 0.2.1) missing from the installed package");
 
       // ---- the installed executable, found on PATH as a user's shell would ----
       const pathEnv = { ...env, PATH: [path.dirname(shim), path.dirname(process.execPath), ...String(env.PATH ?? env.Path ?? "").split(path.delimiter)].join(path.delimiter), DUO_LOCALE: "" };

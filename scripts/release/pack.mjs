@@ -22,15 +22,16 @@ if (packed.code !== 0) { console.error(packed.stdout + packed.stderr); process.e
 const pack = readJson(path.join(DIST, "pack.json"));
 const stage = path.join(DIST, "cli-package");
 const manifest = readJson(path.join(stage, "package.json"));
-const lock = readJson(path.join(stage, "npm-shrinkwrap.json"));
+// H-65: the runtime dependency tree travels inside the package (bundleDependencies), recorded in dist/runtime-tree.json.
+const tree = readJson(path.join(stage, "dist", "runtime-tree.json"));
 const summary = {
-  format: "duo.release-candidate/1",
+  format: "duo.release-candidate/2",
   name: manifest.name, version: manifest.version,
   git: { commit: git.commit, branch: git.branch, clean: git.clean },
   tarball: path.basename(pack.tarball), size: pack.size, unpackedSize: pack.unpackedSize, entryCount: pack.entryCount, integrity: pack.integrity,
   files: stagedFiles(stage),
   dependencies: manifest.dependencies,
-  shrinkwrap: { packages: Object.keys(lock.packages).length - 1 },
+  runtimeTree: { file: "dist/runtime-tree.json", delivery: tree.delivery, bundleDependencies: manifest.bundleDependencies ?? null, packages: tree.packages.length, treeHash: tree.treeHash, lockSha256: tree.lock.sha256 },
 };
 fs.writeFileSync(path.join(DIST, "release-candidate.json"), `${JSON.stringify(summary, null, 2)}\n`);
 console.log(`release:pack: ${summary.tarball} · ${summary.size} B · ${summary.entryCount} files · commit ${git.commit.slice(0, 12)}${git.clean ? "" : " (DIRTY)"}`);

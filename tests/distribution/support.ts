@@ -6,6 +6,7 @@
  * variables are dropped. Nothing here imports workspace source.
  */
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +24,64 @@ export interface PackReport {
   readonly files: readonly { readonly path: string; readonly size: number }[];
   readonly sha256: Readonly<Record<string, string>>;
   readonly dependencies: Readonly<Record<string, string>>;
+  readonly runtimeTree: { readonly file: string; readonly delivery: string; readonly packages: number; readonly files: number; readonly treeHash: string; readonly lockSha256: string } | null;
+}
+
+/** dist/runtime-tree.json (H-65): the release-locked runtime tree the package carries in node_modules/. */
+export interface RuntimeTree {
+  readonly format: string;
+  readonly package: string;
+  readonly delivery: string;
+  readonly lock: { readonly file: string; readonly sha256: string; readonly registry: string };
+  readonly packages: readonly { readonly path: string; readonly name: string; readonly version: string; readonly integrity: string; readonly license: string; readonly files: number; readonly contentHash: string; readonly notPacked?: readonly string[] }[];
+  readonly treeHash: string;
+}
+
+const byCodePoint = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const sha256File = (file: string) => createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+
+/** Package directories under node_modules as lock paths ("node_modules/a", "node_modules/@s/b/node_modules/c"). */
+function packageDirs(nodeModules: string, rel: string): string[] {
+  const out: string[] = [];
+  if (!fs.existsSync(nodeModules)) return out;
+  for (const e of fs.readdirSync(nodeModules, { withFileTypes: true })) {
+    if (e.name.startsWith(".")) continue;
+    const names = e.name.startsWith("@") ? fs.readdirSync(path.join(nodeModules, e.name)).map((s) => `${e.name}/${s}`) : [e.name];
+    for (const n of names) {
+      out.push(`${rel}/${n}`);
+      out.push(...packageDirs(path.join(nodeModules, ...n.split("/"), "node_modules"), `${rel}/${n}/node_modules`));
+    }
+  }
+  return out;
+}
+
+/**
+ * The installed package against the runtime tree it carries: each recorded package at its path inside the package with
+ * the recorded version, file count and content hash (the hash pack-cli writes), no other package inside it, and no
+ * third-party package beside it in the install root (nothing hoisted, nothing fetched from the registry).
+ */
+export function compareInstalledTree(pkgDir: string, installRoot: string): { tree: RuntimeTree; mismatches: string[]; extra: string[]; outside: string[] } {
+  const tree = JSON.parse(fs.readFileSync(path.join(pkgDir, "dist", "runtime-tree.json"), "utf8")) as RuntimeTree;
+  const mismatches: string[] = [];
+  for (const p of tree.packages) {
+    const dir = path.join(pkgDir, ...p.path.split("/"));
+    const manifest = path.join(dir, "package.json");
+    if (!fs.existsSync(manifest)) { mismatches.push(`${p.path}: missing`); continue; }
+    const version = (JSON.parse(fs.readFileSync(manifest, "utf8")) as { version: string }).version;
+    if (version !== p.version) { mismatches.push(`${p.path}: ${version} ≠ ${p.version}`); continue; }
+    const files: string[] = [];
+    for (const e of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
+      const rel = path.relative(dir, path.join(e.parentPath, e.name)).replaceAll("\\", "/");
+      if (e.isFile() && !rel.split("/").includes("node_modules")) files.push(rel);
+    }
+    files.sort(byCodePoint);
+    const hash = createHash("sha256").update(files.map((f) => `${f}\0${sha256File(path.join(dir, ...f.split("/")))}\n`).join("")).digest("hex");
+    if (files.length !== p.files || hash !== p.contentHash) mismatches.push(`${p.path}: content differs (${files.length} files, recorded ${p.files})`);
+  }
+  const recorded = new Set(tree.packages.map((p) => p.path));
+  const extra = packageDirs(path.join(pkgDir, "node_modules"), "node_modules").filter((d) => !recorded.has(d));
+  const outside = packageDirs(installRoot, "node_modules").filter((d) => d !== "node_modules/@duo-director/cli" && !d.startsWith("node_modules/@duo-director/cli/"));
+  return { tree, mismatches, extra, outside };
 }
 
 export function packReport(dir = path.join(REPO, ".dist")): PackReport {

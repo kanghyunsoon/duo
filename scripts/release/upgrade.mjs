@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
  * pnpm release:upgrade — the upgrade journey from the published previous version to the release candidate (T28).
- * Installs the registry package (--from, default 0.1.2) and the packed RC (.dist/pack.json) into two isolated npm
+ * Installs the registry package (--from, default 0.2.0: the latest published version) and the packed RC (.dist/pack.json) into two isolated npm
  * prefixes. Four repositories (TypeScript, Python, C++, sparse Truth) are adopted and indexed by the old duoctl with
  * 0.1.x project.yaml variants (A no llm block, B provider none, C openai-responses without a key, D sparse Truth,
- * E existing adoption with history). Then the installed RC runs: --version, status, doctor, index (when stale),
+ * E existing adoption with history). Then the installed RC runs: --version, status, doctor, index,
  * status, context, review, install codex and claude-code with verify. Checked: Truth bytes unchanged, no re-init,
- * no re-adoption, no Truth migration, a stale index reported as stale (never silently current), one index restores
- * current. Network: the old package from the registry. Publishes nothing.
- *   node scripts/release/upgrade.mjs [--from 0.1.2] [--keep]   → .dist/release-upgrade.json (duo.release-upgrade/1)
+ * no re-adoption, no Truth migration, an out-of-date index reported as stale (never silently current) and one index
+ * restores current; an index the RC reports current must be current (the next index parses nothing and writes
+ * nothing: a packaging-only patch such as 0.2.1 keeps the analysis identity). Network: the old package from the
+ * registry. Publishes nothing.
+ *   node scripts/release/upgrade.mjs [--from 0.2.0] [--keep]   → .dist/release-upgrade.json (duo.release-upgrade/1)
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -17,7 +19,7 @@ import path from "node:path";
 import { DIST, gitState, npm, readJson, REGISTRY, ROOT, run } from "./common.mjs";
 
 const args = process.argv.slice(2);
-const FROM = args.includes("--from") ? args[args.indexOf("--from") + 1] : "0.1.2";
+const FROM = args.includes("--from") ? args[args.indexOf("--from") + 1] : "0.2.0";
 const KEEP = args.includes("--keep");
 const IS_WIN = process.platform === "win32";
 const log = (m) => console.log("upgrade: " + m);
@@ -162,7 +164,7 @@ for (const fx of FIXTURES) {
   const s1 = duo(NEW, root, ["status", "--json"]);
   r.rc.statusBefore = { code: s1.code, initialized: s1.json?.result?.initialized ?? null, index: s1.json?.result?.index ?? null, baseline: s1.json?.result?.baseline?.status ?? null, llm: s1.json?.result?.llm ?? null, truth: s1.json?.result?.truth ?? null, diagnostics: codes(s1.json) };
   check(s1.code === 0 && r.rc.statusBefore.initialized === true, fx.id + ": RC status before index exit " + s1.code + " or not initialized");
-  check(r.rc.statusBefore.index?.status === "stale" || r.rc.statusBefore.index?.status === "incompatible", fx.id + ": the " + FROM + " index is not reported stale/incompatible (" + r.rc.statusBefore.index?.status + ")");
+  check(["stale", "incompatible", "current"].includes(r.rc.statusBefore.index?.status), fx.id + ": the " + FROM + " index is reported " + r.rc.statusBefore.index?.status);
   check(JSON.stringify(r.rc.statusBefore.truth) === JSON.stringify(r.old.status.truth), fx.id + ": Truth counts differ between " + FROM + " and RC");
   const d1 = duo(NEW, root, ["doctor", "--json"]);
   const summarize = (d) => ({ code: d.code, format: d.json?.result?.format ?? null, overall: d.json?.result?.overall ?? null,
@@ -170,8 +172,10 @@ for (const fx of FIXTURES) {
   r.rc.doctorBefore = summarize(d1);
   check(d1.json?.format === "duo.cli.doctor/1" && r.rc.doctorBefore.format === "duo.doctor/1", fx.id + ": doctor formats");
   const ix = duo(NEW, root, ["index", "--json"]);
-  r.rc.index = { code: ix.code, mode: ix.json?.result?.mode ?? null, fullRebuildReason: ix.json?.result?.fullRebuildReason ?? null, diagnostics: codes(ix.json) };
+  r.rc.index = { code: ix.code, mode: ix.json?.result?.mode ?? null, fullRebuildReason: ix.json?.result?.fullRebuildReason ?? null, analyzed: ix.json?.result?.metrics?.files?.analyzed ?? null, written: ix.json?.result?.metrics?.graph?.written ?? null, diagnostics: codes(ix.json) };
   check(ix.code === 0, fx.id + ": RC index exit " + ix.code);
+  // "current" is only true when nothing is out of date: then the index run parses nothing and writes nothing.
+  if (r.rc.statusBefore.index?.status === "current") check(r.rc.index.mode === "incremental" && r.rc.index.analyzed === 0 && r.rc.index.written === false, fx.id + ": the RC reported the " + FROM + " index current but index did work " + JSON.stringify(r.rc.index));
   const s2 = duo(NEW, root, ["status", "--json"]);
   r.rc.statusAfter = { index: s2.json?.result?.index?.status ?? null, baseline: s2.json?.result?.baseline?.status ?? null, llm: s2.json?.result?.llm ?? null };
   check(r.rc.statusAfter.index === "current", fx.id + ": one RC index did not restore current (" + r.rc.statusAfter.index + ")");

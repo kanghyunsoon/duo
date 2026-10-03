@@ -13,7 +13,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { existingProject, type Project } from "../cli/support.js";
-import { codexEntry, dirSize, installedPackages, IS_WIN, isolatedEnv, npm, packReport, recordMetric, REPO, runOnPath, which, type PackReport } from "./support.js";
+import { codexEntry, compareInstalledTree, dirSize, installedPackages, IS_WIN, isolatedEnv, npm, packReport, recordMetric, REPO, runOnPath, which, type PackReport, type RuntimeTree } from "./support.js";
 
 const temps: string[] = [];
 afterAll(() => temps.forEach((t) => fs.rmSync(t, { recursive: true, force: true })));
@@ -57,13 +57,21 @@ beforeAll(() => {
 });
 
 describe("the packed artifact (npm pack is the oracle)", () => {
-  it("holds only the allowlisted files: the executable, the bundle, the grammar WASM and licenses, README, package.json", () => {
+  it("holds only the allowlisted files: the executable, the bundle, the grammar WASM and licenses, README, package.json, and the recorded runtime tree", () => {
     const files = pack.files.map((f) => f.path);
+    const tree = JSON.parse(fs.readFileSync(path.join(REPO, ".dist", "cli-package", "dist", "runtime-tree.json"), "utf8")) as RuntimeTree;
+    const owner = (f: string) => tree.packages.some((p) => f.startsWith(`${p.path}/`));
+    const own = files.filter((f) => !f.startsWith("node_modules/"));
+    const bundled = files.filter((f) => f.startsWith("node_modules/"));
     const grammar = /^dist\/grammars\/(tree-sitter-(typescript|tsx|javascript|java|c_sharp|cpp|python)\.wasm|LICENSE-tree-sitter-(typescript|javascript|java|c-sharp|cpp|python)|grammars\.json)$|^dist\/ui\/(index\.html|app\.js|app\.css)$/u;
-    for (const f of files) expect(f, f).toMatch(/^(package\.json|npm-shrinkwrap\.json|README\.md|LICENSE|dist\/THIRD_PARTY_NOTICES\.md|dist\/duoctl\.js|dist\/cli-[A-Z0-9]+\.js)$/u.test(f) ? /./u : grammar);
+    for (const f of own) expect(f, f).toMatch(/^(package\.json|README\.md|LICENSE|dist\/THIRD_PARTY_NOTICES\.md|dist\/runtime-tree\.json|dist\/duoctl\.js|dist\/cli-[A-Z0-9]+\.js)$/u.test(f) ? /./u : grammar);
     expect(files).toEqual(expect.arrayContaining(["dist/duoctl.js", "dist/grammars/grammars.json", ...["typescript", "tsx", "javascript", "java", "c_sharp", "cpp", "python"].map((g) => `dist/grammars/tree-sitter-${g}.wasm`)]));
+    expect(files).not.toContain("npm-shrinkwrap.json"); // the release lock is a build input (H-65), not shipped
     const forbidden = /(^|\/)(\.env|\.worklog|fixtures|coverage|\.duo-project|node_modules|tmp)(\/|$)|credentials|\.pem$|\.key$|id_rsa|\.p12$|metrics\.jsonl|\.map$|\.test\.|\.tgz$/iu;
-    expect(files.filter((f) => forbidden.test(f))).toEqual([]);
+    expect(own.filter((f) => forbidden.test(f))).toEqual([]);
+    // node_modules/ holds only the packages the runtime tree records; no credentials, packed archives or native addons there.
+    expect(bundled.filter((f) => !owner(f))).toEqual([]);
+    expect(bundled.filter((f) => /(^|\/)(\.npmrc|\.env)$|(^|\/)node_modules\/\.bin\/|\.pem$|\.key$|id_rsa|\.p12$|\.tgz$|\.node$|(^|\/)binding\.gyp$/iu.test(f))).toEqual([]);
   });
 
   it("grammars.json names every vendored grammar: package, exact version, MIT license, sha256 of the packed file, ABI the runtime loads (T18.0)", () => {
@@ -82,8 +90,9 @@ describe("the packed artifact (npm pack is the oracle)", () => {
 
   it("package.json: public name and bin, Node engine, exact runtime dependencies only, no scripts, no workspace links", () => {
     const m = JSON.parse(fs.readFileSync(path.join(REPO, ".dist", "cli-package", "package.json"), "utf8"));
-    expect(m).toMatchObject({ name: "@duo-director/cli", bin: { duoctl: "dist/duoctl.js" }, engines: { node: ">=24.15.0" }, type: "module", files: ["dist", "npm-shrinkwrap.json"] });
-    expect(pack.files.map((f) => f.path)).toContain("npm-shrinkwrap.json");
+    expect(m).toMatchObject({ name: "@duo-director/cli", bin: { duoctl: "dist/duoctl.js" }, engines: { node: ">=24.15.0" }, type: "module", files: ["dist"] });
+    // H-65: every runtime dependency is bundled; npm installs them from the tarball, not from the registry.
+    expect(m.bundleDependencies).toEqual(Object.keys(m.dependencies as Record<string, string>));
     expect(m.version).toMatch(/^0\.\d+\.\d+$/u);
     expect(m.version).toBe(JSON.parse(fs.readFileSync(path.join(REPO, "apps", "cli", "package.json"), "utf8")).version);
     expect(m.scripts).toBeUndefined();
@@ -112,7 +121,7 @@ describe("the packed artifact (npm pack is the oracle)", () => {
     recordMetric("pack", { tarballBytes: pack.size, unpackedBytes: pack.unpackedSize, files: pack.files, integrity: pack.integrity });
   });
 
-  it("Release Hardening: third-party notices cover the code bundled into the UI, the vendored grammars and the runtime dependencies", () => {
+  it("Release Hardening: third-party notices cover the code bundled into the UI, the vendored grammars and every bundled runtime package with its license text", () => {
     const stage = path.join(REPO, ".dist", "cli-package");
     const notices = fs.readFileSync(path.join(stage, "dist", "THIRD_PARTY_NOTICES.md"), "utf8");
     const ui = JSON.parse(fs.readFileSync(path.join(REPO, "packages", "ui", "dist", "licenses.json"), "utf8")) as { packages: { name: string; version: string; text: string }[] };
@@ -121,7 +130,12 @@ describe("the packed artifact (npm pack is the oracle)", () => {
       expect(notices, p.name).toContain(`### ${p.name}@${p.version}`);
       expect(notices, p.name).toContain(p.text.trimEnd());
     }
-    for (const [name, version] of Object.entries(pack.dependencies)) expect(notices).toContain(`- ${name}@${version}`);
+    const tree = JSON.parse(fs.readFileSync(path.join(stage, "dist", "runtime-tree.json"), "utf8")) as RuntimeTree;
+    for (const p of tree.packages) {
+      expect(notices, p.path).toContain(`### ${p.name}@${p.version} (${p.license})`);
+      const licenseFile = fs.readdirSync(path.join(stage, ...p.path.split("/"))).find((f) => /^(licen[cs]e|copying)([-_.][^/]*)?$/iu.test(f));
+      if (licenseFile !== undefined) expect(notices, p.path).toContain(fs.readFileSync(path.join(stage, ...p.path.split("/"), licenseFile), "utf8").replaceAll("\r\n", "\n").trimEnd());
+    }
     expect(notices).toContain("It is not DUO's own license.");
   });
 
@@ -134,20 +148,36 @@ describe("the packed artifact (npm pack is the oracle)", () => {
     expect(license).toBe(fs.readFileSync(path.join(REPO, "LICENSE"), "utf8"));
     expect(license).toContain("Apache License");
     expect(license).toContain("Version 2.0, January 2004");
-    expect(fs.readFileSync(path.join(stage, "dist", "THIRD_PARTY_NOTICES.md"), "utf8")).not.toContain("TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n   1. Definitions.");
+    // DUO's license is not in the third-party notices: no DUO section, and the Apache-2.0 terms appear only inside the
+    // section of a bundled third-party package whose own license file has them (for example typescript, H-65).
+    const notices = fs.readFileSync(path.join(stage, "dist", "THIRD_PARTY_NOTICES.md"), "utf8");
+    const terms = "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION";
+    const [preamble = "", ...sections] = notices.split(/^### /mu);
+    expect(preamble).not.toContain(terms);
+    expect(sections.filter((s) => s.startsWith("@duo-director/"))).toEqual([]);
+    const tree = JSON.parse(fs.readFileSync(path.join(stage, "dist", "runtime-tree.json"), "utf8")) as RuntimeTree;
+    for (const s of sections.filter((x) => x.includes(terms))) {
+      const heading = s.slice(0, s.indexOf("\n"));
+      expect(tree.packages.some((p) => heading.startsWith(`${p.name}@${p.version} `)), heading).toBe(true);
+    }
   });
 
-  it("Release Hardening (C163): npm-shrinkwrap.json pins the runtime tree to registry.npmjs.org; metadata links are public URLs", () => {
+  it("Release lock (C163, H-65): dist/runtime-tree.json is the committed release lock, every package of it is in node_modules/; metadata links are public URLs", () => {
     const stage = path.join(REPO, ".dist", "cli-package");
     const m = JSON.parse(fs.readFileSync(path.join(stage, "package.json"), "utf8"));
-    const lock = JSON.parse(fs.readFileSync(path.join(stage, "npm-shrinkwrap.json"), "utf8")) as { lockfileVersion: number; packages: Record<string, { version?: string; resolved?: string; integrity?: string; name?: string; dependencies?: Record<string, string> }> };
+    const lock = JSON.parse(fs.readFileSync(path.join(REPO, "apps", "cli", "npm-shrinkwrap.json"), "utf8")) as { lockfileVersion: number; packages: Record<string, { version?: string; resolved?: string; integrity?: string; name?: string; dependencies?: Record<string, string> }> };
+    const tree = JSON.parse(fs.readFileSync(path.join(stage, "dist", "runtime-tree.json"), "utf8")) as RuntimeTree;
     expect(lock.lockfileVersion).toBe(3);
     expect(lock.packages[""]).toMatchObject({ name: m.name, version: m.version, dependencies: m.dependencies });
-    for (const [k, v] of Object.entries(lock.packages)) {
-      if (k === "") continue;
+    const entries = Object.entries(lock.packages).filter(([k]) => k !== "").sort(([a], [b]) => (a < b ? -1 : 1));
+    for (const [k, v] of entries) {
       expect(v.resolved, k).toMatch(/^https:\/\/registry\.npmjs\.org\//u);
       expect(v.integrity, k).toMatch(/^sha512-/u);
     }
+    expect(tree).toMatchObject({ format: "duo.runtime-tree/1", package: `${m.name}@${m.version}`, delivery: "bundleDependencies", lock: { file: "apps/cli/npm-shrinkwrap.json", sha256: createHash("sha256").update(fs.readFileSync(path.join(REPO, "apps", "cli", "npm-shrinkwrap.json"))).digest("hex") } });
+    expect(tree.packages.map((p) => [p.path, p.version, p.integrity])).toEqual(entries.map(([k, v]) => [k, v.version, v.integrity]));
+    expect(pack.runtimeTree).toMatchObject({ packages: entries.length, treeHash: tree.treeHash });
+    for (const p of tree.packages) expect(pack.files.map((f) => f.path), p.path).toContain(`${p.path}/package.json`);
     for (const field of [m.repository?.url, m.homepage, m.bugs?.url]) expect(field).toMatch(/^(git\+)?https:\/\/github\.com\/kanghyunsoon\/duo/u);
     expect(JSON.stringify(m)).not.toMatch(/[A-Za-z]:\\\\|\/Users\/|\/home\//u);
   });
@@ -163,22 +193,14 @@ describe("global install (temporary npm prefix)", () => {
     recordMetric("globalInstall", { packages: pkgs.length, bytesOnDisk: dirSize(IS_WIN ? path.join(prefix, "node_modules") : path.join(prefix, "lib", "node_modules")), names: pkgs.map((x) => `${x.name}@${x.version}`).sort() });
   });
 
-  it("Release Hardening (C163): the installed dependency tree is exactly the shrinkwrapped one", () => {
-    const lock = JSON.parse(fs.readFileSync(path.join(pkgDir, "npm-shrinkwrap.json"), "utf8")) as { packages: Record<string, { version?: string; optional?: boolean; os?: string[]; cpu?: string[] }> };
-    const mismatched: string[] = [];
-    let checked = 0;
-    for (const [k, v] of Object.entries(lock.packages)) {
-      if (k === "") continue;
-      const manifestFile = path.join(pkgDir, ...k.split("/"), "package.json");
-      const platformSkipped = v.optional === true && ((v.os !== undefined && !v.os.includes(process.platform)) || (v.cpu !== undefined && !v.cpu.includes(process.arch)));
-      if (!fs.existsSync(manifestFile)) { if (!platformSkipped) mismatched.push(`${k}: missing`); continue; }
-      const installed = JSON.parse(fs.readFileSync(manifestFile, "utf8")).version;
-      if (installed !== v.version) mismatched.push(`${k}: ${installed} ≠ ${v.version}`);
-      checked++;
-    }
-    expect(mismatched).toEqual([]);
-    expect(checked).toBeGreaterThan(Object.keys(lock.packages).length / 2);
-    recordMetric("shrinkwrap", { packages: Object.keys(lock.packages).length - 1, checked });
+  it("Release lock (C163, C242, H-65): the installed runtime tree is exactly the one the artifact records (paths, versions, contents; nothing hoisted or fetched)", () => {
+    const r = compareInstalledTree(pkgDir, path.dirname(path.dirname(pkgDir)));
+    expect(r.mismatches).toEqual([]);
+    expect(r.extra).toEqual([]);
+    expect(r.outside).toEqual([]);
+    expect(r.tree.packages.length).toBe(pack.runtimeTree?.packages);
+    expect(r.tree.treeHash).toBe(pack.runtimeTree?.treeHash);
+    recordMetric("runtimeTree", { packages: r.tree.packages.length, treeHash: r.tree.treeHash, notPacked: r.tree.packages.filter((p) => p.notPacked !== undefined).map((p) => ({ path: p.path, notPacked: p.notPacked })) });
   });
 
   it("duoctl resolves to the installed shim, reports the package version and schema versions, and cannot see the workspace", () => {
@@ -370,6 +392,9 @@ describe("project-local install (npx --no-install duoctl)", () => {
     const local = isolatedEnv([]); // no global duoctl on PATH
     const inst = npm(["install", "-D", pack.tarball, "--no-audit", "--no-fund", "--loglevel=error"], p.root, local);
     expect(inst.status, inst.stderr).toBe(0);
+    // The same runtime tree as the global install: inside the package, nothing hoisted into the project (H-65).
+    const tree = compareInstalledTree(path.join(p.root, "node_modules", "@duo-director", "cli"), path.join(p.root, "node_modules"));
+    expect([...tree.mismatches, ...tree.extra, ...tree.outside]).toEqual([]);
     p.git("add", "-A");
     p.git("commit", "-qm", "add duoctl as a devDependency");
     const npx = (args: string[], input = "") => runOnPath("npx", ["--no-install", "duoctl", ...args], p.root, local, input);

@@ -10,7 +10,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DIST, gitState, npm, pnpm, readJson, REGISTRY, ROOT, run, stagedFiles } from "./common.mjs";
+import { createHash } from "node:crypto";
+import { DIST, gitState, npm, pnpm, readJson, REGISTRY, ROOT, run, sha256, stagedFiles } from "./common.mjs";
 
 const skipTests = process.argv.includes("--skip-tests");
 const blockers = [];
@@ -92,8 +93,32 @@ const pkg = { name: manifest.name, version: manifest.version, description: manif
 for (const field of ["name", "version", "description", "license", "repository", "homepage", "bugs", "bin", "engines", "files", "dependencies"]) if (pkg[field] === undefined) block("metadata-" + field, "package.json has no " + field);
 if (manifest.name !== "@duo-director/cli") block("package-name", "the package name must stay @duo-director/cli");
 if (manifest.version !== repoCli.version) block("version-source", "the packed version differs from apps/cli/package.json");
-const allow = /^(package\.json|npm-shrinkwrap\.json|README\.md|LICENSE|dist\/THIRD_PARTY_NOTICES\.md|dist\/duoctl\.js|dist\/cli-[A-Z0-9]+\.js|dist\/grammars\/(tree-sitter-[a-z_]+\.wasm|LICENSE-tree-sitter-[a-z-]+|grammars\.json)|dist\/ui\/(index\.html|app\.js|app\.css))$/u;
-const unexpected = Object.keys(candidate.files).filter((f) => !allow.test(f));
+const allow = /^(package\.json|README\.md|LICENSE|dist\/THIRD_PARTY_NOTICES\.md|dist\/runtime-tree\.json|dist\/duoctl\.js|dist\/cli-[A-Z0-9]+\.js|dist\/grammars\/(tree-sitter-[a-z_]+\.wasm|LICENSE-tree-sitter-[a-z-]+|grammars\.json)|dist\/ui\/(index\.html|app\.js|app\.css))$/u;
+
+// ---- the release-locked runtime tree (C163, C242, H-65): carried by the package, recorded in dist/runtime-tree.json ----
+// node_modules/ may hold only the packages the runtime tree records, each with exactly its recorded files (content hash);
+// the tree must be the committed release lock (paths, versions, integrity) and every runtime dependency must be bundled.
+const treeFile = path.join(stage, "dist", "runtime-tree.json");
+const tree = fs.existsSync(treeFile) ? readJson(treeFile) : { packages: [] };
+const lockFile = path.join(ROOT, "apps", "cli", "npm-shrinkwrap.json");
+const releaseLock = readJson(lockFile);
+const lockEntries = Object.entries(releaseLock.packages).filter(([k]) => k !== "").sort(([a], [b]) => (a < b ? -1 : 1));
+const treeByPath = new Map(tree.packages.map((p) => [p.path, p]));
+const ownerOf = (f) => tree.packages.filter((p) => f.startsWith(p.path + "/")).sort((a, b) => b.path.length - a.path.length)[0];
+const treeFiles = new Map(tree.packages.map((p) => [p.path, []]));
+for (const f of Object.keys(candidate.files)) if (f.startsWith("node_modules/")) treeFiles.get(ownerOf(f)?.path)?.push(f);
+const hashOf = (p) => createHash("sha256").update(treeFiles.get(p.path).map((f) => f.slice(p.path.length + 1)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)).map((f) => f + "\0" + candidate.files[p.path + "/" + f] + "\n").join("")).digest("hex");
+const runtimeTree = {
+  file: "dist/runtime-tree.json", present: fs.existsSync(treeFile), format: tree.format ?? null, delivery: tree.delivery ?? null, packages: tree.packages.length,
+  bundledFiles: [...treeFiles.values()].reduce((n, l) => n + l.length, 0), treeHash: tree.treeHash ?? null,
+  lockMatches: JSON.stringify(lockEntries.map(([k, v]) => [k, v.version, v.integrity])) === JSON.stringify(tree.packages.map((p) => [p.path, p.version, p.integrity])),
+  lockSha256Matches: tree.lock?.sha256 === sha256(lockFile),
+  bundleDependenciesMatch: JSON.stringify(manifest.bundleDependencies ?? null) === JSON.stringify(Object.keys(manifest.dependencies ?? {})),
+  contentMismatch: tree.packages.filter((p) => treeFiles.get(p.path).length !== p.files || hashOf(p) !== p.contentHash).map((p) => p.path),
+};
+runtimeTree.ok = runtimeTree.present && runtimeTree.format === "duo.runtime-tree/1" && runtimeTree.delivery === "bundleDependencies" && runtimeTree.packages > 0 && runtimeTree.lockMatches && runtimeTree.lockSha256Matches && runtimeTree.bundleDependenciesMatch && runtimeTree.contentMismatch.length === 0;
+if (!runtimeTree.ok) block("runtime-tree", "the packed runtime tree is not the release lock carried byte for byte: " + JSON.stringify({ ...runtimeTree, contentMismatch: runtimeTree.contentMismatch.slice(0, 5) }));
+const unexpected = Object.keys(candidate.files).filter((f) => (f.startsWith("node_modules/") ? !treeByPath.has(ownerOf(f)?.path) : !allow.test(f)));
 if (unexpected.length > 0) block("allowlist", "files outside the allowlist: " + unexpected.join(", "));
 const secretPatterns = [
   ["openai-key", /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}/u], ["npm-token", /\bnpm_[A-Za-z0-9]{36}\b/u], ["github-token", /\bgh[pousr]_[A-Za-z0-9]{36}\b/u],
@@ -102,24 +127,29 @@ const secretPatterns = [
 const home = os.homedir();
 const pathNeedles = [...new Set([ROOT, ROOT.replaceAll("\\", "/"), ROOT.replaceAll("\\", "\\\\"), home, home.replaceAll("\\", "/"), home.replaceAll("\\", "\\\\"), os.tmpdir(), os.tmpdir().replaceAll("\\", "/")])].filter((n) => n.length > 3);
 const pathPatterns = [["windows-user-path", /[A-Za-z]:[\\/]{1,2}Users[\\/]{1,2}[A-Za-z0-9._-]+/u], ["mac-user-path", /\/Users\/[a-z][A-Za-z0-9._-]*\//u], ["linux-home-path", /\/home\/[a-z][A-Za-z0-9._-]*\//u]];
-const scan = { files: 0, secrets: [], absolutePaths: [] };
+// Bundled third-party files (node_modules/) are the published bytes of the locked packages (npm ci checks each tarball's
+// integrity; the runtime-tree check above ties every file to the recorded content hash). A local path of this machine
+// there is a blocker; generic secret/path patterns there are upstream content and are reported, not blocking.
+const scan = { files: 0, secrets: [], absolutePaths: [], thirdPartyPatternMatches: [] };
 for (const f of Object.keys(candidate.files)) {
   const text = fs.readFileSync(path.join(stage, f)).toString("latin1"); // WASM too: strings inside binaries
   scan.files++;
-  for (const [id, re] of secretPatterns) if (re.test(text)) scan.secrets.push(f + ": " + id);
+  const bundled = f.startsWith("node_modules/");
+  for (const [id, re] of secretPatterns) if (re.test(text)) (bundled ? scan.thirdPartyPatternMatches : scan.secrets).push(f + ": " + id);
   for (const needle of pathNeedles) if (text.includes(needle)) scan.absolutePaths.push(f + ": contains a local path of this machine");
-  for (const [id, re] of pathPatterns) { const m = re.exec(text); if (m) scan.absolutePaths.push(f + ": " + id + " " + JSON.stringify(m[0])); }
+  for (const [id, re] of pathPatterns) { const m = re.exec(text); if (m) (bundled ? scan.thirdPartyPatternMatches : scan.absolutePaths).push(f + ": " + id + " " + JSON.stringify(m[0])); }
 }
 if (scan.secrets.length > 0) block("secrets", "secret-like content: " + scan.secrets.join("; "));
 if (scan.absolutePaths.length > 0) block("absolute-paths", "absolute paths in the package: " + scan.absolutePaths.join("; "));
 
-// ---- dependencies (offline inventory from the shrinkwrap, §16) ----
-const lock = readJson(path.join(stage, "npm-shrinkwrap.json"));
+// ---- dependencies (offline inventory of the bundled runtime tree, with the release lock's registry metadata, §16) ----
 const overrides = readJson(path.join(ROOT, "scripts", "release", "license-overrides.json")).packages;
-const entries = Object.entries(lock.packages).filter(([k]) => k !== "").map(([k, v]) => {
-  const name = v.name ?? k.slice(k.lastIndexOf("node_modules/") + 13);
+const lockByPath = new Map(lockEntries);
+const entries = tree.packages.map((p) => {
+  const v = lockByPath.get(p.path) ?? {};
+  const name = p.name;
   const override = v.license === undefined ? overrides[name + "@" + v.version] : undefined;
-  return { path: k, name, version: v.version, license: v.license ?? override?.license ?? null, licenseSource: v.license !== undefined ? "lockfile" : override !== undefined ? "reviewed-override" : "none", deprecated: v.deprecated ?? null, resolved: v.resolved };
+  return { path: p.path, name, version: p.version, license: v.license ?? override?.license ?? null, licenseSource: v.license !== undefined ? "lockfile" : override !== undefined ? "reviewed-override" : "none", deprecated: v.deprecated ?? null, resolved: v.resolved };
 });
 const PERMISSIVE = new Set(["MIT", "ISC", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "0BSD", "BlueOak-1.0.0", "CC0-1.0", "Unlicense", "Python-2.0"]);
 const licenseOk = (l) => typeof l === "string" && l.replace(/[()]/gu, "").split(/\s+OR\s+/u).some((x) => PERMISSIVE.has(x.trim()));
@@ -130,11 +160,12 @@ const dependencies = {
   nonPermissive: entries.filter((e) => !licenseOk(e.license)).map((e) => e.name + "@" + e.version + " (" + (e.license ?? "unknown") + ")"),
   deprecatedInLock: entries.filter((e) => e.deprecated).map((e) => e.name + "@" + e.version),
   foreignResolved: entries.filter((e) => !String(e.resolved ?? "").startsWith(REGISTRY)).map((e) => e.path),
-  inventory: entries.map(({ name, version, license, licenseSource }) => ({ name, version, license, licenseSource })),
+  bundled: true,
+  inventory: entries.map(({ path: p, name, version, license, licenseSource }) => ({ path: p, name, version, license, licenseSource })),
 };
 if (dependencies.nonPermissive.length > 0) block("dependency-licenses", "dependencies without a recognized permissive license: " + dependencies.nonPermissive.join(", "));
 if (dependencies.deprecatedInLock.length > 0) block("deprecated-dependencies", dependencies.deprecatedInLock.join(", "));
-if (dependencies.foreignResolved.length > 0) block("shrinkwrap-registry", "shrinkwrap resolves outside " + REGISTRY);
+if (dependencies.foreignResolved.length > 0) block("lock-registry", "the release lock resolves outside " + REGISTRY + ": " + dependencies.foreignResolved.join(", "));
 log("audit (network)");
 const audit = run(process.execPath, [path.join(ROOT, "scripts", "release", "audit.mjs")]);
 dependencies.audit = fs.existsSync(path.join(DIST, "release-audit.json")) ? readJson(path.join(DIST, "release-audit.json")) : { error: audit.stderr.slice(0, 300) };
@@ -149,6 +180,10 @@ license.apache = /^\s*Apache License\n\s*Version 2\.0, January 2004\n/u.test(lic
 license.packageMatchesRepository = license.inPackage && fs.readFileSync(path.join(stage, "LICENSE"), "utf8") === fs.readFileSync(path.join(ROOT, "LICENSE"), "utf8");
 if (manifest.license !== "Apache-2.0" || repoCli.license !== "Apache-2.0" || !license.apache || !license.packageMatchesRepository) block("license", "package license must be Apache-2.0 with the repository's Apache License 2.0 LICENSE inside the package (H-44)");
 if (!license.thirdPartyNotices || license.grammarLicenses < 6) block("third-party-notices", "third-party notices or grammar licenses are missing from the package");
+// Every bundled npm package is named in the notices with its version and license (H-65: they ship inside the package).
+const noticesText = license.thirdPartyNotices ? fs.readFileSync(path.join(stage, "dist", "THIRD_PARTY_NOTICES.md"), "utf8") : "";
+license.bundledPackagesWithoutNotice = entries.filter((e) => !noticesText.includes("### " + e.name + "@" + e.version + " (" + e.license + ")")).map((e) => e.name + "@" + e.version);
+if (license.bundledPackagesWithoutNotice.length > 0) block("third-party-notices", "bundled packages missing from THIRD_PARTY_NOTICES.md: " + license.bundledPackagesWithoutNotice.join(", "));
 // docs/10-security.md: a security reporting policy is written before the repository goes public (contact chosen by a human).
 // SECURITY.md (H-44): GitHub Private Vulnerability Reporting is the reporting channel; public issues are not.
 const securityDoc = fs.existsSync(path.join(ROOT, "SECURITY.md")) ? fs.readFileSync(path.join(ROOT, "SECURITY.md"), "utf8") : "";
@@ -212,7 +247,8 @@ try {
 const dryFiles = dryParsed?.files?.map((f) => f.path).sort() ?? [];
 npmState.publishDryRun = { ok: dry.code === 0, id: dryParsed?.id ?? null, entryCount: dryParsed?.entryCount ?? null, filesMatchCandidate: JSON.stringify(dryFiles) === JSON.stringify(Object.keys(candidate.files).sort()), ...(dry.code === 0 ? {} : { tail: (dry.stderr || dry.stdout).slice(-600) }) };
 if (!npmState.publishDryRun.ok || !npmState.publishDryRun.filesMatchCandidate) block("publish-dry-run", "npm publish --dry-run failed or listed other files than the release candidate");
-if (!dryFiles.includes("npm-shrinkwrap.json")) block("shrinkwrap-not-packed", "npm-shrinkwrap.json is not inside the tarball npm would publish");
+npmState.publishDryRun.bundled = dryParsed?.bundled?.length ?? null;
+if (!dryFiles.includes("dist/runtime-tree.json") || tree.packages.some((p) => !dryFiles.includes(p.path + "/package.json"))) block("runtime-tree-not-packed", "the tarball npm would publish does not carry dist/runtime-tree.json and every package of the runtime tree");
 
 // ---- actual OpenAI smoke (§28–30) ----
 // H-45: deferred / optional integration verification for 0.1.0. The result is reported when present but never
@@ -244,7 +280,7 @@ const report = {
   version: manifest.version,
   git: { ...git, changes: undefined, pushed, ci },
   verification: skipTests ? { skipped: true } : verification,
-  package: pkg, reproducibility, scan,
+  package: pkg, reproducibility, scan, runtimeTree,
   dependencies, license, npm: npmState, openaiSmoke,
   blockers,
   deferred: ["C184 optional grammar packaging", "C185 custom analyzer capability persistence", "C197 gap semantic assist", "C198 public repository benchmark", "C202 further performance candidates", "C208 real OpenAI smoke (optional integration verification, H-45)", "OpenAI-compatible endpoint live smoke (optional, pnpm test:compatible-smoke, not a release gate; H-60)", "C224 overload member identity (H-52)", "C229 polyglot Context ranking (Deferred to 0.2.x Context Quality / strategy validation, H-62)", "C232 C++ IMPORTS include paths (documented C++ L1 limitation)", "L2 resolvers for Java, C#, C++, Python", "REQ-NFR-004 scope (DP-1, priority should)"],
