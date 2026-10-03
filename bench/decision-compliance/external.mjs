@@ -24,6 +24,9 @@ const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-dc01-ext-
 const repo = path.join(tmp, "repo");
 const commits = generateFixture(repo);
 const target = SCENARIO === "change" ? commits.change : commits.controlOnly;
+// Check out the reviewed commit first, as in a pull-request review (added after the recorded runs; see the benchmark
+// document's limitations: the recorded control-only runs had the change commit checked out).
+spawnSync("git", ["checkout", "-q", SCENARIO === "change" ? "main" : "control-only"], { cwd: repo, windowsHide: true });
 const variants = (p) => [p, p.replaceAll("\\", "/"), p.replaceAll("\\", "\\\\")];
 const pairs = [...variants(repo).map((v) => [v, "<fixture>"]), ...variants(tmp).map((v) => [v, "<tmp>"]), ...variants(os.homedir()).map((v) => [v, "<home>"])];
 const scrub = (t) => pairs.reduce((s, [a, b]) => s.split(a).join(b), String(t));

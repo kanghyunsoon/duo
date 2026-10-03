@@ -1,0 +1,48 @@
+{
+  "tool": "codex",
+  "scenario": "b-control",
+  "date": "2026-10-03T16:49:17.188Z",
+  "checkedOut": "b-control",
+  "command": "codex review --commit de084dd541c6692127c897e0cd0a35fc3f6396f7 -c model=gpt-5.5",
+  "commits": {
+    "T0": "19a1f84c60190599ceb7fdb5d8cbe5e6ba1c1421",
+    "T1": "a1f589279841677c8af47eebe169b74c7e0c8155",
+    "T2": "a005baaff53bb6a5b5931da448d47ec06a17f5f4",
+    "A-control": "69715f3b95b0c50ed131ea97f3ed0c540a1327e9",
+    "T3": "782799df93dc7050db192f9b2b52fc9b39ef2730",
+    "T4": "2927f2358f11bf5101a4e626521bece7152baae7",
+    "B-control": "de084dd541c6692127c897e0cd0a35fc3f6396f7"
+  },
+  "runs": [
+    {
+      "run": 1,
+      "exitCode": 0,
+      "seconds": 40,
+      "client": "OpenAI Codex v0.147.0",
+      "model": "gpt-5.5",
+      "provider": "openai",
+      "approval": "never",
+      "sandbox": "read-only"
+    },
+    {
+      "run": 2,
+      "exitCode": 0,
+      "seconds": 47,
+      "client": "OpenAI Codex v0.147.0",
+      "model": "gpt-5.5",
+      "provider": "openai",
+      "approval": "never",
+      "sandbox": "read-only"
+    },
+    {
+      "run": 3,
+      "exitCode": 0,
+      "seconds": 34,
+      "client": "OpenAI Codex v0.147.0",
+      "model": "gpt-5.5",
+      "provider": "openai",
+      "approval": "never",
+      "sandbox": "read-only"
+    }
+  ]
+}

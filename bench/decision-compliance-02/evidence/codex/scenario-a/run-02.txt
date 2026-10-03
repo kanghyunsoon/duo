@@ -1,0 +1,6 @@
+The patch violates the repository's accepted stateless-auth rule by modifying a non-legacy `SessionStore` symbol. That makes the change blocking under the project guidance.
+
+Review comment:
+
+- [P1] Avoid changing SessionStore symbols — <fixture>\src\auth\late-session-store.ts:4-4
+  This commit changes behavior inside `LateSessionStore`, but the accepted stateless-auth decision says code must not add or change any symbol whose name contains `SessionStore`; only pre-adoption legacy stores are exempt, and `LateSessionStore` is not listed there (`AGENTS.md:7`, `docs/adoption.md:5-8`). Please move this fix out of the session-store path or remove the server-side store instead of modifying it.

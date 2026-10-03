@@ -1,0 +1,6 @@
+The patch introduces a `GlobalAuthCache` symbol, which is explicitly forbidden by the repository's accepted engineering decision and must be blocked.
+
+Review comment:
+
+- [P1] Remove the forbidden GlobalAuthCache symbol — <fixture>\src\auth\global-auth-cache.ts:1-1
+  Adding this class directly violates the accepted repository decision that code must not add or change any symbol whose name contains `GlobalAuthCache`; the root guidance says every such symbol is a violation and must be blocked (`AGENTS.md:7`). Rename or remove this cache implementation so it does not introduce the forbidden symbol.

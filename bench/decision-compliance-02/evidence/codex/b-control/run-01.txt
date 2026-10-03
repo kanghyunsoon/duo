@@ -1,0 +1,1 @@
+The change is small and consistent with the stated intent to reject whitespace-only tokens. It does not violate the repository decision rule about GlobalAuthCache symbols.

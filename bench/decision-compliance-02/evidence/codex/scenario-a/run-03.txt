@@ -1,0 +1,6 @@
+The patch changes a SessionStore-named authentication class that is not recorded as legacy debt, violating the repository's accepted D-001 constraint.
+
+Review comment:
+
+- [P1] Avoid changing SessionStore symbols — <fixture>\src\auth\late-session-store.ts:4-4
+  This change modifies `LateSessionStore`, whose symbol name contains `SessionStore`; D-001 says code must not add or change such symbols, and the adoption record lists only `MemorySessionStore` as non-blocking legacy debt, so this auth store change should be blocked rather than extended here ([`AGENTS.md:7`](AGENTS.md#L7), [`docs/adoption.md:5`](docs/adoption.md#L5)).

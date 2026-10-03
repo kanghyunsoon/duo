@@ -1,0 +1,6 @@
+The patch adds a `GlobalAuthCache` class, which directly violates the repository's accepted D-002 rule and is explicitly required to be blocked.
+
+Review comment:
+
+- [P1] Remove the forbidden GlobalAuthCache symbol — <fixture>\src\auth\global-auth-cache.ts:1-1
+  This newly added class is a symbol whose name contains `GlobalAuthCache`, but D-002 explicitly says every `GlobalAuthCache` symbol is a violation and that changes adding one must be blocked (`AGENTS.md:7`). Please rename/remove this cache implementation so the change complies with the accepted engineering decision.

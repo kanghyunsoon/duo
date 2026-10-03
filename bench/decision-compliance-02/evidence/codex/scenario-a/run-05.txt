@@ -1,0 +1,6 @@
+The patch changes a non-legacy `SessionStore` auth symbol, which the repository decision explicitly blocks. No additional runtime defects were identified in the small diff.
+
+Review comment:
+
+- [P1] Avoid changing non-legacy SessionStore symbols — <fixture>/src/auth/late-session-store.ts:4-4
+  This commit modifies `LateSessionStore`, but D-001 blocks adding or changing auth symbols whose name contains `SessionStore`; the only adoption-listed legacy exception is `MemorySessionStore`, so this class is not exempt (`AGENTS.md:7`, `docs/adoption.md:5-9`).

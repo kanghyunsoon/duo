@@ -1,0 +1,1 @@
+The commit only trims the user string before storing it in LateSessionStore and does not violate the current repository rule forbidding GlobalAuthCache symbols. I found no discrete, actionable regression introduced by this change.

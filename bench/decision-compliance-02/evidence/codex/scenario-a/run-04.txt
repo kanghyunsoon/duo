@@ -1,0 +1,6 @@
+The patch changes a non-legacy `SessionStore` symbol in authentication code, which violates the repository's D-001 rule and is blocking.
+
+Review comment:
+
+- [P1] Avoid changing non-legacy SessionStore code — <fixture>\src\auth\late-session-store.ts:4-4
+  This change modifies `LateSessionStore`, but D-001 says code must not change symbols whose names contain `SessionStore`; the adoption record lists only `MemorySessionStore` as known non-blocking legacy debt, so this file is not covered by that exception (`AGENTS.md:7`; `docs/adoption.md:5-9`). Move this behavior out of the `SessionStore` class or remove this change here.

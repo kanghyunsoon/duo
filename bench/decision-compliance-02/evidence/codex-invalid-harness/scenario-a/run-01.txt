@@ -1,0 +1,1 @@
+The commit only trims the stored user string in LateSessionStore, and I found no concrete regression or applicable repository-rule violation introduced by this change.

@@ -1,0 +1,1 @@
+The change correctly rejects whitespace-only string tokens without introducing an evident regression in the surrounding code.

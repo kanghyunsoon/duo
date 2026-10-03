@@ -1,0 +1,6 @@
+The patch introduces a new `GlobalAuthCache` symbol, directly violating the repository's accepted D-002 decision. This is a blocking project-rule violation.
+
+Review comment:
+
+- [P1] Remove forbidden GlobalAuthCache symbol — <fixture>\src\auth\global-auth-cache.ts:1-1
+  This adds a class whose name contains `GlobalAuthCache`, which the current D-002 repository decision explicitly forbids and says must be blocked (`AGENTS.md:7`). Because there was no legacy `GlobalAuthCache` debt at adoption, this new symbol violates the project rule and should be renamed or removed before merging.

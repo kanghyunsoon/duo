@@ -1,0 +1,8 @@
+{
+  "status": "excluded from results",
+  "reason": "harness bug: the fixture's main branch (T4, where AGENTS.md names D-002 as current) was checked out while Codex reviewed the scenario-a commit T2; the reviewer could read the later decision docs from the working tree",
+  "found": "2026-10-04, after run 3 applied the D-002 rule to T2",
+  "fix": "external.mjs now checks out the reviewed commit first (as in a pull-request review); all Codex runs were repeated",
+  "runs": 4,
+  "note": "Kept unchanged for transparency. run-01: no finding; run-02: P1 for touching non-legacy LateSessionStore; run-03 and run-04: no finding, applying the later D-002 rule from the working tree."
+}

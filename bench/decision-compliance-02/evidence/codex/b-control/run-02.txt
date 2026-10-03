@@ -1,0 +1,1 @@
+The commit only changes token validation to reject whitespace-only strings, which is consistent with the stated fix and does not violate the repository decision rules.

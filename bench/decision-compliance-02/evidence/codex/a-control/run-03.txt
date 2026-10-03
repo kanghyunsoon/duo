@@ -1,0 +1,1 @@
+The change only tightens token verification to reject whitespace-only strings and does not touch any SessionStore symbols covered by the repository decision. I did not identify any introduced correctness or compatibility issue.

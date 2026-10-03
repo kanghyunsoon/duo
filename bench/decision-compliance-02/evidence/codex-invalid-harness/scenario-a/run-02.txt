@@ -1,0 +1,6 @@
+The patch modifies a non-legacy `SessionStore` symbol while D-001 is the active decision for the reviewed commit, so it violates the repository's engineering constraints.
+
+Review comment:
+
+- [P1] Stop modifying non-legacy SessionStore symbols — <fixture>\src\auth\late-session-store.ts:4-4
+  For this commit, the active D-001 decision forbids changing any class or other symbol whose name contains `SessionStore`, and the adoption record lists only `MemorySessionStore` as legacy debt, not `LateSessionStore`. Changing behavior inside `LateSessionStore` therefore violates the project rule and should be avoided or refactored away from the forbidden session-store symbol. (`AGENTS.md` in this commit lines 5-7; `docs/adoption.md` lines 5-9)

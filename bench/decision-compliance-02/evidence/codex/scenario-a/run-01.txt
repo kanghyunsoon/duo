@@ -1,0 +1,6 @@
+The patch changes a `SessionStore` auth class despite the repository decision forbidding such changes outside legacy debt, so it should not be accepted as-is.
+
+Review comment:
+
+- [P1] Stop modifying non-legacy SessionStore code — <fixture>\src\auth\late-session-store.ts:4-4
+  This change updates `LateSessionStore`, but D-001 requires auth to remain stateless and says code must not add or change symbols whose names contain `SessionStore`; legacy exceptions are only to be reported, and this auth store is not identified as legacy debt. Please move this fix into a stateless auth path instead of changing this server-side store. See `AGENTS.md:7`.

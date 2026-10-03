@@ -1,0 +1,1 @@
+No actionable correctness issues were identified in the changed line. The current repository guidance supersedes the earlier SessionStore restriction, and this commit does not add or change any GlobalAuthCache symbol.
