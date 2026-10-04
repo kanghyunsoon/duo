@@ -1,6 +1,6 @@
 # 14-day event log
 
-Write an entry only when something happens; no daily diary. Times are estimates. Answers may be in English or Korean. Do not paste source code or secrets; summarize instead. [Protocol §9–§13](README.md#9-14-day-observation)
+Write an entry only when something happens; no daily diary. Dates are in your study time zone (day 0); times are estimates. Answers may be in English or Korean. Do not paste source code or secrets; summarize instead. [Protocol §9–§13](README.md#9-14-day-observation)
 
 **Event types:** Decision proposed · Decision confirmed · Decision rejected · Decision superseded · Review run · Useful finding · Noisy/false finding · Knowledge Gap · Context use · Agent switch · Truth maintenance · Author assistance · DUO skipped · Alternative tool used · Abandonment
 

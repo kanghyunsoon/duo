@@ -1,15 +1,15 @@
 # Day 0: Pre-registration and onboarding
 
-Fill this in and keep it; send it privately when asked. Answers may be in English or Korean. Approximate values are fine. Do not include source code, keys, tokens, credentials, personal email or customer data. [Protocol §8](README.md#8-day-0)
+Send Part A privately before your first DUO command; keep the rest and send it when asked. Answers may be in English or Korean. Approximate values are fine. Do not include source code, keys, tokens, credentials, personal email or customer data. [Protocol §8](README.md#8-day-0)
 
 ## Part A — before installing DUO
 
-Fill in Part A completely before running any DUO command. It must not be edited after you start using DUO.
+Fill in Part A completely and send it privately before running any DUO command. It is not edited after it is sent. Your participant ID is assigned when you start installing ([protocol §27](README.md#27-pre-participant-clarifications-h-69)).
 
 | Field | Answer |
 |---|---|
-| Participant ID (assigned) | P_ |
 | Date and time (with time zone) | |
+| Study time zone (observation days are counted in it) | |
 | Repository type (application, library, service, game, tool, other) | |
 | Main language(s) | |
 | Repository age (approx.) | |
@@ -46,9 +46,12 @@ Use only the public README, the npm package and `duoctl doctor`. Ask for help if
 
 | Field | Answer |
 |---|---|
+| Participant ID (assigned when you start installing) | P_ |
+| Verified CLI version (`duoctl --version`) | |
+| Verified agent-invoked DUO version (`duoctl doctor --json`, agent check `version`) | |
 | Help from the DUO author (what, how long) | |
 | Setup minutes (approx., total) | |
 | Initial friction (what was confusing or annoying) | |
-| Observation day 1 (= day after first successful init) | |
+| Observation day 1 (= day after first successful init, in your study time zone) | |
 | Observation day 14 | |
 

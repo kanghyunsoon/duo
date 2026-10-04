@@ -1,6 +1,6 @@
 # Cohort evaluation (template)
 
-Filled in once, after every primary participant has finished or dropped out. Criteria are those of [protocol §16–§18](README.md#16-continue-criteria) and must not be changed here. The participant's own answers decide useful, noise, acceptable and chosen; the evaluator does not reinterpret them. Items that cannot be checked after redaction are **Unverifiable** and do not count in DUO's favor.
+Filled in once, after every primary participant has finished or dropped out. Criteria are those of [protocol §16–§18](README.md#16-continue-criteria) and must not be changed here. The participant's own answers decide useful, noise, acceptable and chosen; the evaluator does not reinterpret them. Items that cannot be checked after redaction are **Unverifiable** and do not count in DUO's favor. Exit answers not received within 7 days of the request are **Missing**: the alternative is not assumed and exit-dependent Continue conditions are not met ([protocol §27](README.md#27-pre-participant-clarifications-h-69)).
 
 ## Round
 
@@ -19,7 +19,7 @@ Filled in once, after every primary participant has finished or dropped out. Cri
 | Day 0 / observation start / end | | | |
 | Pre-declared alternative | | | |
 | Completed 14 days? (or dropout day and reason) | | | |
-| Minimum usage met? (3 confirmed Decisions, 1 add/supersede, reviews, end check) | | | |
+| Minimum usage met? (within days 1–14: 3 confirmed Decisions, 1 add/supersede, reviews; end check) | | | |
 | Useful findings | | | |
 | Noisy findings (of which C239) | | | |
 | Truth abandoned? (§13) | | | |

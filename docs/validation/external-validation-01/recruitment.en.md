@@ -1,12 +1,12 @@
 # External Validation 01: Recruitment copy (English)
 
-Prepared in T33; nothing has been sent or posted. Fill the placeholders at launch (T33.1): `<YYYY-MM-DD>` dates from `recruitment_opened_at` and `recruitment_deadline` in [README.md](README.md), `<contact>` = the application channel chosen at launch. Rules: no star requests, no "better than Codex" or benchmark-winner wording, no launch campaign or paid promotion ([protocol §23](README.md#23-recruitment-copy)).
+Recruitment opened on 2026-10-04T09:37:54Z, when the community post below was published as [GitHub Discussion #1](https://github.com/kanghyunsoon/duo/discussions/1), and closes on 2026-11-01T09:37:54Z (status in [README.md](README.md)). Direct invitations use the short request below with `<name>` filled in per person. Rules: no star requests, no "better than Codex" or benchmark-winner wording, no launch campaign or paid promotion ([protocol §23](README.md#23-recruitment-copy)).
 
 ## Direct request (short)
 
 > Hi <name>, I maintain DUO, an open-source CLI that keeps human-confirmed engineering decisions in a repository and checks coding-agent changes against them. In my two public benchmarks, a short custom script and Codex reading hand-written docs reached the same results as DUO, so I want to find out whether DUO is worth its extra steps in real, ongoing work, or not.
 >
-> I am looking for 3 maintainers who already use a coding agent (Codex, Claude Code or similar) on a real repository to use DUO for 14 days and tell me honestly how it compared with what they would do otherwise. No source code or personal data is collected, there is no telemetry, you can stop at any time, and negative feedback is just as useful. Details: <link to participant-guide.md>. Would you be interested?
+> I am looking for 3 maintainers who already use a coding agent (Codex, Claude Code or similar) on a real repository to use DUO for 14 days and tell me honestly how it compared with what they would do otherwise. No source code or personal data is collected, there is no telemetry, you can stop at any time, and negative feedback is just as useful. Details: https://github.com/kanghyunsoon/duo/blob/main/docs/validation/external-validation-01/participant-guide.md. Would you be interested?
 
 ## Community post
 
@@ -16,7 +16,7 @@ DUO (`@duo-director/cli`, Apache-2.0) keeps engineering Decisions that a person 
 
 Why this test: in two public benchmarks, a 54–73-line custom script and Codex reading hand-written docs reached the same decisions as DUO ([Benchmark 1](../../benchmarks/decision-compliance-01.md), [Benchmark 2](../../benchmarks/decision-compliance-02.md)). The open question is whether DUO's extra ceremony and the work of keeping its Decisions current pay off in real development, compared with what you would do anyway. This study is set up so that DUO can fail it; the criteria are fixed in advance ([protocol](README.md)).
 
-- **Recruitment**: <YYYY-MM-DD> → <YYYY-MM-DD> (28 days from this post). No extension.
+- **Recruitment**: 2026-10-04 → 2026-11-01 (28 days from this post). No extension.
 - **Participant study**: 14 days from your own onboarding.
 - **You need**: a real Git repository you maintain (public or private) with real changes planned in the next two weeks, and a coding agent you already use there (Codex, Claude Code or another MCP client). Node.js 24.15+.
 - **During the 14 days**: at least 3 confirmed Decisions that reflect real engineering choices, at least one Decision added or superseded, reviews of real changes.
@@ -25,7 +25,7 @@ Why this test: in two public benchmarks, a 54–73-line custom script and Codex 
 - **You can stop at any time.** Your feedback does not need to be positive.
 - Not eligible: past DUO contributors or anyone involved in its design or benchmarks.
 
-Guide: [participant-guide.md](participant-guide.md). Apply: <contact>.
+Guide: [participant-guide.md](participant-guide.md). Apply: [Discussion #1](https://github.com/kanghyunsoon/duo/discussions/1).
 
 ## Eligibility questions (asked before Day 0)
 

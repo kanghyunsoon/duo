@@ -1,6 +1,6 @@
 # External Validation 01: Protocol
 
-DUO 0.2.1을 독립 외부 maintainer가 자기 실제 repository에서 쓰는 사전 등록 protocol이다. 결정: [H-66](../../conflicts.md#human-결정-기록)(Option C, fallback E), 이 protocol 자체는 H-67. 결과를 본 뒤에는 이 문서의 기준을 바꾸지 않는다. 바꿔야 하면 이유를 공개하고 새 Human Decision을 기록한다.
+DUO 0.2.1을 독립 외부 maintainer가 자기 실제 repository에서 쓰는 사전 등록 protocol이다. 결정: [H-66](../../conflicts.md#human-결정-기록)(Option C, fallback E), 이 protocol 자체는 H-67, participant가 생기기 전의 운영 해석은 H-69([§27](#27-pre-participant-clarifications-h-69)). 결과를 본 뒤에는 이 문서의 기준을 바꾸지 않는다. 바꿔야 하면 이유를 공개하고 새 Human Decision을 기록한다.
 
 모집은 사람이 승인한 T33.1에서 시작했다(GitHub Discussion #1, 2026-10-04T09:37:54Z). 아래 상태 블록이 현재 값이다.
 
@@ -79,7 +79,7 @@ T32.5에서 남은 차별화 후보(Decision이 많을 때의 비용, 손으로 
 
 - eligibility를 먼저 판단하고, eligible로 확인된 순서대로 받는다. 결과를 보고 유리한 3명을 고르지 않는다.
 - round 1은 3명만 시작한다. 그 뒤 지원자는 waitlist에 두고, 이 round에는 넣지 않는다(§18 두 번째 round에서만 쓸 수 있다).
-- participant가 되는 시점: eligibility 확인 후 Day 0 사전 등록을 제출하고 설치를 시작한 때.
+- participant가 되는 시점: eligibility 확인 후 Day 0 사전 등록을 제출하고 설치를 시작한 때. participant ID는 이때 부여한다(§27 B).
 - Day 0 전에 취소한 사람은 participant가 아니며, 그 자리는 다음 eligible 지원자가 받는다.
 
 **Independent.** 다음을 모두 만족해야 한다.
@@ -114,17 +114,17 @@ T32.5에서 남은 차별화 후보(Decision이 많을 때의 비용, 손으로 
 
 순서가 중요하다.
 
-1. **사전 등록(설치 전)**: "DUO가 없다면 나는 이 문제를 어떻게 관리할 것인가?"를 먼저 적는다(pre-declared alternative). 예시만 보여 준다: `AGENTS.md`, `CLAUDE.md`, ADR·docs, linter, CI script, PR review, agent memory, 아무것도 안 함, 기타. 어떤 대안이든 participant가 실제로 쓸 것을 그대로 인정한다. DIY gate 구현을 요구하지 않는다. DUO를 써 본 뒤 대안을 사후에 적지 않는다.
+1. **사전 등록(설치 전)**: "DUO가 없다면 나는 이 문제를 어떻게 관리할 것인가?"를 먼저 적는다(pre-declared alternative). 예시만 보여 준다: `AGENTS.md`, `CLAUDE.md`, ADR·docs, linter, CI script, PR review, agent memory, 아무것도 안 함, 기타. 어떤 대안이든 participant가 실제로 쓸 것을 그대로 인정한다. DIY gate 구현을 요구하지 않는다. DUO를 써 본 뒤 대안을 사후에 적지 않는다. 제출 시점과 수정 금지는 §27 A.
 2. **Self-onboarding**: 공개 자료(README, npm package, `duoctl doctor`)만으로 설치한다. 작성자가 먼저 화면 공유로 설정해 주지 않는다. participant가 막혀서 도움을 청하면 도울 수 있고, 모든 개입을 기록한다(§14).
-3. **Day 0 기록**([day-0.md](day-0.md)): participant ID, repository 종류·언어, 대략의 나이, team 크기, coding agent, pre-declared alternative, 시험 이유, 설치 시작·끝, 첫 `duoctl init` 성공, 첫 Decision confirm, 첫 review, 작성자 도움, 초기 마찰. repository source는 수집하지 않는다.
+3. **Day 0 기록**([day-0.md](day-0.md)): participant ID, repository 종류·언어, 대략의 나이, team 크기, coding agent, study time zone, pre-declared alternative, 시험 이유, 설치 시작·끝, 첫 `duoctl init` 성공, 확인한 DUO version(§27 E), 첫 Decision confirm, 첫 review, 작성자 도움, 초기 마찰. repository source는 수집하지 않는다.
 
 **Onboarding 완료**는 participant의 repository에서 `duoctl init`이 처음 성공한 때다. 설치를 시작했지만 onboarding을 끝내지 못하면 dropout(이유: onboarding)으로 기록하고 교체하지 않는다.
 
 ## 9. 14-day observation
 
-- 기간: onboarding 완료일 다음 날부터 **14 consecutive calendar days**.
+- 기간: onboarding 완료일 다음 날부터 **14 consecutive calendar days**(participant의 study time zone 기준, §27 C). 시작 전 version 확인은 §27 E.
 - version: 모든 participant가 같은 공개 `@duo-director/cli@0.2.1`. security·correctness hotfix가 없으면 기간 중 바꾸지 않는다(§21).
-- 최소 사용 조건(participant마다):
+- 최소 사용 조건(participant마다, Observation Day 1~14 안에서, §27 D):
   - confirmed Decision 3개 이상
   - Decision 추가 또는 supersede event 1회 이상
   - 실제 개발 변경에 대한 review 사용
@@ -182,7 +182,7 @@ participant가 현재 task에서 행동 가치가 없다고 판단한 finding, W
 
 ## 15. Exit interview
 
-Day 14 다음 날 이후 [exit-interview.md](exit-interview.md)의 같은 질문을 모든 participant에게 한다. 질문 14개, pre-declared alternative와의 축별 비교(setup, maintenance, finding usefulness, noise, trust, current authority clarity, history·provenance value, agent workflow fit, would actually keep using; 숫자 합산 없음), multi-agent·Context 관찰, C239~C241 질문, 그리고 마지막 필수 질문:
+Day 14 다음 날 이후 [exit-interview.md](exit-interview.md)의 같은 질문을 모든 participant에게 한다(응답 기간과 미응답 처리는 §27 F). 질문 14개, pre-declared alternative와의 축별 비교(setup, maintenance, finding usefulness, noise, trust, current authority clarity, history·provenance value, agent workflow fit, would actually keep using; 숫자 합산 없음), multi-agent·Context 관찰, C239~C241 질문, 그리고 마지막 필수 질문:
 
 > DUO와 처음 적어 둔 alternative 중 앞으로 실제 repository에서 무엇을 선택하겠는가?
 
@@ -328,3 +328,15 @@ outreach:                 # aggregate only; updated at Day 7 and Day 28
 
 **Checkpoint**: Day 7(`recruitment_opened_at` + 7 days)에 위 aggregate만 집계한다. 제품 수정이나 기준 변경 없이 Day 28까지 모집을 계속한다. Day 28에 Day 0을 시작한 eligible participant가 3명 미만이면 KILL A(§17), Option E 권고, 자동 연장 없음.
 
+## 27. Pre-participant clarifications (H-69)
+
+첫 eligible participant가 생기기 전에 T33.2 dry-run에서 드러난 모호함의 운영 해석을 고정한다. 해석일 뿐이며 §5~§7의 eligibility, §16 Continue, §17 Kill, §18 기준과 §26 outreach 한도를 바꾸지 않는다. participant 양식과 안내는 이 절을 따른다.
+
+| | 규칙 |
+|---|---|
+| **A. 사전 등록 제출** | eligibility가 확인되면 Day 0 Part A 제출을 요청한다. Part A는 첫 DUO command를 실행하기 전에 작성하고 비공개 제출까지 마쳐야 한다. 제출 뒤에는 수정하지 않는다. |
+| **B. Participant ID** | eligibility 확인만으로 P 번호를 주지 않는다. Part A를 제출하고 설치를 시작해 §5의 participant가 되는 순간 P1, P2, P3을 그 순서대로 부여한다. Day 0 전에 취소한 사람은 P 번호를 받지 않는다. Day 0 뒤 dropout의 P 번호는 그대로 남고 교체하지 않는다(§18). |
+| **C. Observation time zone** | participant가 Day 0에 적은 local time zone을 그 participant의 study time zone으로 고정한다. 첫 `duoctl init` 성공 다음 local calendar day가 Day 1이고, 그 time zone으로 14 consecutive calendar days를 센다. |
+| **D. Decision 집계 구간** | onboarding·Day 0 중에 만든 첫 Decision은 §9의 confirmed Decision 3개 이상에 넣지 않는다. Observation Day 1~14에 실제 engineering 작업에서 confirm된 Decision만 센다. Decision 추가 또는 supersede 1회 이상도 Day 1~14 안에 일어나야 한다. validation을 위한 가짜 Decision은 계속 금지한다. |
+| **E. Version 확인** | observation 시작 전에 participant가 직접 쓰는 CLI(`duoctl --version`)와 설정된 coding agent가 실제로 실행하는 DUO(`duoctl doctor --json`의 agent 항목 `version`)가 모두 `@duo-director/cli` 0.2.1인지 확인한다. 다르면 observation을 시작하지 않고 환경을 바로잡는다. 작성자가 도우면 §14대로 기록한다. 새 eligibility 조건이 아니다. Node.js 24.15 이상은 DUO runtime 요구 사항이며 exclusion 조건으로 추가하지 않는다. 그래서 onboarding을 못 하면 그 사실을 설치·도입 friction evidence로 기록한다. |
+| **F. Exit interview 기한** | Day 14가 끝나면 exit interview를 요청하고, 응답 기간은 7 calendar days다. 응답이 없어도 observation dropout으로 소급하지 않는다. exit에 의존하는 evidence는 Missing/Unverifiable로 기록한다. participant가 alternative를 선택했다고 추정하지 않으며, Continue에 필요한 exit 의존 조건은 충족으로 세지 않는다. |

@@ -1,6 +1,6 @@
 # Day 14 exit interview
 
-The same questions for every participant, asked after observation day 14. Answers may be in English or Korean. [Protocol §15](README.md#15-exit-interview)
+The same questions for every participant, asked after observation day 14. Please answer within 7 calendar days of the request ([protocol §27](README.md#27-pre-participant-clarifications-h-69)). Answers may be in English or Korean. [Protocol §15](README.md#15-exit-interview)
 
 ## Questions
 

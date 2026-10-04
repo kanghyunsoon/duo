@@ -24,11 +24,11 @@ In two public benchmarks, a 54–73-line custom script and Codex reading hand-wr
 
 ### What you will do
 
-1. **Before installing**: write down how you would handle this without DUO (your *alternative*: `AGENTS.md`/`CLAUDE.md`, ADRs or docs, a linter, a CI script, PR review, agent memory, nothing, anything else). Use [day-0.md](day-0.md).
+1. **Before installing**: write down how you would handle this without DUO (your *alternative*: `AGENTS.md`/`CLAUDE.md`, ADRs or docs, a linter, a CI script, PR review, agent memory, nothing, anything else). Use Part A of [day-0.md](day-0.md) and send it privately before your first DUO command; it is not edited afterwards.
 2. **Install on your own** from the public README: `npm install -g @duo-director/cli`, then in your repository `duoctl init`, `duoctl install codex` or `duoctl install claude-code`, `duoctl doctor`. Requires Node.js 24.15 or later. If you get stuck, ask; every bit of help is recorded so that "worked without help" is not overstated.
-3. **Use it for 14 consecutive days** starting the day after `duoctl init` first succeeds, in your normal work. Over the period: at least three confirmed Decisions that reflect real choices, at least one Decision added or superseded after setup, reviews of real changes, and a look at the state of `.duo-project/` at the end.
+3. **Use it for 14 consecutive days** starting the day after `duoctl init` first succeeds, in your normal work, counted in the time zone you give on day 0. Before day 1, `duoctl --version` and the DUO your agent starts must both be 0.2.1. During days 1–14 (Decisions made during setup do not count): at least three confirmed Decisions that reflect real choices, at least one Decision added or superseded, reviews of real changes, and a look at the state of `.duo-project/` at the end. Details: [protocol §27](README.md#27-pre-participant-clarifications-h-69).
 4. **Note events when they happen** in [event-log.md](event-log.md) (no daily diary): Decisions proposed, confirmed, rejected or superseded, reviews, findings you acted on, findings that were noise, knowledge gaps, context use, switching agents, time spent maintaining Decisions, skipping DUO, using your alternative instead, stopping.
-5. **Answer the exit questions** in [exit-interview.md](exit-interview.md) after day 14, including a direct comparison with the alternative you wrote down on day 0.
+5. **Answer the exit questions** in [exit-interview.md](exit-interview.md) after day 14, within 7 days of being asked, including a direct comparison with the alternative you wrote down on day 0.
 
 Expected effort (estimate, not a promise): about an hour on day 0, a few minutes per noted event, about 30 minutes for the exit questions.
 
@@ -71,11 +71,11 @@ Expected effort (estimate, not a promise): about an hour on day 0, a few minutes
 
 ### 하실 일
 
-1. **설치 전에**: DUO가 없다면 이 문제를 어떻게 다룰지 적습니다(대안: `AGENTS.md`/`CLAUDE.md`, ADR·문서, linter, CI script, PR review, agent memory, 아무것도 안 함, 기타). [day-0.md](day-0.md)를 씁니다.
+1. **설치 전에**: DUO가 없다면 이 문제를 어떻게 다룰지 적습니다(대안: `AGENTS.md`/`CLAUDE.md`, ADR·문서, linter, CI script, PR review, agent memory, 아무것도 안 함, 기타). [day-0.md](day-0.md)의 Part A를 쓰고, 첫 DUO command 전에 비공개로 보내 주세요. 보낸 뒤에는 고치지 않습니다.
 2. **직접 설치**: 공개 README대로 `npm install -g @duo-director/cli`, repository에서 `duoctl init`, `duoctl install codex` 또는 `duoctl install claude-code`, `duoctl doctor`. Node.js 24.15 이상이 필요합니다. 막히면 물어보세요. 모든 도움은 기록되어 "도움 없이 썼다"가 과장되지 않게 합니다.
-3. **14일 연속 사용**: `duoctl init`이 처음 성공한 다음 날부터 평소 작업에서 씁니다. 기간 동안 실제 선택을 반영한 확정 Decision 세 개 이상, 설정 뒤 Decision 추가나 supersede 한 번 이상, 실제 변경의 review, 마지막 날 `.duo-project/` 상태 확인이 필요합니다.
+3. **14일 연속 사용**: `duoctl init`이 처음 성공한 다음 날부터 평소 작업에서 씁니다. 날짜는 Day 0에 적은 time zone으로 셉니다. Day 1 전에 `duoctl --version`과 agent가 실행하는 DUO가 모두 0.2.1이어야 합니다. Day 1~14 동안(설정 중 만든 Decision은 세지 않습니다) 실제 선택을 반영한 확정 Decision 세 개 이상, Decision 추가나 supersede 한 번 이상, 실제 변경의 review, 마지막 날 `.duo-project/` 상태 확인이 필요합니다. 자세한 규칙: [protocol §27](README.md#27-pre-participant-clarifications-h-69).
 4. **일이 생길 때만 기록**([event-log.md](event-log.md), 매일 쓰지 않아도 됩니다): Decision 제안·확정·거절·supersede, review, 행동으로 이어진 finding, noise였던 finding, knowledge gap, context 사용, agent 전환, Decision 유지에 쓴 시간, DUO를 건너뜀, 대안을 대신 씀, 중단.
-5. **14일 뒤 종료 질문**([exit-interview.md](exit-interview.md))에 답합니다. Day 0에 적은 대안과 직접 비교하는 질문이 있습니다.
+5. **14일 뒤 종료 질문**([exit-interview.md](exit-interview.md))에 요청받은 뒤 7일 안에 답합니다. Day 0에 적은 대안과 직접 비교하는 질문이 있습니다.
 
 예상 노력(추정이며 약속이 아닙니다): Day 0 약 1시간, 기록할 일마다 몇 분, 종료 질문 약 30분.
 
