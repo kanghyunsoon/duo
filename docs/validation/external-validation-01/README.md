@@ -2,16 +2,18 @@
 
 DUO 0.2.1을 독립 외부 maintainer가 자기 실제 repository에서 쓰는 사전 등록 protocol이다. 결정: [H-66](../../conflicts.md#human-결정-기록)(Option C, fallback E), 이 protocol 자체는 H-67. 결과를 본 뒤에는 이 문서의 기준을 바꾸지 않는다. 바꿔야 하면 이유를 공개하고 새 Human Decision을 기록한다.
 
-이 문서는 모집을 시작하지 않는다. 모집은 사람이 승인한 뒤 T33.1에서 시작하며, 그때 아래 상태 값을 채운다.
+모집은 사람이 승인한 T33.1에서 시작했다(GitHub Discussion #1, 2026-10-04T09:37:54Z). 아래 상태 블록이 현재 값이다.
 
 ```yaml
 round: external-validation-01
 protocol_version: 1
 decision: H-67            # H-66 아래의 operational protocol
-status: not-started       # not-started | recruiting | observing | paused | evaluating | closed
+status: recruiting        # not-started | recruiting | observing | paused | evaluating | closed
 duo_version: 0.2.1        # 모든 participant가 같은 공개 version을 쓴다
-recruitment_opened_at:    # 첫 외부 모집 message를 보낸 시각(UTC). T33.1에서 기록
-recruitment_deadline:     # recruitment_opened_at + 28 calendar days
+recruitment_opened_at: 2026-10-04T09:37:54Z   # 첫 외부 message: GitHub Discussion #1 게시(server 시각, T33.1)
+recruitment_deadline: 2026-11-01T09:37:54Z    # recruitment_opened_at + 28 calendar days
+recruitment_page: https://github.com/kanghyunsoon/duo/discussions/1
+outreach_window_ends: 2026-10-11T09:37:54Z    # 첫 7 days, Day 7 checkpoint(H-68)
 participants: []          # P1, P2, P3: day0, observation_start, observation_end, outcome
 result:                   # CONTINUE | KILL | INCONCLUSIVE
 ```
