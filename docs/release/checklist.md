@@ -25,9 +25,10 @@ Packaging patch([release notes](notes-0.2.1.md), [호환성 분류](compatibilit
 - [x] pack: release lock → 격리 `npm ci` → `bundleDependencies` + `dist/runtime-tree.json`, bundled package 67개의 notices(license 원문). preflight(runtime tree = lock, `node_modules/` allowlist = 기록한 package, notices, audit), conformance, verify-published, audit(source·artifact)
 - [x] Contract #15 문구(invariant 유지, mechanism은 검증 열)
 - [x] version 0.2.0 → 0.2.1: `apps/cli/package.json`, release lock의 package version 두 곳(의존성 트리 불변), README·07의 현재 version 예시
-- [ ] upgrade journey(`pnpm release:upgrade`, 공개 0.2.0 → RC): 이전 index current 유지(다음 index parse 0·Graph 쓰기 없음), Truth byte 불변
-- [ ] RC tarball 설치 matrix: npm 10/11/12 × global·project-local·`npx --no-install duoctl`, 설치 트리 = `dist/runtime-tree.json`
-- [ ] full CI(3 OS), `pnpm release:preflight` READY(blocker 0), `npm publish --dry-run`(목록 = release candidate)
+- [x] upgrade journey(`pnpm release:upgrade`, 공개 0.2.0 → RC): TypeScript·Python·C++·sparse 저장소 모두 0.2.0 index가 RC에서 current, 다음 index는 parse 0·Graph 쓰기 없음, context ready, codex·claude-code install verify 성공, Truth byte 불변, re-init·migration 신호 0
+- [x] RC tarball 설치 matrix(Windows, Node 24.18.0): npm 10.9.9/11.21.0/12.2.0 × global·project-local(`npx --no-install duoctl` 포함) 6칸 모두 설치 트리 = `dist/runtime-tree.json`(불일치·추가·package 밖 설치 0, bundled 파일 7,443개 내용 동일), install script 0, `duoctl 0.2.1`, init·status·doctor·context·MCP(tool 9개) 성공
+- [x] CI 3 OS(run 37162699650, `dabfe45`): pnpm test, grammar, 배포 E2E, conformance success. 로컬: `pnpm verify`(1,008 pass / 7 skip), `test:dist` 21/21, `test:conformance`(suite 95/0, C209 20/0), `release:audit`(advisory 0, artifact = lock)
+- [ ] RC commit의 full CI(3 OS), `pnpm release:preflight` READY(blocker 0), `npm publish --dry-run`(목록 = release candidate)
 - [ ] npm publish, registry 확인, `v0.2.1` tag, GitHub Release, `pnpm release:verify-published`: 사람이 승인한 뒤에만
 
 
