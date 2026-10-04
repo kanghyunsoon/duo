@@ -289,3 +289,40 @@ T33의 완료나 이 문서의 commit은 clock을 시작하지 않는다. 사람
 
 **보고.** 모든 primary observation이 끝나면 [evaluation.md](evaluation.md) 양식으로 participant별 결과, dropout, Continue·Kill 조건별 판정, 작성자 개입 합계, Unverifiable 항목, C239~C241 관찰, multi-agent·Context 관찰을 공개한다. 판정 결과(CONTINUE, KILL, INCONCLUSIVE)와 다음 option은 새 Human Decision으로 기록한다. 부정적 결과도 같은 방식으로 공개한다.
 
+## 26. Recruitment execution (H-68)
+
+결과를 보기 전에 고정한 실행 강도다. §4~§18의 기준은 바꾸지 않는다.
+
+| 항목 | 값 |
+|---|---|
+| Public landing | GitHub Discussion(General). canonical recruitment page. GitHub Issues는 모집에 쓰지 않는다 |
+| Acquisition | targeted direct outreach. 공개된 email, 웹사이트 contact 같은 정상적인 developer 연락 수단만 |
+| Outreach budget | `recruitment_opened_at` 뒤 첫 7 calendar days 안에 개별 invitation 최대 **20**건 |
+| Follow-up | 한 사람당 최대 1회 |
+| 중단 | primary cohort 3명이 확정되면 새 outreach를 멈춘다. quota를 채울 의무는 없다 |
+| 금지 | mass spam, 자동 대량 발송, 결과를 본 뒤 유리한 사람만 추가 접촉, quota 사후 확장 |
+| 지원 방법 | Discussion에 짧게 관심 표시(개인 정보 없이). maintainer가 답하고 eligibility 답변과 report용 비공개 채널을 participant와 정한다. direct outreach는 보낸 채널로 답을 받는다 |
+
+**후보 선정 기준**(결과 전 고정): 실제 Git repository maintainer, 기간 중 개발 가능, 이미 coding agent 사용(공개 근거: repository의 `AGENTS.md`·`CLAUDE.md`, agent 사용을 밝힌 commit이나 문서), DUO contributor·T31/T32 참여자 아님, toy repository 아님, 공개된 연락 수단이 있음. 언어를 고르지 않는다. 공개 language support와 맞지 않는 repository는 eligibility 기록에 적는다.
+
+**후보 탐색 절차**: GitHub에서 `AGENTS.md` 또는 `CLAUDE.md`를 가진 공개 repository를 찾고, 결과 순서대로 다음을 만족하는 maintainer를 후보로 둔다: 개인 또는 소규모 팀 소유, 최근 30일 안의 commit, 위 기준 충족. 같은 사람은 한 번만. 개인화는 유지하는 repository와 coding-agent workflow 관련 한 문장으로 한정한다.
+
+**보내는 사람**: Codex는 email·DM을 보내지 않는다. 후보, 공개 연락 경로, 완성 문구까지 준비하고 사람이 보낸다. 보내지 않은 message는 contacted로 세지 않는다.
+
+**개인 정보**: 이름, email, 연락처는 Git 밖 private log에만 둔다. 이 문서에는 아래 aggregate만 적는다.
+
+```yaml
+outreach:                 # aggregate only; updated at Day 7 and Day 28
+  invitations_sent: 0
+  follow_ups_sent: 0
+  responded: 0
+  eligible: 0
+  accepted: 0
+  day0_started: 0
+  declined: 0
+  no_response: 0
+  discussion_interest: 0  # Discussion에서 관심을 표시한 사람
+```
+
+**Checkpoint**: Day 7(`recruitment_opened_at` + 7 days)에 위 aggregate만 집계한다. 제품 수정이나 기준 변경 없이 Day 28까지 모집을 계속한다. Day 28에 Day 0을 시작한 eligible participant가 3명 미만이면 KILL A(§17), Option E 권고, 자동 연장 없음.
+
