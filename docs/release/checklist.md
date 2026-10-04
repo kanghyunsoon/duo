@@ -15,7 +15,7 @@
 | `pnpm test:conformance` | RC를 격리 prefix에 설치 → runtime tree(설치 트리 = `dist/runtime-tree.json`, package 밖 설치 0)·notices → C209 init 반복(`DUO_C209_RUNS`, 기본 20) → 설치된 duoctl로 CLI·MCP·install journey와 RC 전용 검사 → 문서·help 대조 → `.dist/release-conformance.json` | 필요(npm install) |
 | `pnpm release:verify-published` | publish **뒤** 확인(T21): registry의 name·version·integrity·license·engines·bin → 빈 npm 설정과 새 cache로 임시 prefix에 `npm install -g` → 설치된 파일 수(bundled `node_modules/` 포함, npm이 만든 `.bin` 제외)·LICENSE·runtime tree(0.2.1부터 설치 트리 = `dist/runtime-tree.json`, 그 전 version은 `npm-shrinkwrap.json` 존재) → PATH의 `duoctl --version`·`--version --json`·`--help` → 새 Git 저장소에서 `init`→`status` → origin의 `v<version>` tag commit → GitHub Release(draft 아님) → `.dist/release-published.json`. 기대 integrity와 commit은 `--integrity`·`--commit` 또는 같은 version의 `.dist/release-candidate.json`. publish·tag·login을 하지 않고 npm credential을 읽지 않는다. CI와 `pnpm verify`에는 넣지 않는다 | 필요 |
 
-## 0.2.1 (H-65, C242, release candidate)
+## 0.2.1 (H-65, C242, 2026-10-04 release, `v0.2.1` = `1316bdf`)
 
 Packaging patch([release notes](notes-0.2.1.md), [호환성 분류](compatibility.md#021-변경-분류-t324-h-65)). npm 12와 local tarball 설치가 package 안의 `npm-shrinkwrap.json`을 따르지 않아 0.2.0의 release-locked tree가 깨졌다(C242, 공개 0.2.0 영향 B). runtime code, 공개 형식, Truth, 명령은 0.2.0과 같다. 다른 변경은 넣지 않는다(C229·C239·C240·C241, package description, `--help` 첫 줄, README 재설계는 범위 밖).
 
@@ -28,8 +28,12 @@ Packaging patch([release notes](notes-0.2.1.md), [호환성 분류](compatibilit
 - [x] upgrade journey(`pnpm release:upgrade`, 공개 0.2.0 → RC): TypeScript·Python·C++·sparse 저장소 모두 0.2.0 index가 RC에서 current, 다음 index는 parse 0·Graph 쓰기 없음, context ready, codex·claude-code install verify 성공, Truth byte 불변, re-init·migration 신호 0
 - [x] RC tarball 설치 matrix(Windows, Node 24.18.0): npm 10.9.9/11.21.0/12.2.0 × global·project-local(`npx --no-install duoctl` 포함) 6칸 모두 설치 트리 = `dist/runtime-tree.json`(불일치·추가·package 밖 설치 0, bundled 파일 7,443개 내용 동일), install script 0, `duoctl 0.2.1`, init·status·doctor·context·MCP(tool 9개) 성공
 - [x] CI 3 OS(run 37162699650, `dabfe45`): pnpm test, grammar, 배포 E2E, conformance success. 로컬: `pnpm verify`(1,008 pass / 7 skip), `test:dist` 21/21, `test:conformance`(suite 95/0, C209 20/0), `release:audit`(advisory 0, artifact = lock)
-- [ ] RC commit의 full CI(3 OS), `pnpm release:preflight` READY(blocker 0), `npm publish --dry-run`(목록 = release candidate)
-- [ ] npm publish, registry 확인, `v0.2.1` tag, GitHub Release, `pnpm release:verify-published`: 사람이 승인한 뒤에만
+- [x] RC commit `1316bdf`의 full CI(3 OS, run 37178168821)
+- [x] `pnpm release:preflight` READY(codeReady·externalReady true, blocker 0), `npm publish --dry-run`(7,468 entries, 목록 = release candidate, bundled 67)
+- [x] npm publish(검증한 RC tarball 그대로, 브라우저 2FA 승인 1회, integrity `sha512-E34DdTXz…FEVhQ==`, shasum `5c344564efcccbe2a59333b0557eeee67bfd1f4f`), registry version·integrity·shasum·fileCount = RC, `latest` = 0.2.1
+- [x] registry 설치 검증(Windows, Node 24.18.0): npm 12.2.0·11.21.0·10.9.9 × global·project-local(`npx --no-install duoctl` 포함) 6칸 모두 `duoctl 0.2.1`, 설치 트리 = `dist/runtime-tree.json`(67 package, 경로·version·내용 불일치 0, package 밖 설치 0), install script 0, init·status·doctor·context·MCP 성공
+- [x] annotated tag `v0.2.1` → `1316bdf`, GitHub Release "DUO 0.2.1"(draft·prerelease 아님, 본문 = release notes, 상대 링크만 `v0.2.1` 기준 절대 링크로)
+- [x] `pnpm release:verify-published` OK(problems 0: registry integrity = RC, 빈 npm 설정 설치, 설치 트리 = runtime tree, 실행, tag commit, GitHub Release)
 
 
 ## 0.2.0 (H-62, 2026-10-03 release, `v0.2.0` = `90a506b`)
@@ -120,7 +124,7 @@ git tag -a v0.2.1 -m "DUO 0.2.1" <release candidate commit> && git push origin v
 pnpm release:verify-published   # --version 0.2.1 --integrity <RC integrity> --commit <RC commit>
 ```
 
-0.1.0은 `v0.1.0`(`04bab58`), 0.1.1은 `v0.1.1`(`834bc6f`), 0.1.2는 `v0.1.2`(`93010a4`), 0.2.0은 `v0.2.0`(`90a506b`)로 게시했다.
+0.1.0은 `v0.1.0`(`04bab58`), 0.1.1은 `v0.1.1`(`834bc6f`), 0.1.2는 `v0.1.2`(`93010a4`), 0.2.0은 `v0.2.0`(`90a506b`), 0.2.1은 `v0.2.1`(`1316bdf`)로 게시했다.
 
 README와 package README는 publish 전에 이미 npm registry 설치 흐름으로 바뀌어 있고, 그 문서 전환 commit이 final release candidate다. publish 뒤 문서를 다시 바꿀 필요는 없다. GitHub Release는 tag를 push한 뒤 따로 만든다.
 
