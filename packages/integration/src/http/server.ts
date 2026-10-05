@@ -133,7 +133,8 @@ const PROPOSAL_ID = /^P-[A-Za-z0-9-]{1,64}$/u;
 const SCHEMAS = {
   context: z.strictObject({ task: text(20_000), budget: z.number().int().min(MIN_BUDGET).max(MAX_BUDGET).optional() }),
   review: z.strictObject({ task: text(20_000).optional(), from: endpoint.optional(), to: endpoint.optional(), includeSemanticAssist: z.boolean().optional() }),
-  confirm: z.strictObject({ confirmId: z.string().max(80), previewDigest: z.string().max(100).optional() }),
+  // previewDigest is required (T34.3): a UI confirm is always bound to the preview the person reviewed.
+  confirm: z.strictObject({ confirmId: z.string().max(80), previewDigest: z.string().min(1).max(100) }),
   reject: z.strictObject({ reason: z.string().max(2000).optional() }),
   graph: z.strictObject({ node: text(4096), kind: z.enum(["trace", "impact"]).default("trace"), depth: z.coerce.number().int().min(1).max(3).default(1) }),
   search: z.strictObject({ q: text(200), limit: z.coerce.number().int().min(1).max(50).default(20) }),
@@ -191,8 +192,8 @@ export async function startDuoUiServer(options: DuoUiServerOptions): Promise<Duo
         const body = parse(SCHEMAS.confirm, await readJson(req));
         // The ID typed again: a guard against a misclick, not an authentication.
         if (body.confirmId.trim() !== id) throw new HttpError(400, "UI_CONFIRM_ID_MISMATCH", "type the proposal ID to confirm it");
-        // Bound to the preview the person reviewed (T34.2): a changed candidate is not confirmed.
-        const r = await service.confirm(await actor(), id, body.previewDigest === undefined ? {} : { expectedDigest: body.previewDigest });
+        // Bound to the preview the person reviewed (T34.2, T34.3): a changed candidate is not confirmed.
+        const r = await service.confirm(await actor(), id, { expectedDigest: body.previewDigest });
         await meter("decision", r.value === undefined ? "failed" : "confirmed", started);
         return { name: "decision", body: r.value === undefined ? { status: "failed", diagnostics: r.diagnostics.map((d) => ({ code: d.code, message: d.message })) } : { status: "confirmed", result: r.value, warnings: r.diagnostics.map((d) => ({ code: d.code, message: d.message })) } };
       }

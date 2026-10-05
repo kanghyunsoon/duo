@@ -78,6 +78,16 @@ function Content(props: { readonly p: ProposalItem; readonly preview: Preview | 
   );
 }
 
+/**
+ * Staleness is tracked for proposals only (based_on); for a YAML Decision it does not apply, which is
+ * not the same as "checked and fresh" (T34.3, same meaning as the CLI).
+ */
+export function staleText(preview: Preview): string {
+  if (preview.sourceKind === "decision") return "not applicable (staleness is tracked for proposals only)";
+  if (preview.stale === undefined) return "no";
+  return `yes, Project Truth changed since this proposal was made${preview.stale.changedRefs.length > 0 ? ` (changed: ${preview.stale.changedRefs.join(", ")})` : ""}`;
+}
+
 /** The candidate a confirm acts on (previewConfirm), every content field shown, absent ones as (not set). */
 function Candidate(props: { readonly preview: Preview }) {
   const c = props.preview.candidate ?? {};
@@ -87,7 +97,7 @@ function Candidate(props: { readonly preview: Preview }) {
   return (
     <dl className="facts">
       {rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{fieldText(value)}</dd></div>)}
-      <div><dt>Stale</dt><dd>{props.preview.stale === undefined ? "no" : "yes"}</dd></div>
+      <div><dt>Stale</dt><dd>{staleText(props.preview)}</dd></div>
       <div><dt>Expected Decision ID</dt><dd>{props.preview.expectedDecisionId ?? "—"} <span className="muted">(expected; the confirm result is authoritative)</span></dd></div>
     </dl>
   );
@@ -103,7 +113,7 @@ function Pending(props: { readonly p: ProposalItem; readonly preview: Preview | 
   const run = async (kind: "confirm" | "reject") => {
     setBusy(true);
     try {
-      const body = kind === "confirm" ? { confirmId: typed, ...(preview?.digest === undefined ? {} : { previewDigest: preview.digest }) } : reason.trim() === "" ? {} : { reason: reason.trim() };
+      const body = kind === "confirm" ? { confirmId: typed, previewDigest: preview?.digest ?? "" } : reason.trim() === "" ? {} : { reason: reason.trim() };
       const r = (await api.post<ActionResult>(`/api/proposals/${encodeURIComponent(p.id)}/${kind}`, body)).data;
       if (r.status === "failed") props.done(`${p.id}: ${(r.diagnostics ?? []).map((d) => `${d.code} ${d.message}`).join("; ")}`, true);
       else if (kind === "confirm") props.done(`${p.id} confirmed as ${r.result?.decisionId ?? "?"} (${r.result?.path ?? ""}). Run duoctl index so the graph shows it.${(r.warnings ?? []).length > 0 ? ` Warnings: ${(r.warnings ?? []).map((w) => w.code).join(", ")}` : ""}`);

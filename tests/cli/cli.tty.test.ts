@@ -123,6 +123,7 @@ describe("informed confirm (T34.2, terminal)", () => {
     for (const label of ["Title", "Question", "Answer", "Kind", "Rationale", "Governs", "Forbids", "Enforcement", "Supersedes", "Stale", "Expected ID"]) expect(shown).toContain(`  ${label}`);
     expect(shown).toMatch(/Forbids +\(not set\)/u);
     expect(shown).toMatch(/Enforcement +\(not set\)/u);
+    expect(shown).toMatch(/Stale +no$/mu);
     expect(shown).toMatch(/Expected ID +D-001 \(expected; the ID in the confirm result is authoritative\)/u);
     expect(first.out.join("\n")).toContain("confirmed as D-001");
     expect(first.out.join("\n")).toContain("Run duoctl index so review and context see it.");
@@ -166,6 +167,13 @@ describe("informed confirm (T34.2, terminal)", () => {
     const locked = scripted(p.root, "D-002");
     expect(await run(["decision", "reject", "D-002"], locked.io)).toBe(1);
     expect(locked.err.join("\n")).toContain("DECISION_LOCKED");
+
+    // A YAML Decision has no staleness model: "not applicable", never "no" (T34.3).
+    p.write(".duo-project/decisions/D-009.yaml", "id: D-009\ntitle: Minutes only\nkind: decision\nstate: proposed\nquestion: duration_unit\nanswer: minutes\n");
+    const inPlace = scripted(p.root, "D-009");
+    expect(await run(["decision", "confirm", "D-009"], inPlace.io)).toBe(0);
+    expect(inPlace.before()).toMatch(/Stale +not applicable \(staleness is tracked for proposals only\)/u);
+    expect(inPlace.before()).toMatch(/Expected ID +D-009 \(confirmed in place\)/u);
   });
 });
 

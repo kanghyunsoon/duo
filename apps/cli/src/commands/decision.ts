@@ -41,7 +41,9 @@ export function previewLines(L: Locale, p: ConfirmPreview, op: "confirm" | "reje
   const supersedes = c.supersedes === undefined ? t(L, "decision.preview.not-set")
     : p.supersedes === undefined ? `${show(L, c.supersedes)} (${t(L, "decision.preview.not-found")})`
       : `${p.supersedes.id} "${p.supersedes.title}" (${p.supersedes.state})${op === "confirm" ? ` → ${t(L, "decision.preview.becomes-superseded")}` : ""}`;
-  const stale = p.stale === undefined ? t(L, "decision.preview.fresh")
+  // Staleness applies to proposals only; for a YAML Decision it is "not applicable", never "no" (T34.3).
+  const stale = p.sourceKind === "decision" ? t(L, "decision.preview.stale-na")
+    : p.stale === undefined ? t(L, "decision.preview.fresh")
     : t(L, "decision.preview.stale", { changed: p.stale.changedRefs.length > 0 ? ` (changed: ${p.stale.changedRefs.join(", ")})` : "" });
   const lines = [
     head,

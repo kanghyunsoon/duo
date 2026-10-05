@@ -260,9 +260,12 @@ describe("RC: local UI — same operations as CLI/MCP, security, no external res
       expect(proposed.structuredContent).toMatchObject({ format: "duo.proposal/1", confirmed: false });
       const stale = await data(await get("/api/proposals")); // "tab B" loads the list before tab A confirms
       expect(stale.proposals.find((p: { id: string }) => p.id === id)?.status).toBe("pending");
-      const first = await data(await post("/api/proposals/" + id + "/confirm", { confirmId: id }));
+      const previewDigest = stale.previews[id]?.digest as string; // T34.3: a UI confirm is bound to the reviewed preview
+      expect(previewDigest).toMatch(/^sha256:/u);
+      expect((await post("/api/proposals/" + id + "/confirm", { confirmId: id })).status).toBe(400);
+      const first = await data(await post("/api/proposals/" + id + "/confirm", { confirmId: id, previewDigest }));
       expect(first.status).toBe("confirmed");
-      const second = await data(await post("/api/proposals/" + id + "/confirm", { confirmId: id }));
+      const second = await data(await post("/api/proposals/" + id + "/confirm", { confirmId: id, previewDigest }));
       expect(second).toMatchObject({ status: "failed", diagnostics: [expect.objectContaining({ code: "PROPOSAL_NOT_PENDING" })] });
       const refreshed = await data(await get("/api/proposals"));
       // After a refresh the proposal is no longer pending and the Decision is committed.

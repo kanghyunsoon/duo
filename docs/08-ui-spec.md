@@ -25,7 +25,7 @@ UI에서 허용하는 쓰기는 Human의 Decision Proposal **Confirm**과 **Reje
 | GET | `/api/source?path=&start=&end=` | 인덱싱된 파일의 필요한 줄, 최대 120줄 |
 | POST | `/api/context` | 기존 Context Compiler, `{ task, budget? }` |
 | POST | `/api/review` | 기존 Review, `{ task?, from?, to?, includeSemanticAssist? }` |
-| POST | `/api/proposals/:id/confirm` | `{ confirmId, previewDigest? }`. ID를 재입력하고 DecisionService.confirm 호출. `previewDigest`(T34.2)가 있으면 그 preview에 묶여, candidate가 바뀌었으면 `DECISION_CONFIRM_PREVIEW_CHANGED`로 아무것도 쓰지 않음 |
+| POST | `/api/proposals/:id/confirm` | `{ confirmId, previewDigest }`. ID를 재입력하고 DecisionService.confirm 호출. `previewDigest`는 필수(T34.3)이며 없으면 400 `UI_REQUEST_INVALID`. confirm은 그 preview에 묶여, candidate가 바뀌었으면 `DECISION_CONFIRM_PREVIEW_CHANGED`로 아무것도 쓰지 않음 |
 | POST | `/api/proposals/:id/reject` | `{ reason? }`로 DecisionService.reject 호출 |
 
 입력은 서버에서 strict validation한다. POST는 같은 Origin, session cookie, `X-Duo-CSRF`, JSON content type을 요구한다. [보안 계약](10-security.md#로컬-http-api)을 따른다.
@@ -34,7 +34,7 @@ UI에서 허용하는 쓰기는 Human의 Decision Proposal **Confirm**과 **Reje
 
 - **Overview**: 프로젝트, milestone, index freshness, baseline, analysis coverage, Requirement/Decision 수, pending human decision, knowledge gap, 최근 Review verdict. 점수는 만들지 않는다.
 - **Direction**: Vision, Milestone, Requirement, Constraint, active/superseded Decision을 ID·state·source 위치로 탐색한다. Sparse Truth도 정상 상태로 표시한다.
-- **Decisions**: Proposal의 pending/committed/rejected state를 구분한다. Confirm은 내용·stale warning·supersede 대상을 modal에서 다시 보여주고 ID 재입력을 요구한다. modal의 내용은 CLI와 같은 `DecisionService.previewConfirm` candidate(Title, Question, Answer, Kind, Rationale, Governs, Forbids, Enforcement, Supersedes, Stale, Expected Decision ID)이고, 확정 요청은 그 preview의 digest를 함께 보낸다(T34.2). preview가 없으면 Confirm 버튼은 비활성이다. pending 카드에도 Forbids와 Enforcement를 보인다. Reject에는 선택적 사유를 받는다.
+- **Decisions**: Proposal의 pending/committed/rejected state를 구분한다. Confirm은 내용·stale warning·supersede 대상을 modal에서 다시 보여주고 ID 재입력을 요구한다. modal의 내용은 CLI와 같은 `DecisionService.previewConfirm` candidate(Title, Question, Answer, Kind, Rationale, Governs, Forbids, Enforcement, Supersedes, Stale, Expected Decision ID)이고, 확정 요청은 그 preview의 digest를 함께 보낸다(T34.2). preview가 없으면 Confirm 버튼은 비활성이다. Stale은 CLI와 같은 의미로 proposal이면 `no` 또는 바뀐 내용, YAML Decision이면 `not applicable`이다. pending 카드에도 Forbids와 Enforcement를 보인다. Reject에는 선택적 사유를 받는다.
 - **Graph**: 검색으로 seed를 고르고 기존 trace/impact operation으로 depth 1–3의 bounded 관계를 탐색한다. Node/edge 목록에서 entity 상세로 이동한다. 전체 Graph와 별도 force-directed engine을 사용하지 않는다.
 - **Coverage**: 언어별 L0/L1/L2와 file, symbol, test, import, call, type resolution 범위 및 limitation을 표시한다. L0는 정상 file-level fallback이다.
 - **Context**: 입력 task로 Packet을 생성하고 seed, confirmed intent, decision, code, test, gap, evidence, token metric, omitted candidate를 보여준다. Stale index는 명시적으로 `index-required`로 표시한다.
