@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, next] # next: unreleased 0.3.x development track (H-70)
   pull_request:
 
 permissions:
