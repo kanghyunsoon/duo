@@ -383,4 +383,33 @@ describe("T34.2 informed confirm: the preview is the candidate confirm acts on",
     expect(codes(await service().reject(agent, "P-001"))).toEqual(["DECISION_ACTOR_FORBIDDEN"]);
   });
 });
+describe("H-71 proposer in the preview, and agent proposals with forbids, enforcement and supersedes", () => {
+  it("the proposer is shown from the proposal file and bound into the digest; a YAML Decision gets none invented", async () => {
+    await service().propose(agent, { ...input, forbids: { symbols: ["*SessionStore*"] }, enforcement: "block", supersedes: "D-001" });
+    const p = (await service().previewConfirm("P-001")).value;
+    expect(p).toMatchObject({ proposedBy: "codex", proposedByKind: "agent", candidate: { forbids: { symbols: ["*SessionStore*"] }, enforcement: "block", supersedes: "D-001" } });
+    write(".duo-project/decisions/proposals/P-001.yaml", read(".duo-project/decisions/proposals/P-001.yaml").replace("proposed_by: codex", "proposed_by: claude"));
+    expect(codes(await service().confirm(human, "P-001", { expectedDigest: p?.digest ?? "" }))).toEqual(["DECISION_CONFIRM_PREVIEW_CHANGED"]);
+    write(".duo-project/decisions/D-002.yaml", "id: D-002\ntitle: Other\nstate: proposed\nquestion: other\nanswer: x\nproposed_by: someone\n");
+    const d = (await service().previewConfirm("D-002")).value;
+    expect(d?.proposedBy).toBeUndefined();
+    expect(d?.proposedByKind).toBeUndefined();
+  });
+
+  it("H/I/K an agent supersede proposal: a missing or already superseded target writes nothing; the target file is never touched by proposing", async () => {
+    const d001 = read(".duo-project/decisions/D-001.yaml");
+    const listing = () => (exists(".duo-project/decisions/proposals") ? fs.readdirSync(abs(".duo-project/decisions/proposals")).sort() : []);
+    const before = listing();
+    expect(codes(await service().propose(agent, { ...input, supersedes: "D-099" }))).toContain("PROPOSAL_INVALID");
+    expect(listing()).toEqual(before);
+    expect((await service().propose(agent, { ...input, answer: "passkey", supersedes: "D-001", enforcement: "block", forbids: { paths: ["src/legacy/**"] } })).value?.proposalId).toBe("P-001");
+    expect(read(".duo-project/decisions/D-001.yaml")).toBe(d001);
+    expect(truth().truth.decisions.find((d) => d.id === "D-001")?.state).toBe("confirmed");
+    expect((await service().confirm(human, "P-001")).value?.decisionId).toBe("D-002");
+    const afterConfirm = listing();
+    const r = await service().propose(agent, { ...input, answer: "sso", supersedes: "D-001" });
+    expect(codes(r)).toEqual(expect.arrayContaining(["PROPOSAL_INVALID", "DECISION_SUPERSEDE_TARGET_INVALID"]));
+    expect(listing()).toEqual(afterConfirm);
+  });
+});
 

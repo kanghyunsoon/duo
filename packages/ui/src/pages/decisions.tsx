@@ -88,6 +88,12 @@ export function staleText(preview: Preview): string {
   return `yes, Project Truth changed since this proposal was made${preview.stale.changedRefs.length > 0 ? ` (changed: ${preview.stale.changedRefs.join(", ")})` : ""}`;
 }
 
+/** The proposer the proposal file records (H-71), as the CLI shows it: "codex (agent)". */
+export function proposerText(preview: Preview): string {
+  if (preview.proposedBy === undefined) return "(not set)";
+  return preview.proposedByKind === undefined ? preview.proposedBy : `${preview.proposedBy} (${preview.proposedByKind})`;
+}
+
 /** The candidate a confirm acts on (previewConfirm), every content field shown, absent ones as (not set). */
 function Candidate(props: { readonly preview: Preview }) {
   const c = props.preview.candidate ?? {};
@@ -97,6 +103,7 @@ function Candidate(props: { readonly preview: Preview }) {
   return (
     <dl className="facts">
       {rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{fieldText(value)}</dd></div>)}
+      {props.preview.sourceKind !== "proposal" ? null : <div><dt>Proposed by</dt><dd>{proposerText(props.preview)} <span className="muted">(audit label, not an authenticated identity)</span></dd></div>}
       <div><dt>Stale</dt><dd>{staleText(props.preview)}</dd></div>
       <div><dt>Expected Decision ID</dt><dd>{props.preview.expectedDecisionId ?? "—"} <span className="muted">(expected; the confirm result is authoritative)</span></dd></div>
     </dl>

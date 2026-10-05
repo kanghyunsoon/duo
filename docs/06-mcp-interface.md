@@ -88,7 +88,8 @@ Tool은 9개로 고정한다(H-10). 새 Tool이 필요하면 별도 Spec과 ADR�
 
 ### duo_propose_decision
 
-- 입력: `{ title, question, answer, rationale?, governs?: { requirements?, paths?, symbols? }, agent? }`
+- 입력: `{ title, question, answer, rationale?, governs?: { requirements?, paths?, symbols? }, forbids?: { paths?, symbols?, dependencies? }, enforcement?: "warn" | "block", supersedes?: "D-###", agent? }`. `forbids`·`enforcement`·`supersedes`는 H-71(branch `next`)에서 추가됐다. `forbids`는 Decision schema와 같은 형식·의미이고, `paths`는 review가 쓰는 같은 pattern compiler(`compileRepoPattern`)로 compile되어야 하며(절대 경로·`..` 거부) 빈 `forbids`는 거부한다. 개수·길이 상한은 `governs`와 같다(항목 100개, 이름 500자, pattern 4096자). `enforcement`를 생략하면 생략으로 저장하고 기본값을 만들지 않는다. `supersedes`는 Decision ID 하나이며 core가 대상의 존재와 `confirmed` 상태를 확인한다(아니면 `PROPOSAL_INVALID`, 쓰기 0). `evidence`, `source`, `extensions`, `kind`는 agent 입력이 아니다.
+- authority: proposal은 Project Truth가 아니고 review verdict를 바꾸지 않는다. `enforcement: block`과 `supersedes`는 사람이 `duoctl decision confirm`이나 UI에서 Informed Confirm으로 확정한 뒤에만 효력이 있고, 대체되는 Decision은 그때 DecisionService가 `superseded`로 표시한다. proposal 파일은 index freshness를 stale로 만들 수 있다(0.2.1부터의 동작, review는 `index-required`).
 - 동작: core DecisionService가 lock 안에서 `decisions/proposals/P-NNN.yaml`을 새로 만든다(write boundary, symlink 정책은 DecisionService 그대로). 기존 파일은 수정하지 않는다.
 - 출력: `{ proposalId, path, state: "proposed", proposedBy: { kind: "agent", name }, confirmed: false, indexRequired, basedOn?, notice }`.
 

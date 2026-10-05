@@ -1,17 +1,49 @@
 /**
- * T34.2 / H-36 boundary: informed confirm does not widen what an agent may propose. The MCP proposal
- * input stays title, question, answer, rationale, governs (and the agent label); forbids, enforcement
- * and supersedes are not agent-facing even though the core ProposalInput has them.
+ * H-71 contract (was H-36): duo_propose_decision may carry forbids, enforcement and supersedes in addition to
+ * title, question, answer, rationale and governs. evidence, source, extensions and kind stay out of the
+ * agent-facing input. A proposal gains no authority until a human confirms it (DecisionService, Informed Confirm).
  */
 import { describe, expect, it } from "vitest";
-import { INPUT } from "./tools.js";
+import { INPUT, TOOLS } from "./tools.js";
 
-describe("duo_propose_decision input contract (H-36, unchanged by T34.2)", () => {
-  it("accepts only the documented fields and rejects forbids, enforcement and supersedes", () => {
-    const schema = INPUT.duo_propose_decision;
-    expect(Object.keys(schema.shape).sort()).toEqual(["agent", "answer", "governs", "question", "rationale", "title"]);
-    const base = { title: "t", question: "q", answer: "a" };
-    expect(schema.safeParse(base).success).toBe(true);
-    for (const extra of [{ forbids: { symbols: ["*X*"] } }, { enforcement: "block" }, { supersedes: "D-001" }]) expect(schema.safeParse({ ...base, ...extra }).success).toBe(false);
+const schema = INPUT.duo_propose_decision;
+const base = { title: "t", question: "q", answer: "a" };
+const ok = (v: Record<string, unknown>) => schema.safeParse({ ...base, ...v }).success;
+
+describe("duo_propose_decision input contract (H-71)", () => {
+  it("accepts exactly the H-71 fields; evidence, source, extensions and kind stay rejected", () => {
+    expect(Object.keys(schema.shape).sort()).toEqual(["agent", "answer", "enforcement", "forbids", "governs", "question", "rationale", "supersedes", "title"]);
+    for (const extra of [{ evidence: [] }, { source: [] }, { extensions: {} }, { kind: "decision" }, { state: "confirmed" }, { lock: { digest: "sha256:x" } }]) expect(ok(extra)).toBe(false);
+  });
+
+  it("A an old-style request is still valid", () => {
+    expect(ok({})).toBe(true);
+    expect(ok({ rationale: "r", governs: { requirements: ["AUTH-01"], paths: ["src/**"] }, agent: "codex" })).toBe(true);
+  });
+
+  it("B/C forbids with enforcement block, and supersedes, are valid", () => {
+    expect(ok({ forbids: { paths: ["src/ui/**"], symbols: ["*SessionStore*"], dependencies: ["left-pad"] }, enforcement: "block" })).toBe(true);
+    expect(ok({ forbids: { symbols: ["*X*"] } })).toBe(true); // enforcement omitted stays omitted
+    expect(ok({ supersedes: "D-001" })).toBe(true);
+  });
+
+  it("D/E forbids: a pattern review cannot compile is rejected; an empty forbids is rejected; no new syntax", () => {
+    for (const p of ["../outside/**", "/etc/**", "C:\\x\\**", ""]) expect(ok({ forbids: { paths: [p] } }), p).toBe(false);
+    expect(ok({ forbids: {} })).toBe(false);
+    expect(ok({ forbids: { paths: [], symbols: [] } })).toBe(false);
+    expect(ok({ forbids: { regex: ["x"] } })).toBe(false);
+    expect(ok({ forbids: { paths: Array.from({ length: 101 }, (_, i) => `src/${i}`) } })).toBe(false);
+  });
+
+  it("F/G enforcement is warn or block only; supersedes is one Decision ID", () => {
+    for (const e of ["error", "BLOCK", "", true]) expect(ok({ enforcement: e })).toBe(false);
+    for (const id of ["P-001", "AUTH-01", "D-", "d-001", "D-001 ", ["D-001"]]) expect(ok({ supersedes: id })).toBe(false);
+  });
+
+  it("O the tool list is unchanged: nine tools, no confirm or reject", () => {
+    const names = Object.keys(TOOLS);
+    expect(names).toHaveLength(9);
+    expect(names.filter((n) => /confirm|reject|write|index|record/u.test(n))).toEqual([]);
+    expect(TOOLS.duo_propose_decision.description).toMatch(/proposal only.*does not change any review verdict.*no authority until a human confirms/su);
   });
 });

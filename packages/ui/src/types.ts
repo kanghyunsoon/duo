@@ -58,6 +58,7 @@ export interface Preview {
   readonly proposalId?: string; readonly nextDecisionId?: string; readonly expectedDecisionId?: string;
   readonly sourceId?: string; readonly sourceKind?: "proposal" | "decision"; readonly sourcePath?: string; readonly action?: "create" | "confirm-in-place" | "add-lock";
   readonly candidate?: Readonly<Record<string, unknown>>;
+  readonly proposedBy?: string; readonly proposedByKind?: string;
   readonly digest?: string;
   readonly stale?: { readonly truthChanged: boolean; readonly changedRefs: readonly string[] };
   readonly supersedes?: { readonly id: string; readonly title: string; readonly state: string; readonly path: string };

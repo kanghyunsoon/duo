@@ -88,10 +88,16 @@ export interface ConfirmPreview {
   /** Same as expectedDecisionId (T18.1 name). */
   readonly nextDecisionId: string;
   readonly candidate: DecisionCandidate;
+  /**
+   * Who the proposal file says proposed it (H-71): proposed_by and proposed_by_kind, proposals only and only
+   * when present. An audit label, not an authenticated identity. Part of the digest: the human reviews it.
+   */
+  readonly proposedBy?: string;
+  readonly proposedByKind?: string;
   readonly stale?: StaleInfo;
   /** The Decision the candidate supersedes, as it is now. Absent when there is none or it does not exist (candidate.supersedes still names it). */
   readonly supersedes?: { readonly id: string; readonly title: string; readonly state: string; readonly path: RepoPath };
-  /** sha256 over source, action, candidate, staleness and the superseded target (not the expected ID). Pass it to confirm as expectedDigest. */
+  /** sha256 over source, action, candidate, proposer, staleness and the superseded target (not the expected ID). Pass it to confirm as expectedDigest. */
   readonly digest: string;
 }
 
@@ -109,6 +115,8 @@ interface Candidate {
   /** The file's parsed YAML; confirm copies a proposal's content from it. */
   readonly data: Record<string, unknown>;
   readonly candidate: DecisionCandidate;
+  readonly proposedBy?: string;
+  readonly proposedByKind?: string;
   readonly stale?: StaleInfo;
   readonly supersedesId: string | null;
   readonly target?: Decision;
@@ -416,7 +424,9 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
       const expected = v.sourceKind === "decision" ? id : await allocate("D", truth);
       return success({
         sourceId: id, sourceKind: v.sourceKind, sourcePath: v.sourcePath, action: v.action, ...(v.sourceKind === "proposal" ? { proposalId: id } : {}),
-        expectedDecisionId: expected, nextDecisionId: expected, candidate: v.candidate, ...(v.stale === undefined ? {} : { stale: v.stale }),
+        expectedDecisionId: expected, nextDecisionId: expected, candidate: v.candidate,
+        ...(v.proposedBy === undefined ? {} : { proposedBy: v.proposedBy }), ...(v.proposedByKind === undefined ? {} : { proposedByKind: v.proposedByKind }),
+        ...(v.stale === undefined ? {} : { stale: v.stale }),
         ...(v.target === undefined ? {} : { supersedes: { id: v.target.id, title: v.target.title, state: v.target.state, path: v.target.location.path as RepoPath } }),
         digest: v.digest,
       });
@@ -463,6 +473,7 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
     return success(finishCandidate(truth, {
       sourceId: id, sourceKind: "proposal", sourcePath: entry.proposal.location.path as RepoPath, action: "create",
       data, supersedesId: entry.proposal.supersedes, proposal: entry.proposal, ...(stale === undefined ? {} : { stale }),
+      ...(typeof data.proposed_by === "string" ? { proposedBy: data.proposed_by } : {}), ...(typeof data.proposed_by_kind === "string" ? { proposedByKind: data.proposed_by_kind } : {}),
     }));
   }
 
@@ -478,6 +489,7 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
     const target = base.supersedesId === null ? undefined : truth.decisions.find((t) => t.id === base.supersedesId);
     const digest = candidateDigest({
       sourceId: base.sourceId, sourceKind: base.sourceKind, sourcePath: base.sourcePath, action: base.action, candidate, stale: base.stale ?? null,
+      proposedBy: base.proposedBy ?? null, proposedByKind: base.proposedByKind ?? null,
       supersedes: base.supersedesId === null ? null : target === undefined ? { id: base.supersedesId, missing: true }
         : { id: target.id, title: target.title, state: target.state, supersededBy: target.supersededBy, path: target.location.path, content: decisionLockDigest(target) },
     });

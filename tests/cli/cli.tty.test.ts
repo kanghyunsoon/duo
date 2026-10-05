@@ -124,6 +124,7 @@ describe("informed confirm (T34.2, terminal)", () => {
     expect(shown).toMatch(/Forbids +\(not set\)/u);
     expect(shown).toMatch(/Enforcement +\(not set\)/u);
     expect(shown).toMatch(/Stale +no$/mu);
+    expect(shown).toMatch(/Proposed by +codex \(agent\)/u);
     expect(shown).toMatch(/Expected ID +D-001 \(expected; the ID in the confirm result is authoritative\)/u);
     expect(first.out.join("\n")).toContain("confirmed as D-001");
     expect(first.out.join("\n")).toContain("Run duoctl index so review and context see it.");
@@ -141,6 +142,7 @@ describe("informed confirm (T34.2, terminal)", () => {
     expect(s).toMatch(/Supersedes +D-001 "Weekly rotation" \(confirmed\) → becomes superseded by this Decision/u);
     expect(s).toMatch(/Stale +yes, Project Truth changed since this proposal was made/u);
     expect(s).toMatch(/Expected ID +D-002 \(expected/u);
+    expect(s).toMatch(/Proposed by +Ada Lovelace \(human\)/u);
     expect(loadProjectTruth(p.root).value?.truth.decisions.find((d) => d.id === "D-001")?.state).toBe("superseded");
 
     // The candidate changes while the ID is being typed: nothing is confirmed.
@@ -174,6 +176,7 @@ describe("informed confirm (T34.2, terminal)", () => {
     expect(await run(["decision", "confirm", "D-009"], inPlace.io)).toBe(0);
     expect(inPlace.before()).toMatch(/Stale +not applicable \(staleness is tracked for proposals only\)/u);
     expect(inPlace.before()).toMatch(/Expected ID +D-009 \(confirmed in place\)/u);
+    expect(inPlace.before()).not.toContain("Proposed by");
   });
 });
 

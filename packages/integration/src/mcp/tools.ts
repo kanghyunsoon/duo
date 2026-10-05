@@ -7,7 +7,7 @@
  * definitions, the Graph and evidence, and propose a Decision. There is no tool to confirm or reject
  * a Decision, write Truth, record a Review, index or capture the Adoption Baseline.
  */
-import { DEFINITION_ID_PATTERN, MCP_SERVER_NAME, normalizeRepoPath, normalizeRepoPattern, type RepoPath } from "@duo-director/core";
+import { compileRepoPattern, DEFINITION_ID_PATTERN, MCP_SERVER_NAME, normalizeRepoPath, normalizeRepoPattern, type RepoPath } from "@duo-director/core";
 import { ambiguityRemediation, MAX_BUDGET, MIN_BUDGET, redactSecrets, renderContextMarkdown, reviewLlmMetric, type ReviewResult, type SeedAmbiguity, type TokenCountMemo } from "@duo-director/director";
 import { z } from "zod";
 import type { LLMProviderPool } from "../llm/factory.js";
@@ -29,6 +29,17 @@ const definitionId = z.string().regex(DEFINITION_ID_PATTERN, "a definition ID su
 // eslint-disable-next-line no-control-regex -- control characters are refused on purpose
 const endpoint = z.string().min(1).max(256).refine((v) => !v.startsWith("-") && !/[\u0000-\u001f\u007f\s]/u.test(v), "HEAD, INDEX, WORKTREE or a commit / branch name");
 const text = (max: number) => z.string().trim().min(1).max(max);
+/** H-71: one existing Decision ID (DecisionService lifecycle IDs), never a proposal or another definition. */
+const decisionId = z.string().regex(/^D-\d+$/u, "a Decision ID such as D-004");
+/**
+ * H-71: forbids has the Decision schema's shape and meaning. A path must compile with the pattern compiler
+ * review uses (review silently skips one it cannot compile), so nothing is accepted that review cannot
+ * apply. Limits are those of governs (100 entries, 500 characters per name; 4096 per pattern like repoPattern).
+ */
+const forbidPattern = z.string().min(1).max(4096).refine((p) => compileRepoPattern(p) !== undefined, "a repository-relative pattern review can match (no absolute or .. pattern)");
+const forbids = z.strictObject({
+  paths: z.array(forbidPattern).max(100).optional(), symbols: z.array(text(500)).max(100).optional(), dependencies: z.array(text(500)).max(100).optional(),
+}).refine((f) => (f.paths?.length ?? 0) + (f.symbols?.length ?? 0) + (f.dependencies?.length ?? 0) > 0, "forbids needs at least one path, symbol or dependency");
 
 export const INPUT = {
   duo_get_status: z.strictObject({}),
@@ -45,6 +56,8 @@ export const INPUT = {
   duo_propose_decision: z.strictObject({
     title: text(200), question: text(200), answer: text(2000), rationale: text(4000).optional(),
     governs: z.strictObject({ requirements: z.array(definitionId).max(100).optional(), paths: z.array(repoPattern).max(100).optional(), symbols: z.array(text(500)).max(100).optional() }).optional(),
+    // H-71: the proposal may carry what a Decision enforces and what it replaces; it gains no authority until a human confirms it.
+    forbids: forbids.optional(), enforcement: z.enum(["warn", "block"]).optional(), supersedes: decisionId.optional(),
     agent: text(100).optional(),
   }),
 } as const;
@@ -208,11 +221,13 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
   },
   duo_propose_decision: {
     name: "duo_propose_decision", title: "Propose a Decision", readOnly: false,
-    description: "Creates a Decision proposal only (decisions/proposals/P-*.yaml). Cannot confirm or reject a decision: a human does that in duoctl or the Web UI. A proposal is not confirmed intent. The agent name is an audit label, not an authentication.",
+    description: "Creates a Decision proposal only (decisions/proposals/P-*.yaml). Cannot confirm or reject a decision: a human does that in duoctl or the Web UI. A proposal is not confirmed Project Truth and does not change any review verdict. forbids and enforcement: \"block\" have no authority until a human confirms the proposal. supersedes names a confirmed Decision to replace; that Decision is not modified until a human confirms this proposal. The agent name is an audit label, not an authentication.",
     run: async (args, ctx) => {
       const op = await proposeDecision(ctx.root, args.agent ?? ctx.agentName, {
         title: args.title, question: args.question, answer: args.answer, ...(args.rationale === undefined ? {} : { rationale: args.rationale }),
         ...(args.governs === undefined ? {} : { governs: args.governs }),
+        ...(args.forbids === undefined ? {} : { forbids: args.forbids }), ...(args.enforcement === undefined ? {} : { enforcement: args.enforcement }),
+        ...(args.supersedes === undefined ? {} : { supersedes: args.supersedes }),
       });
       return { op, metric: { status: op.kind === "ok" ? "proposed" : op.kind } };
     },

@@ -50,6 +50,8 @@ export function previewLines(L: Locale, p: ConfirmPreview, op: "confirm" | "reje
     row("Title", show(L, c.title)), row("Question", show(L, c.question)), row("Answer", show(L, c.answer)), row("Kind", show(L, c.kind)),
     row("Rationale", show(L, c.rationale)), row("Governs", show(L, c.governs)), row("Forbids", show(L, c.forbids)), row("Enforcement", show(L, c.enforcement)),
     row("Supersedes", supersedes),
+    // H-71: the proposer as the proposal file records it (an audit label); a YAML Decision has none to show.
+    ...(p.sourceKind === "proposal" ? [row("Proposed by", p.proposedBy === undefined ? t(L, "decision.preview.not-set") : `${p.proposedBy}${p.proposedByKind === undefined ? "" : ` (${p.proposedByKind})`}`)] : []),
     ...(c.evidence === undefined ? [] : [row("Evidence", show(L, c.evidence))]),
     ...(c.source === undefined ? [] : [row("Source", show(L, c.source))]),
     ...(c.extensions === undefined ? [] : [row("Extensions", show(L, c.extensions))]),

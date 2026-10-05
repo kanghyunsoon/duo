@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createDecisionService } from "@duo-director/core";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { CLI_MAIN, duoctl, existingProject, snapshot } from "../cli/support.js";
 import { contextRegistry, makeContextRepo, REVIEW_FIXTURE } from "../../packages/director/src/context/testing.js";
@@ -262,3 +263,81 @@ describe("Truth lookups and dirty-baseline Review provenance through MCP (TASK-0
     expect(truth.every((f: { provenance?: string }) => f.provenance === "adoption-bootstrap")).toBe(true);
   });
 });
+describe("H-71 full decision proposals through MCP: more expressive, no authority until a human confirms (T35.1)", () => {
+  const p = existingProject(temps);
+  let s: McpSession;
+  const human = { kind: "human" as const, name: "Ada Lovelace" };
+  const decisionFiles = () => fs.readdirSync(path.join(p.root, ".duo-project", "decisions")).filter((f) => f.endsWith(".yaml")).sort();
+  const proposalFiles = () => { const d = path.join(p.root, ".duo-project", "decisions", "proposals"); return fs.existsSync(d) ? fs.readdirSync(d).sort() : []; };
+  const readD = (id: string) => fs.readFileSync(path.join(p.root, ".duo-project", "decisions", `${id}.yaml`), "utf8");
+  beforeAll(async () => {
+    const init = duoctl(p.root, ["init", "--non-interactive", "--answers", "-", "--json"], JSON.stringify([{ question: "project_goal", value: "Keep recurring chores fair." }]));
+    expect(init.code).toBe(0);
+    s = await open(p.root);
+  });
+
+  it("A-O: old and full proposals, validation with no write, unchanged verdict and Decisions, and no agent path to authority", async () => {
+    const review = async () => {
+      const r = (await s.call("duo_review_changes", {})).structuredContent;
+      return { status: r.status, verdict: r.verdict, claims: (r.claims ?? []).map((c: { id: string; alignment: string }) => `${c.id}:${c.alignment}`) };
+    };
+    const before = await review();
+    expect(before.status).toBe("ready");
+
+    // A: an old-style request still works.
+    const a = await s.call("duo_propose_decision", { title: "Weekday rotation", question: "rotation_days", answer: "weekdays only", agent: "codex" });
+    expect(a.isError).toBeFalsy();
+    expect(a.structuredContent).toMatchObject({ format: "duo.proposal/1", proposalId: "P-001", confirmed: false });
+    // B: forbids + enforcement block; only a proposal file appears.
+    const b = await s.call("duo_propose_decision", {
+      title: "No direct clock access", question: "clock_access", answer: "Scheduler code takes time from an injected clock",
+      governs: { paths: ["src/**"] }, forbids: { symbols: ["*SystemClock*"], paths: ["src/legacy/**"] }, enforcement: "block", agent: "codex",
+    });
+    expect(b.isError).toBeFalsy();
+    expect(b.structuredContent.proposalId).toBe("P-002");
+    expect(decisionFiles()).toEqual([]);
+    const pFile = fs.readFileSync(path.join(p.root, b.structuredContent.path), "utf8");
+    expect(pFile).toContain("enforcement: block");
+    expect(pFile).toContain("proposed_by_kind: agent");
+    // J: proposals change no verdict. A proposal file makes the index stale (as in 0.2.1); after the human's index the result is the same.
+    expect(duoctl(p.root, ["index", "--json"]).code).toBe(0);
+    expect(await review()).toEqual(before);
+
+    // C/K: a supersede proposal leaves the target byte-identical.
+    expect((await createDecisionService({ root: p.root }).confirm(human, "P-001")).value?.decisionId).toBe("D-001");
+    const d001 = readD("D-001");
+    const c = await s.call("duo_propose_decision", { title: "Every day rotation", question: "rotation_days", answer: "every day", supersedes: "D-001", agent: "codex" });
+    expect(c.isError).toBeFalsy();
+    expect(c.structuredContent.proposalId).toBe("P-003");
+    expect(readD("D-001")).toBe(d001);
+    expect(decisionFiles()).toEqual(["D-001.yaml"]);
+
+    // D-H: invalid input or a missing target writes nothing.
+    const listing = proposalFiles();
+    const invalid: Record<string, unknown>[] = [
+      { forbids: { paths: ["../outside/**"] } }, { forbids: {} }, { forbids: { paths: [] } }, { enforcement: "error" },
+      { supersedes: "P-003" }, { supersedes: "AUTH-1" }, { supersedes: "D-099" }, { kind: "constraint" }, { evidence: [] },
+    ];
+    for (const extra of invalid) {
+      const r = await s.call("duo_propose_decision", { title: "x", question: "q_invalid", answer: "a", ...extra });
+      expect(r.isError, JSON.stringify(extra)).toBe(true);
+    }
+    expect(proposalFiles()).toEqual(listing);
+    expect(readD("D-001")).toBe(d001);
+
+    // I: once D-001 is superseded by a human confirm, a proposal to supersede it again writes nothing.
+    expect((await createDecisionService({ root: p.root }).confirm(human, "P-003")).value).toMatchObject({ decisionId: "D-002", supersedes: "D-001" });
+    const afterSupersede = proposalFiles();
+    const again = await s.call("duo_propose_decision", { title: "Weekend rotation", question: "rotation_days", answer: "weekends", supersedes: "D-001" });
+    expect(again.isError).toBe(true);
+    expect(proposalFiles()).toEqual(afterSupersede);
+
+    // L/M/N/O: nine tools, none confirms, rejects or writes a Decision; P-002 is still only a pending proposal.
+    const { tools } = await s.client.listTools();
+    expect(tools).toHaveLength(9);
+    expect(tools.map((t) => t.name).filter((n) => /confirm|reject|write|delete|record|index/u.test(n))).toEqual([]);
+    expect((await s.call("duo_get_status")).structuredContent.pendingDecisions.map((d: { id: string }) => d.id)).toEqual(["P-002"]);
+    expect((await s.call("duo_get_decision", { id: "P-002" })).structuredContent.status).toBe("not-found");
+  });
+});
+
