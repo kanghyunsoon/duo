@@ -286,4 +286,101 @@ describe("T09.1 proposal read model: pending is a logical state, reading never w
     expect(listDecisionProposals(truth().truth).map((e) => [e.id, e.status])).toEqual([["P-001", "pending"], ["P-002", "rejected"]]);
   });
 });
+describe("T34.2 informed confirm: the preview is the candidate confirm acts on", () => {
+  const full = { ...input, kind: "decision" as const, rationale: "Phishing-resistant", forbids: { symbols: ["*SessionStore*"], paths: ["src/legacy/**"] }, enforcement: "block" as const, supersedes: "D-001" };
+
+  it("A/F a proposal preview shows every content field, the superseded target and its consequence, and an expected (not guaranteed) ID", async () => {
+    await service().propose(human, full);
+    const p = (await service().previewConfirm("P-001")).value;
+    expect(p).toMatchObject({
+      sourceId: "P-001", sourceKind: "proposal", sourcePath: ".duo-project/decisions/proposals/P-001.yaml", action: "create", proposalId: "P-001",
+      expectedDecisionId: "D-002", nextDecisionId: "D-002",
+      candidate: { title: "Passkey login", kind: "decision", question: "login_mechanism", answer: "passkey", rationale: "Phishing-resistant", governs: { requirements: ["AUTH-01"] },
+        forbids: { symbols: ["*SessionStore*"], paths: ["src/legacy/**"] }, enforcement: "block", supersedes: "D-001" },
+      supersedes: { id: "D-001", title: "Password login", state: "confirmed", path: ".duo-project/decisions/D-001.yaml" },
+    });
+    expect(p?.digest).toMatch(/^sha256:[0-9a-f]{64}$/u);
+    expect(p?.stale).toBeUndefined();
+  });
+
+  it("an absent field stays absent: no default is invented", async () => {
+    await service().propose(agent, input);
+    const c = (await service().previewConfirm("P-001")).value?.candidate ?? {};
+    expect(Object.keys(c).sort()).toEqual(["answer", "governs", "question", "title"]);
+  });
+
+  it("B a proposed D-### YAML Decision previews in place; a locked Decision is refused like confirm", async () => {
+    write(".duo-project/decisions/D-002.yaml", "id: D-002\ntitle: No legacy store\nkind: decision\nstate: proposed\nquestion: session_store\nanswer: none\nforbids:\n  symbols: [\"*LegacyStore*\"]\nenforcement: block\n");
+    const p = (await service().previewConfirm("D-002")).value;
+    expect(p).toMatchObject({ sourceId: "D-002", sourceKind: "decision", action: "confirm-in-place", expectedDecisionId: "D-002",
+      candidate: { title: "No legacy store", forbids: { symbols: ["*LegacyStore*"] }, enforcement: "block" } });
+    expect(p?.proposalId).toBeUndefined();
+    expect(codes(await service().previewConfirm("D-001"))).toEqual(["DECISION_LOCKED"]);
+    expect(codes(await service().previewConfirm("../x"))).toEqual(["INVALID_ID"]);
+  });
+
+  it("G staleness is part of the preview, before anything is confirmed", async () => {
+    await service().propose(agent, input);
+    write(".duo-project/specs/auth.md", read(".duo-project/specs/auth.md").replace("Users log in.", "Users log in with SSO."));
+    expect((await service().previewConfirm("P-001")).value?.stale).toEqual({ truthChanged: true, changedRefs: ["AUTH-01"] });
+    expect(exists(".duo-project/decisions/D-002.yaml")).toBe(false);
+  });
+
+  it("K/N/O an unchanged candidate confirms with the preview digest; indexRequired and the lock are as before", async () => {
+    await service().propose(human, full);
+    const p = (await service().previewConfirm("P-001")).value;
+    const r = await service().confirm(human, "P-001", { expectedDigest: p?.digest ?? "" });
+    expect(r.value).toMatchObject({ decisionId: "D-002", supersedes: "D-001", indexRequired: true });
+    expect(service().verifyLock("D-002").value?.status).toBe("valid");
+    expect(service().verifyLock("D-001").value?.status).toBe("valid");
+    expect(truth().truth.decisions.find((d) => d.id === "D-002")).toMatchObject({ forbids: { symbols: ["*SessionStore*"] }, enforcement: "block" });
+  });
+
+  it("L a candidate edited after the preview is not confirmed; nothing is written and the proposal stays pending", async () => {
+    await service().propose(human, full);
+    const p = (await service().previewConfirm("P-001")).value;
+    write(".duo-project/decisions/proposals/P-001.yaml", read(".duo-project/decisions/proposals/P-001.yaml").replace("enforcement: block", "enforcement: warn"));
+    const r = await service().confirm(human, "P-001", { expectedDigest: p?.digest ?? "" });
+    expect(codes(r)).toEqual(["DECISION_CONFIRM_PREVIEW_CHANGED"]);
+    expect(r.diagnostics[0]?.message).toBe("The Decision changed after you reviewed it. Review the current contents and confirm again.");
+    expect(exists(".duo-project/decisions/D-002.yaml")).toBe(false);
+    expect(truth().truth.decisions.find((d) => d.id === "D-001")?.state).toBe("confirmed");
+    expect(pendingDecisionProposals(truth().truth).map((x) => x.id)).toEqual(["P-001"]);
+    const again = (await service().previewConfirm("P-001")).value;
+    expect(again?.candidate.enforcement).toBe("warn");
+    expect((await service().confirm(human, "P-001", { expectedDigest: again?.digest ?? "" })).value?.decisionId).toBe("D-002");
+  });
+
+  it("M the superseded target changing after the preview (another confirm took it) aborts instead of a different failure", async () => {
+    await service().propose(human, full);
+    await service().propose(human, { ...full, title: "WebAuthn login", answer: "webauthn" });
+    const p1 = (await service().previewConfirm("P-001")).value;
+    expect((await service().confirm(human, "P-002")).value?.decisionId).toBe("D-002");
+    expect(codes(await service().confirm(human, "P-001", { expectedDigest: p1?.digest ?? "" }))).toEqual(["DECISION_CONFIRM_PREVIEW_CHANGED"]);
+    expect(codes(await service().previewConfirm("P-001"))).toEqual([]);
+    expect((await service().previewConfirm("P-001")).value?.supersedes).toMatchObject({ id: "D-001", state: "superseded" });
+  });
+
+  it("H the expected ID is an expectation: if another Decision takes it, the confirm result's ID is the authority", async () => {
+    // A proposal without based_on has no staleness, so an unrelated confirm does not change what was reviewed.
+    write(".duo-project/decisions/proposals/P-001.yaml", "id: P-001\ntitle: Reports in cents\nstate: proposed\nquestion: report_unit\nanswer: whole cents\nproposed_by: kanghyunsoon\nproposed_by_kind: human\n");
+    const p = (await service().previewConfirm("P-001")).value;
+    expect(p?.expectedDecisionId).toBe("D-002");
+    write(".duo-project/decisions/D-002.yaml", "id: D-002\ntitle: Other\nstate: proposed\nquestion: other\nanswer: x\n");
+    expect((await service().confirm(human, "D-002")).value?.decisionId).toBe("D-002");
+    const r = await service().confirm(human, "P-001", { expectedDigest: p?.digest ?? "" });
+    expect(r.value?.decisionId).toBe("D-003");
+  });
+
+  it("P agents and the system still cannot confirm or reject, with or without a digest; previewing writes nothing", async () => {
+    await service().propose(agent, input);
+    const before = fs.readdirSync(abs(".duo-project/decisions/proposals"));
+    const p = (await service().previewConfirm("P-001")).value;
+    expect(fs.readdirSync(abs(".duo-project/decisions/proposals"))).toEqual(before);
+    expect(exists(DECISION_LOCK_PATH)).toBe(false);
+    expect(codes(await service().confirm(agent, "P-001", { expectedDigest: p?.digest ?? "" }))).toEqual(["DECISION_ACTOR_FORBIDDEN"]);
+    expect(codes(await service().confirm(system, "P-001", { expectedDigest: p?.digest ?? "" }))).toEqual(["DECISION_ACTOR_FORBIDDEN"]);
+    expect(codes(await service().reject(agent, "P-001"))).toEqual(["DECISION_ACTOR_FORBIDDEN"]);
+  });
+});
 

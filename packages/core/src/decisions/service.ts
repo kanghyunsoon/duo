@@ -12,7 +12,7 @@
  * a superseded Decision follow and are finished by the next operation if they fail.
  */
 import os from "node:os";
-import { createDiagnostic, failure, success, type Diagnostic, type ParseResult } from "../diagnostics.js";
+import { createDiagnostic, failure, success, type Diagnostic, type ParseResult, type SourceLocation } from "../diagnostics.js";
 import { parseDecisionFile, parseProposalFile } from "../domain/files.js";
 import type { Decision, ProjectTruth, Proposal } from "../domain/model.js";
 import { PROPOSAL_ID_PATTERN } from "../ids.js";
@@ -21,7 +21,7 @@ import type { RepoPath } from "../paths.js";
 import { ACTOR_KINDS, type ProposalData } from "../schema/schemas.js";
 import { parseYaml, setYamlTopLevel, stringifyYaml } from "../source/yaml.js";
 import { analyzeTrace } from "../trace/trace.js";
-import { decisionLockDigest, definitionDigest, truthDigest, verifyDecisionLock, type LockVerification } from "./digest.js";
+import { candidateDigest, decisionLockDigest, definitionDigest, truthDigest, verifyDecisionLock, type LockVerification } from "./digest.js";
 import {
   DECISION_LOCK_PATH, DECISIONS_DIR, decisionPath, guardDecisionWrite, nodeDecisionFileSystem, proposalPath, PROPOSALS_DIR,
   type DecisionActor, type DecisionFileSystem, type DecisionWriteTarget,
@@ -64,13 +64,57 @@ export interface ConfirmResult {
 }
 export interface RejectResult { readonly proposalId: string; readonly path: RepoPath; readonly indexRequired: false; readonly repaired: readonly string[] }
 
-/** What confirming a pending proposal would do (T18.1, read-only): shown to the human before confirming. */
+/** The content fields a confirm copies from a proposal or keeps in a YAML Decision (T34.2). */
+export const CANDIDATE_FIELDS = ["title", "kind", "question", "answer", "rationale", "governs", "forbids", "enforcement", "supersedes", "evidence", "source", "extensions"] as const;
+export type CandidateField = (typeof CANDIDATE_FIELDS)[number];
+/** Exactly what the file says for each content field; an absent key means the field is not set (no defaults are invented). */
+export type DecisionCandidate = Readonly<Partial<Record<CandidateField, unknown>>>;
+
+/**
+ * What confirming would do (T18.1, T34.2, read-only): shown to the human before confirming. It is
+ * built from the same candidate reading confirm uses, and its digest binds a confirm to it.
+ */
 export interface ConfirmPreview {
-  readonly proposalId: string;
-  /** The ID the next confirm would try first (allocation is repeated under the lock at confirm time). */
+  /** The proposal (P-...) or YAML Decision (D-...) confirm acts on. */
+  readonly sourceId: string;
+  readonly sourceKind: "proposal" | "decision";
+  readonly sourcePath: RepoPath;
+  /** create: the proposal becomes a new Decision; confirm-in-place: a proposed YAML Decision; add-lock: a confirmed Decision without a lock. */
+  readonly action: "create" | "confirm-in-place" | "add-lock";
+  /** Set for proposals (the T18.1 field). */
+  readonly proposalId?: string;
+  /** The ID confirm would try first. Allocation is repeated under the lock, so the confirm result's decisionId is the authority. */
+  readonly expectedDecisionId: string;
+  /** Same as expectedDecisionId (T18.1 name). */
   readonly nextDecisionId: string;
+  readonly candidate: DecisionCandidate;
   readonly stale?: StaleInfo;
+  /** The Decision the candidate supersedes, as it is now. Absent when there is none or it does not exist (candidate.supersedes still names it). */
   readonly supersedes?: { readonly id: string; readonly title: string; readonly state: string; readonly path: RepoPath };
+  /** sha256 over source, action, candidate, staleness and the superseded target (not the expected ID). Pass it to confirm as expectedDigest. */
+  readonly digest: string;
+}
+
+export interface ConfirmOptions {
+  /** The digest of the preview the human reviewed. If the candidate no longer matches, confirm writes nothing (DECISION_CONFIRM_PREVIEW_CHANGED). */
+  readonly expectedDigest?: string;
+}
+
+/** A confirm candidate read once (T34.2); previewConfirm and confirm both use it. */
+interface Candidate {
+  readonly sourceId: string;
+  readonly sourceKind: "proposal" | "decision";
+  readonly sourcePath: RepoPath;
+  readonly action: ConfirmPreview["action"];
+  /** The file's parsed YAML; confirm copies a proposal's content from it. */
+  readonly data: Record<string, unknown>;
+  readonly candidate: DecisionCandidate;
+  readonly stale?: StaleInfo;
+  readonly supersedesId: string | null;
+  readonly target?: Decision;
+  readonly proposal?: Proposal;
+  readonly decision?: Decision;
+  readonly digest: string;
 }
 
 export interface DecisionServiceOptions {
@@ -85,10 +129,10 @@ export interface DecisionServiceOptions {
 export interface DecisionService {
   propose(actor: DecisionActor, input: ProposalInput): Promise<ParseResult<ProposeResult>>;
   /** Confirms a proposal (P-...) or a YAML Decision that is proposed or confirmed without a lock (ADR-013). */
-  confirm(actor: DecisionActor, id: string): Promise<ParseResult<ConfirmResult>>;
+  confirm(actor: DecisionActor, id: string, options?: ConfirmOptions): Promise<ParseResult<ConfirmResult>>;
   reject(actor: DecisionActor, proposalId: string, reason?: string): Promise<ParseResult<RejectResult>>;
-  /** Read-only preview of confirm(proposalId): no lock, no write, no repair. */
-  previewConfirm(proposalId: string): Promise<ParseResult<ConfirmPreview>>;
+  /** Read-only preview of confirm(id) for a proposal or a YAML Decision: no lock, no write, no repair. */
+  previewConfirm(id: string): Promise<ParseResult<ConfirmPreview>>;
   /** Finishes what an interrupted confirm left behind (also done at the start of every operation). */
   repair(): Promise<ParseResult<{ readonly repaired: readonly string[] }>>;
   /** Read-only lock check of one Decision. */
@@ -313,7 +357,7 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
       });
     },
 
-    async confirm(actor, id) {
+    async confirm(actor, id, confirmOptions = {}) {
       const denied = forbidden(actor, "confirm");
       if (denied.length > 0) return failure(denied);
       if (!PROPOSAL_ID_PATTERN.test(id) && !DECISION_ID.test(id)) return failure([createDiagnostic("INVALID_ID", `"${id}" is not a proposal or Decision ID`)]);
@@ -322,7 +366,13 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
         if (prepared.value === undefined) return failure(prepared.diagnostics);
         const { truth, repaired } = prepared.value;
         const warnings: Diagnostic[] = [...prepared.diagnostics];
-        return DECISION_ID.test(id) ? confirmDecision(actor, id, truth, repaired, warnings) : confirmProposal(actor, id, truth, repaired, warnings);
+        // Re-read the candidate under the lock; a confirm bound to a preview acts only on what was reviewed (T34.2).
+        const c = await candidateOf(truth, id);
+        if (c.value === undefined) return failure(c.diagnostics);
+        if (confirmOptions.expectedDigest !== undefined && confirmOptions.expectedDigest !== c.value.digest) {
+          return failure([createDiagnostic("DECISION_CONFIRM_PREVIEW_CHANGED", "The Decision changed after you reviewed it. Review the current contents and confirm again.", { path: c.value.sourcePath } as SourceLocation)]);
+        }
+        return c.value.sourceKind === "decision" ? confirmDecision(actor, c.value, truth, repaired, warnings) : confirmProposal(actor, c.value, truth, repaired, warnings);
       });
     },
 
@@ -355,19 +405,20 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
       });
     },
 
-    async previewConfirm(proposalId) {
-      if (!PROPOSAL_ID_PATTERN.test(proposalId)) return failure([createDiagnostic("INVALID_ID", `"${proposalId}" is not a proposal ID`)]);
+    async previewConfirm(id) {
+      if (!PROPOSAL_ID_PATTERN.test(id) && !DECISION_ID.test(id)) return failure([createDiagnostic("INVALID_ID", `"${id}" is not a proposal or Decision ID`)]);
       const loaded = load();
       if (loaded.value === undefined) return failure(loaded.diagnostics);
       const truth = loaded.value;
-      const entry = listDecisionProposals(truth).find((p) => p.id === proposalId);
-      if (entry === undefined) return failure([createDiagnostic("PROPOSAL_NOT_FOUND", `No proposal ${proposalId}`)]);
-      if (entry.status !== "pending") return failure([createDiagnostic("PROPOSAL_NOT_PENDING", `${proposalId} is ${entry.status}`, entry.proposal.location)]);
-      const stale = staleness(truth, entry.proposal);
-      const target = entry.proposal.supersedes === null ? undefined : truth.decisions.find((d) => d.id === entry.proposal.supersedes);
+      const c = await candidateOf(truth, id);
+      if (c.value === undefined) return failure(c.diagnostics);
+      const v = c.value;
+      const expected = v.sourceKind === "decision" ? id : await allocate("D", truth);
       return success({
-        proposalId, nextDecisionId: await allocate("D", truth), ...(stale === undefined ? {} : { stale }),
-        ...(target === undefined ? {} : { supersedes: { id: target.id, title: target.title, state: target.state, path: target.location.path as RepoPath } }),
+        sourceId: id, sourceKind: v.sourceKind, sourcePath: v.sourcePath, action: v.action, ...(v.sourceKind === "proposal" ? { proposalId: id } : {}),
+        expectedDecisionId: expected, nextDecisionId: expected, candidate: v.candidate, ...(v.stale === undefined ? {} : { stale: v.stale }),
+        ...(v.target === undefined ? {} : { supersedes: { id: v.target.id, title: v.target.title, state: v.target.state, path: v.target.location.path as RepoPath } }),
+        digest: v.digest,
       });
     },
 
@@ -381,22 +432,68 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
     },
   };
 
-  async function confirmProposal(actor: DecisionActor, id: string, truth: ProjectTruth, repaired: string[], warnings: Diagnostic[]): Promise<ParseResult<ConfirmResult>> {
+  /**
+   * The one reading of a confirm candidate (T34.2): previewConfirm shows it and confirm acts on it, so
+   * what a person reviewed and what is written cannot be read differently. Read-only.
+   */
+  async function candidateOf(truth: ProjectTruth, id: string): Promise<ParseResult<Candidate>> {
+    if (DECISION_ID.test(id)) {
+      const d = truth.decisions.find((x) => x.id === id);
+      if (d === undefined) return failure([createDiagnostic("PROPOSAL_NOT_FOUND", `No Decision ${id}`)]);
+      if (!isServiceFile(d)) return failure([createDiagnostic("DECISION_TARGET_UNSUPPORTED", `${id} is not a decisions/D-###.yaml file; DUO does not rewrite it`, d.location)]);
+      if (d.state === "superseded" || (d.state === CONFIRMED && d.lock !== undefined)) {
+        return failure([createDiagnostic("DECISION_LOCKED", `${id} is ${d.state} and locked; supersede it with a new proposal`, d.location)]);
+      }
+      if (d.state === "rejected") return failure([createDiagnostic("PROPOSAL_NOT_PENDING", `${id} is rejected`, d.location)]);
+      const data = await rawData(d.location.path);
+      if (data === undefined) return failure([createDiagnostic("PROPOSAL_NOT_FOUND", `${d.location.path} is missing`)]);
+      return success(finishCandidate(truth, {
+        sourceId: id, sourceKind: "decision", sourcePath: d.location.path as RepoPath, action: d.state === CONFIRMED ? "add-lock" : "confirm-in-place",
+        data, supersedesId: d.supersedes, decision: d,
+      }));
+    }
     const done = truth.decisions.find((d) => d.proposalId === id);
     if (done !== undefined) return failure([createDiagnostic("PROPOSAL_NOT_PENDING", `${id} was already confirmed as ${done.id}`)]);
     const entry = listDecisionProposals(truth).find((p) => p.id === id);
     if (entry === undefined) return failure([createDiagnostic("PROPOSAL_NOT_FOUND", `No proposal ${id}`)]);
     if (entry.status !== "pending") return failure([createDiagnostic("PROPOSAL_NOT_PENDING", `${id} is ${entry.status}`, entry.proposal.location)]);
-    const proposal = entry.proposal;
-    const stale = staleness(truth, proposal);
+    const data = await rawData(entry.proposal.location.path);
+    if (data === undefined) return failure([createDiagnostic("PROPOSAL_NOT_FOUND", `${entry.proposal.location.path} is missing`)]);
+    const stale = staleness(truth, entry.proposal);
+    return success(finishCandidate(truth, {
+      sourceId: id, sourceKind: "proposal", sourcePath: entry.proposal.location.path as RepoPath, action: "create",
+      data, supersedesId: entry.proposal.supersedes, proposal: entry.proposal, ...(stale === undefined ? {} : { stale }),
+    }));
+  }
+
+  /** The file's parsed YAML, exactly as confirm copies it (no schema defaults). */
+  async function rawData(repoPath: string): Promise<Record<string, unknown> | undefined> {
+    const text = await fs.readText(`${root}/${repoPath}`);
+    if (text === undefined) return undefined;
+    return (parseYaml({ path: repoPath, text }).value?.data ?? {}) as Record<string, unknown>;
+  }
+
+  function finishCandidate(truth: ProjectTruth, base: Omit<Candidate, "candidate" | "target" | "digest">): Candidate {
+    const candidate = defined(Object.fromEntries(CANDIDATE_FIELDS.map((k) => [k, base.data[k]]))) as DecisionCandidate;
+    const target = base.supersedesId === null ? undefined : truth.decisions.find((t) => t.id === base.supersedesId);
+    const digest = candidateDigest({
+      sourceId: base.sourceId, sourceKind: base.sourceKind, sourcePath: base.sourcePath, action: base.action, candidate, stale: base.stale ?? null,
+      supersedes: base.supersedesId === null ? null : target === undefined ? { id: base.supersedesId, missing: true }
+        : { id: target.id, title: target.title, state: target.state, supersededBy: target.supersededBy, path: target.location.path, content: decisionLockDigest(target) },
+    });
+    return { ...base, candidate, ...(target === undefined ? {} : { target }), digest };
+  }
+
+  async function confirmProposal(actor: DecisionActor, c: Candidate, truth: ProjectTruth, repaired: string[], warnings: Diagnostic[]): Promise<ParseResult<ConfirmResult>> {
+    const id = c.sourceId;
+    const proposal = c.proposal as Proposal;
+    const stale = c.stale;
     if (stale !== undefined) {
       warnings.push(createDiagnostic("PROPOSAL_STALE",
         `${id} was made on an older Project Truth${stale.changedRefs.length > 0 ? ` (changed: ${stale.changedRefs.join(", ")})` : ""}; confirmed anyway`, proposal.location));
     }
-    const text = await fs.readText(`${root}/${proposal.location.path}`);
-    if (text === undefined) return failure([createDiagnostic("PROPOSAL_NOT_FOUND", `${proposal.location.path} is missing`)]);
-    const data = (parseYaml({ path: proposal.location.path, text }).value?.data ?? {}) as Record<string, unknown>;
-    const target = proposal.supersedes === null ? undefined : truth.decisions.find((d) => d.id === proposal.supersedes);
+    const data = c.data;
+    const target = c.target;
     if (proposal.supersedes !== null) {
       if (target === undefined) return failure([createDiagnostic("BROKEN_REFERENCE", `${id} supersedes ${proposal.supersedes}, which does not exist`, proposal.location)]);
       if (!isServiceFile(target)) return failure([createDiagnostic("DECISION_TARGET_UNSUPPORTED", `${target.id} is not a decisions/D-###.yaml file; DUO does not rewrite it`, target.location)]);
@@ -442,14 +539,9 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
   }
 
   /** In-place confirm of a YAML Decision (ADR-013): proposed → confirmed, or confirmed without lock → lock added. */
-  async function confirmDecision(actor: DecisionActor, id: string, truth: ProjectTruth, repaired: string[], warnings: Diagnostic[]): Promise<ParseResult<ConfirmResult>> {
-    const d = truth.decisions.find((x) => x.id === id);
-    if (d === undefined) return failure([createDiagnostic("PROPOSAL_NOT_FOUND", `No Decision ${id}`)]);
-    if (!isServiceFile(d)) return failure([createDiagnostic("DECISION_TARGET_UNSUPPORTED", `${id} is not a decisions/D-###.yaml file; DUO does not rewrite it`, d.location)]);
-    if (d.state === "superseded" || (d.state === CONFIRMED && d.lock !== undefined)) {
-      return failure([createDiagnostic("DECISION_LOCKED", `${id} is ${d.state} and locked; supersede it with a new proposal`, d.location)]);
-    }
-    if (d.state === "rejected") return failure([createDiagnostic("PROPOSAL_NOT_PENDING", `${id} is rejected`, d.location)]);
+  async function confirmDecision(actor: DecisionActor, c: Candidate, truth: ProjectTruth, repaired: string[], warnings: Diagnostic[]): Promise<ParseResult<ConfirmResult>> {
+    const id = c.sourceId;
+    const d = c.decision as Decision;
     const digest = decisionLockDigest(d);
     const values: Record<string, unknown> = d.state === CONFIRMED
       ? { lock: { digest }, confirmed_at: d.confirmedAt ?? now(), confirmed_by: d.confirmedBy ?? actor.name }

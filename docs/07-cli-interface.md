@@ -206,16 +206,27 @@ Graph primitive를 그대로 보인다. depth(1-3)와 node 한도로 bounded이�
 ## duoctl decision
 
 - `list`는 core `listDecisionProposals()` read model의 pending proposal과 proposed Decision을 보인다(commit됐거나 rejected인 proposal은 pending이 아님). 파일을 직접 scan하지 않는다.
-- `confirm`·`reject`는 TTY가 아니거나 `--non-interactive`면 거부하고(`CLI_TTY_REQUIRED`, 종료 코드 1, AC-015-04), 내용을 보여 준 뒤 ID를 다시 입력받는다. Agent의 무인 실행을 막는 장치이며 보안 인증이 아니다([10-security.md](10-security.md)). actor는 `{ kind: "human", name: <Git user.name> }`이고 검사, ID 할당, lock, supersede, stale 판단은 core `DecisionService`가 한다([ADR-013](adr/ADR-013-decision-lifecycle.md)).
+- `confirm`·`reject`는 TTY가 아니거나 `--non-interactive`면 거부하고(`CLI_TTY_REQUIRED`, 종료 코드 1, AC-015-04), 내용을 보여 준 뒤 ID를 다시 입력받는다.
+- **Informed confirm(T34.2)**: `confirm`은 ID를 묻기 전에 core `DecisionService.previewConfirm`이 읽은 candidate 전체를 stderr에 보인다. 항목은 Title, Question, Answer, Kind, Rationale, Governs, Forbids, Enforcement, Supersedes(대상의 title·현재 state와 "superseded가 됨"), 있으면 Evidence·Source·Extensions, Stale, Expected ID, File이다. 파일에 없는 field는 `(not set)`, 비어 있으면 `(none)`이며 기본값을 만들지 않는다. Expected ID는 예상값이고 실제 ID는 확정 결과의 `decisionId`다. 확정은 그 preview의 digest를 함께 넘기며, DecisionService가 repository lock 안에서 candidate를 다시 읽어 digest가 다르면 아무것도 쓰지 않고 `DECISION_CONFIRM_PREVIEW_CHANGED`(종료 코드 1, "The Decision changed after you reviewed it. Review the current contents and confirm again.")로 끝낸다. 자동 재시도는 없다. digest는 source ID·경로, 확정 방식, candidate field, staleness, supersede 대상(ID, title, state, superseded_by, 경로, 내용 digest)을 묶고 Expected ID는 넣지 않는다. 확정 뒤에는 `duoctl index` 안내를 보인다. `reject`도 ID를 묻기 전에 proposal 내용을 같은 형식으로 보인다(Expected ID 없음). proposal이 없거나 pending이 아니면 ID를 묻기 전에 같은 진단으로 끝난다. `--json` 결과, ID 재입력, TTY 요구는 바뀌지 않는다. Agent의 무인 실행을 막는 장치이며 보안 인증이 아니다([10-security.md](10-security.md)). actor는 `{ kind: "human", name: <Git user.name> }`이고 검사, ID 할당, lock, supersede, stale 판단은 core `DecisionService`가 한다([ADR-013](adr/ADR-013-decision-lifecycle.md)).
 
 ```text
 $ duoctl decision confirm P-007
-P-007  "Refresh token rotation"
-  question  refresh_token_policy
-  answer    rotate_on_use
-  governs   AUTH-03
+Confirm P-007: this proposal becomes a new confirmed Decision.
+  Title         Refresh token rotation
+  Question      refresh_token_policy
+  Answer        rotate_on_use
+  Kind          (not set)
+  Rationale     (not set)
+  Governs       requirements: AUTH-03
+  Forbids       symbols: *LongLivedToken*
+  Enforcement   block
+  Supersedes    D-002 "Static refresh tokens" (confirmed) → becomes superseded by this Decision
+  Stale         no
+  Expected ID   D-005 (expected; the ID in the confirm result is authoritative)
+  File          .duo-project/decisions/proposals/P-007.yaml
 Type the ID to confirm: P-007
 confirmed as D-005 · .duo-project/decisions/D-005.yaml
+Run duoctl index so review and context see it.
 ```
 
 ## runtime/metrics.jsonl

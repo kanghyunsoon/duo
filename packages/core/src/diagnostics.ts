@@ -136,6 +136,8 @@ export const DIAGNOSTIC_SEVERITY = {
   DECISION_SUPERSEDE_TARGET_INVALID: "error",
   /** DecisionService: another process holds the repository decision lock. */
   DECISION_LOCK_BUSY: "error",
+  /** DecisionService (T34.2): the candidate changed after the preview a person reviewed; nothing was confirmed. */
+  DECISION_CONFIRM_PREVIEW_CHANGED: "error",
   /** A confirmed Decision's lock.digest does not match its content fields (a detection aid, not a signature). */
   DECISION_LOCK_MISMATCH: "warning",
   /** A SourceLocation that does not address its canonical source text (a producer bug, T09.1). */
@@ -239,7 +241,7 @@ export const DIAGNOSTIC_PERSISTENCE = {
   GRAPH_WRITE_REFUSED: T, TEST_ID_CONFLICT: P, DECLARED_SYMBOL_UNRESOLVED: P, GRAPH_INVARIANT_VIOLATED: T,
   INDEX_STATE_INVALID: T,
   DECISION_ACTOR_FORBIDDEN: T, PROPOSAL_NOT_FOUND: T, PROPOSAL_NOT_PENDING: T, PROPOSAL_INVALID: T, PROPOSAL_STALE: T,
-  DECISION_LOCKED: T, DECISION_TARGET_UNSUPPORTED: T, DECISION_SUPERSEDE_TARGET_INVALID: T, DECISION_LOCK_BUSY: T,
+  DECISION_LOCKED: T, DECISION_TARGET_UNSUPPORTED: T, DECISION_SUPERSEDE_TARGET_INVALID: T, DECISION_LOCK_BUSY: T, DECISION_CONFIRM_PREVIEW_CHANGED: T,
   DECISION_LOCK_MISMATCH: P,
   SOURCE_LOCATION_INVALID: P,
   CONTEXT_REQUEST_INVALID: T,

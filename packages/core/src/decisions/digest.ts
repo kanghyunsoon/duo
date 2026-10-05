@@ -24,6 +24,11 @@ function canonical(value: unknown): unknown {
   return value;
 }
 
+/** sha256 over canonical JSON (T34.2: binds a confirm to the preview a person reviewed). */
+export function candidateDigest(value: unknown): string {
+  return sha256(stableJson(value));
+}
+
 /** Canonical JSON: sorted keys, undefined dropped. */
 export function stableJson(value: unknown): string {
   return JSON.stringify(canonical(value));

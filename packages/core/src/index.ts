@@ -32,6 +32,7 @@ export * from "./trace/trace.js";
 export { loadProjectTruth, type LoadedProject, type LoadProjectOptions } from "./loader/project.js";
 export {
   createDecisionService, DECISION_PERMISSIONS,
+  CANDIDATE_FIELDS, type CandidateField, type ConfirmOptions, type DecisionCandidate,
   type ConfirmPreview, type ConfirmResult, type DecisionService, type DecisionServiceOptions, type ProposalInput, type ProposeResult, type RejectResult, type StaleInfo,
 } from "./decisions/service.js";
 export {

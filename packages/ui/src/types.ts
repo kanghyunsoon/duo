@@ -53,8 +53,12 @@ export interface Direction {
   readonly decisions: readonly DecisionItem[];
   readonly proposals: readonly ProposalItem[];
 }
+/** DecisionService.previewConfirm as the server returns it (T18.1, T34.2). candidate: the file's content fields; an absent key is not set. */
 export interface Preview {
-  readonly proposalId?: string; readonly nextDecisionId?: string;
+  readonly proposalId?: string; readonly nextDecisionId?: string; readonly expectedDecisionId?: string;
+  readonly sourceId?: string; readonly sourcePath?: string; readonly action?: "create" | "confirm-in-place" | "add-lock";
+  readonly candidate?: Readonly<Record<string, unknown>>;
+  readonly digest?: string;
   readonly stale?: { readonly truthChanged: boolean; readonly changedRefs: readonly string[] };
   readonly supersedes?: { readonly id: string; readonly title: string; readonly state: string; readonly path: string };
   readonly error?: readonly string[];

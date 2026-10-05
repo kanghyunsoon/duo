@@ -239,4 +239,22 @@ describe("human decisions through DecisionService (T18.1)", () => {
     const metrics = fs.readFileSync(path.join(root, ".duo-project", "runtime", "metrics.jsonl"), "utf8");
     expect(metrics).toContain('"surface":"ui","command":"decision"');
   });
+  it("informed confirm (T34.2): the preview carries the full candidate and a digest; a confirm bound to an outdated preview writes nothing", async () => {
+    const service = createDecisionService({ root });
+    const human = { kind: "human" as const, name: "Dev" };
+    const id = (await service.propose(human, { title: "No float money", question: "money_type", answer: "integers only", forbids: { symbols: ["*FloatAmount*"] }, enforcement: "block" })).value?.proposalId ?? "";
+    type P = { candidate: Record<string, unknown>; digest: string; expectedDecisionId: string; action: string };
+    const before = ((await get("/api/proposals")).json().data as { previews: Record<string, P> }).previews[id];
+    expect(before).toMatchObject({ action: "create", candidate: { forbids: { symbols: ["*FloatAmount*"] }, enforcement: "block", answer: "integers only" } });
+    expect(before?.digest).toMatch(/^sha256:/u);
+    edit(`.duo-project/decisions/proposals/${id}.yaml`, "enforcement: block", "enforcement: warn");
+    const stale = (await post(`/api/proposals/${id}/confirm`, { confirmId: id, previewDigest: before?.digest })).json();
+    expect(stale.data).toMatchObject({ status: "failed", diagnostics: [expect.objectContaining({ code: "DECISION_CONFIRM_PREVIEW_CHANGED" })] });
+    const after = ((await get("/api/proposals")).json().data as { previews: Record<string, P> }).previews[id];
+    expect(after?.candidate.enforcement).toBe("warn");
+    const ok = (await post(`/api/proposals/${id}/confirm`, { confirmId: id, previewDigest: after?.digest })).json().data as { status: string; result: { decisionId: string } };
+    expect(ok.status).toBe("confirmed");
+    expect((await post(`/api/proposals/${id}/confirm`, { confirmId: id, previewDigest: "x".repeat(101) })).status).toBe(400);
+  });
 });
+
