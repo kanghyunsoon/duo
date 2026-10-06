@@ -93,7 +93,8 @@ describe("the packed artifact (npm pack is the oracle)", () => {
     expect(m).toMatchObject({ name: "@duo-director/cli", bin: { duoctl: "dist/duoctl.js" }, engines: { node: ">=24.15.0" }, type: "module", files: ["dist"] });
     // H-65: every runtime dependency is bundled; npm installs them from the tarball, not from the registry.
     expect(m.bundleDependencies).toEqual(Object.keys(m.dependencies as Record<string, string>));
-    expect(m.version).toMatch(/^0\.\d+\.\d+$/u);
+    // 0.x.y, or a release candidate 0.x.y-rc.N (T40: 0.3.0-rc.1 is published only under the dist-tag next).
+    expect(m.version).toMatch(/^0\.\d+\.\d+(?:-rc\.\d+)?$/u);
     expect(m.version).toBe(JSON.parse(fs.readFileSync(path.join(REPO, "apps", "cli", "package.json"), "utf8")).version);
     expect(m.scripts).toBeUndefined();
     expect(m.devDependencies).toBeUndefined();
