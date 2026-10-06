@@ -76,9 +76,9 @@ $ duoctl index
 Indexed (incremental) · 5 files · 2 parsed · 2 changed · graph updated
 $ duoctl review
 BLOCK  2 claims · 2 files · llm_calls 0
-  CONFLICT  decision-forbids           D-001 · forbidden-symbol [blocking, introduced]
+  CONFLICT  decision-forbids           D-001 · forbidden-symbol [blocking, not-in-adoption-baseline]
             evidence: src/auth/server-session-store.ts:3-5, src/auth/server-session-store.ts:1-6, .duo-project/decisions/D-001.yaml:1-14
-  CONFLICT  decision-forbids           D-001 · forbidden-symbol [pre-existing-touched]
+  CONFLICT  decision-forbids           D-001 · forbidden-symbol [in-adoption-baseline, touched]
             evidence: src/auth/legacy-session-store.ts:3-5, .duo-project/decisions/D-001.yaml:1-14, src/auth/legacy-session-store.ts:4-4
 Knowledge gaps:
   - No confirmed Requirement or Decision is linked to this task.
@@ -87,7 +87,7 @@ Limitations:
   no-task-scope
 ```
 
-새 store는 **introduced**이고 BLOCK을 만듭니다. legacy store는 도입 전부터 있었으므로 그것을 고친 것은 **pre-existing-touched**이며, 보고는 되지만 BLOCK을 만들지 않습니다. 변경이 건드리지 않은 기존 위반은 새 문제로 보고되지 않습니다. 각 claim은 Decision ID를 밝히고 source 줄을 가리킵니다.
+새 store는 **adoption baseline에 없으므로** BLOCK을 만듭니다. legacy store는 **adoption baseline에 있고** 이번 변경이 그것을 건드렸으므로 보고는 되지만 BLOCK을 만들지 않습니다. `--json`에서는 각각 `provenance: "introduced"`, `"pre-existing-touched"`입니다. `introduced`는 위반이 adoption baseline에 없다는 뜻일 뿐 이번 변경이 만들었다는 뜻이 아닙니다. 변경이 건드리지 않은 기존 위반은 새 문제로 보고되지 않습니다. 각 claim은 Decision ID를 밝히고 source 줄을 가리킵니다.
 
 verdict는 기본적으로 종료 코드가 아닙니다. CI에서는 `duoctl review --fail-on block`이 BLOCK일 때 종료 코드 4로 끝납니다. `--json`은 같은 claim을 `expected`("no symbol matching *SessionStore* (D-001)"), `observed`, `provenance`, Evidence 기록과 함께 돌려줍니다.
 

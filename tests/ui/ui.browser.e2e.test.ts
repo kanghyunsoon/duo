@@ -202,10 +202,10 @@ describe("DUO UI in a browser (T18.1)", () => {
     await page.getByLabel("Task (optional)").fill("AUTH-03");
     await page.getByRole("button", { name: "Review changes" }).click();
     await see(page, "Deterministic review:");
-    const touched = page.getByRole("row").filter({ hasText: "pre-existing · touched" }).first();
+    const touched = page.getByRole("row").filter({ hasText: "in-adoption-baseline, touched" }).first();
     await touched.waitFor();
     expect(await touched.textContent()).not.toContain("blocking");
-    const introduced = page.getByRole("row").filter({ hasText: "introduced" }).first();
+    const introduced = page.getByRole("row").filter({ hasText: "not-in-adoption-baseline" }).first();
     await introduced.waitFor();
     expect(await introduced.textContent()).toContain("blocking");
     expect(errors).toEqual([]);

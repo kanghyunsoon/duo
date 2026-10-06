@@ -259,6 +259,15 @@ describe("Truth lookups and dirty-baseline Review provenance through MCP (TASK-0
     expect(byFile("legacy-session-store.ts")).toEqual([["pre-existing-touched", false]]);
     expect(byFile("server-session-store.ts")).toEqual([["introduced", true]]);
     expect(r.structuredContent.verdict).toBe("BLOCK");
+    // H-73 (C240): people read adoption-baseline wording; the machine values above are unchanged.
+    const summary = String(r.content[0]?.text);
+    expect(summary).toContain("(not-in-adoption-baseline) [blocking]");
+    expect(summary).toContain("(in-adoption-baseline, touched)");
+    expect(summary).not.toMatch(/\((?:introduced|pre-existing|pre-existing-touched)\)/u);
+    const human = duoctl(root, ["review", "--task", "AUTH-03"]).stdout;
+    expect(human).toContain("[blocking, not-in-adoption-baseline]");
+    expect(human).toContain("[in-adoption-baseline, touched]");
+    expect(human).not.toMatch(/\[[^\]]*(?:introduced|pre-existing)[^\]]*\]/u);
     const truth = r.structuredContent.diff.files.filter((f: { path: string }) => f.path.startsWith(".duo-project/"));
     expect(truth.every((f: { provenance?: string }) => f.provenance === "adoption-bootstrap")).toBe(true);
   });
@@ -357,6 +366,51 @@ describe("H-71 full decision proposals through MCP: more expressive, no authorit
     expect(tools.map((t) => t.name).filter((n) => /confirm|reject|write|delete|record|index/u.test(n))).toEqual([]);
     expect((await s.call("duo_get_status")).structuredContent.pendingDecisions.map((d: { id: string }) => d.id)).toEqual(["P-002", "P-004", "P-005"]);
     expect((await s.call("duo_get_decision", { id: "P-002" })).structuredContent.status).toBe("not-found");
+  });
+});
+
+describe("H-73 provenance wording: an edited existing import line is not called new (T38, C240)", () => {
+  it("F: machine provenance stays introduced; CLI and MCP text say not-in-adoption-baseline; verdict and payload unchanged", async () => {
+    const p = existingProject(temps);
+    p.write("src/db/legacy-db.ts", "export type LegacyRow = string;\n\nexport class LegacyDb {\n  run(sql: string): LegacyRow {\n    return sql;\n  }\n}\n");
+    p.write("src/services/legacy-report.ts", "import { LegacyDb } from \"../db/legacy-db.js\";\n\nexport function legacyReport(): string {\n  return new LegacyDb().run(\"select 1\");\n}\n");
+    p.git("add", "-A");
+    p.git("commit", "-qm", "legacy report");
+    const init = duoctl(p.root, ["init", "--non-interactive", "--answers", "-", "--json"], JSON.stringify([{ question: "project_goal", value: "Keep recurring chores fair." }]));
+    expect(init.code).toBe(0);
+    p.git("add", "-A");
+    p.git("commit", "-qm", "duo init");
+    const s = await open(p.root);
+    const prop = await s.call("duo_propose_decision", { title: "No legacy-db imports", question: "q_legacy_db", answer: "Use DbClient", forbids: { imported_paths: ["src/db/legacy-db.ts"] }, enforcement: "block" });
+    expect(prop.isError).toBeFalsy();
+    expect((await createDecisionService({ root: p.root }).confirm({ kind: "human", name: "Ada Lovelace" }, String(prop.structuredContent.proposalId))).value?.decisionId).toEqual(expect.any(String));
+    p.git("add", "-A");
+    p.git("commit", "-qm", "confirm decision");
+    // The import existed before adoption; this change only edits the binding list of that line.
+    p.edit("src/services/legacy-report.ts", "import { LegacyDb } from", "import { LegacyDb, type LegacyRow } from");
+    expect(duoctl(p.root, ["index"]).code).toBe(0);
+
+    const json = duoctl(p.root, ["review", "--json"]).json().result;
+    const claims = json.claims.filter((c: { rule: string }) => c.rule === "decision-forbids-import");
+    expect(json.verdict).toBe("BLOCK");
+    expect(claims).toHaveLength(1);
+    expect(claims[0]).toMatchObject({ alignment: "CONFLICT", reason: "forbidden-import", provenance: "introduced", blockEligible: true });
+    expect(claims[0].observed).toContain("forbidden import on a changed line");
+    const mcp = await s.call("duo_review_changes", {});
+    expect(mcp.structuredContent).toEqual(json);
+
+    const human = duoctl(p.root, ["review"]).stdout;
+    const line = human.split("\n").find((l) => l.includes("decision-forbids-import")) ?? "";
+    expect(line).toContain("forbidden-import");
+    expect(line).toContain("[blocking, not-in-adoption-baseline]");
+    const ko = duoctl(p.root, ["review", "--locale", "ko"]).stdout;
+    expect(ko).toContain("[blocking, 채택 기준선에 없음]");
+    const summary = String(mcp.content[0]?.text);
+    expect(summary).toContain("(not-in-adoption-baseline) [blocking]");
+    for (const out of [human, ko, summary]) {
+      expect(out).not.toMatch(/introduced/u);
+      expect(out).not.toMatch(/new import|newly introduced import|introduced relation/iu);
+    }
   });
 });
 

@@ -1,6 +1,7 @@
 /** Shared presentational pieces. Status is always text (never color alone); no scores anywhere. */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { api, ApiError } from "./api.js";
+import { PROVENANCE_BADGES } from "./provenance.js";
 import type { Location } from "./types.js";
 
 export type Load<T> = { readonly state: "loading" } | { readonly state: "ok"; readonly data: T; readonly durationMs?: number } | { readonly state: "error"; readonly error: ApiError | Error };
@@ -75,16 +76,9 @@ export function Label(props: { readonly text: string; readonly tone?: "ok" | "in
   return <span className={`badge tone-${props.tone ?? "info"}`}>{props.text}</span>;
 }
 
-const PROVENANCE: Readonly<Record<string, { readonly text: string; readonly tone: "ok" | "info" | "warn" | "muted" | "block"; readonly help: string }>> = {
-  introduced: { text: "introduced", tone: "block", help: "new since the Adoption Baseline" },
-  "pre-existing": { text: "pre-existing", tone: "muted", help: "existed at adoption, not touched by this change: history, not a new violation" },
-  "pre-existing-touched": { text: "pre-existing · touched", tone: "warn", help: "existed at adoption and this change touches it: a warning, never a block" },
-  "unverified-at-adoption": { text: "unverified at adoption", tone: "warn", help: "the baseline could not analyze this language: a warning, never a block" },
-  "adoption-bootstrap": { text: "adoption bootstrap", tone: "muted", help: "Truth files exactly as init wrote them: not reviewed until changed" },
-};
 export function Provenance(props: { readonly value: string | undefined }) {
   if (props.value === undefined) return null;
-  const p = PROVENANCE[props.value] ?? { text: props.value, tone: "info" as const, help: "" };
+  const p = PROVENANCE_BADGES[props.value] ?? { text: props.value, tone: "info" as const, help: "" };
   return <span className={`badge tone-${p.tone}`} title={p.help}>{p.text}</span>;
 }
 

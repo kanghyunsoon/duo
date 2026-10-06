@@ -23,6 +23,9 @@ describe("UI components (T18.1)", () => {
     expect(out[1]).not.toContain("block");
     expect(out[2]).toContain("tone-warn");
     expect(out[3]).toContain("tone-warn");
+    // H-73 (C240): adoption-baseline wording, never "introduced".
+    expect(out.slice(0, 4).map((h) => /title="[^"]*">([^<]*)</u.exec(h)?.[1])).toEqual(["not-in-adoption-baseline", "in-adoption-baseline", "in-adoption-baseline, touched", "baseline-unverified"]);
+    expect(out.join("")).not.toMatch(/introduced/u);
   });
 
   it("L0 is file-level analysis, not an error", () => {
@@ -62,7 +65,7 @@ describe("UI components (T18.1)", () => {
     expect(out).not.toMatch(/100% aligned|All tests pass|Bug free/u);
     expect(out).toContain("Semantic assistance (supplemental, never blocks)");
     expect(out.indexOf("Semantic assistance")).toBeGreaterThan(out.indexOf("Claims"));
-    expect(out).toContain("pre-existing · touched");
+    expect(out).toContain("in-adoption-baseline, touched");
     expect(out).toContain("duoctl review --record");
     const stale = html(<ReviewView r={{ ...base, status: "index-required", freshness: { status: "stale" } }} />);
     expect(stale).toContain("index-required");

@@ -76,9 +76,9 @@ $ duoctl index
 Indexed (incremental) · 5 files · 2 parsed · 2 changed · graph updated
 $ duoctl review
 BLOCK  2 claims · 2 files · llm_calls 0
-  CONFLICT  decision-forbids           D-001 · forbidden-symbol [blocking, introduced]
+  CONFLICT  decision-forbids           D-001 · forbidden-symbol [blocking, not-in-adoption-baseline]
             evidence: src/auth/server-session-store.ts:3-5, src/auth/server-session-store.ts:1-6, .duo-project/decisions/D-001.yaml:1-14
-  CONFLICT  decision-forbids           D-001 · forbidden-symbol [pre-existing-touched]
+  CONFLICT  decision-forbids           D-001 · forbidden-symbol [in-adoption-baseline, touched]
             evidence: src/auth/legacy-session-store.ts:3-5, .duo-project/decisions/D-001.yaml:1-14, src/auth/legacy-session-store.ts:4-4
 Knowledge gaps:
   - No confirmed Requirement or Decision is linked to this task.
@@ -87,7 +87,7 @@ Limitations:
   no-task-scope
 ```
 
-The new store is **introduced** and blocks. The legacy store existed before adoption, so touching it is **pre-existing-touched**, which is reported but never blocks. A pre-existing violation that the change does not touch is not reported as a new problem. Each claim names the Decision and points at the source lines.
+The new store is **not in the adoption baseline** and blocks. The legacy store is **in the adoption baseline** and this change touches it, which is reported but never blocks. In `--json` these are `provenance: "introduced"` and `"pre-existing-touched"`; `introduced` only means the violation is absent from the adoption baseline, not that this change created it. A pre-existing violation that the change does not touch is not reported as a new problem. Each claim names the Decision and points at the source lines.
 
 The verdict is not an exit code by default. In CI, `duoctl review --fail-on block` exits with code 4 on BLOCK. `--json` returns the same claims with `expected` ("no symbol matching *SessionStore* (D-001)"), `observed`, `provenance` and the Evidence records.
 

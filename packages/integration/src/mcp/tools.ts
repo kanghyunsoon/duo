@@ -8,7 +8,7 @@
  * a Decision, write Truth, record a Review, index or capture the Adoption Baseline.
  */
 import { compileRepoPattern, DEFINITION_ID_PATTERN, MCP_SERVER_NAME, normalizeRepoPath, normalizeRepoPattern, type RepoPath } from "@duo-director/core";
-import { ambiguityRemediation, MAX_BUDGET, MIN_BUDGET, redactSecrets, renderContextMarkdown, reviewLlmMetric, type ReviewResult, type SeedAmbiguity, type TokenCountMemo } from "@duo-director/director";
+import { ambiguityRemediation, MAX_BUDGET, MIN_BUDGET, provenanceLabel, redactSecrets, renderContextMarkdown, reviewLlmMetric, type ReviewResult, type SeedAmbiguity, type TokenCountMemo } from "@duo-director/director";
 import { z } from "zod";
 import type { LLMProviderPool } from "../llm/factory.js";
 import { NOT_INITIALIZED_FORMAT, type Operation } from "../operations/common.js";
@@ -192,7 +192,7 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
     summarize: (p) => {
       const r = p as unknown as ReviewResult;
       if (r.status === "index-required") return "INDEX_REQUIRED: the DUO index is not current. Run duoctl index, then review again.";
-      const lines = r.claims.filter((c) => c.alignment !== "ALIGNED").map((c) => `- ${c.alignment} ${c.rule} ${c.subject.id}: ${c.reason}${c.provenance === undefined ? "" : ` (${c.provenance})`}${c.blockEligible ? " [blocking]" : ""}`);
+      const lines = r.claims.filter((c) => c.alignment !== "ALIGNED").map((c) => `- ${c.alignment} ${c.rule} ${c.subject.id}: ${c.reason}${c.provenance === undefined ? "" : ` (${provenanceLabel(c.provenance)})`}${c.blockEligible ? " [blocking]" : ""}`);
       const a = r.semanticAssist;
       const semantic = a.status === "not-requested" ? [] : [
         `Semantic assistance (supplemental, never blocks): ${a.status}${a.failure === undefined ? "" : ` (${a.failure})`}`,

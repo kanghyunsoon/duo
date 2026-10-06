@@ -77,7 +77,7 @@ scanner는 Git이 추적하는 파일과 ignore되지 않은 untracked 파일을
 - **Review**: 변경된 파일의 limitation이 같은 code로 붙는다(문서·데이터 파일 제외). Analyzer가 없다는 이유로 claim이 생기지 않는다: scope drift는 structural 파일만 보고, test-coverage는 바뀐 구현 파일 중 test를 볼 수 있는 언어가 없으면 PARTIAL 대신 UNKNOWN(`tests-not-analyzable`, 경고 아님)이다. PASS의 뜻은 그대로: 가진 evidence 범위에서 방향 위반을 찾지 못함.
 - **Forbidden imports(H-72, `next`)**: Decision `forbids.imported_paths`는 바뀐 줄의 import가 index에서 repository 파일로 정확히 해석될 때만 판정한다: TS·JS(import, export-from, dynamic import, require, type-only), Python(상대·발견된 root의 absolute), C++(옆 파일 quoted include). Java·C#은 module resolution이 없어 `imports-resolution-unsupported`, 해석되지 않거나 후보가 여럿이면 `imports-unresolved`·`imports-ambiguous` limitation이며 BLOCK하지 않는다.
 - **Impact**: 관련 파일 언어의 limitation을 `limitations`로 더한다(Graph에 기록된 관계만).
-- **Adoption Baseline**: `analysis.structuralLanguages`와 registry digest를 기록한다(T18.0 이전 record는 TS/JS로 본다). baseline을 다시 해석하지 않는다. baseline 당시 구조 분석이 없던 언어의 Symbol 위반이 baseline에 없으면 provenance `unverified-at-adoption`: 경고는 하되 BLOCK하지 않는다.
+- **Adoption Baseline**: `analysis.structuralLanguages`와 registry digest를 기록한다(T18.0 이전 record는 TS/JS로 본다). baseline을 다시 해석하지 않는다. baseline 당시 구조 분석이 없던 언어의 Symbol 위반이 baseline에 없으면 provenance `unverified-at-adoption`(사람이 읽는 표시 `baseline-unverified`, H-73): 경고는 하되 BLOCK하지 않는다.
 - **의미 보조(T12B)**: `duoctl review --semantic`은 언어와 무관하다. 후보 claim과 이미 수집한 Evidence 발췌만 보내고 adapter에 언어별 분기가 없다. L0 파일도 요청할 수 있지만 LLM에게 Symbol이나 호출 관계를 추측하게 하지 않는다: LLM은 결정적 Evidence의 의미만 해석한다. OpenAI 설정이 없으면 모든 언어의 init, index, context, review가 `llmCalls = 0`이다(언어별 CLI e2e).
 - Cross-language 관계(TS frontend → HTTP → Java backend)는 추측하지 않는다. Project Truth가 명시한 관계만 Edge가 된다.
 

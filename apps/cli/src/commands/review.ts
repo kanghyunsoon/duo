@@ -4,7 +4,7 @@
  * index-required (--refresh indexes first); only --record writes, through recordReview(). A verdict
  * is not a process error: the exit code follows it only with --fail-on (or --strict).
  */
-import { recordReview, renderGapQuestions, reviewLlmMetric, type ReviewResult, type Verdict } from "@duo-director/director";
+import { provenanceLabel, recordReview, renderGapQuestions, reviewLlmMetric, type ReviewResult, type Verdict } from "@duo-director/director";
 import { normalizeRepoPath, type RepoPath } from "@duo-director/core";
 import { indexRepository } from "@duo-director/graph";
 import { diffEnd, projectReview, withGraphWriter } from "@duo-director/integration";
@@ -36,7 +36,7 @@ function renderReview(env: Env, r: ReviewResult): string[] {
   const ev = new Map(r.evidence.map((e) => [e.id, e] as const));
   const shown = r.claims.filter((c) => env.verbose || c.alignment !== "ALIGNED");
   for (const c of shown) {
-    const tags = [c.blockEligible ? "blocking" : "", c.provenance ?? "", c.drift ? "drift" : ""].filter((x) => x !== "").join(", ");
+    const tags = [c.blockEligible ? "blocking" : "", c.provenance === undefined ? "" : provenanceLabel(c.provenance, L), c.drift ? "drift" : ""].filter((x) => x !== "").join(", ");
     out.push(`  ${c.alignment.padEnd(9)} ${c.rule.padEnd(26)} ${c.subject.id} · ${c.reason}${tags === "" ? "" : ` [${tags}]`}`);
     const pointers = c.evidenceIds.map((id) => ev.get(id)?.pointer).filter((p) => p?.path !== undefined).slice(0, 3)
       .map((p) => `${p?.path ?? ""}${p?.lines === undefined ? "" : `:${p.lines[0]}-${p.lines[1]}`}`);
