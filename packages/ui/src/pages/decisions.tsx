@@ -8,6 +8,7 @@
 import { useRef, useState } from "react";
 import { api, ApiError } from "../api.js";
 import { Command, Empty, ErrorBox, Label, Loading, Loc, Page, Section, useApi } from "../components.js";
+import { FORBIDS_SCOPE, hasForbids } from "../forbids.js";
 import { entityPath, Link } from "../router.js";
 import type { Diag, Preview, ProposalItem } from "../types.js";
 
@@ -70,6 +71,7 @@ function Content(props: { readonly p: ProposalItem; readonly preview: Preview | 
       {p.rationale === null ? null : <div><dt>Rationale</dt><dd>{p.rationale}</dd></div>}
       <div><dt>Governs</dt><dd>{[...p.governs.requirements, ...p.governs.paths, ...p.governs.symbols].join(", ") || "—"}</dd></div>
       {c === undefined ? null : <div><dt>Forbids</dt><dd>{fieldText(c.forbids)}</dd></div>}
+      {c === undefined || !hasForbids(c.forbids) ? null : <div><dt>Forbids scope</dt><dd>{FORBIDS_SCOPE}</dd></div>}
       {c === undefined ? null : <div><dt>Enforcement</dt><dd>{fieldText(c.enforcement)}</dd></div>}
       <div><dt>Supersedes</dt><dd>{p.supersedes ?? "—"}</dd></div>
       <div><dt>Proposed by</dt><dd>{p.proposedBy}{p.proposedAt === null ? null : <span className="muted"> · {p.proposedAt}</span>}</dd></div>
@@ -95,10 +97,11 @@ export function proposerText(preview: Preview): string {
 }
 
 /** The candidate a confirm acts on (previewConfirm), every content field shown, absent ones as (not set). */
-function Candidate(props: { readonly preview: Preview }) {
+export function Candidate(props: { readonly preview: Preview }) {
   const c = props.preview.candidate ?? {};
   const rows: [string, unknown][] = [["Title", c.title], ["Question", c.question], ["Answer", c.answer], ["Kind", c.kind], ["Rationale", c.rationale],
-    ["Governs", c.governs], ["Forbids", c.forbids], ["Enforcement", c.enforcement], ["Supersedes", c.supersedes]];
+    ["Governs", c.governs], ["Forbids", c.forbids], ...(hasForbids(c.forbids) ? [["Forbids scope", FORBIDS_SCOPE] as [string, unknown]] : []),
+    ["Enforcement", c.enforcement], ["Supersedes", c.supersedes]];
   for (const k of ["evidence", "source", "extensions"] as const) if (c[k] !== undefined) rows.push([k[0]?.toUpperCase() + k.slice(1), c[k]]);
   return (
     <dl className="facts">

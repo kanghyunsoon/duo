@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Level, Provenance, Verdict } from "./components.js";
 import { route } from "./app.js";
 import { CoverageTable } from "./pages/coverage.js";
+import { Candidate } from "./pages/decisions.js";
 import { DecisionLabel } from "./pages/direction.js";
 import { llmText } from "./pages/overview.js";
 import { PASS_MEANING, ReviewView } from "./pages/review.js";
@@ -79,6 +80,14 @@ describe("UI components (T18.1)", () => {
     expect(failed).toContain("PROJECT_TRUTH_INVALID");
     expect(failed).toContain(".duo-project/decisions/D-001.yaml");
     expect(failed).not.toMatch(/verdict-(pass|warn|block)|Deterministic review:/u);
+  });
+
+  it("T40 N3: the confirm preview states that forbids are repository-wide", () => {
+    const preview = { sourceId: "P-001", sourceKind: "proposal" as const, expectedDecisionId: "D-001", digest: "sha256:x",
+      candidate: { title: "t", question: "q", answer: "a", governs: { paths: ["src/ui/**"] }, forbids: { imported_paths: ["src/db/legacy-db.ts"] }, enforcement: "block" } };
+    const out = html(<Candidate preview={preview} />);
+    expect(out).toContain("<dt>Forbids scope</dt><dd>repository-wide (governs does not narrow forbids)</dd>");
+    expect(html(<Candidate preview={{ ...preview, candidate: { title: "t", question: "q", answer: "a" } }} />)).not.toContain("Forbids scope");
   });
 
   it("deep links route to their screens", () => {
