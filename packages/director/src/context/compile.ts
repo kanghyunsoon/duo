@@ -11,7 +11,7 @@
  */
 import { performance } from "node:perf_hooks";
 import type { AnalyzerRegistry } from "@duo-director/analyzer";
-import { canonicalDiagnostics, createDiagnostic, failure, loadProjectTruth, success, type Diagnostic, type ParseResult } from "@duo-director/core";
+import { canonicalDiagnostics, createDiagnostic, failure, loadProjectTruth, requireCompleteTruth, success, type Diagnostic, type ParseResult } from "@duo-director/core";
 import { inspectIndex, type GraphReader, type IndexedGraph, type IndexInspection } from "@duo-director/graph";
 import { redactSecrets } from "./redact.js";
 import { TOKEN_ESTIMATOR, truncateToTokens } from "../tokens/index.js";
@@ -88,7 +88,8 @@ export async function compileContext(root: string, request: ContextRequest, opti
     success({ status, freshness, signals, cache: { status: "off", written: false }, performance: perf(), diagnostics: canonicalDiagnostics(diagnostics), ...extra }, canonicalDiagnostics(diagnostics));
   if (inspected.value.status !== "current") return idle("index-required", []);
 
-  const loaded = loadProjectTruth(root);
+  // T40 (N1): an agent never receives a Context Packet built from partial Truth.
+  const loaded = requireCompleteTruth(loadProjectTruth(root));
   if (loaded.value === undefined) return failure(loaded.diagnostics);
   const { truth } = loaded.value;
   const valid = validate(request, truth.config.context.defaultBudgetTokens);

@@ -48,6 +48,15 @@ export function ReviewView(props: { readonly r: ReviewResult }) {
   if (r.status === "index-required") {
     return <p role="status" className="box box-warn"><Label text="index-required" tone="warn" /> The index is {r.freshness?.status ?? "not current"}. Run <Command>duoctl index</Command>, then review again.</p>;
   }
+  if (r.status === "failed") {
+    // T40 (N1): a review DUO could not run, e.g. Project Truth it could read only in part. No verdict is shown.
+    return (
+      <div role="alert" className="box box-error">
+        <strong>Review not run: no verdict</strong>
+        <ul>{(r.diagnostics ?? []).map((d, i) => <li key={i}><code>{d.code}</code> {d.message}</li>)}</ul>
+      </div>
+    );
+  }
   if (r.status !== "ready") return <p role="alert" className="box box-error">{r.status}</p>;
   const bootstrap = r.diff?.files.filter((f) => f.provenance === "adoption-bootstrap") ?? [];
   return (

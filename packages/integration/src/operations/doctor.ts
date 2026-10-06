@@ -13,7 +13,7 @@
  */
 import path from "node:path";
 import { findGitTopLevel, openGitProvider, type GitProvider } from "@duo-director/analyzer";
-import { loadProjectTruth, type Diagnostic, type LoadedProject } from "@duo-director/core";
+import { loadProjectTruth, truthAuthorityErrors, type Diagnostic, type LoadedProject } from "@duo-director/core";
 import { getAdoptionBaselineStatus, inspectStateDirectory, observeWorkingTree, redactSecrets } from "@duo-director/director";
 import { inspectIndex, type IndexInspection } from "@duo-director/graph";
 import { agentAdapter, EXPECTED_MCP_TOOLS, inspectAgentIntegration, launcherOf, verifyAgentIntegration } from "../agents/integration.js";
@@ -151,7 +151,12 @@ export async function projectDoctor(rootArg: string, options: DoctorOptions): Pr
   let project: LoadedProject | undefined;
   if (runs("truth.project", "git.repository")) {
     const loaded = loadProjectTruth(root);
-    if (loaded.value !== undefined) {
+    // T40 (N1): Truth the loader could read only in part is invalid here, never "valid" with a lower count.
+    const authority = loaded.value === undefined ? [] : truthAuthorityErrors(loaded.diagnostics);
+    if (loaded.value !== undefined && authority.length > 0) {
+      const problems = authority.slice(0, LIST_LIMIT).map((d) => ({ code: d.code, ...(d.source?.path === undefined ? {} : { path: d.source.path }) }));
+      set("truth.project", "error", "invalid", { problems }, [{ id: "fix-truth", commands: [], params: { path: problems.find((p) => p.path !== undefined)?.path ?? ".duo-project/project.yaml" } }]);
+    } else if (loaded.value !== undefined) {
       project = loaded.value;
       const t = project.truth;
       set("truth.project", "ok", "valid", { name: t.config.name, requirements: t.requirements.length, decisions: t.decisions.length, constraints: t.constraints.length });

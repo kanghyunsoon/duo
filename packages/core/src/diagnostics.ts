@@ -138,6 +138,8 @@ export const DIAGNOSTIC_SEVERITY = {
   DECISION_LOCK_BUSY: "error",
   /** A confirmed Decision's lock.digest does not match its content fields (a detection aid, not a signature). */
   DECISION_LOCK_MISMATCH: "warning",
+  /** T40 (N1): an authoritative operation refused partial Project Truth; the loader errors follow it. */
+  PROJECT_TRUTH_INVALID: "error",
   /** A SourceLocation that does not address its canonical source text (a producer bug, T09.1). */
   SOURCE_LOCATION_INVALID: "error",
   /** Context Compiler: the request cannot be compiled (empty task, budget out of range or below the packet frame, unknown profile). */
@@ -239,7 +241,7 @@ export const DIAGNOSTIC_PERSISTENCE = {
   GRAPH_WRITE_REFUSED: T, TEST_ID_CONFLICT: P, DECLARED_SYMBOL_UNRESOLVED: P, GRAPH_INVARIANT_VIOLATED: T,
   INDEX_STATE_INVALID: T,
   DECISION_ACTOR_FORBIDDEN: T, PROPOSAL_NOT_FOUND: T, PROPOSAL_NOT_PENDING: T, PROPOSAL_INVALID: T, PROPOSAL_STALE: T,
-  DECISION_LOCKED: T, DECISION_TARGET_UNSUPPORTED: T, DECISION_SUPERSEDE_TARGET_INVALID: T, DECISION_LOCK_BUSY: T,
+  DECISION_LOCKED: T, DECISION_TARGET_UNSUPPORTED: T, DECISION_SUPERSEDE_TARGET_INVALID: T, DECISION_LOCK_BUSY: T, PROJECT_TRUTH_INVALID: T,
   DECISION_LOCK_MISMATCH: P,
   SOURCE_LOCATION_INVALID: P,
   CONTEXT_REQUEST_INVALID: T,

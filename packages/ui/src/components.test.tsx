@@ -69,6 +69,15 @@ describe("UI components (T18.1)", () => {
     expect(stale).toContain("duoctl index");
   });
 
+  it("T40 N1: a failed review shows the Truth error and no verdict", () => {
+    const failed = html(<ReviewView r={{ status: "failed", baseline: { status: "unknown" }, claims: [], evidence: [], limitations: [], metrics: { llmCalls: 0 },
+      diagnostics: [{ code: "PROJECT_TRUTH_INVALID", message: "Project Truth could not be read completely (1 error: .duo-project/decisions/D-001.yaml)." }] } as unknown as ReviewResult} />);
+    expect(failed).toContain("Review not run: no verdict");
+    expect(failed).toContain("PROJECT_TRUTH_INVALID");
+    expect(failed).toContain(".duo-project/decisions/D-001.yaml");
+    expect(failed).not.toMatch(/verdict-(pass|warn|block)|Deterministic review:/u);
+  });
+
   it("deep links route to their screens", () => {
     expect(html(route("/entity/AUTH-03"))).toContain("AUTH-03");
     expect(html(route("/decisions"))).toContain("Pending decisions");
