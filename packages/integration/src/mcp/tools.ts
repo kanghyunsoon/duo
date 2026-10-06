@@ -37,8 +37,19 @@ const decisionId = z.string().regex(/^D-\d+$/u, "a Decision ID such as D-004");
  * apply. Limits are those of governs (100 entries, 500 characters per name; 4096 per pattern like repoPattern).
  */
 const forbidPattern = z.string().min(1).max(4096).refine((p) => compileRepoPattern(p) !== undefined, "a repository-relative pattern review can match (no absolute or .. pattern)");
+/**
+ * T35.2: forbids.symbols are wildcard patterns over the qualified name of a changed symbol (review's wildcard:
+ * "*" any text, "?" one character), e.g. LegacyDb, LegacyDb.run, *LegacyDb*. A DUO path#symbol reference
+ * (src/db/legacy-db.ts#LegacyDb, a display/reference handle in context output) can never match a qualified
+ * name, so a pattern with "/", "\\" or "#" is refused, never rewritten. Language punctuation such as "." or
+ * "::" stays allowed.
+ */
+export const FORBIDS_SYMBOL_MESSAGE = "forbids.symbols matches symbol qualified names only. Do not use a DUO path#symbol reference. Use a qualified-name wildcard such as 'LegacyDb' or '*LegacyDb*'.";
+const forbidSymbol = text(500).refine((s) => !/[/\\#]/u.test(s), FORBIDS_SYMBOL_MESSAGE);
 const forbids = z.strictObject({
-  paths: z.array(forbidPattern).max(100).optional(), symbols: z.array(text(500)).max(100).optional(), dependencies: z.array(text(500)).max(100).optional(),
+  paths: z.array(forbidPattern).max(100).optional().describe("Repository path patterns; a change to a matching file conflicts."),
+  symbols: z.array(forbidSymbol).max(100).optional().describe("Wildcard patterns over the qualified names of changed symbols ('*' any text, '?' one character), e.g. LegacyDb, LegacyDb.run, *LegacyDb*. Not a DUO path#symbol reference. Catches changes to matching symbols, not new calls or references from other symbols."),
+  dependencies: z.array(text(500)).max(100).optional().describe("Package names; adding one to a package.json conflicts."),
 }).refine((f) => (f.paths?.length ?? 0) + (f.symbols?.length ?? 0) + (f.dependencies?.length ?? 0) > 0, "forbids needs at least one path, symbol or dependency");
 
 export const INPUT = {
@@ -221,7 +232,7 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
   },
   duo_propose_decision: {
     name: "duo_propose_decision", title: "Propose a Decision", readOnly: false,
-    description: "Creates a Decision proposal only (decisions/proposals/P-*.yaml). Cannot confirm or reject a decision: a human does that in duoctl or the Web UI. A proposal is not confirmed Project Truth and does not change any review verdict. forbids and enforcement: \"block\" have no authority until a human confirms the proposal. supersedes names a confirmed Decision to replace; that Decision is not modified until a human confirms this proposal. The agent name is an audit label, not an authentication.",
+    description: "Creates a Decision proposal only (decisions/proposals/P-*.yaml). Cannot confirm or reject a decision: a human does that in duoctl or the Web UI. A proposal is not confirmed Project Truth and does not change any review verdict. forbids and enforcement: \"block\" have no authority until a human confirms the proposal. supersedes names a confirmed Decision to replace; that Decision is not modified until a human confirms this proposal. forbids.symbols are wildcard patterns over the qualified names of changed symbols ('*' any text, '?' one character), e.g. LegacyDb, LegacyDb.run, *LegacyDb*; a DUO path#symbol reference such as src/db/legacy-db.ts#LegacyDb (a display handle in context output) is not a pattern and is refused. A symbol pattern catches changes to matching symbols, not new calls or references from other code. The agent name is an audit label, not an authentication.",
     run: async (args, ctx) => {
       const op = await proposeDecision(ctx.root, args.agent ?? ctx.agentName, {
         title: args.title, question: args.question, answer: args.answer, ...(args.rationale === undefined ? {} : { rationale: args.rationale }),

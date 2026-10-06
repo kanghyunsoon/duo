@@ -317,6 +317,7 @@ describe("H-71 full decision proposals through MCP: more expressive, no authorit
     const invalid: Record<string, unknown>[] = [
       { forbids: { paths: ["../outside/**"] } }, { forbids: {} }, { forbids: { paths: [] } }, { enforcement: "error" },
       { supersedes: "P-003" }, { supersedes: "AUTH-1" }, { supersedes: "D-099" }, { kind: "constraint" }, { evidence: [] },
+      { forbids: { symbols: ["src/scheduler.ts#Scheduler"] } }, { forbids: { symbols: ["src/Scheduler"] } },
     ];
     for (const extra of invalid) {
       const r = await s.call("duo_propose_decision", { title: "x", question: "q_invalid", answer: "a", ...extra });
@@ -324,6 +325,14 @@ describe("H-71 full decision proposals through MCP: more expressive, no authorit
     }
     expect(proposalFiles()).toEqual(listing);
     expect(readD("D-001")).toBe(d001);
+    // T35.2: the refusal tells the agent what to send instead.
+    const ref = await s.call("duo_propose_decision", { title: "x", question: "q_ref", answer: "a", forbids: { symbols: ["src/scheduler.ts#Scheduler"] } });
+    expect(JSON.stringify(ref.content)).toContain("qualified names only");
+    expect(JSON.stringify(ref.content)).toContain("*LegacyDb*");
+    expect(proposalFiles()).toEqual(listing);
+    expect((await s.call("duo_propose_decision", { title: "No scheduler rewrite", question: "q_ok", answer: "a", forbids: { symbols: ["*Scheduler*"] }, enforcement: "warn" })).isError).toBeFalsy();
+    const { tools: listed } = await s.client.listTools();
+    expect(JSON.stringify(listed.find((t) => t.name === "duo_propose_decision")?.inputSchema)).toContain("qualified names of changed symbols");
 
     // I: once D-001 is superseded by a human confirm, a proposal to supersede it again writes nothing.
     expect((await createDecisionService({ root: p.root }).confirm(human, "P-003")).value).toMatchObject({ decisionId: "D-002", supersedes: "D-001" });
@@ -336,7 +345,7 @@ describe("H-71 full decision proposals through MCP: more expressive, no authorit
     const { tools } = await s.client.listTools();
     expect(tools).toHaveLength(9);
     expect(tools.map((t) => t.name).filter((n) => /confirm|reject|write|delete|record|index/u.test(n))).toEqual([]);
-    expect((await s.call("duo_get_status")).structuredContent.pendingDecisions.map((d: { id: string }) => d.id)).toEqual(["P-002"]);
+    expect((await s.call("duo_get_status")).structuredContent.pendingDecisions.map((d: { id: string }) => d.id)).toEqual(["P-002", "P-004"]);
     expect((await s.call("duo_get_decision", { id: "P-002" })).structuredContent.status).toBe("not-found");
   });
 });

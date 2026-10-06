@@ -4,7 +4,7 @@
  * agent-facing input. A proposal gains no authority until a human confirms it (DecisionService, Informed Confirm).
  */
 import { describe, expect, it } from "vitest";
-import { INPUT, TOOLS } from "./tools.js";
+import { FORBIDS_SYMBOL_MESSAGE, INPUT, TOOLS } from "./tools.js";
 
 const schema = INPUT.duo_propose_decision;
 const base = { title: "t", question: "q", answer: "a" };
@@ -38,6 +38,18 @@ describe("duo_propose_decision input contract (H-71)", () => {
   it("F/G enforcement is warn or block only; supersedes is one Decision ID", () => {
     for (const e of ["error", "BLOCK", "", true]) expect(ok({ enforcement: e })).toBe(false);
     for (const id of ["P-001", "AUTH-01", "D-", "d-001", "D-001 ", ["D-001"]]) expect(ok({ supersedes: id })).toBe(false);
+  });
+
+  it("T35.2 forbids.symbols: qualified-name wildcards pass; a DUO path#symbol reference or a path is refused with an actionable message", () => {
+    for (const s of ["LegacyDb", "LegacyDb.run", "*LegacyDb*", "Namespace::LegacyDb", "Legacy?b", "app.db.LegacyDb"]) expect(ok({ forbids: { symbols: [s] } }), s).toBe(true);
+    for (const s of ["src/db/legacy-db.ts#LegacyDb", "src/db/LegacyDb", "LegacyDb#run", "src\\db\\LegacyDb"]) {
+      const r = schema.safeParse({ ...base, forbids: { symbols: [s] } });
+      expect(r.success, s).toBe(false);
+      const message = r.success ? "" : r.error.issues.map((i) => i.message).join(" ");
+      expect(message).toContain(FORBIDS_SYMBOL_MESSAGE);
+      expect(message).toMatch(/'LegacyDb' or '\*LegacyDb\*'/u);
+    }
+    expect(TOOLS.duo_propose_decision.description).toMatch(/qualified names of changed symbols.*not a pattern and is refused.*not new calls or references/su);
   });
 
   it("O the tool list is unchanged: nine tools, no confirm or reject", () => {
