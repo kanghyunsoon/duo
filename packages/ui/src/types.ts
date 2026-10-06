@@ -89,6 +89,8 @@ export interface SemanticAssist {
 }
 export interface ReviewResult {
   readonly status: string;
+  /** Present when status is "failed" (the API's failed operation): code and message of each diagnostic. */
+  readonly diagnostics?: readonly { readonly code: string; readonly message: string }[];
   readonly verdict?: string;
   readonly freshness?: { readonly status: string };
   readonly baseline: { readonly status: string; readonly id?: string };

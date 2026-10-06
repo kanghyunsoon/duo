@@ -12,7 +12,7 @@
 import { performance } from "node:perf_hooks";
 import { openGitProvider, type AnalyzerRegistry } from "@duo-director/analyzer";
 import {
-  canonicalDiagnostics, canonicalSourceText, compareUtf8, fileRef, loadProjectTruth, readSourceFile, sha256Text, stableJson, STATE_DIR_NAME, success,
+  canonicalDiagnostics, canonicalSourceText, compareUtf8, fileRef, loadProjectTruth, readSourceFile, requireCompleteTruth, sha256Text, stableJson, STATE_DIR_NAME, success,
   type Diagnostic, type EvidenceBasis, type ParseResult,
 } from "@duo-director/core";
 import type { GitDiffEnd, GitProvider } from "@duo-director/analyzer";
@@ -150,7 +150,8 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   if (inspected.value.status !== "current") {
     return success({ result: { format: "duo.review/1", status: "index-required", request: requestIdentity, baseline, freshness, seeds: [], verdictBasis: { blocking: [], ask: [], warn: [] }, claims: [], evidence: [], limitations: [], semanticAssist: noAssist, metrics: zeroMetrics, diagnostics: [] }, performance: perf() });
   }
-  const loaded = loadProjectTruth(root);
+  // T40 (N1): never a verdict on partial Truth; a Decision the loader left out must not turn into a PASS.
+  const loaded = requireCompleteTruth(loadProjectTruth(root));
   if (loaded.value === undefined) return { diagnostics: loaded.diagnostics };
   const { truth } = loaded.value;
 

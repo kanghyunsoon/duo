@@ -8,7 +8,7 @@
  * is shown (content, enforcement and forbids, the superseded target, staleness, the expected Decision ID),
  * and confirm is bound to that preview's digest: if the candidate changed meanwhile, nothing is confirmed.
  */
-import { createDecisionService, createDiagnostic, listDecisionProposals, type ConfirmPreview } from "@duo-director/core";
+import { createDecisionService, createDiagnostic, listDecisionProposals, truthAuthorityErrors, type ConfirmPreview } from "@duo-director/core";
 import { t, type Locale } from "../messages.js";
 import { EXIT, failed, type Outcome } from "../output.js";
 import { diagLines, humanActor, requireProject, usage, type Env } from "./shared.js";
@@ -74,9 +74,12 @@ export async function decisionCommand(env: Env, sub: string | undefined, id: str
   if (sub === "list" || sub === undefined) {
     const pending = entries.filter((e) => e.status === "pending");
     const proposedDecisions = truth.decisions.filter((d) => d.state === "proposed");
-    const human = pending.length + proposedDecisions.length === 0 ? [t(env.locale, "decision.none")]
-      : [...pending.map((e) => `${e.id}  ${e.proposal.title}  (${e.proposal.question} = ${e.proposal.answer})`), ...proposedDecisions.map((d) => `${d.id}  ${d.title}  (proposed Decision)`)];
-    return { command: "decision", exitCode: EXIT.OK, diagnostics: [], human, result: { pending: pending.map((e) => ({ id: e.id, title: e.proposal.title, question: e.proposal.question, answer: e.proposal.answer })), proposedDecisions: proposedDecisions.map((d) => ({ id: d.id, title: d.title })) } };
+    // T40 (N1): a proposal or Decision file the loader could not read is named, never just missing from the list.
+    const unread = truthAuthorityErrors(project.diagnostics);
+    const human = [...(pending.length + proposedDecisions.length === 0 ? [t(env.locale, "decision.none")]
+      : [...pending.map((e) => `${e.id}  ${e.proposal.title}  (${e.proposal.question} = ${e.proposal.answer})`), ...proposedDecisions.map((d) => `${d.id}  ${d.title}  (proposed Decision)`)]),
+      ...(unread.length === 0 ? [] : [t(env.locale, "decision.truth-errors", { n: unread.length }), ...unread.map((d) => `  ${d.code} ${d.source?.path ?? ""}${d.source?.startLine === undefined ? "" : `:${d.source.startLine}`} ${d.message}`)])];
+    return { command: "decision", exitCode: EXIT.OK, diagnostics: unread, human, result: { pending: pending.map((e) => ({ id: e.id, title: e.proposal.title, question: e.proposal.question, answer: e.proposal.answer })), proposedDecisions: proposedDecisions.map((d) => ({ id: d.id, title: d.title })) } };
   }
   if (sub !== "confirm" && sub !== "reject") return usage("decision", "usage: duoctl decision list | confirm <id> | reject <id> [--reason <text>]");
   if (id === undefined) return usage("decision", `duoctl decision ${sub} needs an ID`);

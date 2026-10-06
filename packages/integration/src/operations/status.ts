@@ -1,6 +1,6 @@
 /** duo status (CLI status, MCP duo_get_status): write 0. */
 import { getAdoptionBaselineStatus } from "@duo-director/director";
-import { listDecisionProposals } from "@duo-director/core";
+import { listDecisionProposals, truthAuthorityErrors } from "@duo-director/core";
 import { inspectIndex } from "@duo-director/graph";
 import { errorsOf, guarded, llmPoolOf, project, withGraphReader, withRegistry, type Operation, type OperationOptions, type Failure } from "./common.js";
 
@@ -11,6 +11,8 @@ export function projectStatus(root: string, options: OperationOptions = {}): Pro
     const p = project(root);
     if (p.value === undefined) return p.outcome as Failure;
     const { truth } = p.value;
+    // T40 (N1): status reads partial Truth on purpose (it describes a broken repository) and names what was left out.
+    const truthErrors = truthAuthorityErrors(p.diagnostics ?? []);
     const inspection = await withRegistry(options.registry, (registry) => withGraphReader(root, (graph) => inspectIndex(root, { graph, registry })));
     const baseline = await getAdoptionBaselineStatus(root);
     const pending = listDecisionProposals(truth).filter((e) => e.status === "pending");
@@ -19,11 +21,15 @@ export function projectStatus(root: string, options: OperationOptions = {}): Pro
     // Local only (T12B): configuration and environment, never a network call.
     const llm = llmPoolOf(options).forConfig(truth.config.llm);
     return {
-      kind: "ok", diagnostics: errorsOf([...inspection.diagnostics, ...baseline.diagnostics]),
+      kind: "ok", diagnostics: errorsOf([...truthErrors, ...inspection.diagnostics, ...baseline.diagnostics]),
       payload: {
         format: STATUS_FORMAT, initialized: true,
         project: { name: truth.config.name, vision: truth.vision?.status ?? "missing", currentMilestone: truth.config.currentMilestone },
-        truth: { requirements: truth.requirements.length, decisions: truth.decisions.length, constraints: truth.constraints.length, declaredGaps: truth.gaps.length },
+        truth: {
+          requirements: truth.requirements.length, decisions: truth.decisions.length, constraints: truth.constraints.length, declaredGaps: truth.gaps.length,
+          // T40 (additive): loader errors that make review, context and Decision confirm refuse this Truth. Empty when Truth loaded completely.
+          errors: truthErrors.map((d) => ({ code: d.code, message: d.message, ...(d.source === undefined ? {} : { path: d.source.path, ...(d.source.startLine === undefined ? {} : { line: d.source.startLine }) }) })),
+        },
         index: i === undefined ? null : {
           status: i.status, fullRebuildReason: i.fullRebuildReason ?? null, fullRebuildRequired: i.wouldRebuild.full,
           changes: {
