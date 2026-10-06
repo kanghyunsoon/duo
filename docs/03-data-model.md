@@ -494,7 +494,7 @@ lock:
 
 ADR 형식 Markdown Decision은 같은 필드를 frontmatter에 두고 `type: decision`을 붙인다.
 
-`forbids`의 field는 서로 다른 것을 본다: `paths`는 바뀐 파일 경로, `symbols`는 바뀐 symbol의 qualified name(wildcard), `dependencies`는 package.json에 새로 추가된 dependency, `imported_paths`(H-72, `next`)는 diff의 바뀐 줄에 있는 import·module-reference 구문(TS·JS import, export-from, dynamic import, require, type-only 포함, Python import, C++ quoted include)이 index에서 정확히 해석된 repository 파일 경로다. `imported_paths`는 그 관계가 새로 생겼음을 증명하지 않고, 해석되지 않거나(unresolved, ambiguous) module resolution이 없는 언어(Java, C#)의 import는 확인하지 않는다(review limitation). 값이 있을 때만 domain model(`forbids.importedPaths`)과 lock digest에 들어가므로 `imported_paths`가 없는 Decision의 lock은 T37 전과 같다.
+`forbids`의 field는 서로 다른 것을 본다: `paths`는 바뀐 파일 경로, `symbols`는 바뀐 symbol의 qualified name(wildcard), `dependencies`는 package.json에 새로 추가된 dependency, `imported_paths`(H-72, `next`)는 diff의 바뀐 줄에 있는 import·module-reference 구문(TS·JS import, export-from, dynamic import, require, type-only 포함, Python import, C++ quoted include)이 index에서 정확히 해석된 repository 파일 경로다. `imported_paths`는 그 관계가 새로 생겼음을 증명하지 않고, 해석되지 않거나(unresolved, ambiguous) module resolution이 없는 언어(Java, C#)의 import는 확인하지 않는다(review limitation). 값이 있을 때만 domain model(`forbids.importedPaths`)과 lock digest에 들어가므로 `imported_paths`가 없는 Decision의 lock은 T37 전과 같다. `forbids`의 모든 field는 저장소 전체의 변경에 적용된다. `governs`는 Decision이 다루는 대상을 연결할 뿐 `forbids`의 범위를 좁히지 않는다. 예를 들어 `governs.paths: src/ui/**`와 `forbids.imported_paths: src/db/legacy-db.ts`를 함께 쓰면 `src/ui` 밖 파일의 바뀐 import도 위반이다(T39 확인). import하는 쪽의 경로로 범위를 제한하는 field는 없다.
 
 ## decisions/proposals/P-*.yaml
 

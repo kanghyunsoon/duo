@@ -18,7 +18,7 @@ DUO는 변경이 일어난 뒤를 봅니다. 사람이 확정한 Requirement와 
 
 - **Decision 생명주기.** Agent는 Decision을 제안만 할 수 있습니다. 확정과 거절은 사람이 하고, 확정된 Decision은 내용 digest로 잠겨 이후 수정이 드러납니다.
 - **결정적 근거(Evidence).** Review claim은 파일, 줄 범위, Git diff hunk, 해당 Decision을 가리킵니다. 핵심 Review는 LLM을 쓰지 않으므로 같은 저장소 상태에서는 같은 결과가 나옵니다.
-- **Adoption Baseline.** 기존 저장소에 DUO를 도입할 때 이미 있던 위반을 기록합니다. 이후 Review는 원래 있던 위반(pre-existing)과 변경이 새로 만든 위반(introduced)을 구분합니다.
+- **Adoption Baseline.** 기존 저장소에 DUO를 도입할 때 이미 있던 위반을 기록합니다. 이후 Review는 원래 있던 위반과 adoption baseline에 없는 위반을 구분합니다.
 - **연결한 모든 Agent에 같은 Project Truth.** Codex와 Claude Code는 DUO의 MCP 서버로 같은 Truth를 읽습니다.
 
 두 Decision Compliance Benchmark가 고정된 fixture에서 공개된 DUO와, 대조군으로 직접 만든 script와 AI 리뷰를 실행해 이 주장들을 시험하고 raw evidence와 한계를 공개합니다. 두 benchmark 모두 대조군이 DUO와 같은 판정에 이르렀고, 무엇이 달랐는지를 기록했습니다.
@@ -28,7 +28,7 @@ DUO는 변경이 일어난 뒤를 봅니다. 사람이 확정한 Requirement와 
 
 ## Decision drift 예시
 
-파일 두 개짜리 TypeScript 저장소에서 공개된 `duoctl` 0.2.0으로 실행한 결과입니다. 아래 출력은 고치지 않은 그대로입니다.
+파일 두 개짜리 TypeScript 저장소에서 공개된 `duoctl` 0.2.0으로 실행한 결과입니다. 아래 출력은 고치지 않은 그대로이며, 4단계의 provenance 라벨만 이 개발 branch가 출력하는 표시로 바꿨습니다(0.2.0은 `introduced`, `pre-existing-touched`로 출력).
 
 **1. 사람이 Decision을 확정합니다.** Decision은 보통 Agent의 제안으로 시작하지만, 여기서는 파일을 직접 작성했습니다.
 
@@ -130,7 +130,7 @@ Agent는 `duo-director` MCP 서버(`duoctl mcp`, Tool 9개)로 DUO를 씁니다.
 
 - **Project Truth**: 사람이 확정한 Requirement, Decision, Constraint입니다. `.duo-project/`에 평범한 파일로 두고 코드와 함께 commit합니다. 모든 Review의 기준입니다.
 - **Requirement**: 프로젝트가 해야 하는 일입니다. 코드, 테스트, Decision이 가리킬 수 있는 ID를 가집니다.
-- **Decision**: 답이 정해진 엔지니어링 선택입니다. 무엇을 금지하는지(path, symbol, dependency)와 얼마나 엄격한지(`enforcement: warn` 또는 `block`)를 함께 적을 수 있습니다.
+- **Decision**: 답이 정해진 엔지니어링 선택입니다. 무엇을 금지하는지(path, symbol, dependency, import하는 repository 경로)와 얼마나 엄격한지(`enforcement: warn` 또는 `block`)를 함께 적을 수 있습니다.
 - **Decision Lock**: Decision을 확정하면 내용의 digest가 기록됩니다. 내용이 lock과 맞지 않게 된 Decision은 Review가 보고합니다.
 - **Adoption Baseline**: DUO를 도입한 시점의 저장소 상태입니다. 원래 있던 문제를 새 문제로 보고하지 않게 합니다.
 - **Context Compiler**: Agent가 저장소 전체를 읽는 대신, 작업에 필요한 Truth·코드·테스트만 담은 작은 Context Packet을 만듭니다.

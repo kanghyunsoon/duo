@@ -18,7 +18,7 @@ DUO works on the other side of the change. It keeps human-confirmed Requirements
 
 - **Decision lifecycle.** Agents can only propose a Decision. A person confirms or rejects it, and a confirmed Decision is locked with a digest so later edits are visible.
 - **Deterministic evidence.** Review claims point to files, line ranges, Git diff hunks and the Decision itself. The core review does not use an LLM, so the same repository state gives the same result.
-- **Adoption baseline.** When you adopt DUO in an existing repository, it records the violations that already exist. Later reviews tell a violation that was already there (pre-existing) from one a change introduced.
+- **Adoption baseline.** When you adopt DUO in an existing repository, it records the violations that already exist. Later reviews tell a violation that was already there from one that is not in the adoption baseline.
 - **One Project Truth for every connected agent.** Codex and Claude Code read the same Truth through DUO's MCP server.
 
 Two Decision Compliance Benchmarks test these claims on fixed fixtures with the published DUO, bespoke scripts and an AI review as controls, and publish raw evidence and limits. In both, the controls reached the same decisions as DUO; the benchmarks record what differed.
@@ -28,7 +28,7 @@ Two Decision Compliance Benchmarks test these claims on fixed fixtures with the 
 
 ## A Decision drift example
 
-This runs on a two-file TypeScript repository with the published `duoctl` 0.2.0. The output below is unedited.
+This runs on a two-file TypeScript repository with the published `duoctl` 0.2.0. The output below is unedited except the provenance labels in step 4, which are shown as this development branch prints them (0.2.0 printed `introduced` and `pre-existing-touched`).
 
 **1. A person confirms a Decision.** Decisions usually start as an agent proposal; here the file is written by hand:
 
@@ -130,7 +130,7 @@ Agents reach DUO through the `duo-director` MCP server (`duoctl mcp`, nine tools
 
 - **Project Truth**: the Requirements, Decisions and Constraints a person has confirmed, kept as plain files in `.duo-project/` and committed with the code. It is the reference every review uses.
 - **Requirement**: what the project must do, with an ID that code, tests and Decisions can point to.
-- **Decision**: an engineering choice with an answer and, optionally, what it forbids (paths, symbols, dependencies) and how strictly (`enforcement: warn` or `block`).
+- **Decision**: an engineering choice with an answer and, optionally, what it forbids (paths, symbols, dependencies, imported repository paths) and how strictly (`enforcement: warn` or `block`).
 - **Decision Lock**: confirming a Decision records a digest of its content. Review reports a Decision whose content no longer matches its lock.
 - **Adoption Baseline**: the state of the repository when DUO was adopted, so existing problems are not reported as new ones.
 - **Context Compiler**: builds a small Context Packet for a task (the relevant Truth, code and tests) instead of having the agent read the whole repository.
