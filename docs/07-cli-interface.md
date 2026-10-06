@@ -56,6 +56,8 @@ Operational failure와 Review verdict를 섞지 않는다. Verdict는 `--fail-on
 
 install은 init 전이면 5(`AGENT_NOT_INITIALIZED`), verify 실패면 1이다.
 
+Project Truth를 일부만 읽을 수 있으면(T40) review와 context는 verdict·Packet 없이 1(\`PROJECT_TRUTH_INVALID\`와 각 파일 진단)이고, doctor는 \`truth.project: invalid\`로 6, status는 0이지만 \`Truth errors\` 줄과 파일을 보인다(JSON \`truth.errors\`). \`decision list\`는 읽지 못한 파일을 따로 적고 confirm·reject는 거부된다. Informed confirm preview는 forbids가 있으면 \`Forbids scope  repository-wide (governs does not narrow forbids)\` 줄을 보인다(T40 N3).
+
 ## Agent 연결 (install)
 
 ```text

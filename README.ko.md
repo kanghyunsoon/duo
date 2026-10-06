@@ -26,70 +26,72 @@ DUO는 변경이 일어난 뒤를 봅니다. 사람이 확정한 Requirement와 
 - [Benchmark 1: Legacy + New Violation](docs/benchmarks/decision-compliance-01.md)
 - [Benchmark 2: Adoption Provenance + Supersession](docs/benchmarks/decision-compliance-02.md)
 
-## Decision drift 예시
+## Decision compliance 예시
 
-파일 두 개짜리 TypeScript 저장소에서 공개된 `duoctl` 0.2.0으로 실행한 결과입니다. 아래 출력은 고치지 않은 그대로이며, 4단계의 provenance 라벨만 이 개발 branch가 출력하는 표시로 바꿨습니다(0.2.0은 `introduced`, `pre-existing-touched`로 출력).
+`duoctl` 0.3.0-rc.1과 Codex로 파일 여덟 개짜리 TypeScript 저장소에서 기록했습니다. 팀은 UI와 service 코드가 legacy database module을 더 이상 import하지 않기를 원합니다. 아래 명령과 출력은 고치지 않은 그대로입니다.
 
-**1. 사람이 Decision을 확정합니다.** Decision은 보통 Agent의 제안으로 시작하지만, 여기서는 파일을 직접 작성했습니다.
+**1. DUO를 도입하고 Codex를 연결합니다.**
 
-```yaml
-# .duo-project/decisions/D-001.yaml
-id: D-001
-title: Stateless authentication
-kind: decision
-state: proposed
-question: session_state
-answer: tokens are verified without a server-side session store
-forbids:
-  symbols: ["*SessionStore*"]
-enforcement: block
+```bash
+duoctl init
+duoctl install codex
 ```
 
+**2. Agent가 Decision을 제안합니다.** 규칙을 강제할 수 있게 해 달라는 요청에 Codex가 `forbids.imported_paths: ["src/db/legacy-db.ts"]`, `enforcement: block`으로 `duo_propose_decision` MCP tool을 호출합니다. DUO의 응답:
+
 ```text
-$ duoctl decision confirm D-001
-D-001  "Stateless authentication"
-  question  session_state
-  answer    tokens are verified without a server-side session store
-Type the ID to confirm: D-001
+Proposal P-001 created (not confirmed; a human decides)
+```
+
+**3. 사람이 강제될 내용을 그대로 보고 확정합니다.**
+
+```text
+$ duoctl decision confirm P-001
+Confirm P-001: this proposal becomes a new confirmed Decision.
+  Title         UI and service code must not import the legacy DB module directly; use DbClient
+  Question      May UI code (src/ui) and service code (src/services) import the legacy database module src/db/legacy-db.ts directly?
+  Answer        No. Code in src/ui and src/services must not import src/db/legacy-db.ts directly. New data access goes through src/db/client.ts (DbClient).
+  Kind          (not set)
+  Rationale     src/db/legacy-db.ts (LegacyDb) is v1 data access kept only for old reports; src/db/client.ts (DbClient) is the v2 data-access layer. Blocking direct imports of legacy-db stops new coupling to the legacy module. Note: DUO forbids are repository-wide, so the imported_paths forbid applies to any changed import of src/db/legacy-db.ts anywhere in the repo (currently only src/services/legacy-report.ts imports it, a pre-existing usage).
+  Governs       paths: src/ui/**, src/services/**, src/db/legacy-db.ts, src/db/client.ts; symbols: LegacyDb, DbClient
+  Forbids       imported_paths: src/db/legacy-db.ts
+  Forbids scope repository-wide (governs does not narrow forbids)
+  Enforcement   block
+  Supersedes    (not set)
+  Proposed by   codex (agent)
+  Stale         no
+  Expected ID   D-001 (expected; the ID in the confirm result is authoritative)
+  File          .duo-project/decisions/proposals/P-001.yaml
+Type the ID to confirm: P-001
 
 confirmed as D-001 · .duo-project/decisions/D-001.yaml
+Run duoctl index so review and context see it.
 ```
 
-확정은 대화형 터미널(또는 로컬 UI)에서만 되고, 사람이 ID를 한 번 더 입력합니다.
+확정은 대화형 terminal(또는 로컬 UI)에서만, 전체 Decision을 보여 준 뒤 ID를 다시 입력해야 일어납니다. `Forbids scope`는 이 규칙이 저장소 어디에서든 바뀐 import에 적용된다는 뜻입니다. `governs`는 Decision이 무엇에 관한 것인지 기록할 뿐 범위를 좁히지 않습니다.
 
-**2. 팀이 DUO를 도입합니다.** 저장소에는 이미 D-001을 어기는 `LegacySessionStore` class가 있습니다. `duoctl init`은 이것을 새 문제로 보고하지 않고 adoption baseline에 기록합니다.
+**4. Agent가 이를 어기는 코드를 씁니다.** 빠른 화면을 요청받은 Codex가 `../db/legacy-db.js`에서 `LegacyDb`를 import하는 `src/ui/legacy-orders-page.ts`를 추가했습니다.
 
-```text
-$ duoctl init
-Repository ok · duo-t30-demo · typescript · 2 files · branch main
-Truth      already done
-Index      ok · full (no-state) · 4 files
-Baseline   ok · a0bfda12ccc7 · 2 pre-existing findings
-```
-
-**3. Coding Agent가 코드를 바꿉니다.** 새 `ServerSessionStore` class가 든 `src/auth/server-session-store.ts`를 추가하고, legacy store의 한 줄을 고칩니다.
-
-**4. DUO가 변경을 Review합니다.**
+**5. DUO가 변경을 review합니다.** Codex는 AGENTS.md 안내대로 이미 `duoctl index`를 실행했습니다.
 
 ```text
 $ duoctl index
-Indexed (incremental) · 5 files · 2 parsed · 2 changed · graph updated
+Indexed (incremental) · 14 files · 0 parsed · 0 changed · graph unchanged
 $ duoctl review
-BLOCK  2 claims · 2 files · llm_calls 0
-  CONFLICT  decision-forbids           D-001 · forbidden-symbol [blocking, not-in-adoption-baseline]
-            evidence: src/auth/server-session-store.ts:3-5, src/auth/server-session-store.ts:1-6, .duo-project/decisions/D-001.yaml:1-14
-  CONFLICT  decision-forbids           D-001 · forbidden-symbol [in-adoption-baseline, touched]
-            evidence: src/auth/legacy-session-store.ts:3-5, .duo-project/decisions/D-001.yaml:1-14, src/auth/legacy-session-store.ts:4-4
-Knowledge gaps:
-  - No confirmed Requirement or Decision is linked to this task.
+BLOCK  1 claims · 1 files · llm_calls 0
+  CONFLICT  decision-forbids-import    D-001 · forbidden-import [blocking, not-in-adoption-baseline]
+            evidence: .duo-project/decisions/D-001.yaml:1-28, src/db/legacy-db.ts, src/ui/legacy-orders-page.ts:1-1
 Limitations:
   calls-exact-only
   no-task-scope
 ```
 
-새 store는 **adoption baseline에 없으므로** BLOCK을 만듭니다. legacy store는 **adoption baseline에 있고** 이번 변경이 그것을 건드렸으므로 보고는 되지만 BLOCK을 만들지 않습니다. `--json`에서는 각각 `provenance: "introduced"`, `"pre-existing-touched"`입니다. `introduced`는 위반이 adoption baseline에 없다는 뜻일 뿐 이번 변경이 만들었다는 뜻이 아닙니다. 변경이 건드리지 않은 기존 위반은 새 문제로 보고되지 않습니다. 각 claim은 Decision ID를 밝히고 source 줄을 가리킵니다.
+이 import는 adoption baseline에 없으므로 D-001이 BLOCK합니다. claim은 Decision을 밝히고 Decision 파일, import된 파일, 바뀐 import 줄을 가리킵니다. `--json`에서 claim은 `provenance: "introduced"`, `expected`("no changed import resolves to src/db/legacy-db.ts (D-001)"), `observed`("forbidden import on a changed line: src/ui/legacy-orders-page.ts:1 import "../db/legacy-db.js" resolves to src/db/legacy-db.ts")를 가집니다. `introduced`는 위반이 adoption baseline에 없다는 뜻일 뿐 이번 변경이 import를 만들었다는 뜻이 아닙니다. `src/services/legacy-report.ts`의 기존 import는 변경이 그 줄을 고칠 때만 보고됩니다.
 
-verdict는 기본적으로 종료 코드가 아닙니다. CI에서는 `duoctl review --fail-on block`이 BLOCK일 때 종료 코드 4로 끝납니다. `--json`은 같은 claim을 `expected`("no symbol matching *SessionStore* (D-001)"), `observed`, `provenance`, Evidence 기록과 함께 돌려줍니다.
+`imported_paths`는 repository 파일 하나로 정확히 해석되는 바뀐 import 줄을 확인합니다: TypeScript와 JavaScript, 그리고 DUO가 module을 해석하는 범위의 Python과 C++입니다. Java와 C#의 import, 해석되지 않는 import, barrel 파일을 거친 import는 확인하지 않으며 review가 확인하지 못한 것을 limitation으로 보여 줍니다.
+
+verdict는 기본적으로 종료 코드가 아닙니다. CI에서는 `duoctl review --fail-on block`이 BLOCK일 때 종료 코드 4로 끝납니다.
+
 
 ## 빠른 시작
 
@@ -130,7 +132,7 @@ Agent는 `duo-director` MCP 서버(`duoctl mcp`, Tool 9개)로 DUO를 씁니다.
 
 - **Project Truth**: 사람이 확정한 Requirement, Decision, Constraint입니다. `.duo-project/`에 평범한 파일로 두고 코드와 함께 commit합니다. 모든 Review의 기준입니다.
 - **Requirement**: 프로젝트가 해야 하는 일입니다. 코드, 테스트, Decision이 가리킬 수 있는 ID를 가집니다.
-- **Decision**: 답이 정해진 엔지니어링 선택입니다. 무엇을 금지하는지(path, symbol, dependency, import하는 repository 경로)와 얼마나 엄격한지(`enforcement: warn` 또는 `block`)를 함께 적을 수 있습니다.
+- **Decision**: 답이 정해진 엔지니어링 선택입니다. 무엇을 금지하는지(path, symbol, dependency, import하는 repository 경로)와 얼마나 엄격한지(`enforcement: warn` 또는 `block`)를 함께 적을 수 있습니다. forbids는 저장소 전체에 적용되며, `governs`는 Decision이 무엇에 관한 것인지 기록할 뿐 범위를 좁히지 않습니다.
 - **Decision Lock**: Decision을 확정하면 내용의 digest가 기록됩니다. 내용이 lock과 맞지 않게 된 Decision은 Review가 보고합니다.
 - **Adoption Baseline**: DUO를 도입한 시점의 저장소 상태입니다. 원래 있던 문제를 새 문제로 보고하지 않게 합니다.
 - **Context Compiler**: Agent가 저장소 전체를 읽는 대신, 작업에 필요한 Truth·코드·테스트만 담은 작은 Context Packet을 만듭니다.

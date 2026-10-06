@@ -360,7 +360,7 @@ type Diagnostic = { code: DiagnosticCode; severity: "error" | "warning" | "info"
 type ParseResult<T> = { value?: T; diagnostics: readonly Diagnostic[] };
 ```
 
-Parser와 loader는 예외를 던지지 않고 모든 문제를 모은다. 일부 파일이 실패해도 읽을 수 있는 Project Truth는 value로 돌려준다. 코드와 기본 심각도는 `DIAGNOSTIC_SEVERITY`에 있다.
+Parser와 loader는 예외를 던지지 않고 모든 문제를 모은다. 일부 파일이 실패해도 읽을 수 있는 Project Truth는 value로 돌려준다. **Authority 경계(T40, N1)**: 이 관대한 계약은 그대로이고, 권위 있는 판정을 하는 작업(review, context, Adoption Baseline 캡처, Decision confirm·reject·repair·preview)은 \`requireCompleteTruth\`를 거친다. loader error가 하나라도 있으면(내용을 빼지 않는 \`BROKEN_REFERENCE\`, \`REFERENCE_TYPE_MISMATCH\` 제외, 나중에 생기는 코드도 막는다) \`PROJECT_TRUTH_INVALID\`와 각 파일 진단으로 실패하고 verdict, Context Packet, baseline, Decision 변경을 만들지 않는다. 읽지 못한 Decision이 빠진 채 PASS가 나오는 일을 막기 위해서다. status·doctor·index·trace·search·propose는 계속 동작하며 status \`truth.errors\`, doctor \`truth.project: invalid\`로 보인다. DUO는 문제 파일을 고치거나 지우지 않는다. 코드와 기본 심각도는 `DIAGNOSTIC_SEVERITY`에 있다.
 
 **Persistent / transient(T08.1)**: 코드마다 성격을 중앙 registry `DIAGNOSTIC_PERSISTENCE`에 둔다(`satisfies Record<DiagnosticCode, …>`라 새 코드는 분류 없이 컴파일되지 않는다).
 

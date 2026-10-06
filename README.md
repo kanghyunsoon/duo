@@ -26,70 +26,72 @@ Two Decision Compliance Benchmarks test these claims on fixed fixtures with the 
 - [Benchmark 1: Legacy + New Violation](docs/benchmarks/decision-compliance-01.md)
 - [Benchmark 2: Adoption Provenance + Supersession](docs/benchmarks/decision-compliance-02.md)
 
-## A Decision drift example
+## A Decision compliance example
 
-This runs on a two-file TypeScript repository with the published `duoctl` 0.2.0. The output below is unedited except the provenance labels in step 4, which are shown as this development branch prints them (0.2.0 printed `introduced` and `pre-existing-touched`).
+Recorded with `duoctl` 0.3.0-rc.1 and Codex on an eight-file TypeScript repository. The team wants UI and service code to stop importing the legacy database module. Commands and output below are unedited.
 
-**1. A person confirms a Decision.** Decisions usually start as an agent proposal; here the file is written by hand:
+**1. Adopt DUO and connect Codex.**
 
-```yaml
-# .duo-project/decisions/D-001.yaml
-id: D-001
-title: Stateless authentication
-kind: decision
-state: proposed
-question: session_state
-answer: tokens are verified without a server-side session store
-forbids:
-  symbols: ["*SessionStore*"]
-enforcement: block
+```bash
+duoctl init
+duoctl install codex
 ```
 
+**2. The agent proposes a Decision.** Asked to make the rule enforceable, Codex calls the `duo_propose_decision` MCP tool with `forbids.imported_paths: ["src/db/legacy-db.ts"]` and `enforcement: block`. DUO answers:
+
 ```text
-$ duoctl decision confirm D-001
-D-001  "Stateless authentication"
-  question  session_state
-  answer    tokens are verified without a server-side session store
-Type the ID to confirm: D-001
+Proposal P-001 created (not confirmed; a human decides)
+```
+
+**3. A person confirms exactly what will be enforced.**
+
+```text
+$ duoctl decision confirm P-001
+Confirm P-001: this proposal becomes a new confirmed Decision.
+  Title         UI and service code must not import the legacy DB module directly; use DbClient
+  Question      May UI code (src/ui) and service code (src/services) import the legacy database module src/db/legacy-db.ts directly?
+  Answer        No. Code in src/ui and src/services must not import src/db/legacy-db.ts directly. New data access goes through src/db/client.ts (DbClient).
+  Kind          (not set)
+  Rationale     src/db/legacy-db.ts (LegacyDb) is v1 data access kept only for old reports; src/db/client.ts (DbClient) is the v2 data-access layer. Blocking direct imports of legacy-db stops new coupling to the legacy module. Note: DUO forbids are repository-wide, so the imported_paths forbid applies to any changed import of src/db/legacy-db.ts anywhere in the repo (currently only src/services/legacy-report.ts imports it, a pre-existing usage).
+  Governs       paths: src/ui/**, src/services/**, src/db/legacy-db.ts, src/db/client.ts; symbols: LegacyDb, DbClient
+  Forbids       imported_paths: src/db/legacy-db.ts
+  Forbids scope repository-wide (governs does not narrow forbids)
+  Enforcement   block
+  Supersedes    (not set)
+  Proposed by   codex (agent)
+  Stale         no
+  Expected ID   D-001 (expected; the ID in the confirm result is authoritative)
+  File          .duo-project/decisions/proposals/P-001.yaml
+Type the ID to confirm: P-001
 
 confirmed as D-001 · .duo-project/decisions/D-001.yaml
+Run duoctl index so review and context see it.
 ```
 
-Confirmation only happens in an interactive terminal (or the local UI), and the person types the ID again.
+Confirmation only happens in an interactive terminal (or the local UI), after the full Decision is shown, and the person types the ID again. `Forbids scope` says the rule applies to changed imports anywhere in the repository: `governs` records what the Decision is about and does not narrow it.
 
-**2. The team adopts DUO.** The repository already contains a `LegacySessionStore` class, which breaks D-001. `duoctl init` records it in the adoption baseline instead of reporting it as new:
+**4. The agent writes code that breaks it.** Asked for a quick page, Codex added `src/ui/legacy-orders-page.ts`, which imports `LegacyDb` from `../db/legacy-db.js`.
 
-```text
-$ duoctl init
-Repository ok · duo-t30-demo · typescript · 2 files · branch main
-Truth      already done
-Index      ok · full (no-state) · 4 files
-Baseline   ok · a0bfda12ccc7 · 2 pre-existing findings
-```
-
-**3. A coding agent changes the code.** It adds `src/auth/server-session-store.ts` with a new `ServerSessionStore` class and edits one line in the legacy store.
-
-**4. DUO reviews the change.**
+**5. DUO reviews the change.** Codex had already run `duoctl index` as its AGENTS.md block asks.
 
 ```text
 $ duoctl index
-Indexed (incremental) · 5 files · 2 parsed · 2 changed · graph updated
+Indexed (incremental) · 14 files · 0 parsed · 0 changed · graph unchanged
 $ duoctl review
-BLOCK  2 claims · 2 files · llm_calls 0
-  CONFLICT  decision-forbids           D-001 · forbidden-symbol [blocking, not-in-adoption-baseline]
-            evidence: src/auth/server-session-store.ts:3-5, src/auth/server-session-store.ts:1-6, .duo-project/decisions/D-001.yaml:1-14
-  CONFLICT  decision-forbids           D-001 · forbidden-symbol [in-adoption-baseline, touched]
-            evidence: src/auth/legacy-session-store.ts:3-5, .duo-project/decisions/D-001.yaml:1-14, src/auth/legacy-session-store.ts:4-4
-Knowledge gaps:
-  - No confirmed Requirement or Decision is linked to this task.
+BLOCK  1 claims · 1 files · llm_calls 0
+  CONFLICT  decision-forbids-import    D-001 · forbidden-import [blocking, not-in-adoption-baseline]
+            evidence: .duo-project/decisions/D-001.yaml:1-28, src/db/legacy-db.ts, src/ui/legacy-orders-page.ts:1-1
 Limitations:
   calls-exact-only
   no-task-scope
 ```
 
-The new store is **not in the adoption baseline** and blocks. The legacy store is **in the adoption baseline** and this change touches it, which is reported but never blocks. In `--json` these are `provenance: "introduced"` and `"pre-existing-touched"`; `introduced` only means the violation is absent from the adoption baseline, not that this change created it. A pre-existing violation that the change does not touch is not reported as a new problem. Each claim names the Decision and points at the source lines.
+The import is not in the adoption baseline, so D-001 blocks it. The claim names the Decision and points to the Decision file, the imported file and the changed import line. In `--json` the claim has `provenance: "introduced"`, `expected` ("no changed import resolves to src/db/legacy-db.ts (D-001)") and `observed` ("forbidden import on a changed line: src/ui/legacy-orders-page.ts:1 import "../db/legacy-db.js" resolves to src/db/legacy-db.ts"). `introduced` only means the violation is absent from the adoption baseline, not that this change created the import. The existing import in `src/services/legacy-report.ts` is reported only when a change edits that line.
 
-The verdict is not an exit code by default. In CI, `duoctl review --fail-on block` exits with code 4 on BLOCK. `--json` returns the same claims with `expected` ("no symbol matching *SessionStore* (D-001)"), `observed`, `provenance` and the Evidence records.
+`imported_paths` checks changed import lines that resolve to exactly one repository file: TypeScript and JavaScript, and Python and C++ where DUO resolves the module. Java and C# imports, unresolved imports and imports through a barrel file are not checked; the review lists what it could not check.
+
+The verdict is not an exit code by default. In CI, `duoctl review --fail-on block` exits with code 4 on BLOCK.
+
 
 ## Quick start
 
@@ -130,7 +132,7 @@ Agents reach DUO through the `duo-director` MCP server (`duoctl mcp`, nine tools
 
 - **Project Truth**: the Requirements, Decisions and Constraints a person has confirmed, kept as plain files in `.duo-project/` and committed with the code. It is the reference every review uses.
 - **Requirement**: what the project must do, with an ID that code, tests and Decisions can point to.
-- **Decision**: an engineering choice with an answer and, optionally, what it forbids (paths, symbols, dependencies, imported repository paths) and how strictly (`enforcement: warn` or `block`).
+- **Decision**: an engineering choice with an answer and, optionally, what it forbids (paths, symbols, dependencies, imported repository paths) and how strictly (`enforcement: warn` or `block`). Forbids apply to the whole repository; `governs` records what the Decision is about and does not narrow them.
 - **Decision Lock**: confirming a Decision records a digest of its content. Review reports a Decision whose content no longer matches its lock.
 - **Adoption Baseline**: the state of the repository when DUO was adopted, so existing problems are not reported as new ones.
 - **Context Compiler**: builds a small Context Packet for a task (the relevant Truth, code and tests) instead of having the agent read the whole repository.
