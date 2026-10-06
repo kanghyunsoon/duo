@@ -106,7 +106,11 @@ export interface DecisionContent {
   readonly rationale?: string | undefined;
   readonly owner?: "human" | undefined;
   readonly governs: { readonly requirements: readonly string[]; readonly paths: readonly string[]; readonly symbols: readonly string[] };
-  readonly forbids: { readonly dependencies: readonly string[]; readonly symbols: readonly string[]; readonly paths: readonly string[] };
+  /**
+   * importedPaths (H-72): present only when the file has a non-empty imported_paths, so the lock digest
+   * of a Decision without it is unchanged (no empty default is injected).
+   */
+  readonly forbids: { readonly dependencies: readonly string[]; readonly symbols: readonly string[]; readonly paths: readonly string[]; readonly importedPaths?: readonly string[] };
   readonly supersedes: string | null;
   readonly evidence: readonly EvidencePointer[];
   readonly sources: readonly SourceRef[];

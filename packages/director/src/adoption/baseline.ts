@@ -15,7 +15,7 @@ import {
 import { inspectIndex, readIndexState, type GraphReader, type IndexedGraph } from "@duo-director/graph";
 import { ADOPTION_BASELINE_FORMAT, historyRecordId, REVIEWS_DIR, verifyReviewRecord, writeHistoryRecord } from "../review/record.js";
 import { headBaselineFindings } from "./head.js";
-import type { AdoptionBaselineBody, AdoptionBaselineRecord, AdoptionBaselineState, CaptureResult, DirtyAdoptionPolicy } from "./types.js";
+import type { AdoptionBaselineBody, AdoptionBaselineRecord, AdoptionBaselineState, BaselineRule, CaptureResult, DirtyAdoptionPolicy } from "./types.js";
 import { observeWorkingTree } from "./worktree.js";
 
 export interface CaptureBaselineOptions {
@@ -144,7 +144,12 @@ export async function captureAdoptionBaseline(root: string, options: CaptureBase
     own?.value?.dispose();
   }
   const bootstrapTruth = await bootstrapTruthOf(root, git.value);
-  const limitations = [...evaluated.limitations, ...(wt.truncated ? ["working-tree-list-truncated"] : [])].sort(compareUtf8);
+  // H-72: decision-forbids-import is evaluated (and recorded so) only when HEAD's import relations are the
+  // indexed ones, i.e. the working tree outside .duo-project is clean. Other rules keep their T15.1 meaning.
+  const evaluatedRules: BaselineRule[] = (["decision-forbids", "declared-reference", "external-source-drift", ...(wt.dirty ? [] : ["decision-forbids-import" as const])] as BaselineRule[]).sort(compareUtf8);
+  const limitations = [
+    ...evaluated.limitations, ...(wt.truncated ? ["working-tree-list-truncated"] : []), ...(wt.dirty ? ["import-relations-not-evaluated-dirty-working-tree"] : []),
+  ].sort(compareUtf8);
   const body: AdoptionBaselineBody = {
     format: "duo.adoption-baseline/2",
     project: { name: truth.config.name, rootCommits: repo.value.rootCommitOids },
@@ -158,7 +163,7 @@ export async function captureAdoptionBaseline(root: string, options: CaptureBase
       untracked: wt.untracked.map((p) => { const h = fileHash(root, p); return { path: p, ...(h === undefined ? {} : { contentHash: h }) }; }),
       conflicted: wt.conflicted, counts: wt.counts, excludedSecrets: wt.excludedSecrets, truncated: wt.truncated,
     },
-    bootstrapTruth, findingsAt: "HEAD", findings: evaluated.findings, limitations, analysis,
+    bootstrapTruth, findingsAt: "HEAD", findings: evaluated.findings, limitations, analysis, evaluatedRules,
   };
   const id = historyRecordId("adoption", body);
   const existing = loadAdoptionBaseline(root);

@@ -32,7 +32,7 @@ import type { RuleContext } from "./claims.js";
 import { collectDiff } from "./diff.js";
 import { externalSourceDrift } from "./drift.js";
 import {
-  constraintCompliance, decisionForbids, decisionGovernance, decisionIntegrity, declaredReferences, requirementImplementation, scopeRelevance,
+  constraintCompliance, decisionForbids, decisionForbidsImport, decisionGovernance, decisionIntegrity, declaredReferences, requirementImplementation, scopeRelevance,
   supersedeIntegrity, testCoverage, testResults,
 } from "./rules.js";
 import { unlinkedAdditions } from "./scope.js";
@@ -205,14 +205,17 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
     ...(request.testResults === undefined ? {} : { testResults: request.testResults }),
     ...(adoption.baseline === undefined ? {} : { baselineKeys: new Set(adoption.baseline.findings.map((f) => f.key)) }),
     ...(adoption.baseline === undefined ? {} : { baselineStructuralLanguages: new Set(adoption.baseline.analysis?.structuralLanguages ?? PRE_T18_STRUCTURAL_LANGUAGES) }),
+    ...(adoption.baseline?.evaluatedRules === undefined ? {} : { baselineEvaluatedRules: new Set<string>(adoption.baseline.evaluatedRules) }),
+    ...(adoption.baseline === undefined ? {} : { baselineRecordedAt: adoption.baseline.recorded.at }),
   };
   const integrity = await decisionIntegrity(ctx);
   const forbids = await decisionForbids(ctx);
+  const imports = await decisionForbidsImport(ctx);
   const drift = await externalSourceDrift(ctx);
   const additions = unlinkedAdditions(ctx);
-  const conflicted = new Set(forbids.map((c) => c.subject.id));
+  const conflicted = new Set([...forbids, ...imports.claims].map((c) => c.subject.id));
   const claims: ReviewClaim[] = [
-    ...integrity, ...supersedeIntegrity(ctx), ...forbids, ...decisionGovernance(ctx, conflicted), ...declaredReferences(ctx),
+    ...integrity, ...supersedeIntegrity(ctx), ...forbids, ...imports.claims, ...decisionGovernance(ctx, conflicted), ...declaredReferences(ctx),
     ...requirementImplementation(ctx), ...testCoverage(ctx), ...testResults(ctx), ...constraintCompliance(ctx), ...scopeRelevance(ctx, additions.covered),
     ...additions.claims, ...drift.claims,
   ].sort((a, b) => compareUtf8(a.rule, b.rule) || compareUtf8(a.id, b.id));
@@ -243,6 +246,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
       ...limitationsOf({ identity: diff.value.identity, from: diff.value.from, to: diff.value.to, files }, reviewPacket, task !== "", taskContext?.status === "ready"),
       ...analysisLimitsOf(files, options.graph),
       ...drift.limitations,
+      ...imports.limitations,
       ...(adoption.status === "incompatible" ? [{ code: "adoption-baseline-unusable", message: "The Adoption Baseline cannot be used (" + (adoption.reason ?? "unreadable") + "); violations are not told apart from pre-existing ones." }] : []),
     ],
     semanticAssist: semantic.assist,

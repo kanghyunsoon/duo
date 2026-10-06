@@ -6,18 +6,19 @@
  */
 import {
   canonicalSourceText, compareUtf8, compileRepoPattern, decisionLockDigest, fileRef, nodeId, parseDecisionFile, parseDefinitionMarkdown, readSourceFile,
-  STATE_DIR_NAME, testRef, verifyDecisionLock, type Decision, type RepoPath,
+  STATE_DIR_NAME, testRef, verifyDecisionLock, type Decision, type RepoPath, type SourceLocation,
 } from "@duo-director/core";
 import { languageProfile, type GitBlobSource, type GitDiffEnd } from "@duo-director/analyzer";
-import type { GraphNode } from "@duo-director/graph";
-import { truthEvidence, truthEvidenceFromText, testRunEvidence } from "../evidence/sources.js";
+import { readIndexedModuleReferences, type GraphNode, type IndexedModuleReference } from "@duo-director/graph";
+import { moduleReferenceEvidence, truthEvidence, truthEvidenceFromText, testRunEvidence } from "../evidence/sources.js";
 import { matchConstraint, wildcard, type ScopeEntry } from "../relevance/policy.js";
 import {
   decisionEvidence, isActive, makeClaim, nodeEvidence, requirementEvidence, seedEvidence, type RuleContext,
 } from "./claims.js";
 import { nonApplicationReason } from "./scope.js";
 import { declaredReferenceParts, dependencyOffending, violationKey } from "../adoption/key.js";
-import type { ChangedFile, DiffSeed, ReviewClaim } from "./types.js";
+import { hunkRange } from "./seeds.js";
+import type { ChangedFile, DiffSeed, ReviewClaim, ReviewLimitation } from "./types.js";
 
 const DECISIONS = `${STATE_DIR_NAME}/decisions/`;
 const PROPOSALS = `${STATE_DIR_NAME}/decisions/proposals/`;
@@ -384,3 +385,108 @@ export function scopeRelevance(ctx: RuleContext, covered: ReadonlySet<string> = 
 export function implementedRequirements(ctx: RuleContext): ReadonlyMap<string, readonly ChangedFile["path"][]> {
   return new Map([...implemented(ctx)].map(([k, v]) => [k, v.map((s) => s.path)]));
 }
+// ---- R-IMPORT: decision-forbids-import (H-72) ----
+
+const overlapsLines = (loc: SourceLocation, [a, b]: readonly [number, number]) => {
+  const start = loc.startLine ?? 1;
+  return start <= b && (loc.endLine ?? start) >= a;
+};
+const preview = (items: readonly string[]) => `${items.slice(0, 5).join(", ")}${items.length > 5 ? `, … (${items.length} in all)` : ""}`;
+
+/** H-72: the Decision was confirmed after the Adoption Baseline was recorded (UTC ISO 8601 on both sides). */
+function confirmedAfterBaseline(confirmedAt: string | undefined, recordedAt: string | undefined): boolean {
+  if (confirmedAt === undefined || recordedAt === undefined) return false;
+  const c = Date.parse(confirmedAt);
+  const r = Date.parse(recordedAt);
+  return Number.isFinite(c) && Number.isFinite(r) && c > r;
+}
+
+/**
+ * H-72: a module reference (import, export-from, dynamic import, require, Python import, C++ quoted
+ * include; type-only included) on a changed new-side line whose indexed resolution is exactly one
+ * repository file that an active Decision's forbids.imported_paths matches: CONFLICT forbidden-import.
+ * The claim says "on a changed line"; it does not prove the relation is new. Unresolved, ambiguous and
+ * unsupported references never conflict and no text similarity is guessed: they are limitations. An
+ * external package is forbids.dependencies. A pattern that matches no file is not reported.
+ */
+export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonly claims: ReviewClaim[]; readonly limitations: ReviewLimitation[] }> {
+  const decisions = ctx.truth.decisions.filter((d) => isActive(d) && (d.forbids.importedPaths?.length ?? 0) > 0).sort((a, b) => compareUtf8(a.id, b.id));
+  if (decisions.length === 0) return { claims: [], limitations: [] };
+  const matchers = decisions.map((d) => ({ d, match: (d.forbids.importedPaths ?? []).flatMap((p) => compileRepoPattern(p) ?? []) }));
+  const changed = ctx.files.filter((f) => f.kind !== "deleted" && !f.binary && !f.path.startsWith(`${STATE_DIR_NAME}/`) && f.hunks.length > 0);
+  // The index describes the working tree; another reviewed side is evaluated only where its text is the same.
+  const usable: ChangedFile[] = [];
+  const otherSide: string[] = [];
+  for (const f of changed) {
+    if (ctx.to === "WORKTREE") { usable.push(f); continue; }
+    const side = await sideText(ctx, ctx.to, f.path);
+    const current = readSourceFile(ctx.root, f.path).value;
+    if (side !== undefined && current !== undefined && side === canonicalSourceText(current)) usable.push(f);
+    else otherSide.push(f.path);
+  }
+  const indexed = await readIndexedModuleReferences(ctx.root, usable.map((f) => f.path));
+  const unresolved: string[] = [];
+  const ambiguous: string[] = [];
+  const unsupported: string[] = [];
+  const notIndexedTarget: string[] = [];
+  const unavailable: string[] = [];
+  const groups = new Map<string, { d: Decision; source: RepoPath; target: RepoPath; sites: { ref: IndexedModuleReference; hunks: string[] }[] }>();
+  usable.forEach((f, i) => {
+    const r = indexed[i];
+    if (r === undefined || r.status === "unavailable") { unavailable.push(f.path); return; }
+    if (r.status !== "ok") return; // no analyzer (L0): the changed file's capability limitation is reported already
+    for (const ref of r.references) {
+      const hunks = f.hunks.filter((h) => overlapsLines(ref.location, hunkRange(h))).map((h) => h.evidenceId);
+      if (hunks.length === 0) continue;
+      const where = `${f.path}:${ref.location.startLine ?? "?"}`;
+      const target = ref.target;
+      if (target === undefined) {
+        const s = ref.resolution.status;
+        if (s === "unresolved") unresolved.push(where);
+        else if (s === "ambiguous") ambiguous.push(where);
+        else if (s === "unsupported") unsupported.push(where);
+        else if (s === "resolved") notIndexedTarget.push(where);
+        continue; // external: forbids.dependencies, not imported_paths
+      }
+      for (const { d, match } of matchers) {
+        if (!match.some((m) => m(target))) continue;
+        const key = `${d.id}\n${f.path}\n${target}`;
+        const g = groups.get(key) ?? { d, source: f.path, target, sites: [] };
+        g.sites.push({ ref, hunks });
+        groups.set(key, g);
+      }
+    }
+  });
+  const coverage = ctx.baselineEvaluatedRules?.has("decision-forbids-import") === true;
+  const claims: ReviewClaim[] = [];
+  for (const g of [...groups.values()].sort((a, b) => compareUtf8(a.d.id, b.d.id) || compareUtf8(a.source, b.source) || compareUtf8(a.target, b.target))) {
+    const where = g.sites.map((s) => `${g.source}:${s.ref.location.startLine ?? "?"} ${s.ref.kind} "${s.ref.specifier}"${s.ref.typeOnly ? " (type-only)" : ""}`).join("; ");
+    // A baseline that did not evaluate this rule cannot say whether the relation existed at adoption (H-72),
+    // unless the Decision itself was confirmed after the baseline was recorded.
+    const unverifiable = ctx.baselineKeys !== undefined && !coverage && !confirmedAfterBaseline(g.d.confirmedAt, ctx.baselineRecordedAt);
+    const c = makeClaim(ctx, {
+      rule: "decision-forbids-import", subject: { kind: "decision", id: g.d.id }, key: `import:${g.source}->${g.target}`, alignment: "CONFLICT", reason: "forbidden-import",
+      enforced: g.d.enforcement === "block",
+      expected: `no changed import resolves to ${(g.d.forbids.importedPaths ?? []).join(", ")} (${g.d.id})`,
+      observed: `forbidden import on a changed line: ${where} resolves to ${g.target}`,
+      evidence: [
+        decisionEvidence(ctx, g.d.id),
+        ...g.sites.map((s) => moduleReferenceEvidence(ctx.store, ctx.reader, { path: g.source, location: s.ref.location, kind: s.ref.kind, specifier: s.ref.specifier, typeOnly: s.ref.typeOnly, target: g.target }, ctx.toLabel)),
+        ...g.sites.flatMap((s) => s.hunks),
+        nodeEvidence(ctx, ctx.graph.getNode(fileRef(g.target))),
+      ],
+      violation: { key: violationKey("decision-forbids-import", g.d.id, `import:${nodeId(fileRef(g.source))}->${nodeId(fileRef(g.target))}`), touched: true, ...(unverifiable ? { unverifiable: true } : {}) },
+    });
+    if (c !== undefined) claims.push(c);
+  }
+  const limitations: ReviewLimitation[] = [];
+  const not = "were not checked against forbids.imported_paths";
+  if (unresolved.length > 0) limitations.push({ code: "imports-unresolved", message: `${unresolved.length} changed import(s) did not resolve to a repository file and ${not}: ${preview(unresolved)}.` });
+  if (ambiguous.length > 0) limitations.push({ code: "imports-ambiguous", message: `${ambiguous.length} changed import(s) have more than one candidate file and ${not}: ${preview(ambiguous)}.` });
+  if (unsupported.length > 0) limitations.push({ code: "imports-resolution-unsupported", message: `${unsupported.length} changed import(s) are in a language without module resolution (imports are recorded as written) and ${not}: ${preview(unsupported)}.` });
+  if (notIndexedTarget.length > 0) limitations.push({ code: "imports-target-not-indexed", message: `${notIndexedTarget.length} changed import(s) resolve to a file outside the index and ${not}: ${preview(notIndexedTarget)}.` });
+  if (unavailable.length > 0) limitations.push({ code: "imports-index-unavailable", message: `The indexed imports of ${unavailable.length} changed file(s) could not be read and ${not}: ${preview(unavailable)}.` });
+  if (otherSide.length > 0) limitations.push({ code: "imports-reviewed-side-not-indexed", message: `${otherSide.length} changed file(s) differ on the reviewed side from the indexed working tree; their imports ${not}: ${preview(otherSide)}.` });
+  return { claims, limitations };
+}
+

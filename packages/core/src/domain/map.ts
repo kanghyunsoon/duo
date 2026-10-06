@@ -185,6 +185,8 @@ function mapDecisionContent(d: DecisionData | ProposalData, ctx: MapContext, gov
       dependencies: d.forbids?.dependencies ?? [],
       symbols: d.forbids?.symbols ?? [],
       paths: ctx.patterns(["forbids", "paths"], d.forbids?.paths),
+      // H-72: only when present and non-empty; absent stays absent (lock digest compatibility).
+      ...((d.forbids?.imported_paths?.length ?? 0) > 0 ? { importedPaths: ctx.patterns(["forbids", "imported_paths"], d.forbids?.imported_paths) } : {}),
     },
     supersedes: d.supersedes ?? null,
     evidence: ctx.evidence(["evidence"], d.evidence),

@@ -31,7 +31,8 @@ export interface WorkingTreeObservation {
   readonly truncated: boolean;
 }
 
-export type BaselineRule = "decision-forbids" | "declared-reference" | "external-source-drift";
+/** decision-forbids-import (H-72): Decision forbids.imported_paths over File→File IMPORTS. */
+export type BaselineRule = "decision-forbids" | "declared-reference" | "external-source-drift" | "decision-forbids-import";
 
 /** A deterministic finding that already held at adoption. */
 export interface BaselineFinding {
@@ -91,6 +92,12 @@ export interface AdoptionBaselineBody {
    * digest. Absent in a record captured before T18.0 (then PRE_T18_STRUCTURAL_LANGUAGES).
    */
   readonly analysis?: { readonly analyzerRegistryDigest: string; readonly structuralLanguages: readonly string[] };
+  /**
+   * H-72 (additive): the provenance rules this capture actually evaluated. Absent in a record captured
+   * before T37; such a baseline is never read as having evaluated decision-forbids-import. A dirty
+   * HEAD_BASELINE does not list decision-forbids-import (HEAD import relations are not reconstructed).
+   */
+  readonly evaluatedRules?: readonly BaselineRule[];
 }
 
 export interface AdoptionBaselineRecord extends AdoptionBaselineBody {

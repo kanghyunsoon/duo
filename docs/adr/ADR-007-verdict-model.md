@@ -89,6 +89,7 @@ interface Claim {
 | | | lock 유효(lifecycle만 바뀜, lock과 함께 새로 확정) | ALIGNED | - |
 | supersede-integrity | R-LOCK | 새 Decision의 supersedes 대상이 superseded_by로 이어지지 않음 | PARTIAL(아니면 ALIGNED) | - |
 | decision-forbids | R-DECISION | 활성 Decision의 `forbids`: 변경 경로가 paths에, 변경 Symbol이 symbols에, package.json에 새로 추가된 dependency가 dependencies에 일치 | CONFLICT | `enforcement: block`이면 예 |
+| decision-forbids-import | R-DECISION(H-72, `next`) | 활성 Decision의 `forbids.imported_paths`: diff의 바뀐 new-side 줄에 있는 import·module-reference가 현재 index에서 정확히 한 repository 파일로 해석되고 그 경로가 일치(type-only 포함). "새 import"라고 주장하지 않는다. unresolved·ambiguous·module resolution 없는 언어는 limitation이며 claim이 아니다 | CONFLICT(`forbidden-import`) | `enforcement: block`이면 예(provenance 정책 적용) |
 | decision-governance | R-DECISION | 변경 코드가 활성 Decision의 governs 대상(직접 또는 구현한 Requirement)이고 forbids 충돌 없음 | ALIGNED | - |
 | declared-reference | (새) | Indexer의 `DECLARED_SYMBOL_UNRESOLVED`(index state에서 읽음)가 Review 맥락의 정의나 변경된 Truth 파일에 있음 | PARTIAL | - |
 | requirement-implementation | R-REQ, R-INTENT | 변경 코드가 IMPLEMENTS로 Requirement와 이어짐. 의미 충족은 판단하지 않음 | UNKNOWN(의미 후보), 현재 Milestone 밖이면 PARTIAL | - |

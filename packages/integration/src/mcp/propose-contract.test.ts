@@ -52,6 +52,17 @@ describe("duo_propose_decision input contract (H-71)", () => {
     expect(TOOLS.duo_propose_decision.description).toMatch(/qualified names of changed symbols.*not a pattern and is refused.*not new calls or references/su);
   });
 
+  it("T37 forbids.imported_paths: repository path patterns accepted, invalid ones refused, semantics in the schema and description", () => {
+    expect(ok({ forbids: { imported_paths: ["src/legacy/**", "src/db/legacy-db.ts"] }, enforcement: "block" })).toBe(true);
+    expect(ok({ forbids: { imported_paths: ["src/legacy/"] } })).toBe(true); // imported_paths alone is a non-empty forbids
+    for (const p of ["../outside/**", "/abs/**", ""]) expect(ok({ forbids: { imported_paths: [p] } }), p).toBe(false);
+    expect(ok({ forbids: { imported_paths: [] } })).toBe(false);
+    const d = TOOLS.duo_propose_decision.description;
+    expect(d).toMatch(/imported_paths are repository path patterns/u);
+    expect(d).toMatch(/changed import\/module-reference statements that resolve exactly to a matching repository file/u);
+    expect(d).toMatch(/does not prove the import relation is newly introduced/u);
+  });
+
   it("O the tool list is unchanged: nine tools, no confirm or reject", () => {
     const names = Object.keys(TOOLS);
     expect(names).toHaveLength(9);

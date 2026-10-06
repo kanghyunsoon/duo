@@ -34,7 +34,7 @@ export interface ReviewRequest {
 export type ReviewRule =
   | "decision-integrity" | "supersede-integrity" | "decision-forbids" | "decision-governance" | "declared-reference"
   | "requirement-implementation" | "constraint-compliance" | "scope-relevance" | "test-coverage" | "test-result"
-  | "unlinked-addition" | "external-source-drift";
+  | "unlinked-addition" | "external-source-drift" | "decision-forbids-import";
 
 /**
  * What was asked, as recorded (T13.1). identity = sha256 of the semantic input that shapes the

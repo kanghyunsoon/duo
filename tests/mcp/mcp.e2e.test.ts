@@ -333,6 +333,16 @@ describe("H-71 full decision proposals through MCP: more expressive, no authorit
     expect((await s.call("duo_propose_decision", { title: "No scheduler rewrite", question: "q_ok", answer: "a", forbids: { symbols: ["*Scheduler*"] }, enforcement: "warn" })).isError).toBeFalsy();
     const { tools: listed } = await s.client.listTools();
     expect(JSON.stringify(listed.find((t) => t.name === "duo_propose_decision")?.inputSchema)).toContain("qualified names of changed symbols");
+    // T37 (H-72): imported_paths through the same tool; its exact semantics are in the agent-facing schema.
+    const schemaText = JSON.stringify(listed.find((t) => t.name === "duo_propose_decision")?.inputSchema);
+    expect(schemaText).toContain("Matches changed import/module-reference statements");
+    expect(schemaText).toContain("It does not prove the import relation is newly introduced");
+    const beforeBad = proposalFiles();
+    expect((await s.call("duo_propose_decision", { title: "x", question: "q_bad_import", answer: "a", forbids: { imported_paths: ["../outside/**"] } })).isError).toBe(true);
+    expect(proposalFiles()).toEqual(beforeBad);
+    const imp = await s.call("duo_propose_decision", { title: "No legacy imports", question: "q_imports", answer: "a", forbids: { imported_paths: ["src/legacy/**"] }, enforcement: "block" });
+    expect(imp.isError).toBeFalsy();
+    expect(fs.readFileSync(path.join(p.root, imp.structuredContent.path), "utf8")).toContain("imported_paths:");
 
     // I: once D-001 is superseded by a human confirm, a proposal to supersede it again writes nothing.
     expect((await createDecisionService({ root: p.root }).confirm(human, "P-003")).value).toMatchObject({ decisionId: "D-002", supersedes: "D-001" });
@@ -345,7 +355,7 @@ describe("H-71 full decision proposals through MCP: more expressive, no authorit
     const { tools } = await s.client.listTools();
     expect(tools).toHaveLength(9);
     expect(tools.map((t) => t.name).filter((n) => /confirm|reject|write|delete|record|index/u.test(n))).toEqual([]);
-    expect((await s.call("duo_get_status")).structuredContent.pendingDecisions.map((d: { id: string }) => d.id)).toEqual(["P-002", "P-004"]);
+    expect((await s.call("duo_get_status")).structuredContent.pendingDecisions.map((d: { id: string }) => d.id)).toEqual(["P-002", "P-004", "P-005"]);
     expect((await s.call("duo_get_decision", { id: "P-002" })).structuredContent.status).toBe("not-found");
   });
 });

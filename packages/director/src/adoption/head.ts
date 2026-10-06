@@ -15,7 +15,7 @@
 import { isSecretFileName, type AnalyzerRegistry, type GitProvider } from "@duo-director/analyzer";
 import {
   canonicalSourceText, compareSourceHash, compareUtf8, compileRepoPattern, externalSourceSlice, fileRef, isRemoteSourcePath, nodeId,
-  normalizeRepoPath, readSourceFile, STATE_DIR_NAME, type Diagnostic, type ProjectTruth, type RepoPath, type SourceRef,
+  normalizeRepoPath, parseNodeId, readSourceFile, STATE_DIR_NAME, type Diagnostic, type ProjectTruth, type RepoPath, type SourceRef,
 } from "@duo-director/core";
 import type { GraphReader } from "@duo-director/graph";
 import { wildcard } from "../relevance/policy.js";
@@ -62,7 +62,7 @@ export async function headBaselineFindings(input: HeadFindingsInput): Promise<{ 
   };
 
   // Symbols of HEAD: the current Graph for paths equal to HEAD, the analyzer for divergent ones.
-  const decisions = input.truth.decisions.filter((d) => isActive(d) && d.forbids.paths.length + d.forbids.symbols.length + d.forbids.dependencies.length > 0);
+  const decisions = input.truth.decisions.filter((d) => isActive(d) && d.forbids.paths.length + d.forbids.symbols.length + d.forbids.dependencies.length + (d.forbids.importedPaths?.length ?? 0) > 0);
   const declared = input.stateDiagnostics.filter((x) => x.code === "DECLARED_SYMBOL_UNRESOLVED");
   const needSymbols = decisions.some((d) => d.forbids.symbols.length > 0) || (declared.length > 0 && input.divergent.size > 0);
   const symbols: HeadSymbol[] = [];
@@ -100,6 +100,22 @@ export async function headBaselineFindings(input: HeadFindingsInput): Promise<{ 
       for (const m of headFiles.filter((f) => f === "package.json" || f.endsWith("/package.json"))) {
         const text = input.divergent.has(m) ? await headText(m) : readSourceFile(input.root, m).value;
         for (const n of [...dependencyNames(text)].filter((x) => d.forbids.dependencies.includes(x))) add("decision-forbids", d.id, dependencyOffending(m, n), { path: m, enforced });
+      }
+    }
+  }
+
+  // H-72: forbids.imported_paths over the Graph's File→File IMPORTS from HEAD files that equal HEAD (type-only
+  // included). Exact only when no path diverges; the caller records the rule as evaluated only for a clean tree.
+  const importing = decisions.filter((d) => (d.forbids.importedPaths?.length ?? 0) > 0)
+    .map((d) => ({ d, match: (d.forbids.importedPaths ?? []).flatMap((p) => compileRepoPattern(p) ?? []) }));
+  if (importing.length > 0) {
+    for (const f of headFiles.filter((p) => !input.divergent.has(p))) {
+      for (const e of input.graph.adjacentEdges([fileRef(f)], { direction: "outgoing", types: ["IMPORTS"], limit: 10_000 }).edges) {
+        const to = parseNodeId(e.to);
+        if (to?.type !== "file" || !inHead.has(to.path)) continue;
+        for (const { d, match } of importing) {
+          if (match.some((m) => m(to.path))) add("decision-forbids-import", d.id, `import:${nodeId(fileRef(f))}->${nodeId(fileRef(to.path))}`, { path: f, enforced: d.enforcement === "block" });
+        }
       }
     }
   }

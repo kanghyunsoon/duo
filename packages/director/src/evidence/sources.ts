@@ -153,3 +153,25 @@ export function testRunEvidence(store: EvidenceStore, run: { readonly command?: 
     metadata: { status, ...(run.command === undefined ? {} : { command: run.command }) },
   });
 }
+/**
+ * A module reference statement of the current repository state (T37, H-72): the exact slice at its
+ * location. The resolved target and the statement's kind are metadata; the pointer keeps path, lines
+ * and the slice hash.
+ */
+export function moduleReferenceEvidence(
+  store: EvidenceStore, reader: SourceReader,
+  r: { readonly path: RepoPath; readonly location: SourceLocation; readonly kind: string; readonly specifier: string; readonly typeOnly: boolean; readonly target: RepoPath },
+  commit: string,
+): string | undefined {
+  const slice = reader.slice(r.location);
+  if (slice.value === undefined) return undefined;
+  const contentHash = sha256Text(slice.value);
+  const range = lines(r.location);
+  return store.add({
+    id: evidenceId("repository", "file", `${r.path}\nmodule-reference\n${range?.join("-") ?? ""}\n${contentHash}`), basis: "repository", kind: "file", entity: { type: "file", path: r.path },
+    source: r.location, contentHash, summary: `${r.path}:${range?.[0] ?? "?"} ${r.kind} "${r.specifier}" → ${r.target}`,
+    pointer: { kind: "file", path: r.path, ...(range === undefined ? {} : { lines: range }), commit, contentHash },
+    metadata: { moduleReference: r.kind, specifier: r.specifier, typeOnly: r.typeOnly, resolvedTo: r.target },
+  }, slice.value);
+}
+

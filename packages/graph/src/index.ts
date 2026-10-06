@@ -42,6 +42,7 @@ export {
   GRAPH_REVISION_KEY, INDEX_STATE_FILE_PATH, INDEX_STATE_TOKEN_KEY, readIndexState, type IndexedFileState, type IndexState,
 } from "./incremental/state.js";
 export { ANALYSIS_CACHE_DIR } from "./incremental/analysis-cache.js";
+export { readIndexedModuleReferences, type IndexedModuleReference, type IndexedModuleReferences } from "./incremental/references.js";
 export { applyGraphDiff, diffScopes, type GraphDiff } from "./incremental/diff.js";
 export { impact, impactSeedsOfFiles, type ImpactItem, type ImpactOptions, type ImpactRelation, type ImpactResult } from "./query/impact.js";
 export { trace, TRACE_EDGE_TYPES } from "./query/trace.js";

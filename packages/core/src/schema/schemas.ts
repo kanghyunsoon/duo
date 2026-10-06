@@ -168,7 +168,8 @@ const decisionShape = {
   rationale: text().optional(),
   owner: z.literal("human").optional(),
   governs: z.strictObject({ requirements: ids().optional(), paths: texts().optional(), symbols: texts().optional() }).optional(),
-  forbids: z.strictObject({ dependencies: texts().optional(), symbols: texts().optional(), paths: texts().optional() }).optional(),
+  /** imported_paths (H-72): repository path patterns; a changed import resolving to a matching file conflicts. */
+  forbids: z.strictObject({ dependencies: texts().optional(), symbols: texts().optional(), paths: texts().optional(), imported_paths: texts().optional() }).optional(),
   supersedes: id().nullable().optional(),
   evidence: z.array(EvidencePointerSchema).optional(),
   source: sources,
