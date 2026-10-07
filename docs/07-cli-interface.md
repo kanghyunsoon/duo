@@ -20,7 +20,7 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 | `duoctl review` | 변경 검수 | `--staged`, `--from <ref>`, `--to <ref>`, `--files a,b`, `--task`, `--budget`, `--record`, `--refresh`, `--fail-on block\|ask\|warn`, `--strict`, `--semantic` | director reviewChanges, recordReview, integration LLM factory(`--semantic`만) | 없음(`--record`만 reviews/) |
 | `duoctl trace <node>` | 추적 관계 | `--depth <1-3>` | graph trace | 없음 |
 | `duoctl impact <node>` | Graph에 기록된 영향 | `--depth <1-3>` | graph impact | 없음 |
-| `duoctl decision list\|confirm <id>\|reject <id>` | proposal 목록, 확정, 거절 | `--reason <text>`(reject) | core DecisionService, listDecisionProposals | decisions/ |
+| `duoctl decision list\|confirm <id>\|reject <id>\|review-pending` | proposal 목록, 확정, 거절, pending 전부를 한 session에서 검토하고 고른 것만 확정 | `--reason <text>`(reject) | core DecisionService, listDecisionProposals | decisions/ |
 | `duoctl stats` | runtime/metrics.jsonl 요약 | `--last <n>` | director readRuntimeMetrics | 없음 |
 | `duoctl mcp` | duo-director MCP 서버를 stdio로 실행(한 저장소, [06](06-mcp-interface.md)) | `--root <path>` 또는 `--root-from git-cwd\|env:<NAME>`(결과는 Git top level이어야 함), `--agent <label>` | integration `resolveMcpRoot`, `serveDuoMcp` | Tool이 쓰는 것만(metrics, proposals) |
 | `duoctl install <codex\|claude-code>` | Agent 연결: plan → 확인 → apply → verify([06 Agent integration](06-mcp-interface.md#agent-integration-duoctl-install)) | `--launcher path\|npx`, `--yes`, `--non-interactive`, `--json` | integration `planAgentIntegration`, `applyAgentIntegration`, `verifyAgentIntegration` | `.codex/config.toml`+`AGENTS.md` 또는 `.mcp.json`+`CLAUDE.md`, 백업(runtime/backup) |
@@ -211,6 +211,8 @@ Graph primitive를 그대로 보인다. depth(1-3)와 node 한도로 bounded이�
 - `confirm`·`reject`는 TTY가 아니거나 `--non-interactive`면 거부하고(`CLI_TTY_REQUIRED`, 종료 코드 1, AC-015-04), 내용을 보여 준 뒤 ID를 다시 입력받는다.
 - **Informed confirm(T34.2)**: `confirm`은 ID를 묻기 전에 core `DecisionService.previewConfirm`이 읽은 candidate 전체를 stderr에 보인다. 항목은 Title, Question, Answer, Kind, Rationale, Governs, Forbids, Enforcement, Supersedes(대상의 title·현재 state와 "superseded가 됨"), proposal이면 Proposed by(파일의 `proposed_by`와 `proposed_by_kind`, 예: `codex (agent)`, 인증된 신원이 아닌 audit label, H-71), 있으면 Evidence·Source·Extensions, Stale, Expected ID, File이다. YAML Decision에는 Proposed by를 만들어 보이지 않는다. 파일에 없는 field는 `(not set)`, 비어 있으면 `(none)`이며 기본값을 만들지 않는다. Stale은 proposal이면 `no` 또는 바뀐 내용이고, YAML Decision(`D-###`)이면 staleness 모델이 없으므로 `not applicable`이다(검사 결과 `no`와 구분, T34.3). Expected ID는 예상값이고 실제 ID는 확정 결과의 `decisionId`다. 확정은 그 preview의 digest를 함께 넘기며, DecisionService가 repository lock 안에서 candidate를 다시 읽어 digest가 다르면 아무것도 쓰지 않고 `DECISION_CONFIRM_PREVIEW_CHANGED`(종료 코드 1, "The Decision changed after you reviewed it. Review the current contents and confirm again.")로 끝낸다. 자동 재시도는 없다. digest는 source ID·경로, 확정 방식, candidate field, 제안자 이름·종류, staleness, supersede 대상(ID, title, state, superseded_by, 경로, 내용 digest)을 묶고 Expected ID는 넣지 않는다. 확정 뒤에는 `duoctl index` 안내를 보인다. `reject`도 ID를 묻기 전에 proposal 내용을 같은 형식으로 보인다(Expected ID 없음). proposal이 없거나 pending이 아니면 ID를 묻기 전에 같은 진단으로 끝난다. `--json` 결과, ID 재입력, TTY 요구는 바뀌지 않는다. Agent의 무인 실행을 막는 장치이며 보안 인증이 아니다([10-security.md](10-security.md)). actor는 `{ kind: "human", name: <Git user.name> }`이고 검사, ID 할당, lock, supersede, stale 판단은 core `DecisionService`가 한다([ADR-013](adr/ADR-013-decision-lifecycle.md)).
 
+- **review-pending(T44, F-07, C248)**: `duoctl decision review-pending`은 한 terminal session에서 pending proposal 전부를 검토하고 사람이 고른 것만 확정한다. 확정마다 `confirm` 명령을 따로 칠 필요가 없을 뿐 권한 규칙은 `confirm`과 같다. TTY가 아니거나 `--non-interactive`면 아무것도 보이거나 묻지 않고 거부한다(`CLI_TTY_REQUIRED`). actor는 Git user인 human이고 agent·MCP에는 이 경로가 없다(MCP tool 9개 그대로). 흐름: (1) pending proposal 전부를 ID 순서(`listDecisionProposals`)로 `confirm`과 같은 informed preview로 보인다. (2) 확정할 proposal을 묻는다. ID 목록(대소문자·쉼표 무관, ID 순서로 정리), `all`, 하나씩 결정하는 `one`, 빈 입력·입력 끝·`cancel`은 취소다. 기본값은 없고 모르는 ID·중복·섞인 입력은 아무것도 하지 않고 종료 코드 1이다. (3) `all`·ID 목록이면 core `planConfirmSession`이 먼저 각 proposal이 검토한 그대로인지 확인하고(다르면 `DECISION_CONFIRM_PREVIEW_CHANGED`, 아무것도 확정하지 않음), `.duo-project` 임시 사본에서 같은 `DecisionService`로 순서대로 확정해 보며 각 proposal을 확정 직전의 candidate로 읽는다. 앞 proposal을 확정하면 Truth가 바뀌어 뒤 proposal이 stale이 되므로, 그렇게 달라지는 줄(예: `Stale no → yes`)과 예상 Decision ID를 보인다. 같은 session의 다른 proposal에 결과가 달린 경우(같은 Decision을 두 proposal이 supersede, session이 만들 Decision을 supersede)는 session 전체를 거부한다(`DECISION_SESSION_CONFLICT`, 하나씩 확정). (4) 고른 ID를 보인 순서 그대로 다시 입력해야 실행한다(빈 입력은 취소). (5) 각 proposal은 보인 candidate의 digest로 묶인 보통의 `DecisionService.confirm`이다. 그 사이 바뀐 proposal은 그것만 `DECISION_CONFIRM_PREVIEW_CHANGED`로 실패하고 나머지는 계속한다(session transaction 없음, 종료 코드 1). `one`은 proposal마다 확정 직전에 다시 읽고, 검토 때와 다르면 달라진 줄을 먼저 보인 뒤 ID 입력(확정), `skip`(pending 유지), 빈 입력(멈춤)을 받는다. 확정된 Decision은 `confirm`으로 확정한 것과 같다(Decision ID, lock, `proposal`, `proposed_by`, `confirmed_by`, supersede). session 표시나 새 field는 Truth에 남지 않는다. `--json` 결과는 `status`(`confirmed`·`partial`·`cancelled`·`none`·`failed`)와 `session`(mode, reviewed, selected, confirmed, skipped, failed, pending)이다. YAML Decision(`D-###`)의 in-place 확정은 대상이 아니며 `confirm <id>`로 한다.
+
 ```text
 $ duoctl decision confirm P-007
 Confirm P-007: this proposal becomes a new confirmed Decision.
@@ -228,6 +230,32 @@ Confirm P-007: this proposal becomes a new confirmed Decision.
   File          .duo-project/decisions/proposals/P-007.yaml
 Type the ID to confirm: P-007
 confirmed as D-005 · .duo-project/decisions/D-005.yaml
+Run duoctl index so review and context see it.
+```
+
+```text
+$ duoctl decision review-pending
+Review: 5 pending proposal(s) in ID order: P-001, P-002, P-003, P-004, P-005. Nothing is confirmed until you choose and type the IDs.
+
+[1/5]
+Confirm P-001: this proposal becomes a new confirmed Decision.
+  Title         Weekly rotation
+  …
+Confirm which proposals? Type their IDs (e.g. P-001 P-002), 'all', 'one' to decide one by one, or press Enter to cancel: P-001 P-003 P-004
+Confirm plan, in ID order (each confirm is bound to the candidate shown):
+  P-001 → D-001 (expected)
+  P-003 → D-002 (expected)
+  P-004 → D-003 (expected)
+
+P-003 at the moment of its confirm (the proposals before it in this session are confirmed first):
+  - Stale         no
+  + Stale         yes, Project Truth changed since this proposal was made
+…
+Type the IDs to confirm, exactly as listed (P-001 P-003 P-004), or press Enter to cancel: P-001 P-003 P-004
+P-001 confirmed as D-001 · .duo-project/decisions/D-001.yaml
+P-003 confirmed as D-002 · .duo-project/decisions/D-002.yaml
+P-004 confirmed as D-003 · .duo-project/decisions/D-003.yaml
+Confirmed 3 of 3. Still pending: P-002, P-005.
 Run duoctl index so review and context see it.
 ```
 
