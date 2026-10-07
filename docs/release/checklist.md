@@ -15,6 +15,16 @@
 | `pnpm test:conformance` | RC를 격리 prefix에 설치 → runtime tree(설치 트리 = `dist/runtime-tree.json`, package 밖 설치 0)·notices → C209 init 반복(`DUO_C209_RUNS`, 기본 20) → 설치된 duoctl로 CLI·MCP·install journey와 RC 전용 검사 → 문서·help 대조 → `.dist/release-conformance.json` | 필요(npm install) |
 | `pnpm release:verify-published` | publish **뒤** 확인(T21): registry의 name·version·integrity·license·engines·bin → 빈 npm 설정과 새 cache로 임시 prefix에 `npm install -g` → 설치된 파일 수(bundled `node_modules/` 포함, npm이 만든 `.bin` 제외)·LICENSE·runtime tree(0.2.1부터 설치 트리 = `dist/runtime-tree.json`, 그 전 version은 `npm-shrinkwrap.json` 존재) → PATH의 `duoctl --version`·`--version --json`·`--help` → 새 Git 저장소에서 `init`→`status` → origin의 `v<version>` tag commit → GitHub Release(draft 아님) → `.dist/release-published.json`. 기대 integrity와 commit은 `--integrity`·`--commit` 또는 같은 version의 `.dist/release-candidate.json`. publish·tag·login을 하지 않고 npm credential을 읽지 않는다. CI와 `pnpm verify`에는 넣지 않는다 | 필요 |
 
+## 0.2.2 (H-75, C243, C244)
+
+Correctness patch([release notes](notes-0.2.2.md), [호환성 분류](compatibility.md#022-변경-분류-t43-h-75)). v0.2.1에서 만든 `release/0.2.2`에 `next`의 T40 N1 수정만 backport했다. 권위 있는 작업은 일부만 읽힌 Project Truth에서 실행하지 않고 `PROJECT_TRUTH_INVALID`로 실패한다. H-71, Informed Confirm, `imported_paths`, provenance 표시(H-73), explicit seed(H-76) 등 0.3 기능은 넣지 않는다. External Validation 01은 계속 정확히 0.2.1이다.
+
+- [x] backport: v0.2.1 위에 `0c59d47` cherry-pick, 충돌 3곳(import 줄, message, diagnostic persistence)은 0.2.1 줄을 유지하고 N1 줄만 넣음
+- [x] correctness test: core `authority.test.ts`, e2e `tests/cli/truth-fail-closed.e2e.test.ts`(0.3 전용 `imported_paths`, 모르는 field, 잘못된 YAML·타입, 깨진 proposal: review·context 종료 1과 verdict 없음, `--fail-on`도 실패, status `truth.errors`, doctor invalid, decision list, Decision confirm·reject 거부, MCP `isError`, UI review route failed, Truth 파일 불변, 고친 Truth는 다시 BLOCK)
+- [x] 정상 저장소: 공개 0.2.1 설치본과 0.2.2 build의 review·context JSON이 같음(WARN·BLOCK 두 경우, 실행 시간 field만 다름)
+- [x] version 0.2.1 → 0.2.2: `apps/cli/package.json`, release lock의 package version 두 곳(의존성 트리 불변), README·07의 현재 version 예시
+- [x] 로컬 `pnpm verify`(101 files, 1,020 pass / 7 skip)
+
 ## 0.2.1 (H-65, C242, 2026-10-04 release, `v0.2.1` = `1316bdf`)
 
 Packaging patch([release notes](notes-0.2.1.md), [호환성 분류](compatibility.md#021-변경-분류-t324-h-65)). npm 12와 local tarball 설치가 package 안의 `npm-shrinkwrap.json`을 따르지 않아 0.2.0의 release-locked tree가 깨졌다(C242, 공개 0.2.0 영향 B). runtime code, 공개 형식, Truth, 명령은 0.2.0과 같다. 다른 변경은 넣지 않는다(C229·C239·C240·C241, package description, `--help` 첫 줄, README 재설계는 범위 밖).

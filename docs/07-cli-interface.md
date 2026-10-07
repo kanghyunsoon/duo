@@ -137,7 +137,7 @@ $ duoctl doctor
 DUO Doctor · ready
 
 Runtime
-  ok       duoctl 0.2.1 · Node.js v24.18.0 (supported: >=24.15.0)
+  ok       duoctl 0.2.2 · Node.js v24.18.0 (supported: >=24.15.0)
 
 Git
   ok       Git repository: /work/poly
