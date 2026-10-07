@@ -26,7 +26,8 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [release/checklist.md](release/checklist.md) | release 명령, version별 release 기록(0.2.1, 0.2.0, 0.1.2, 0.1.1, 0.1.0: 준비 항목과 최종 상태), publish 순서, limitation |
 | [release/notes-0.1.1.md](release/notes-0.1.1.md) | 0.1.1 release notes |
 | [release/notes-0.1.2.md](release/notes-0.1.2.md) | 0.1.2 release notes |
-| [release/notes-0.3.0-rc.2.md](release/notes-0.3.0-rc.2.md) | 0.3.0-rc.2 release notes(branch next, dist-tag next): 사용자 변화 4가지, fail-closed Truth, MCP SDK security update(H-77), imported_paths 의미, 알려진 한계, 호환성(0.2.2 safety floor), machine contract 변경 |
+| [release/notes-0.3.0-rc.3.md](release/notes-0.3.0-rc.3.md) | 0.3.0-rc.3 release notes(branch next, dist-tag next): rc.1·rc.2·rc.3 이력, 사용자 변화 4가지, fail-closed Truth, MCP SDK security update(H-77), imported_paths 의미, 알려진 한계, 호환성(0.2.2 safety floor), machine contract 변경 |
+| [release/notes-0.3.0-rc.2.md](release/notes-0.3.0-rc.2.md) | 0.3.0-rc.2 release notes(검증했지만 publish하지 않음: preflight가 H-70 dual-track을 반영하지 못함, C247, rc.3가 대체) |
 | [release/notes-0.3.0-rc.1.md](release/notes-0.3.0-rc.1.md) | 0.3.0-rc.1 release notes 초안(publish하지 않음: H-77 security gate 실패, rc.2가 대체) |
 | [release/notes-0.2.1.md](release/notes-0.2.1.md) | 0.2.1 release notes: packaging patch(C242). runtime dependency 트리를 package가 직접 싣는다(bundleDependencies, dist/runtime-tree.json), 영향, 호환성 |
 | [release/notes-0.2.0.md](release/notes-0.2.0.md) | 0.2.0 release notes: correctness, freshness, doctor, ambiguity 안내, OpenAI-compatible provider, 호환성, upgrade, known limitations |

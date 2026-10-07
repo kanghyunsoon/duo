@@ -1,10 +1,12 @@
-# DUO 0.3.0-rc.2 release notes (validated, never published)
+# DUO 0.3.0-rc.3 release notes
 
-> VALIDATED, NOT RELEASED. The candidate (`299b39b`) passed its product and security gates, but `release:preflight` did not yet encode the H-70 dual-track prerelease policy: it accepted release candidates only from `main` and dry-ran with dist-tag `latest` (C247). It is kept as history; [0.3.0-rc.3](notes-0.3.0-rc.3.md) replaces it.
+Release candidate on the `next` development line, published to the npm dist-tag `next` (`npm install -g @duo-director/cli@next`). The stable release stays 0.2.2 on `latest`. This is not a stable release: 0.3.0 needs a separate decision. External Validation 01 keeps using exactly 0.2.1.
 
-Release candidate on the `next` development line, for the npm dist-tag `next` (`npm install -g @duo-director/cli@next`). The stable line is 0.2.2 on `latest`, and this candidate does not change that. It is not a stable release: 0.3.0 needs a separate decision. External Validation 01 keeps using exactly 0.2.1.
+## Release candidates
 
-0.3.0-rc.1 was never published. Its candidate (commit `82246f4`) bundled `@modelcontextprotocol/client` 2.1.0, which is affected by the High advisory GHSA-6qxp-vccf-f47h, so it did not pass the release gate (H-77). rc.2 is that candidate with the MCP SDK security update and nothing else added.
+- **0.3.0-rc.1** (`82246f4`): never published. It failed the security gate: the bundled `@modelcontextprotocol/client` 2.1.0 is affected by the High advisory GHSA-6qxp-vccf-f47h (H-77).
+- **0.3.0-rc.2** (`299b39b`): validated, never published. It is rc.1 with the MCP SDK 2.2.0 update and passed its product and security gates, but the release preflight did not yet encode the H-70 dual-track prerelease policy (it accepted only `main` and dry-ran with dist-tag `latest`, C247).
+- **0.3.0-rc.3**: the same product as rc.2 (MCP SDK 2.2.0) plus the release-tooling correction: the release channel now follows the version (a prerelease is cut from `next` and published to the dist-tag `next`; a stable version from `main` to `latest`). DUO itself does not change between rc.2 and rc.3.
 
 ## What changes for users
 
@@ -44,7 +46,7 @@ The bundled MCP SDK (`@modelcontextprotocol/client`, `@modelcontextprotocol/serv
 
 ## Compatibility
 
-- A project made by 0.2.1 or 0.2.2 opens in 0.3.0-rc.2 without migration and nothing is rewritten: Decisions, locks, proposals, Adoption Baselines, Review Records, index state and agent configuration are read as they are.
+- A project made by 0.2.1 or 0.2.2 opens in 0.3.0-rc.3 without migration and nothing is rewritten: Decisions, locks, proposals, Adoption Baselines, Review Records, index state and agent configuration are read as they are.
 - 0.2.2 is the fail-closed safety floor and the current stable release. It does not understand `imported_paths`; it refuses to review a repository that uses it instead of silently ignoring the Decision.
 - Opening a repository that uses 0.3-only Truth (`forbids.imported_paths`) with 0.2.1 or older is not supported. Those versions leave such a Decision out without a visible warning, and a review can pass a change it forbids.
 - To go back to 0.2.x completely, first supersede Decisions that use `imported_paths` with Decisions that do not.
@@ -59,4 +61,4 @@ The bundled MCP SDK (`@modelcontextprotocol/client`, `@modelcontextprotocol/serv
 - `duo.status/1`: `truth.errors` (additive, also in 0.2.2).
 - Local UI HTTP API: `POST /api/proposals/<id>/confirm` requires `previewDigest` (the bundled UI sends it).
 
-The package file, its size and hashes are listed in the GitHub prerelease `v0.3.0-rc.2`.
+The package file, its size and hashes are listed in the GitHub prerelease `v0.3.0-rc.3`.
