@@ -40,6 +40,7 @@ export {
   DECISION_LOCK_PATH, DECISIONS_DIR, decisionPath, guardDecisionWrite, nodeDecisionFileSystem, proposalPath, PROPOSALS_DIR,
   type ActorKind, type DecisionActor, type DecisionFileSystem, type DecisionWriteTarget,
 } from "./decisions/files.js";
+export { planConfirmSession, sessionOrder, type ConfirmSessionItem, type ReviewedProposal } from "./decisions/session.js";
 export { decisionLockDigest, definitionDigest, stableJson, truthDigest, verifyDecisionLock, type LockStatus, type LockVerification } from "./decisions/digest.js";
 export { nextDecisionId, nextProposalId } from "./decisions/ids.js";
 export {

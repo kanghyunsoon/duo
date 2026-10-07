@@ -77,7 +77,7 @@ const HELP = [
   "  review      review changes (--staged, --from, --to, --files, --task, --budget, --refresh, --record, --fail-on block|ask|warn, --strict = --fail-on warn, --semantic: optional LLM assistance)",
   "  trace       trace a node (--depth 1-3)",
   "  impact      Graph-recorded impact of a node (--depth 1-3)",
-  "  decision    list | confirm <id> | reject <id> [--reason <text>] (terminal only)",
+  "  decision    list | confirm <id> | reject <id> [--reason <text>] | review-pending (terminal only, a human: review-pending previews every pending proposal, then confirms the ones you choose)",
   "  stats       runtime metrics summary (--last n)",
   "  mcp         serve the duo-director MCP server over stdio (--root <path> | --root-from git-cwd|env:<NAME>, --agent <label>)",
   "  install     connect an agent: install codex|claude-code [--launcher path|npx] [--yes] · install status [agent] · install remove <agent>",
