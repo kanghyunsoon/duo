@@ -15,9 +15,9 @@
 | `pnpm test:conformance` | RC를 격리 prefix에 설치 → runtime tree(설치 트리 = `dist/runtime-tree.json`, package 밖 설치 0)·notices → C209 init 반복(`DUO_C209_RUNS`, 기본 20) → 설치된 duoctl로 CLI·MCP·install journey와 RC 전용 검사 → 문서·help 대조 → `.dist/release-conformance.json` | 필요(npm install) |
 | `pnpm release:verify-published` | publish **뒤** 확인(T21): registry의 name·version·integrity·license·engines·bin → 빈 npm 설정과 새 cache로 임시 prefix에 `npm install -g` → 설치된 파일 수(bundled `node_modules/` 포함, npm이 만든 `.bin` 제외)·LICENSE·runtime tree(0.2.1부터 설치 트리 = `dist/runtime-tree.json`, 그 전 version은 `npm-shrinkwrap.json` 존재) → PATH의 `duoctl --version`·`--version --json`·`--help` → 새 Git 저장소에서 `init`→`status` → origin의 `v<version>` tag commit → GitHub Release(draft 아님) → `.dist/release-published.json`. 기대 integrity와 commit은 `--integrity`·`--commit` 또는 같은 version의 `.dist/release-candidate.json`. publish·tag·login을 하지 않고 npm credential을 읽지 않는다. CI와 `pnpm verify`에는 넣지 않는다 | 필요 |
 
-## 0.2.2 (H-75, C243, C244)
+## 0.2.2 (H-75, H-77, C243, C244)
 
-Correctness patch([release notes](notes-0.2.2.md), [호환성 분류](compatibility.md#022-변경-분류-t43-h-75)). v0.2.1에서 만든 `release/0.2.2`에 `next`의 T40 N1 수정만 backport했다. 권위 있는 작업은 일부만 읽힌 Project Truth에서 실행하지 않고 `PROJECT_TRUTH_INVALID`로 실패한다. H-71, Informed Confirm, `imported_paths`, provenance 표시(H-73), explicit seed(H-76) 등 0.3 기능은 넣지 않는다. External Validation 01은 계속 정확히 0.2.1이다.
+Correctness·security patch([release notes](notes-0.2.2.md), [호환성 분류](compatibility.md#022-변경-분류-t43-h-75)). v0.2.1에서 만든 `release/0.2.2`에 `next`의 T40 N1 수정만 backport했다. 권위 있는 작업은 일부만 읽힌 Project Truth에서 실행하지 않고 `PROJECT_TRUTH_INVALID`로 실패한다. H-71, Informed Confirm, `imported_paths`, provenance 표시(H-73), explicit seed(H-76) 등 0.3 기능은 넣지 않는다. External Validation 01은 계속 정확히 0.2.1이다.
 
 - [x] backport: v0.2.1 위에 `0c59d47` cherry-pick, 충돌 3곳(import 줄, message, diagnostic persistence)은 0.2.1 줄을 유지하고 N1 줄만 넣음
 - [x] correctness test: core `authority.test.ts`, e2e `tests/cli/truth-fail-closed.e2e.test.ts`(0.3 전용 `imported_paths`, 모르는 field, 잘못된 YAML·타입, 깨진 proposal: review·context 종료 1과 verdict 없음, `--fail-on`도 실패, status `truth.errors`, doctor invalid, decision list, Decision confirm·reject 거부, MCP `isError`, UI review route failed, Truth 파일 불변, 고친 Truth는 다시 BLOCK)
@@ -26,6 +26,24 @@ Correctness patch([release notes](notes-0.2.2.md), [호환성 분류](compatibil
 - [x] 로컬 `pnpm verify`(101 files, 1,020 pass / 7 skip)
 - [x] release tooling: `release:upgrade`가 status `truth` 객체 전체를 비교해 additive `truth.errors: []` 때문에 실패했다. 개수 field(requirements·decisions·constraints·declaredGaps)만 비교하고 RC의 `truth.errors`가 비어 있는지 따로 확인하도록 고침(제품 출력 불변). upgrade journey 공개 0.2.1 → RC: ts·python·cpp·sparse 모두 current, Truth 불변
 - [x] RC tarball 설치 matrix(Windows, Node 24.18.0): npm 10.9.9·11.21.0·12.2.0 global, npm 11.21.0 project-local 4칸 모두 `duoctl 0.2.2`, 설치 트리 = `dist/runtime-tree.json`(67 package, 불일치·package 밖 설치 0), doctor, MCP tool 9개, 정상 review BLOCK과 `--fail-on block` 종료 4, 모르는 field가 있는 Decision은 review 종료 1(verdict 없음, `PROJECT_TRUTH_INVALID`)·doctor 6·MCP `isError`, Truth 불변
+- [x] 첫 RC `f186bbb`(`duo-director-cli-0.2.2.tgz` 24,334,130 B, sha1 `e66ab2cdb48b2c6b97c34eea4b931ac82e8db451`, integrity `sha512-cC0m17aG…xvFN2g==`): **INVALIDATED**. reason: `release:audit` / GHSA-6qxp-vccf-f47h. `pnpm release:preflight`는 BLOCKED(codeReady false, externalReady true, blocker `audit` 1: bundled `@modelcontextprotocol/client` 2.1.0이 upstream High advisory 범위). npm publish·tag·GitHub Release는 없었다. 위 upgrade journey와 설치 matrix는 이 RC의 기록이며 새 RC로 승계하지 않는다
+- [x] H-77 security exception: MCP SDK release group만 갱신. PoC(`aed684d`의 격리 worktree 두 곳)
+
+| 항목 | 2.1.0(기존) | 2.2.0 | 2.3.1 |
+|---|---|---|---|
+| GHSA-6qxp-vccf-f47h | 해당 | 해소(first patched) | 해소 |
+| `release:audit` high/critical | 1 / 0 | 0 / 0 | 0 / 0 |
+| resolved client·server·core | 2.1.0 | 2.2.0 | 2.3.1 |
+| runtime package 수 | 67 | 67(version 변경 3, 추가·삭제 0) | 67(version 변경 3, 추가·삭제 0) |
+| install script | 0 | 0 | 0 |
+| SDK license | MIT | MIT | Apache-2.0 |
+| MCP initialize·protocol | 2025-06-18 | 동일 | 동일 |
+| tools/list(이름·schema) | 9 | 동일 | 동일 |
+| `duo_get_status`, 잘못된 인자·없는 tool 오류 | 기준 | 동일 | 동일 |
+| stdio probe(install codex·claude-code verify, doctor agent) | ok | ok | ok |
+| MCP·install·integration·workspace test | 기준 | 12 files, 155 pass | 12 files, 155 pass |
+
+선택: 2.2.0. advisory를 해소하는 최소 version이고 위 조건을 모두 만족한다. 2.3.1도 동작은 같지만 license가 바뀌고 변경 폭이 더 커서 stable patch에 넣지 않는다. `core`는 직접 의존성으로 추가하지 않았고 lock에서 2.2.0으로 해석된다. DUO의 SDK client 사용처는 stdio launch probe(`packages/integration/src/mcp/probe.ts`) 하나이고 OAuth·HTTP transport를 쓰지 않는다. 그래도 vulnerable package가 artifact에 있었으므로 audit blocker를 따른다
 
 ## 0.2.1 (H-65, C242, 2026-10-04 release, `v0.2.1` = `1316bdf`)
 

@@ -40,7 +40,7 @@
     "@duo-director/graph": "workspace:*",
     "@duo-director/integration": "workspace:*",
     "@eslint/js": "^10.0.1",
-    "@modelcontextprotocol/client": "2.1.0",
+    "@modelcontextprotocol/client": "2.2.0",
     "@types/node": "^24.19.0",
     "esbuild": "0.28.2",
     "eslint": "^10.11.0",

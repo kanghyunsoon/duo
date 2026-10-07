@@ -61,11 +61,12 @@
 
 ## 0.2.2 변경 분류 (T43, H-75)
 
-0.2.1 → 0.2.2는 correctness patch다(C243, C244). Truth를 다 읽은 저장소에서는 위 freeze 대상이 하나도 바뀌지 않는다.
+0.2.1 → 0.2.2는 correctness·security patch다(C243, C244, H-77). Truth를 다 읽은 저장소에서는 위 freeze 대상이 하나도 바뀌지 않는다.
 
 | 분류 | 내용 |
 |---|---|
 | Behavior correction | 권위 있는 작업(review, context, Adoption Baseline 캡처, Decision confirm·reject·repair·confirm preview)은 loader가 일부만 읽은 Project Truth에서 실행하지 않고 `PROJECT_TRUTH_INVALID`와 각 파일 오류로 실패한다(review·context 종료 코드 1, verdict·packet 없음). `BROKEN_REFERENCE`·`REFERENCE_TYPE_MISMATCH`만 예외. propose는 그대로 허용. doctor `truth.project`는 `invalid`, MCP review는 `isError`, UI review는 verdict 없이 오류 |
 | Additive public | status `truth.errors`(CLI JSON, MCP `duo_get_status`), decision list `diagnostics`의 읽지 못한 파일, diagnostic code `PROJECT_TRUTH_INVALID`. 모두 같은 `/1` |
-| Unchanged | Truth를 다 읽은 저장소의 review·context 결과와 JSON, 다른 모든 CLI·MCP·UI API 형식, MCP tool 9개와 input schema, `duo.review-record/1`, `duo.adoption-baseline/2`, project.yaml `schema_version: 1`, 명령·옵션, analysis identity, bundled runtime tree(0.2.1 lock) |
+| Unchanged | Truth를 다 읽은 저장소의 review·context 결과와 JSON, 다른 모든 CLI·MCP·UI API 형식, MCP tool 9개와 input schema, `duo.review-record/1`, `duo.adoption-baseline/2`, project.yaml `schema_version: 1`, 명령·옵션, analysis identity |
+| Dependency (security) | upstream High advisory GHSA-6qxp-vccf-f47h 때문에 MCP SDK release group(`@modelcontextprotocol/client`·`server`·`core`)을 2.1.0 → 2.2.0으로 올린다. 다른 bundled package·license·install script는 그대로(67 package). MCP protocol version, tool 9개와 schema, `duo_get_status`, stdio launch probe(install verify, doctor) 동작은 같다 |
 | Downgrade | DUO 0.3이 쓴 저장소(예: `forbids.imported_paths`)를 열 수 있는 가장 낮은 버전은 0.2.2다. 0.2.2는 그 field를 이해하지 않고 review를 거부한다. 0.2.1 이하로 여는 것은 지원하지 않는다(C244) |
