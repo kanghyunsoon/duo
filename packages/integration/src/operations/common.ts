@@ -75,9 +75,9 @@ export async function withGraphWriter<T>(root: string, fn: (graph: GraphStore) =
 }
 
 /** Project Truth, or the not-initialized / failed outcome. */
-export function project(root: string): { readonly value?: LoadedProject; readonly outcome?: Failure } {
+export function project(root: string): { readonly value?: LoadedProject; readonly diagnostics?: readonly Diagnostic[]; readonly outcome?: Failure } {
   const loaded = loadProjectTruth(root);
-  if (loaded.value !== undefined) return { value: loaded.value };
+  if (loaded.value !== undefined) return { value: loaded.value, diagnostics: loaded.diagnostics };
   const missing = loaded.diagnostics.some((d) => d.code === "PROJECT_FILE_MISSING");
   return { outcome: missing ? { kind: "not-initialized", diagnostics: loaded.diagnostics } : { kind: "failed", diagnostics: loaded.diagnostics } };
 }

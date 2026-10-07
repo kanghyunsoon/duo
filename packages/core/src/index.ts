@@ -30,6 +30,7 @@ export {
 } from "./domain/files.js";
 export * from "./trace/trace.js";
 export { loadProjectTruth, type LoadedProject, type LoadProjectOptions } from "./loader/project.js";
+export { NON_BLOCKING_TRUTH_ERRORS, projectTruthInvalid, requireCompleteTruth, truthAuthorityErrors } from "./loader/authority.js";
 export {
   createDecisionService, DECISION_PERMISSIONS,
   type ConfirmPreview, type ConfirmResult, type DecisionService, type DecisionServiceOptions, type ProposalInput, type ProposeResult, type RejectResult, type StaleInfo,

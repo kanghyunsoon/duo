@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createDefaultAnalyzerRegistry, openGitProvider, type AnalyzerRegistry, type GitProvider } from "@duo-director/analyzer";
 import {
-  canonicalSourceText, compareUtf8, createDiagnostic, failure, loadProjectTruth, readSourceFile, sha256Text, STATE_DIR_NAME, success, truthDigest, WRITE_AREAS,
+  canonicalSourceText, compareUtf8, createDiagnostic, failure, loadProjectTruth, readSourceFile, requireCompleteTruth, sha256Text, STATE_DIR_NAME, success, truthDigest, WRITE_AREAS,
   type DecisionActor, type ParseResult, type RepoPath,
 } from "@duo-director/core";
 import { inspectIndex, readIndexState, type GraphReader, type IndexedGraph } from "@duo-director/graph";
@@ -102,7 +102,8 @@ export async function captureAdoptionBaseline(root: string, options: CaptureBase
   if (options.actor.kind !== "human") {
     return failure([createDiagnostic("ADOPTION_FORBIDDEN", `${options.actor.kind} "${options.actor.name}" cannot capture the Adoption Baseline; adoption is a human decision`)]);
   }
-  const loaded = loadProjectTruth(root);
+  // T40 (N1): a baseline recorded from partial Truth would fix wrong findings for good.
+  const loaded = requireCompleteTruth(loadProjectTruth(root));
   if (loaded.value === undefined) return failure(loaded.diagnostics);
   const { truth } = loaded.value;
   const shared = { graph: options.graph, ...(options.registry === undefined ? {} : { registry: options.registry }), ...(options.historyWindow === undefined ? {} : { historyWindow: options.historyWindow }) };

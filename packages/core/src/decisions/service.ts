@@ -17,6 +17,7 @@ import { parseDecisionFile, parseProposalFile } from "../domain/files.js";
 import type { Decision, ProjectTruth, Proposal } from "../domain/model.js";
 import { PROPOSAL_ID_PATTERN } from "../ids.js";
 import { loadProjectTruth } from "../loader/project.js";
+import { requireCompleteTruth } from "../loader/authority.js";
 import type { RepoPath } from "../paths.js";
 import { ACTOR_KINDS, type ProposalData } from "../schema/schemas.js";
 import { parseYaml, setYamlTopLevel, stringifyYaml } from "../source/yaml.js";
@@ -156,8 +157,14 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
     }
   }
 
-  function load(): ParseResult<ProjectTruth> {
-    const loaded = loadProjectTruth(root);
+  /**
+   * T40 (N1): confirm, reject, repair and the confirm preview never act on partial Truth (a Decision the loader left
+   * out could be superseded or shown as missing unseen). propose(complete = false) still works: a proposal has no
+   * authority, and an agent may need to propose the very change that fixes the Truth; its confirm is refused until then.
+   */
+  function load(complete = true): ParseResult<ProjectTruth> {
+    const raw = loadProjectTruth(root);
+    const loaded = complete ? requireCompleteTruth(raw) : raw;
     return loaded.value === undefined ? failure(loaded.diagnostics) : success(loaded.value.truth, loaded.diagnostics);
   }
 
@@ -216,12 +223,12 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
   }
 
   /** Loads the truth and repairs it (under the lock). */
-  async function prepare(): Promise<ParseResult<{ truth: ProjectTruth; repaired: string[] }>> {
-    let loaded = load();
+  async function prepare(complete = true): Promise<ParseResult<{ truth: ProjectTruth; repaired: string[] }>> {
+    let loaded = load(complete);
     if (loaded.value === undefined) return failure(loaded.diagnostics);
     const fixed = await repairWith(loaded.value);
     if (fixed.repaired.length > 0) {
-      loaded = load();
+      loaded = load(complete);
       if (loaded.value === undefined) return failure(loaded.diagnostics);
     }
     return success({ truth: loaded.value, repaired: fixed.repaired }, fixed.diagnostics);
@@ -281,7 +288,7 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
       const denied = forbidden(actor, "propose");
       if (denied.length > 0) return failure(denied);
       return withLock(async () => {
-        const prepared = await prepare();
+        const prepared = await prepare(false);
         if (prepared.value === undefined) return failure(prepared.diagnostics);
         const { truth, repaired } = prepared.value;
         const digests = refDigests(truth, [...(input.governs?.requirements ?? []), ...(input.supersedes ? [input.supersedes] : [])]);
