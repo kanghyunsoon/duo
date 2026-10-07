@@ -116,7 +116,7 @@ DUO가 어디에 쓸 수 있는지는 core의 순수 정책 함수 `checkWriteBo
 | type | 필드 |
 |---|---|
 | requirement | `status`(planned, in_progress, done, deferred), `milestone`, `priority`(must, should, could), `source`(인용 라벨 또는 `{path, hash, section?}`), `implements`({paths, symbols}), `tests`, `depends_on`, `extensions` |
-| issue | `status`(todo, in_progress, review, done, 필수), `milestone`, `package`, `requirements`, `decisions`, `depends_on`, `extensions` |
+| issue | `status`(todo, in_progress, review, done, 필수), `milestone`, `package`, `requirements`, `decisions`, `depends_on`, `implements`({paths}, H-78), `extensions` |
 | milestone | `title`, `state`(planned, active, done), `issues`(Issue ID 목록), `extensions` |
 
 예:
@@ -138,7 +138,7 @@ Access token이 만료되면 refresh token으로 재발급한다.
 
 ## Issue 소유권
 
-Issue의 내용과 AC는 **Markdown Issue 정의 한 곳**(`type: issue`)만 소유한다. Milestone은 Issue를 ID로만 참조하고 다시 정의하지 않는다.
+Issue의 내용과 AC는 **Markdown Issue 정의 한 곳**(`type: issue`)만 소유한다. Issue `implements.paths`(H-78, 선택)는 그 Issue가 구현·변경할 것으로 선언한 저장소 경로 범위이며 Requirement `implements.paths`와 같은 pattern 규칙을 쓴다(`symbols`는 없음). Graph builder가 일치하는 File마다 File IMPLEMENTS Issue(declared)를 만든다. relevance·traceability metadata일 뿐 enforcement·forbids 범위나 수정 제한이 아니며, 본문 경로를 추출하거나 `depends_on`으로 상속하지 않는다. Milestone은 Issue를 ID로만 참조하고 다시 정의하지 않는다.
 
 ```yaml
 # milestones/M1.yaml
