@@ -40,6 +40,14 @@ export function refOfNode(node: Pick<GraphNode, "ref">): string {
   }
 }
 
+/**
+ * The task tokens BM25 reads: not definition or proposal IDs, and not tokens that resolved to an exact File path seed
+ * (C249, T46). Other words, including path-like tokens that matched no File, stay keyword input.
+ */
+export function keywordQueryTokens(tokens: readonly string[], idTokens: ReadonlySet<string>, pathTokens: ReadonlySet<string>): string[] {
+  return tokens.filter((t) => !idTokens.has(t) && !pathTokens.has(t));
+}
+
 function rawTokens(task: string): string[] {
   return task.split(/[\s,;:!?()[\]{}<>"'`]+/u).map((t) => t.replace(/^[.]+|[.]+$/gu, "")).filter((t) => t.length > 0);
 }
@@ -157,12 +165,15 @@ export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphRead
 
   const symbols = listAll(store, "symbol");
   const files = listAll(store, "file");
+  // C249 (T46): a token that resolved to an existing File as an exact path seed is not reused as keyword input;
+  // otherwise its path words (src, auth, ts ...) pull unrelated files, and the Decisions governing them, in by BM25.
+  const pathTokens = new Set<string>();
   for (const token of tokens) {
     if (idTokens.has(token)) continue;
     if (token.includes("/")) {
       const p = normalizeRepoPath(token.replace(/^\.\//u, "")).value;
       const node = p === undefined ? undefined : store.getNode(fileRef(p));
-      if (node !== undefined) { add(node, "path", token, SEED_STRENGTH.path); exact++; }
+      if (node !== undefined) { add(node, "path", token, SEED_STRENGTH.path); exact++; pathTokens.add(token); }
       continue;
     }
     const name = token.replace(/\(\)$/u, "");
@@ -180,7 +191,7 @@ export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphRead
     else if (named.length > 1 && named.length <= SYMBOL_NAME_MAX_MATCHES) ambiguities.push({ term: name, reason: "symbol-name", options: named.map(option) });
   }
 
-  const ranked = bm25(keywordDocs(truth, store, symbols, files), searchTerms(tokens.filter((t) => !idTokens.has(t)).join(" ")));
+  const ranked = bm25(keywordDocs(truth, store, symbols, files), searchTerms(keywordQueryTokens(tokens, idTokens, pathTokens).join(" ")));
   const best = ranked[0]?.score ?? 0;
   const keyword = ranked.filter((r) => r.score >= best * KEYWORD.minFraction).slice(0, KEYWORD.top);
   if (exact === 0 && ambiguities.length === 0) {
