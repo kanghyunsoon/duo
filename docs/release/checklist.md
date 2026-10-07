@@ -15,7 +15,10 @@
 | `pnpm test:conformance` | RC를 격리 prefix에 설치 → runtime tree(설치 트리 = `dist/runtime-tree.json`, package 밖 설치 0)·notices → C209 init 반복(`DUO_C209_RUNS`, 기본 20) → 설치된 duoctl로 CLI·MCP·install journey와 RC 전용 검사 → 문서·help 대조 → `.dist/release-conformance.json` | 필요(npm install) |
 | `pnpm release:verify-published` | publish **뒤** 확인(T21): registry의 name·version·integrity·license·engines·bin → 빈 npm 설정과 새 cache로 임시 prefix에 `npm install -g` → 설치된 파일 수(bundled `node_modules/` 포함, npm이 만든 `.bin` 제외)·LICENSE·runtime tree(0.2.1부터 설치 트리 = `dist/runtime-tree.json`, 그 전 version은 `npm-shrinkwrap.json` 존재) → PATH의 `duoctl --version`·`--version --json`·`--help` → 새 Git 저장소에서 `init`→`status` → origin의 `v<version>` tag commit → GitHub Release(draft 아님) → `.dist/release-published.json`. 기대 integrity와 commit은 `--integrity`·`--commit` 또는 같은 version의 `.dist/release-candidate.json`. publish·tag·login을 하지 않고 npm credential을 읽지 않는다. CI와 `pnpm verify`에는 넣지 않는다 | 필요 |
 
-## 0.3.0-rc.2 candidate (branch `next`, H-77, 검증만, 미출시)
+const fs=require('fs');const p='docs/release/checklist.md';let s=fs.readFileSync(p,'utf8');const k='## 0.3.0-rc.2 candidate (branch \x60next\x60, H-77, 검증만, 미출시)';if(s.split(k).length!==2)throw 'k';
+s=s.replace(k,fs.readFileSync(process.argv[1],'utf8')+'## 0.3.0-rc.2 candidate (branch \x60next\x60, H-77): VALIDATED, NOT RELEASED');
+s=s.replace('`next`의 prerelease candidate. 제품·보안 gate는 통과했지만 release preflight가 H-70 dual-track prerelease 정책을 아직 반영하지 못해 publish하지 않았다(C247). 제품·보안 실패가 아니며 commit·tarball은 그대로 보존한다. rc.3가 대체한다.','`next`의 prerelease candidate. 제품·보안 gate는 통과했지만 release preflight가 H-70 dual-track prerelease 정책을 아직 반영하지 못해 publish하지 않았다(C247). 제품·보안 실패가 아니며 commit·tarball은 그대로 보존한다. rc.3가 대체한다.');
+fs.writeFileSync(p,s);console.log('ok')## 0.3.0-rc.2 candidate (branch `next`, H-77): VALIDATED, NOT RELEASED
 
 `next`의 prerelease candidate. publish·tag·GitHub prerelease와 H-74 기록은 하지 않았다(별도 승인 필요).
 
