@@ -78,7 +78,7 @@ Proposal ID(`P-018`)는 seed가 아니라 그 proposal을 PENDING HUMAN DECISION
 - Project Node는 지나가지 않는다. Milestone, Decision, Issue는 자기 seed 항목(depth 0)일 때만 확장한다. Decision 하나가 여러 Requirement를 governs하거나 Milestone이 모든 Requirement를 requires해도 형제 Requirement가 최고 weight로 끌려오지 않는다.
 - SUPERSEDES는 따라가지 않는다. 활성 Decision은 Project Truth의 `superseded_by`로 찾는다.
 - **언어 친화(T18.0)**: code 후보(File, Symbol, Test)가 자기를 데려온 code seed와 다른 언어 계열이면 순서 값에 `CROSS_LANGUAGE_FACTOR`(0.5)를 곱한다. Java Symbol이 seed면 Java subgraph가 먼저이고, 같은 Requirement를 구현한 Python·TypeScript 코드는 그 뒤에 남는다. TypeScript·TSX·JavaScript는 한 계열이고 Truth seed와 Analyzer 없는 파일은 언어가 없어 곱하지 않는다(TS만 있는 저장소의 순서는 그대로).
-- weight는 비교 순서로만 쓰고 Packet에 노출하지 않는다. Packet의 `rank`는 순서다. 정책을 바꾸면 `CONTEXT_POLICY_VERSION`(현재 "2", T18.0)을 올린다.
+- weight는 비교 순서로만 쓰고 Packet에 노출하지 않는다. Packet의 `rank`는 순서다. 정책을 바꾸면 `CONTEXT_POLICY_VERSION`(현재 "3", T42 H-76: explicit primary seed 우선)을 올린다.
 
 ## 후보 분류
 
@@ -173,9 +173,10 @@ TASK-011. Compiler는 무엇을 보여줄지 고르고, 무엇이 아직 정해�
 
 1. **frame(reserved)**: header, TASK, section heading, pending decision L1, limitation. frame이 budget보다 크면 `CONTEXT_REQUEST_INVALID`.
 2. **필수 항목** L1.
+2a. **explicit primary seed(H-76, T42, F-23)**: task 문자열에 정확한 Definition ID로 적혀 seed match가 `id`인 Requirement 또는 Issue는 필수 항목 다음, 다른 어떤 승격보다 먼저 한 단계씩 들어가는 가장 높은 표현까지 올린다(Issue L3 = 본문과 Acceptance Criteria 전체가 든 source slice, Requirement L3 = 설명 전체). 그 대가로 test, code, evidence, 다른 issue가 빠질 수 있다. keyword·path·symbol seed, Review의 diff seed(`explicitSeeds`, match `diff`), traversal로 찾은 항목은 이 우선권이 없다. 여럿이면 plan 순서(tier, 순서값, 깊이, ID)로 처리해 task에 적힌 순서와 무관하다. full 표현이 들어가지 않으면 들어가는 가장 높은 단계(L1·L2·L3 중 하나, AC를 일부만 자른 표현은 만들지 않는다)를 넣고 limitation `explicit-seed-truncated`(seed ID, budget, full 표현의 token 수, 보인 단계)를 붙인다. 이 limitation은 frame 예약에 최악의 길이로 포함한다. 필수 항목 L1을 먼저 두는 것은 active Decision과 confirmed Constraint가 빠지지 않게 하려는 것이다.
 3. **상한 있는 단계**: tier 순서 requirement > decision > pending > code-direct > test > issue > code-structural > code-historical로, tier마다 L0→L1, L1→L2, L2→L3 순서로 한 단계씩 올린다. tier는 남은 승격 budget의 몫(25%, 15%, 5%, 30%, 12%, 5%, 6%, 2%)까지만 쓰고, L3는 파일마다 2개까지다. 한 파일의 Symbol이 Packet을 채우지 않게 하는 장치다.
 4. **상한 없는 단계**: 같은 순서로 남은 budget을 쓴다. 비용이 남은 budget보다 크면 그 항목을 건너뛴다(작은 하위 항목은 들어갈 수 있다).
-5. **정확한 확인**: 렌더링한 Markdown 전체를 o200k_base로 다시 센다. 넘으면 마지막 승격부터 되돌린다. budget은 넘지 않는다(AC-010-02).
+5. **정확한 확인**: 렌더링한 Markdown 전체를 o200k_base로 다시 센다. 넘으면 마지막 승격부터 되돌린다. 일반 승격이 먼저 되돌려지고 explicit primary seed의 승격은 그 뒤다. budget은 넘지 않는다(AC-010-02).
 
 항목 비용은 항목 block과 EVIDENCE 줄의 token 수다. 들어가지 못한 후보는 `omittedCandidates`(id, ref, rank, tier, reason)에 남고, 하나라도 있으면 `truncated: true`다. 표현이 최대 단계보다 낮은 항목 수는 `summarized` limitation으로 알린다.
 

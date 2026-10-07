@@ -38,6 +38,11 @@ export interface PlannedItem {
   readonly tier: ContextTier;
   readonly rank: number;
   readonly mandatory: boolean;
+  /**
+   * H-76 (F-23): an explicit primary seed, a Requirement or Issue the task text names by its exact ID (seed match "id").
+   * It takes its highest fitting representation before any normal promotion. Absent for every other candidate.
+   */
+  readonly primary?: true;
   /** Levels this candidate has, lowest first (L1 always). */
   readonly levels: readonly LevelText[];
   readonly via: PacketItem["via"];
@@ -78,6 +83,7 @@ interface Draft {
   readonly score: number;
   readonly depth: number;
   readonly mandatory: boolean;
+  readonly primary?: true;
   readonly levels: readonly LevelText[];
   readonly via: PacketItem["via"];
   readonly source?: SourceLocation;
@@ -269,6 +275,11 @@ export function planContext(input: PlanInput): ContextPlan {
   const seedIds = new Set(input.seeds.seeds.map((s) => s.id));
   /** Exact seeds (ID, path, symbol) are mandatory; keyword seeds are ordinary candidates. */
   const exactSeeds = new Set(input.seeds.seeds.filter((s) => s.match !== "keyword").map((s) => s.id));
+  /**
+   * H-76: explicit primary seeds are the seeds the task text names by exact Definition ID (match "id"). Only a
+   * Requirement or an Issue becomes primary (set below by kind); diff, path, symbol and keyword seeds never do.
+   */
+  const idSeeds = new Set(input.seeds.seeds.filter((s) => s.match === "id").map((s) => s.id));
 
   const slice = (loc: SourceLocation): string | undefined => {
     const r = reader.slice(loc);
@@ -295,6 +306,7 @@ export function planContext(input: PlanInput): ContextPlan {
     const exact = slice(r.location);
     put({
       id: c.node.id, ref: r.id, kind: "requirement", tier: "requirement", score: c.score, depth: c.depth, mandatory: exactSeeds.has(c.node.id),
+      ...(c.depth === 0 && idSeeds.has(c.node.id) ? { primary: true as const } : {}),
       levels: levels([["L1", head], ["L2", body === "" ? undefined : `${head}\n${body}`], ["L3", exact === undefined ? undefined : `${head}\n${fence(exact, "md")}`]]),
       via: via(c), source: r.location, file: r.location.path,
     });
@@ -368,7 +380,7 @@ export function planContext(input: PlanInput): ContextPlan {
       }
       case "issue": {
         const i = iss.get(ref.id);
-        if (i !== undefined) put(issueDraft(i, node, c, slice, via(c)));
+        if (i !== undefined) put(issueDraft(i, node, c, slice, via(c), c.depth === 0 && idSeeds.has(node.id)));
         break;
       }
       case "milestone": {
@@ -481,7 +493,7 @@ export function planContext(input: PlanInput): ContextPlan {
   const ordered = [...drafts.values()].sort((a, b) =>
     (TIER_INDEX.get(a.tier) ?? 0) - (TIER_INDEX.get(b.tier) ?? 0) || b.score - a.score || a.depth - b.depth || compareUtf8(a.id, b.id));
   const items: PlannedItem[] = ordered.map((d, i) => ({
-    id: d.id, ref: d.ref, kind: d.kind, tier: d.tier, rank: i + 1, mandatory: d.mandatory, levels: d.levels, via: d.via,
+    id: d.id, ref: d.ref, kind: d.kind, tier: d.tier, rank: i + 1, mandatory: d.mandatory, ...(d.primary === true ? { primary: true as const } : {}), levels: d.levels, via: d.via,
     ...(d.source === undefined ? {} : { source: d.source }), ...(d.state === undefined ? {} : { state: d.state }), file: d.file,
   }));
 
@@ -507,13 +519,13 @@ function proposalRefs(p: Proposal): string[] {
   return [...out].sort(compareUtf8);
 }
 
-function issueDraft(i: Issue, node: GraphNode, c: Candidate, slice: (l: SourceLocation) => string | undefined, v: PacketItem["via"]): Draft {
+function issueDraft(i: Issue, node: GraphNode, c: Candidate, slice: (l: SourceLocation) => string | undefined, v: PacketItem["via"], primary: boolean): Draft {
   const head = `${i.id} ${i.title} (${[i.status, i.milestone].filter((x) => x !== null).join(", ")})`;
   const ac = i.acceptance.map((a) => `- ${a.id} ${a.text}`);
   const commits = Array.isArray(node.payload.commits) ? node.payload.commits.slice(0, 3).map((x) => String(x).slice(0, 12)) : [];
   const exact = slice(i.location);
   return {
-    id: node.id, ref: i.id, kind: "issue", tier: "issue", score: c.score, depth: c.depth, mandatory: c.depth === 0,
+    id: node.id, ref: i.id, kind: "issue", tier: "issue", score: c.score, depth: c.depth, mandatory: c.depth === 0, ...(primary ? { primary: true as const } : {}),
     levels: levels([["L1", head], ["L2", ac.length === 0 ? undefined : [head, ...ac].join("\n")],
       ["L3", exact === undefined ? undefined : [head, fence(exact, "md"), ...(commits.length === 0 ? [] : [`commits: ${commits.join(", ")}`])].join("\n")]]),
     via: v, source: i.location, file: i.location.path,

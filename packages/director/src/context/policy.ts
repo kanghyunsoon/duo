@@ -11,8 +11,10 @@ import type { ContextTier } from "./types.js";
  * 2: T18.0, generic-file head window, capability limitations, cross-language factor, Python comment lines as leading context.
  * T24.1 (C217, C225) kept 2: it changed only the level texts of Symbols with more than one location, and those texts'
  * hashes are already in the Packet Dependency Digest; a bump would change the digest of every other Packet too.
+ * 3: H-76 (T42, F-23): explicit primary seeds (a Requirement or Issue named by exact ID) take their highest fitting
+ * representation before normal promotion; the selection changes, so old cached Packets must stop matching.
  */
-export const CONTEXT_POLICY_VERSION = "2";
+export const CONTEXT_POLICY_VERSION = "3";
 
 /** Per-hop multiplier. A candidate's order value is seed strength × Π hop weights (best path). */
 export const EDGE_WEIGHTS: Readonly<Record<Exclude<GraphEdgeType, "SUPERSEDES">, number>> = {

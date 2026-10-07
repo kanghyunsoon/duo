@@ -3,12 +3,15 @@
  *
  * 1. Frame: header, task, section headings, pending human decisions at L1, limitations (reserved).
  * 2. Mandatory items at L1: seeds, active Decisions and confirmed Constraints (05 §3).
+ * 2a. Explicit primary seeds (H-76: a Requirement or Issue the task names by exact ID) are raised one level at a
+ *    time to their highest fitting representation before any other promotion. If the full representation does not
+ *    fit, the packet says so (explicit-seed-truncated) instead of dropping it silently.
  * 3. Capped pass: per tier in priority order (intent > decision > pending > direct code > tests >
  *    issues > structural > historical), raise items one level at a time (L0→L1, then L2, then L3)
  *    within the tier's share of the promotion budget and at most two L3 items per file.
  * 4. Uncapped pass: the same order with whatever is left.
  * 5. Exact check: the rendered Markdown is measured with o200k_base; while it is over budget the
- *    latest promotion is undone. The budget is never exceeded.
+ *    latest promotion is undone, so normal promotions go before an explicit seed's. The budget is never exceeded.
  *
  * Nothing is cut from the front: an item enters at a representation level or not at all, and
  * every candidate left out is listed in omittedCandidates.
@@ -42,8 +45,23 @@ const STATIC_LIMITATIONS: readonly ContextLimitation[] = [
   { code: "no-diff", message: "The working-tree diff is not part of this packet." },
 ];
 
-function limitations(plan: ContextPlan, taskTruncated: boolean, omitted: number, summarized: number): ContextLimitation[] {
+/** An explicit primary seed below its full representation: ref, tokens of the full representation, shown level (-1: not shown). */
+interface TruncatedSeed {
+  readonly ref: string;
+  readonly fullTokens: number;
+  readonly shown: string | undefined;
+}
+
+function limitations(plan: ContextPlan, taskTruncated: boolean, omitted: number, summarized: number, budget: number, truncatedSeeds: readonly TruncatedSeed[]): ContextLimitation[] {
   const out = [...STATIC_LIMITATIONS];
+  for (const t of truncatedSeeds) {
+    out.push({
+      code: "explicit-seed-truncated",
+      message: t.shown === undefined
+        ? `Explicit seed ${t.ref} could not fit within the ${budget}-token budget (its full specification is ${t.fullTokens} tokens); it is not shown.`
+        : `Explicit seed ${t.ref} could not fit its full specification within the ${budget}-token budget (${t.fullTokens} tokens); the highest fitting representation (${t.shown}) is shown.`,
+    });
+  }
   if (omitted > 0) out.push({ code: "omitted", message: `omitted: ${omitted} lower-ranked candidates did not fit the budget (ids in omittedCandidates).` });
   if (summarized > 0) out.push({ code: "summarized", message: `summarized: ${summarized} items are shown below their full representation.` });
   if (plan.traversalTruncated) out.push({ code: "traversal-truncated", message: "traversal: the candidate search hit its node or edge limit; more related nodes may exist." });
@@ -62,6 +80,9 @@ export function packContext(input: PackInput): ParseResult<ContextPacket> {
   const block = (text: string) => meter.count(renderItemBlock(text) + "\n");
   const evidence = (i: PlannedItem) => meter.count(renderEvidenceLine(i.ref, i.via) + "\n");
   const itemTokens = (i: PlannedItem, level: number) => (level < 0 ? 0 : block(i.levels[level]?.text ?? "") + evidence(i));
+  const truncatedSeed = (s: Slot<PlannedItem>, level: number): TruncatedSeed => ({
+    ref: s.value.ref, fullTokens: itemTokens(s.value, s.value.levels.length - 1), shown: level < 0 ? undefined : (s.value.levels[level]?.level ?? "L1"),
+  });
   const pendingTokens = (p: PlannedPending, level: number) => block(p.levels[level]?.text ?? "");
 
   const build = (): { packet: ContextPacket; markdown: string } => {
@@ -83,6 +104,7 @@ export function packContext(input: PackInput): ParseResult<ContextPacket> {
     const omitted = items.filter((s) => s.level < 0);
     const summarized = chosen.filter((s) => s.level < s.value.levels.length - 1).length;
     const taskTruncated = request.taskTruncated;
+    const truncatedSeeds = items.filter((s) => s.value.primary === true && s.level < s.value.levels.length - 1).map((s) => truncatedSeed(s, s.level));
     const packet: ContextPacket = {
       format: "duo.context-packet/1",
       request,
@@ -94,7 +116,7 @@ export function packContext(input: PackInput): ParseResult<ContextPacket> {
       issues: of((i) => i.kind === "issue" || i.kind === "milestone"),
       pendingDecisions: pend,
       evidence: chosen.map((s) => ({ id: s.value.id, ref: s.value.ref, via: s.value.via })),
-      limitations: limitations(plan, taskTruncated, omitted.length, summarized),
+      limitations: limitations(plan, taskTruncated, omitted.length, summarized, request.budget, truncatedSeeds),
       signals: plan.signals,
       omittedCandidates: omitted.map((s) => ({ id: s.value.id, ref: s.value.ref, rank: s.value.rank, tier: s.value.tier, reason: "budget" as const })),
       truncated: omitted.length > 0 || plan.traversalTruncated || taskTruncated,
@@ -105,9 +127,10 @@ export function packContext(input: PackInput): ParseResult<ContextPacket> {
     return { packet, markdown: renderContextMarkdown(packet) };
   };
 
-  // Frame: every item out, worst-case limitation lines (omitted and summarized counts of full width).
+  // Frame: every item out, worst-case limitation lines (omitted and summarized counts of full width, every explicit seed truncated).
   const frame = build();
-  const frameLimits = limitations(plan, request.taskTruncated, Math.max(1, items.length), Math.max(1, items.length));
+  const frameLimits = limitations(plan, request.taskTruncated, Math.max(1, items.length), Math.max(1, items.length), request.budget,
+    items.filter((s) => s.value.primary === true).map((s) => truncatedSeed(s, 0)));
   const reserved = meter.count(renderContextMarkdown({ ...frame.packet, limitations: frameLimits }));
   if (reserved > request.budget) {
     return failure([createDiagnostic("CONTEXT_REQUEST_INVALID", `budget ${request.budget} is smaller than the packet frame (${reserved} tokens: task, headings, pending decisions, limitations)`)]);
@@ -138,6 +161,11 @@ export function packContext(input: PackInput): ParseResult<ContextPacket> {
   };
 
   for (const s of items) if (s.value.mandatory) raise(s, s.value.tier, undefined);
+  // H-76: explicit primary seeds next, one level at a time to the highest that fits, in plan order (tier, order value, depth, ID).
+  for (const s of items) {
+    if (s.value.primary !== true) continue;
+    while (raise(s, s.value.tier, undefined)) { /* raised one level */ }
+  }
   const promotion = available - spent;
   const byTier = (tier: ContextTier): (Slot<PlannedItem> | Slot<PlannedPending>)[] => (tier === "pending" ? pending : items.filter((s) => s.value.tier === tier));
   for (const capped of [true, false]) {
