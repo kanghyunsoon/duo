@@ -184,7 +184,8 @@ export async function decisionForbids(ctx: RuleContext): Promise<ReviewClaim[]> 
 function implemented(ctx: RuleContext): Map<string, DiffSeed[]> {
   const out = new Map<string, DiffSeed[]>();
   for (const s of codeSeeds(ctx)) {
-    const edges = ctx.graph.adjacentEdges([s.entity], { direction: "outgoing", types: ["IMPLEMENTS"], limit: 1000 }).edges;
+    // IMPLEMENTS also links Issues (H-78); this rule is about Requirements only.
+    const edges = ctx.graph.adjacentEdges([s.entity], { direction: "outgoing", types: ["IMPLEMENTS"], limit: 1000 }).edges.filter((e) => e.to.startsWith("req:"));
     for (const e of edges) {
       const id = e.to.slice("req:".length);
       out.set(id, [...(out.get(id) ?? []), s]);

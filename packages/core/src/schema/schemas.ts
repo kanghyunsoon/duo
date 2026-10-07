@@ -146,6 +146,8 @@ const issueShape = {
   requirements: ids().optional(),
   decisions: ids().optional(),
   depends_on: ids().optional(),
+  /** H-78 (T45): the repository path scope this Issue declares it implements (relevance / traceability only). Paths only. */
+  implements: z.strictObject({ paths: texts().optional() }).optional(),
   extensions,
 };
 

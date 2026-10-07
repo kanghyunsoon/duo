@@ -43,20 +43,21 @@ export interface ImpactOptions {
 
 const RANK: Readonly<Record<ImpactRelation, number>> = { direct: 0, structural: 1, historical: 2 };
 
-interface Step { readonly edge: GraphEdgeType; readonly direction: Exclude<EdgeDirection, "both">; readonly relation: ImpactRelation; readonly seedOnly?: boolean }
+interface Step { readonly edge: GraphEdgeType; readonly direction: Exclude<EdgeDirection, "both">; readonly relation: ImpactRelation; readonly seedOnly?: boolean; readonly to?: EntityType }
 
 /** Which relations are followed from each node type. Project Truth nodes end a path. */
 const STEPS: Readonly<Partial<Record<EntityType, readonly Step[]>>> = {
   symbol: [
     { edge: "CALLS", direction: "incoming", relation: "direct" },
     { edge: "VALIDATED_BY", direction: "outgoing", relation: "direct" },
-    { edge: "IMPLEMENTS", direction: "outgoing", relation: "direct" },
+    // IMPLEMENTS also links Issues (H-78); impact reports Requirements here, as before.
+    { edge: "IMPLEMENTS", direction: "outgoing", relation: "direct", to: "requirement" },
     { edge: "GOVERNS", direction: "incoming", relation: "direct" },
     { edge: "CONTAINS", direction: "incoming", relation: "structural" },
   ],
   file: [
     { edge: "IMPORTS", direction: "incoming", relation: "direct" },
-    { edge: "IMPLEMENTS", direction: "outgoing", relation: "direct" },
+    { edge: "IMPLEMENTS", direction: "outgoing", relation: "direct", to: "requirement" },
     { edge: "GOVERNS", direction: "incoming", relation: "direct" },
     { edge: "CONTAINS", direction: "outgoing", relation: "structural", seedOnly: true },
     { edge: "CHANGED_WITH", direction: "outgoing", relation: "historical" },
@@ -102,6 +103,7 @@ export function impact(store: GraphReader, seeds: readonly EntityRef[], options:
       for (const e of r.edges) {
         const other = step.direction === "incoming" ? e.from : e.to;
         if (seedSet.has(other)) continue;
+        if (step.to !== undefined && refOf(other).type !== step.to) continue;
         const relation = RANK[step.relation] > RANK[current.relation] ? step.relation : current.relation;
         const item: ImpactItem = { id: other, ref: refOf(other), depth: current.depth + 1, relation, via: { from: current.id, edge: step.edge, direction: step.direction } };
         const known = best.get(other);

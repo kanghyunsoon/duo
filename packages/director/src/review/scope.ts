@@ -62,7 +62,8 @@ export function unlinkedAdditions(ctx: RuleContext): { readonly claims: ReviewCl
     // The file, and every symbol and test it owns: a "duo:" annotation links the symbol it documents, not the file.
     const owned = ctx.graph.listNodes({ ownerFile: f.path, limit: 10_000 }).map((n) => n.ref);
     const from: EntityRef[] = [fileRef(f.path), ...seeds.map((s) => s.entity), ...owned];
-    if (ctx.graph.adjacentEdges(from, { direction: "outgoing", types: ["IMPLEMENTS"], limit: 1 }).edges.length > 0) continue;
+    // Linked to a Requirement: IMPLEMENTS also links Issues (H-78), which is not a Requirement link.
+    if (ctx.graph.adjacentEdges(from, { direction: "outgoing", types: ["IMPLEMENTS"], limit: 10_000 }).edges.some((e) => e.to.startsWith("req:"))) continue;
     const c = makeClaim(ctx, {
       rule: "unlinked-addition", subject: { kind: "file", id: f.path }, alignment: "UNKNOWN", reason: "added-file-unlinked", drift: warn, semantic: true,
       expected: "a new application file serves the task or implements a Requirement",

@@ -8,7 +8,7 @@ import type { GraphEdgeType } from "../store/types.js";
 export const EDGE_ENDPOINTS: Readonly<Record<GraphEdgeType, readonly (readonly [EntityType, EntityType])[]>> = {
   CONTAINS: [["project", "milestone"], ["project", "file"], ["file", "symbol"], ["symbol", "symbol"], ["file", "test"]],
   REQUIRES: [["milestone", "requirement"], ["requirement", "requirement"], ["issue", "issue"]],
-  IMPLEMENTS: [["symbol", "requirement"], ["file", "requirement"]],
+  IMPLEMENTS: [["symbol", "requirement"], ["file", "requirement"], ["file", "issue"]],
   CALLS: [["symbol", "symbol"]],
   IMPORTS: [["file", "file"]],
   GOVERNS: [["decision", "requirement"], ["decision", "issue"], ["decision", "file"], ["decision", "symbol"]],

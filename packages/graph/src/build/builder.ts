@@ -43,8 +43,11 @@ export const CALL_RESOLUTION_VERSION = 1;
  * declared Truth references (T24.5: a C++ declaration / definition group, C231) and annotation targets
  * (T24.4: every Symbol location). The index state records it; an index written with another value (or
  * none, before T24.5) is stale, and one index run applies the rules again (cached analyses are reused).
+ *
+ * 2: H-78 (T45): an Issue's implements.paths becomes File IMPLEMENTS Issue edges. An index built before could not read
+ * that field, so it is stale once and the next index run adds the edges.
  */
-export const RELATION_RULES_VERSION = 1;
+export const RELATION_RULES_VERSION = 2;
 
 /** A declared Symbol reference with several matches, decided once the run's declaration links exist (T24.5). */
 interface PendingReference {
@@ -344,7 +347,7 @@ class Builder {
     this.contexts.set(analysis.path, { analysis, analyzerVersion, bindings, byIdentity, topLevel, tests, strategy });
   }
 
-  // ---- declared code relations (Requirement.implements / tests, Decision.governs) ----
+  // ---- declared code relations (Requirement.implements / tests, Issue.implements, Decision.governs) ----
 
   private symbolsNamed(qualifiedName: string, paths: readonly string[]): { file: RepoPath; symbol: AnalyzedSymbol }[] {
     const matchers = paths.flatMap((p) => compileRepoPattern(p) ?? []);
@@ -443,6 +446,12 @@ class Builder {
           this.addEdge(definitionRef("requirement", id), "VALIDATED_BY", testRef(file, test.fullName), "project-truth", { provenance: "declared", basis: ["test-name"] });
         }
       }
+    }
+    // H-78 (T45): the path scope an Issue declares it implements; the same pattern semantics as a Requirement's.
+    for (const i of truth.issues) {
+      const iss = definitionRef("issue", i.id);
+      if (!this.has(iss)) continue;
+      for (const f of this.filesMatching(i.implements.paths)) this.addEdge(fileRef(f), "IMPLEMENTS", iss, "project-truth", { provenance: "declared", basis: ["implements.paths"] });
     }
     for (const d of truth.decisions) {
       const dec = definitionRef("decision", d.id);

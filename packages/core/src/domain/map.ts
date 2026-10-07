@@ -155,6 +155,7 @@ export function mapIssue(
     requirements: ctx.refs("requirements", ["requirements"], d.requirements, "requirement", { type: "TRACKED_BY", direction: "incoming" }),
     decisions: ctx.refs("decisions", ["decisions"], d.decisions, "decision", { type: "GOVERNS", direction: "incoming" }),
     dependsOn: ctx.refs("depends_on", ["depends_on"], d.depends_on, "issue", { type: "REQUIRES", direction: "outgoing" }),
+    implements: { paths: ctx.patterns(["implements", "paths"], d.implements?.paths) },
     references: ctx.references,
     extensions: d.extensions ?? {},
   };

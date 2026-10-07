@@ -85,6 +85,12 @@ export interface Issue extends DefinitionBase {
   readonly requirements: readonly string[];
   readonly decisions: readonly string[];
   readonly dependsOn: readonly string[];
+  /**
+   * H-78 (T45): repository path patterns this Issue declares it implements or changes. Relevance and traceability
+   * metadata (File IMPLEMENTS Issue edges): not an enforcement or forbids scope, not a limit on what the Issue may
+   * change, not ownership. Empty when not declared; never inferred from the body or inherited through depends_on.
+   */
+  readonly implements: { readonly paths: readonly string[] };
   readonly acceptance: readonly AcceptanceCriterion[];
   readonly description: string;
 }
