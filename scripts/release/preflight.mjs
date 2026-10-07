@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { channelPolicy, gitPolicyBlockers, publishArgs } from "./channel.mjs";
 import { DIST, gitState, npm, pnpm, readJson, REGISTRY, ROOT, run, sha256, stagedFiles } from "./common.mjs";
 
 const skipTests = process.argv.includes("--skip-tests");
@@ -33,10 +34,18 @@ const log = (m) => console.log("release:preflight: " + m);
 const git = gitState();
 const repoCli = readJson(path.join(ROOT, "apps", "cli", "package.json"));
 if (!git.clean) block("git-dirty", "the working tree has uncommitted changes (" + git.changes.length + ")");
-if (git.branch !== "main") block("git-branch", "release candidates are cut from main (current: " + git.branch + ")");
-const upstream = run("git", ["rev-parse", "@{u}"]).stdout.trim();
-const pushed = upstream === git.commit;
-if (!pushed) block("git-not-pushed", "HEAD is not the pushed origin/main commit");
+// H-70 dual-track (T43.1): the version decides the channel, its branch, upstream and npm dist-tag. No override.
+const policy = channelPolicy(repoCli.version);
+const upstreamName = run("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]).stdout.trim();
+const upstreamCommit = run("git", ["rev-parse", "@{u}"]).stdout.trim();
+const pushed = upstreamCommit === git.commit;
+for (const b of gitPolicyBlockers({ version: repoCli.version, branch: git.branch, upstream: upstreamName, upstreamCommit, commit: git.commit })) block(b.id, b.message);
+const channel = {
+  releaseChannel: policy?.releaseChannel ?? null, expectedBranch: policy?.expectedBranch ?? null, actualBranch: git.branch,
+  expectedUpstream: policy?.expectedUpstream ?? null, actualUpstream: upstreamName || null, pushed,
+  expectedDistTag: policy?.expectedDistTag ?? null, publishDryRunTag: null, githubPrerelease: policy?.githubPrerelease ?? null,
+};
+log("channel " + channel.releaseChannel + " · branch " + git.branch + " (expected " + channel.expectedBranch + ") · upstream " + (upstreamName || "none") + " (expected " + channel.expectedUpstream + ") · dist-tag " + channel.expectedDistTag);
 log("git " + git.commit.slice(0, 12) + " " + git.branch + (git.clean ? " clean" : " DIRTY"));
 // The full output of every step, for diagnosis (the report keeps only a tail).
 const LOGS = path.join(DIST, "preflight-logs");
@@ -237,8 +246,12 @@ const pvrEnabled = (() => {
 })();
 npmState.githubPrivateVulnerabilityReporting = pvrEnabled === true ? "enabled" : pvrEnabled === false ? "disabled" : "not-verifiable (repository not public or not accessible)";
 if (pvrEnabled !== true) block("github-private-vulnerability-reporting", "GitHub Private Vulnerability Reporting is " + npmState.githubPrivateVulnerabilityReporting);
-log("npm publish --dry-run");
-const dry = npm(["publish", path.join(DIST, candidate.tarball), "--dry-run", "--json", "--access", "public", "--tag", "latest", "--registry", REGISTRY, "--ignore-scripts"]);
+// The dry run uses the same dist-tag as the real publish of this channel (T43.1).
+const dryArgs = publishArgs(path.join(DIST, candidate.tarball), manifest.version, { dryRun: true });
+channel.publishDryRunTag = dryArgs[dryArgs.indexOf("--tag") + 1];
+if (channel.publishDryRunTag !== channel.expectedDistTag) block("publish-dist-tag", "the dry run would publish with dist-tag " + channel.publishDryRunTag + ", expected " + channel.expectedDistTag);
+log("npm publish --dry-run --tag " + channel.publishDryRunTag);
+const dry = npm([...dryArgs, "--registry", REGISTRY, "--ignore-scripts"]);
 let dryParsed;
 try {
   const parsed = JSON.parse(dry.stdout.slice(dry.stdout.indexOf("{")));
@@ -279,6 +292,7 @@ const report = {
   format: "duo.release-preflight/1",
   version: manifest.version,
   git: { ...git, changes: undefined, pushed, ci },
+  channel,
   verification: skipTests ? { skipped: true } : verification,
   package: pkg, reproducibility, scan, runtimeTree,
   dependencies, license, npm: npmState, openaiSmoke,

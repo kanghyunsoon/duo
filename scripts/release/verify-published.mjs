@@ -14,6 +14,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { channelPolicy, publishedChannelProblems } from "./channel.mjs";
 import { compareInstalledTree, DIST, npm, readJson, REGISTRY, ROOT, run } from "./common.mjs";
 
 const flag = (name) => { const i = process.argv.indexOf("--" + name); return i < 0 ? undefined : process.argv[i + 1]; };
@@ -50,7 +51,7 @@ try {
   const registry = meta === undefined ? { published: false } : {
     published: meta.version === version, name: meta.name, version: meta.version, license: meta.license, engines: meta.engines, bin: meta.bin,
     integrity: meta.dist?.integrity, tarball: meta.dist?.tarball, fileCount: meta.dist?.fileCount, unpackedSize: meta.dist?.unpackedSize,
-    latest: meta["dist-tags"]?.latest, repository: meta.repository?.url, homepage: meta.homepage,
+    latest: meta["dist-tags"]?.latest, distTags: meta["dist-tags"] ?? {}, repository: meta.repository?.url, homepage: meta.homepage,
   };
   if (!registry.published) problem("not-published", name + "@" + version + " is not in " + REGISTRY);
   if (registry.published) {
@@ -141,7 +142,12 @@ try {
   if (!githubRelease.exists) problem("github-release", "no GitHub Release for " + tag);
   else if (githubRelease.draft) problem("github-release-draft", "the GitHub Release for " + tag + " is still a draft");
 
-  report = { format: "duo.release-published/1", name, version, expected, registry, install, git, githubRelease, problems, ok: problems.length === 0 };
+  // ---- release channel (H-70, T43.1): stable → latest and a stable GitHub Release; prerelease → next, latest stays stable, a prerelease GitHub Release ----
+  const policy = channelPolicy(version);
+  const channel = { releaseChannel: policy?.releaseChannel ?? null, expectedDistTag: policy?.expectedDistTag ?? null, distTags: registry.distTags ?? null, githubPrerelease: policy?.githubPrerelease ?? null };
+  if (registry.published) for (const p of publishedChannelProblems({ version, distTags: registry.distTags, githubRelease })) problem(p.id, p.message);
+
+  report = { format: "duo.release-published/1", name, version, expected, registry, install, git, githubRelease, channel, problems, ok: problems.length === 0 };
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
