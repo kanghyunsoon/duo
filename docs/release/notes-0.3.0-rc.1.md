@@ -1,4 +1,6 @@
-# DUO 0.3.0-rc.1 release notes (draft)
+# DUO 0.3.0-rc.1 release notes (draft, never published)
+
+> Not published. The 0.3.0-rc.1 candidate (`82246f4`) did not pass the release gate because its bundled MCP SDK is affected by GHSA-6qxp-vccf-f47h (H-77). It is kept as history; [0.3.0-rc.2](notes-0.3.0-rc.2.md) replaces it.
 
 Release candidate on the `next` development line. Not published. When it is, it goes to the npm dist-tag `next` (`npm install -g @duo-director/cli@next`); `latest` stays 0.2.1, and External Validation 01 keeps using exactly 0.2.1.
 
