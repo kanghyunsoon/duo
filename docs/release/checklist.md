@@ -15,7 +15,7 @@
 | `pnpm test:conformance` | RC를 격리 prefix에 설치 → runtime tree(설치 트리 = `dist/runtime-tree.json`, package 밖 설치 0)·notices → C209 init 반복(`DUO_C209_RUNS`, 기본 20) → 설치된 duoctl로 CLI·MCP·install journey와 RC 전용 검사 → 문서·help 대조 → `.dist/release-conformance.json` | 필요(npm install) |
 | `pnpm release:verify-published` | publish **뒤** 확인(T21): registry의 name·version·integrity·license·engines·bin → 빈 npm 설정과 새 cache로 임시 prefix에 `npm install -g` → 설치된 파일 수(bundled `node_modules/` 포함, npm이 만든 `.bin` 제외)·LICENSE·runtime tree(0.2.1부터 설치 트리 = `dist/runtime-tree.json`, 그 전 version은 `npm-shrinkwrap.json` 존재) → PATH의 `duoctl --version`·`--version --json`·`--help` → 새 Git 저장소에서 `init`→`status` → origin의 `v<version>` tag commit → GitHub Release(draft 아님) → `.dist/release-published.json`. 기대 integrity와 commit은 `--integrity`·`--commit` 또는 같은 version의 `.dist/release-candidate.json`. publish·tag·login을 하지 않고 npm credential을 읽지 않는다. CI와 `pnpm verify`에는 넣지 않는다 | 필요 |
 
-## 0.2.2 (H-75, H-77, C243, C244)
+## 0.2.2 (H-75, H-77, C243, C244, 2026-10-07 release, `v0.2.2` = `c4c7895`)
 
 Correctness·security patch([release notes](notes-0.2.2.md), [호환성 분류](compatibility.md#022-변경-분류-t43-h-75)). v0.2.1에서 만든 `release/0.2.2`에 `next`의 T40 N1 수정만 backport했다. 권위 있는 작업은 일부만 읽힌 Project Truth에서 실행하지 않고 `PROJECT_TRUTH_INVALID`로 실패한다. H-71, Informed Confirm, `imported_paths`, provenance 표시(H-73), explicit seed(H-76) 등 0.3 기능은 넣지 않는다. External Validation 01은 계속 정확히 0.2.1이다.
 
@@ -44,6 +44,17 @@ Correctness·security patch([release notes](notes-0.2.2.md), [호환성 분류](
 | MCP·install·integration·workspace test | 기준 | 12 files, 155 pass | 12 files, 155 pass |
 
 선택: 2.2.0. advisory를 해소하는 최소 version이고 위 조건을 모두 만족한다. 2.3.1도 동작은 같지만 license가 바뀌고 변경 폭이 더 커서 stable patch에 넣지 않는다. `core`는 직접 의존성으로 추가하지 않았고 lock에서 2.2.0으로 해석된다. DUO의 SDK client 사용처는 stdio launch probe(`packages/integration/src/mcp/probe.ts`) 하나이고 OAuth·HTTP transport를 쓰지 않는다. 그래도 vulnerable package가 artifact에 있었으므로 audit blocker를 따른다
+
+- [x] 새 RC `c4c7895`(H-77 SDK 2.2.0): `duo-director-cli-0.2.2.tgz` 24,359,281 B(unpacked 114,133,875 B), 7,468 files, bundled 67, sha1 `20d20ff1d74c1479c4624845806ee995d0d3c8dd`, sha256 `5899eefd0bd0f10d974307f819cf3014305e655aa66522a73e48225012aa6422`, integrity `sha512-/dnNTyf0…LiX7w==`, runtime tree `264ab643…`. preflight의 재pack과 PoC worktree의 독립 pack 모두 byte 동일
+- [x] CI 3 OS(run 37572543060, `c4c7895`) success
+- [x] `pnpm release:preflight` READY(codeReady·externalReady true, blocker 0): verify(첫 실행은 full verify 부하에서 `python-definitions.e2e` 180 s timeout 1건, 단독 25 s 통과, 코드 변경 없이 재실행 통과), grammar, benchmark smoke, 배포 E2E, conformance, upgrade(공개 0.2.0 → RC), audit high/critical 0·deprecated 0·artifact = lock, secret·절대경로 0, license 비허용 0, `npm publish --dry-run`(7,468 entries = RC, bundled 67)
+- [x] upgrade journey 공개 0.2.1 → RC: ts·python·cpp·sparse 모두 current, Truth 불변
+- [x] RC tarball 설치 matrix: npm 10.9.9·11.21.0·12.2.0 global, npm 11.21.0 project-local 4칸 모두 `duoctl 0.2.2`, 설치 트리 = runtime tree, doctor, MCP tool 9개, 정상 review BLOCK, `--fail-on block` 종료 4, 모르는 field가 있는 Decision은 review 1·doctor 6·MCP `isError`, Truth 불변
+- [x] npm publish(검증한 RC tarball 그대로, 브라우저 2FA 승인 1회): registry version·integrity·shasum·fileCount = RC, `latest` = 0.2.2
+- [x] annotated tag `v0.2.2` → `c4c7895`, GitHub Release "DUO 0.2.2"(draft·prerelease 아님, 본문 = release notes, 상대 링크만 `v0.2.2` 기준 절대 링크로). `v0.2.1`·`v0.2.0`은 그대로
+- [x] `pnpm release:verify-published` OK(problems 0)
+- [x] registry 설치 matrix: npm 10.9.9·11.21.0·12.2.0 global, npm 11.21.0 project-local 4칸 모두 위와 같은 검사 통과(npm 10 칸의 첫 시도는 publish 직후 로컬 metadata cache 때문에 ETARGET, 다시 실행해 통과)
+- [x] External Validation 01은 정확히 0.2.1 그대로다. 참가자 version을 0.2.2로 옮길지는 별도 Human Decision이다
 
 ## 0.2.1 (H-65, C242, 2026-10-04 release, `v0.2.1` = `1316bdf`)
 
