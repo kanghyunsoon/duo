@@ -15,6 +15,22 @@
 | `pnpm test:conformance` | RC를 격리 prefix에 설치 → runtime tree(설치 트리 = `dist/runtime-tree.json`, package 밖 설치 0)·notices → C209 init 반복(`DUO_C209_RUNS`, 기본 20) → 설치된 duoctl로 CLI·MCP·install journey와 RC 전용 검사 → 문서·help 대조 → `.dist/release-conformance.json` | 필요(npm install) |
 | `pnpm release:verify-published` | publish **뒤** 확인(T21): registry의 name·version·integrity·license·engines·bin → 빈 npm 설정과 새 cache로 임시 prefix에 `npm install -g` → 설치된 파일 수(bundled `node_modules/` 포함, npm이 만든 `.bin` 제외)·LICENSE·runtime tree(0.2.1부터 설치 트리 = `dist/runtime-tree.json`, 그 전 version은 `npm-shrinkwrap.json` 존재) → PATH의 `duoctl --version`·`--version --json`·`--help` → 새 Git 저장소에서 `init`→`status` → origin의 `v<version>` tag commit → GitHub Release(draft 아님) → `.dist/release-published.json`. 기대 integrity와 commit은 `--integrity`·`--commit` 또는 같은 version의 `.dist/release-candidate.json`. publish·tag·login을 하지 않고 npm credential을 읽지 않는다. CI와 `pnpm verify`에는 넣지 않는다 | 필요 |
 
+## 0.3.0-rc.2 candidate (branch `next`, H-77, 검증만, 미출시)
+
+`next`의 prerelease candidate. publish·tag·GitHub prerelease와 H-74 기록은 하지 않았다(별도 승인 필요).
+
+- [x] 0.3.0-rc.1 candidate `82246f4`(`duo-director-cli-0.3.0-rc.1.tgz` 24,347,554 B, sha1 `8b2f0578d32ab289e11c905f599565bdf19e6936`, integrity `sha512-ZA8Olc…ClgA==`, runtime tree `f4d122fd…`): **failed / obsolete**. bundled `@modelcontextprotocol/client` 2.1.0이 GHSA-6qxp-vccf-f47h 범위. commit·tarball은 바꾸지 않고 보존, publish 없음
+- [x] `next`: `adaafca` MCP SDK 2.2.0, `f106606` upgrade journey 비교 수정(main `f186bbb`과 같음), `299b39b` version 0.3.0-rc.2·release notes·rc.1 notes에 미출시 표시. source candidate `299b39bf17e07b12a4393d3af4e9a481e8017a4e`
+- [x] tarball `duo-director-cli-0.3.0-rc.2.tgz` 24,370,928 B(unpacked 114,163,347 B), 7,468 files, bundled 67, sha1 `21f76666260f71a2a9a5fd38169a7b367a35769f`, sha256 `80e4c88355f6f2fc08844156e26f882fa5bd13583eaa266e2bde9fcace287ccd`, integrity `sha512-SgUajO9y…uhcA==`, runtime tree `264ab643…`(0.2.2와 같음). preflight 재pack과 독립 `pack-cli --out` 모두 byte 동일
+- [x] CI 3 OS(run 37583083135, `299b39b`) success
+- [x] `pnpm release:preflight`: blocker는 `git-branch`("release candidates are cut from main") 1개. dual-track(H-70)상 prerelease는 `next`에서 자르므로 정책 검사와 충돌한다. 나머지는 모두 통과: verify, grammar, benchmark smoke, 배포 E2E, conformance(97 pass / 0 fail, C209 20/0), upgrade(공개 0.2.0 → RC), audit high/critical 0·deprecated 0·artifact = lock, secret·절대경로 0, license 비허용 0, `npm publish --dry-run`(7,468 entries = RC, bundled 67)
+- [x] upgrade journey 공개 0.2.2 → RC: ts·python·cpp·sparse 모두 current, Truth 불변
+- [x] 설치 matrix: npm 10.9.9·11.21.0·12.2.0 global, npm 11.21.0 project-local 4칸 모두 `duoctl 0.3.0-rc.2`, 설치 트리 = runtime tree, doctor, MCP tool 9개, 정상 BLOCK, `--fail-on block` 종료 4, 모르는 field Truth fail-closed(review 1·doctor 6·MCP `isError`)
+- [x] packed T42 회귀(4칸 각각): TASK-014 budget 6,000·12,000 AC 7/7, TASK-010 6,000·12,000 AC 6/6(L3, budget 이내)
+- [x] canonical(4칸 각각): MCP `duo_propose_decision`(`imported_paths`, block) → preview(proposer agent) → 틀린 digest의 confirm 거부(`DECISION_CONFIRM_PREVIEW_CHANGED`) → digest confirm → 위반 import → BLOCK(`forbidden-import`, `not-in-adoption-baseline`), `--fail-on block` 4
+- [x] 실제 Codex demo(npm 10 설치본): Codex가 MCP로 P-001 제안, terminal preview에 `Proposed by … (agent)`·`Forbids scope repository-wide`, ID 입력으로 D-001, Codex가 위반 파일 작성, 사람 review BLOCK `[blocking, not-in-adoption-baseline]`, `--fail-on block` 4, YAML 수동 편집 0. 위반 단계의 Codex 세션(workspace-write)에는 MCP tool이 붙지 않아 Codex가 `duoctl review` CLI로 BLOCK을 확인했다. 같은 상태에서 MCP `duo_review_changes` 직접 호출도 BLOCK이고 MCP 서버는 2.1 s에 tool 9개로 기동
+- [x] downgrade: rc.2가 만든 `imported_paths` Decision 저장소를 공개 0.2.2로 열면 review 1·verdict 없음·`PROJECT_TRUTH_INVALID`·doctor 6·`--fail-on block` 1, Truth 불변. 공개 0.2.1은 WARN·claim 0·doctor ready·`--fail-on block` 0(지원하지 않는 downgrade의 증거)
+
 ## 0.2.2 (H-75, H-77, C243, C244, 2026-10-07 release, `v0.2.2` = `c4c7895`)
 
 Correctness·security patch([release notes](notes-0.2.2.md), [호환성 분류](compatibility.md#022-변경-분류-t43-h-75)). v0.2.1에서 만든 `release/0.2.2`에 `next`의 T40 N1 수정만 backport했다. 권위 있는 작업은 일부만 읽힌 Project Truth에서 실행하지 않고 `PROJECT_TRUTH_INVALID`로 실패한다. H-71, Informed Confirm, `imported_paths`, provenance 표시(H-73), explicit seed(H-76) 등 0.3 기능은 넣지 않는다. External Validation 01은 계속 정확히 0.2.1이다.
