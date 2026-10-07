@@ -24,6 +24,8 @@ Correctness patch([release notes](notes-0.2.2.md), [호환성 분류](compatibil
 - [x] 정상 저장소: 공개 0.2.1 설치본과 0.2.2 build의 review·context JSON이 같음(WARN·BLOCK 두 경우, 실행 시간 field만 다름)
 - [x] version 0.2.1 → 0.2.2: `apps/cli/package.json`, release lock의 package version 두 곳(의존성 트리 불변), README·07의 현재 version 예시
 - [x] 로컬 `pnpm verify`(101 files, 1,020 pass / 7 skip)
+- [x] release tooling: `release:upgrade`가 status `truth` 객체 전체를 비교해 additive `truth.errors: []` 때문에 실패했다. 개수 field(requirements·decisions·constraints·declaredGaps)만 비교하고 RC의 `truth.errors`가 비어 있는지 따로 확인하도록 고침(제품 출력 불변). upgrade journey 공개 0.2.1 → RC: ts·python·cpp·sparse 모두 current, Truth 불변
+- [x] RC tarball 설치 matrix(Windows, Node 24.18.0): npm 10.9.9·11.21.0·12.2.0 global, npm 11.21.0 project-local 4칸 모두 `duoctl 0.2.2`, 설치 트리 = `dist/runtime-tree.json`(67 package, 불일치·package 밖 설치 0), doctor, MCP tool 9개, 정상 review BLOCK과 `--fail-on block` 종료 4, 모르는 field가 있는 Decision은 review 종료 1(verdict 없음, `PROJECT_TRUTH_INVALID`)·doctor 6·MCP `isError`, Truth 불변
 
 ## 0.2.1 (H-65, C242, 2026-10-04 release, `v0.2.1` = `1316bdf`)
 
