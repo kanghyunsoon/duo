@@ -165,7 +165,10 @@ for (const fx of FIXTURES) {
   r.rc.statusBefore = { code: s1.code, initialized: s1.json?.result?.initialized ?? null, index: s1.json?.result?.index ?? null, baseline: s1.json?.result?.baseline?.status ?? null, llm: s1.json?.result?.llm ?? null, truth: s1.json?.result?.truth ?? null, diagnostics: codes(s1.json) };
   check(s1.code === 0 && r.rc.statusBefore.initialized === true, fx.id + ": RC status before index exit " + s1.code + " or not initialized");
   check(["stale", "incompatible", "current"].includes(r.rc.statusBefore.index?.status), fx.id + ": the " + FROM + " index is reported " + r.rc.statusBefore.index?.status);
-  check(JSON.stringify(r.rc.statusBefore.truth) === JSON.stringify(r.old.status.truth), fx.id + ": Truth counts differ between " + FROM + " and RC");
+  // The counts must match. Fields a newer status adds (0.2.2: truth.errors, empty when Truth loads completely) are not counts.
+  const counts = (t) => (t === null || t === undefined ? null : { requirements: t.requirements, decisions: t.decisions, constraints: t.constraints, declaredGaps: t.declaredGaps });
+  check(JSON.stringify(counts(r.rc.statusBefore.truth)) === JSON.stringify(counts(r.old.status.truth)), fx.id + ": Truth counts differ between " + FROM + " and RC");
+  check((r.rc.statusBefore.truth?.errors ?? []).length === 0, fx.id + ": the RC reports Truth errors in a repository " + FROM + " wrote");
   const d1 = duo(NEW, root, ["doctor", "--json"]);
   const summarize = (d) => ({ code: d.code, format: d.json?.result?.format ?? null, overall: d.json?.result?.overall ?? null,
     notOk: (d.json?.result?.checks ?? []).filter((c) => c.status !== "ok").map((c) => c.id + ":" + c.status + (c.reason ? "/" + c.reason : "")), next: (d.json?.result?.next ?? []).map((n) => n.id ?? n.action ?? n) });
