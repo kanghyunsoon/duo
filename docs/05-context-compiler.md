@@ -54,7 +54,7 @@ Compiler는 시작할 때 `inspectIndex`(T08.1)를 부르고 current일 때만 G
 | Symbol | token이 qualifiedName과 정확히 같은 Symbol 하나 | 1.0 |
 | Symbol 이름 | token이 이름과 같은 Symbol 하나 | 0.9 |
 | diff | `explicitSeeds`의 Entity(Graph에 있을 때). explicit(T13) | 1.0 |
-| 키워드 | Task를 검색어로 나눠(camelCase·snake_case 분해, 소문자, 불용어 제거, 한글은 공백 단위) Requirement 제목·본문, Decision 제목·question·answer, Constraint statement·keywords, Issue 제목·본문, Milestone 제목, Symbol 이름, 파일 경로에 BM25(k1 1.2, b 0.75). 최고값의 30% 이상인 상위 8개를 최고값으로 정규화해 × 0.6. ID token과, 존재하는 File로 exact path seed가 된 token은 BM25 검색어에 넣지 않는다(C249, T46: 경로 단어가 무관한 파일을 끌어오지 않도록. 나머지 단어는 그대로) | ≤ 0.6 |
+| 키워드 | Task를 검색어로 나눠(camelCase·snake_case 분해, 소문자, 불용어 제거, 한글은 공백 단위) Requirement 제목·본문, Decision 제목·question·answer, Constraint statement·keywords, Issue 제목·본문, Milestone 제목, Symbol 이름, 파일 경로에 BM25(k1 1.2, b 0.75). 최고값의 30% 이상인 상위 8개를 최고값으로 정규화해 × 0.6. ID token과, exact ID·path·Symbol seed로 소비된 token은 같은 요청의 BM25 검색어에 넣지 않는다: 존재하는 File로 exact path seed가 된 token(C249, T46), 유일한 qualified name·유일한 이름·하나의 callable group으로 Symbol seed가 된 token(C251, T50). 그 token의 단어(`src`·`auth`, `session`·`open`)가 이름이 겹치는 무관한 파일·Symbol과 그것을 governs하는 Decision을 끌어오지 않도록 한다. 각 신호의 해석 조건은 위 행 그대로이고, 해석되지 않거나 모호한 token과 나머지 단어는 그대로 검색어다 | ≤ 0.6 |
 
 Proposal ID(`P-018`)는 seed가 아니라 그 proposal을 PENDING HUMAN DECISIONS에 넣는 신호다.
 
@@ -78,7 +78,7 @@ Proposal ID(`P-018`)는 seed가 아니라 그 proposal을 PENDING HUMAN DECISION
 - Project Node는 지나가지 않는다. Milestone, Decision, Issue는 자기 seed 항목(depth 0)일 때만 확장한다. Decision 하나가 여러 Requirement를 governs하거나 Milestone이 모든 Requirement를 requires해도 형제 Requirement가 최고 weight로 끌려오지 않는다.
 - SUPERSEDES는 따라가지 않는다. 활성 Decision은 Project Truth의 `superseded_by`로 찾는다.
 - **언어 친화(T18.0)**: code 후보(File, Symbol, Test)가 자기를 데려온 code seed와 다른 언어 계열이면 순서 값에 `CROSS_LANGUAGE_FACTOR`(0.5)를 곱한다. Java Symbol이 seed면 Java subgraph가 먼저이고, 같은 Requirement를 구현한 Python·TypeScript 코드는 그 뒤에 남는다. TypeScript·TSX·JavaScript는 한 계열이고 Truth seed와 Analyzer 없는 파일은 언어가 없어 곱하지 않는다(TS만 있는 저장소의 순서는 그대로).
-- weight는 비교 순서로만 쓰고 Packet에 노출하지 않는다. Packet의 `rank`는 순서다. 정책을 바꾸면 `CONTEXT_POLICY_VERSION`(현재 "5": 3은 T42 H-76 explicit primary seed 우선, 4는 T46 C249 exact path token을 BM25 입력에서 제외, 5는 T47 C252 `./`·역슬래시 경로 표기를 canonical RepoPath로 해석)을 올린다.
+- weight는 비교 순서로만 쓰고 Packet에 노출하지 않는다. Packet의 `rank`는 순서다. 정책을 바꾸면 `CONTEXT_POLICY_VERSION`(현재 "6": 3은 T42 H-76 explicit primary seed 우선, 4는 T46 C249 exact path token을 BM25 입력에서 제외, 5는 T47 C252 `./`·역슬래시 경로 표기를 canonical RepoPath로 해석, 6은 T50 C251 exact Symbol token을 BM25 입력에서 제외)을 올린다.
 
 ## 후보 분류
 
