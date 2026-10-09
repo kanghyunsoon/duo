@@ -38,7 +38,7 @@ UI에서 허용하는 쓰기는 Human의 Decision Proposal **Confirm**과 **Reje
 - **Graph**: 검색으로 seed를 고르고 기존 trace/impact operation으로 depth 1–3의 bounded 관계를 탐색한다. Node/edge 목록에서 entity 상세로 이동한다. 전체 Graph와 별도 force-directed engine을 사용하지 않는다.
 - **Coverage**: 언어별 L0/L1/L2와 file, symbol, test, import, call, type resolution 범위 및 limitation을 표시한다. L0는 정상 file-level fallback이다.
 - **Context**: 입력 task로 Packet을 생성하고 seed, confirmed intent, decision, code, test, gap, evidence, token metric, omitted candidate를 보여준다. Stale index는 명시적으로 `index-required`로 표시한다.
-- **Review / Reviews / Evidence**: 현재 diff에 대한 결정적 verdict와 Claim/Evidence, baseline provenance, 선택적 semantic supplement를 분리한다. Review 실행은 Record를 자동 생성하지 않는다. 기록된 Review와 Evidence pointer는 별도로 탐색한다.
+- **Review / Reviews / Evidence**: 현재 diff에 대한 결정적 verdict와 Claim/Evidence, baseline provenance, 선택적 semantic supplement를 분리한다. live Review의 Decision claim은 Subject 칸에 lifecycle을 작게 보인다(C241: `current authority · supersedes D-001`, `superseded · superseded by D-002`, CLI와 같은 문구). 기록된 Review는 Record에 담긴 pointer만 보이고 현재 Truth와 다시 join하지 않으므로 lifecycle 줄이 없다. Review 실행은 Record를 자동 생성하지 않는다. 기록된 Review와 Evidence pointer는 별도로 탐색한다.
 - **Search / Entity**: Requirement ID, Decision ID, Symbol, File, Review ID를 찾고 URL로 직접 열 수 있다. Source viewer는 evidence slice만 제공한다.
 
 Refresh는 사용자 요청 또는 화면 전환 시에만 수행한다. 1초 polling, watcher, 자동 Index는 사용하지 않는다. 기본 LLM은 disabled이고, semantic Review는 사용자가 명시적으로 켤 때만 선택된 evidence slice를 전송한다.

@@ -544,10 +544,12 @@ ReviewResult {
   gaps?: KnowledgeGapAssessment; context?: { review?, task?, profile: "review", seeds }
   limitations; semanticAssist; metrics; diagnostics
 }
-ReviewClaim { id, rule, subject, expected, observed, alignment, evidenceIds(≥1), basis[], reason, enforced, blockEligible, drift, semanticCandidate, violationKey?, provenance? }   // T14.1: baseline 규칙(decision-forbids, declared-reference, external-source-drift, H-72 decision-forbids-import)
+ReviewClaim { id, rule, subject, expected, observed, alignment, evidenceIds(≥1), basis[], reason, enforced, blockEligible, drift, semanticCandidate, violationKey?, provenance?, decisionAuthority? }   // T14.1: baseline 규칙(decision-forbids, declared-reference, external-source-drift, H-72 decision-forbids-import)
+DecisionAuthority { state, active, supersedes, supersededBy }   // C241(T49): subject가 Truth의 Decision인 claim만
 ```
 
 - Claim ID는 `claim-` + hash(rule, subject, 구분 key, diff identity)이며 실행 시각이나 발견 순서를 쓰지 않는다.
+- `decisionAuthority`(C241, T49, additive): subject가 Decision이고 rule이 읽은 같은 complete Project Truth에 그 ID가 있으면 붙는다. `state`·`supersedes`·`supersededBy`는 그 Decision 파일의 값 그대로이고, `active`는 rule이 쓰는 authority 판정(`confirmed`이고 `supersededBy`가 없음)이다. 직접 관계만 담고 chain을 풀거나 Git history에서 추론하지 않으며, 두 Decision의 값이 서로 맞지 않아도 고치지 않는다(판정은 `supersede-integrity`). verdict·claim ID·evidence 뒤에 붙는 설명이라 판정 signal이 아니고, semantic assist 입력과 Review Record body(따라서 Record ID)에 들어가지 않는다. Requirement·Constraint·file·test claim과 LLM semantic claim에는 없다.
 - PASS는 "DUO가 현재 Evidence 범위에서 방향 위반을 찾지 못했다"는 뜻이지 버그가 없다는 뜻이 아니다.
 - T13.1 규칙: `unlinked-addition`(R-SCOPE, task가 있을 때 task 맥락 밖이고 IMPLEMENTS가 없는 추가 application 파일 → UNKNOWN drift, 의미 후보, BLOCK 불가), `external-source-drift`(R-DRIFT, 명시적 `{path, hash, section?}`의 hash 불일치 → PARTIAL). limitation `external-source-unavailable`(원격·저장소 밖·secret·없는 파일), `external-source-hash-invalid`.
 - `semanticAssist.provider`: 호출한 Provider의 `id`, 보고된 `model`, `cacheIdentity`(secret 없음).
