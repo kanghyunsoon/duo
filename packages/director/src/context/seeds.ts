@@ -8,7 +8,7 @@
  * a shell argument or SQL.
  */
 import {
-  compareUtf8, definitionRef, fileRef, isDefinitionId, normalizeRepoPath, PROPOSAL_ID_PATTERN, type DefinitionType, type EntityRef, type EntityType, type ProjectTruth,
+  compareUtf8, definitionRef, fileRef, isDefinitionId, normalizeRepoPath, PROPOSAL_ID_PATTERN, type DefinitionType, type EntityRef, type EntityType, type ProjectTruth, type RepoPath,
 } from "@duo-director/core";
 import type { GraphNode, GraphReader } from "@duo-director/graph";
 import { searchTerms } from "../relevance/terms.js";
@@ -48,17 +48,51 @@ export function keywordQueryTokens(tokens: readonly string[], idTokens: Readonly
   return tokens.filter((t) => !idTokens.has(t) && !pathTokens.has(t));
 }
 
+const SEPARATORS = /[\s,;:!?()[\]{}<>"'`]+/u;
+
 function rawTokens(task: string): string[] {
-  return task.split(/[\s,;:!?()[\]{}<>"'`]+/u).map((t) => t.replace(/^[.]+|[.]+$/gu, "")).filter((t) => t.length > 0);
+  return taskWords(task).map((w) => w.token);
+}
+
+interface TaskWord {
+  /** The token every other signal reads (IDs, names, BM25): surrounding dots removed. */
+  readonly token: string;
+  /**
+   * The same word as a path is written (C252, T47): only trailing sentence dots removed, so a leading "./" or ".\\"
+   * survives and reaches normalizeRepoPath. Other leading dots are removed as in token.
+   */
+  readonly pathText: string;
+}
+
+function taskWords(task: string): TaskWord[] {
+  return task.split(SEPARATORS).map((w) => {
+    const token = w.replace(/^[.]+|[.]+$/gu, "");
+    const trimmed = w.replace(/[.]+$/u, "");
+    return { token, pathText: /^\.[\\/]/u.test(trimmed) ? trimmed : token };
+  }).filter((w) => w.token.length > 0);
+}
+
+/**
+ * The canonical RepoPath a task word names, when it is written as a repository-relative path with at least one
+ * separator: "/" or "\\", optionally after "./" or ".\\" (C252, T47). core normalizeRepoPath decides; absolute paths and
+ * paths leaving the repository are not paths here. A root file without a separator is not a path signal.
+ */
+function pathOf(pathText: string): RepoPath | undefined {
+  if (!pathText.includes("/") && !pathText.includes("\\")) return undefined;
+  return normalizeRepoPath(pathText).value;
 }
 
 /** A symbol name or qualified name the task can name (one token). */
 const NAME_TOKEN = /^[A-Za-z_$][\w$]*(?:\.#?[A-Za-z_$][\w$]*)*$/u;
 
-/** The path, written as is in a task, is read as a path seed: one token with a / (T26.2 remediation). */
+/**
+ * The path, written as is in a task, is read as a path seed: one word with a separator that normalizes to a
+ * repository-relative RepoPath (T26.2 remediation; C252: "./", ".\\" and "\\" spellings too). Whether the File exists is
+ * decided at resolution.
+ */
 export function isPathSignal(path: string): boolean {
-  const tokens = rawTokens(path);
-  return tokens.length === 1 && tokens[0] === path && path.includes("/") && normalizeRepoPath(path).value === path;
+  const words = taskWords(path);
+  return words.length === 1 && words[0]?.pathText === path && pathOf(path) !== undefined;
 }
 
 /** The name, written as is in a task, is read as a symbol name and not as an ID (T26.2 remediation). */
@@ -151,7 +185,8 @@ export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphRead
     if (node !== undefined) { add(node, "diff", refOfNode(node), SEED_STRENGTH.diff); exact++; }
   }
 
-  const tokens = rawTokens(task);
+  const words = taskWords(task);
+  const tokens = words.map((w) => w.token);
   const idTokens = new Set<string>();
   for (const token of tokens) {
     const upper = token.toUpperCase();
@@ -168,14 +203,13 @@ export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphRead
   // C249 (T46): a token that resolved to an existing File as an exact path seed is not reused as keyword input;
   // otherwise its path words (src, auth, ts ...) pull unrelated files, and the Decisions governing them, in by BM25.
   const pathTokens = new Set<string>();
-  for (const token of tokens) {
+  for (const { token, pathText } of words) {
     if (idTokens.has(token)) continue;
-    if (token.includes("/")) {
-      const p = normalizeRepoPath(token.replace(/^\.\//u, "")).value;
-      const node = p === undefined ? undefined : store.getNode(fileRef(p));
-      if (node !== undefined) { add(node, "path", token, SEED_STRENGTH.path); exact++; pathTokens.add(token); }
-      continue;
-    }
+    const p = pathOf(pathText);
+    const node = p === undefined ? undefined : store.getNode(fileRef(p));
+    // term: the path as the task spells it ("./src/a.ts", "src\\a.ts"); ref stays the canonical RepoPath.
+    if (node !== undefined) { add(node, "path", pathText, SEED_STRENGTH.path); exact++; pathTokens.add(token); continue; }
+    if (token.includes("/")) continue;
     const name = token.replace(/\(\)$/u, "");
     if (!NAME_TOKEN.test(name) || name.length < 3) continue;
     const qualified = symbols.filter((s) => s.payload.qualifiedName === name);

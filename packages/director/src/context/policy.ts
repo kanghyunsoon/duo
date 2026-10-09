@@ -14,8 +14,10 @@ import type { ContextTier } from "./types.js";
  * 3: H-76 (T42, F-23): explicit primary seeds (a Requirement or Issue named by exact ID) take their highest fitting
  * representation before normal promotion; the selection changes, so old cached Packets must stop matching.
  * 4: C249 (T46): an exact path token is not reused as BM25 keyword input (a task token that resolved to an existing File).
+ * 5: C252 (T47): repository-relative "./" and backslash path spellings resolve through the canonical RepoPath before
+ * exact path seeding.
  */
-export const CONTEXT_POLICY_VERSION = "4";
+export const CONTEXT_POLICY_VERSION = "5";
 
 /** Per-hop multiplier. A candidate's order value is seed strength × Π hop weights (best path). */
 export const EDGE_WEIGHTS: Readonly<Record<Exclude<GraphEdgeType, "SUPERSEDES">, number>> = {

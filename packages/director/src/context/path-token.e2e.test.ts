@@ -1,7 +1,8 @@
 /**
  * C249 (T46): a task token that resolved to an existing File as an exact path seed is not reused as BM25 keyword
  * input. Only that token is withdrawn: the other words of the task, IDs (already excluded) and path-like tokens that
- * matched no File keep their behavior.
+ * matched no File keep their behavior. C252 (T47): "./", ".\\" and backslash spellings of a repository path are the same exact
+ * path seed.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -9,7 +10,7 @@ import path from "node:path";
 import type { AnalyzerRegistry } from "@duo-director/analyzer";
 import { createDecisionService } from "@duo-director/core";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { keywordQueryTokens } from "./seeds.js";
+import { isPathSignal, keywordQueryTokens } from "./seeds.js";
 import { contextRegistry, makeContextRepo, type ContextRepo } from "./testing.js";
 import type { ContextResult } from "./types.js";
 
@@ -90,12 +91,45 @@ describe("exact path tokens are not BM25 input (C249, T46)", () => {
     expect(active(twice)).toEqual(active(once));
   });
 
-  it("6 a path-like token that matches no File keeps the keyword behavior (also ./ and backslash forms, which are not exact today)", async () => {
-    for (const task of ["Modify src/auth/sessions.ts", "./src/auth/session.ts", "src\\auth\\session.ts"]) {
+  it("6 a path-like token that matches no File keeps the keyword behavior", async () => {
+    for (const task of ["Modify src/auth/sessions.ts", "./src/auth/missing.ts"]) {
       const r = await repo.compile({ task, budget: 6000 });
       expect(r.packet?.seeds.some((s) => s.match === "path"), task).toBe(false);
       expect(keywordSeeds(r).length, task).toBeGreaterThan(0);
     }
+  });
+
+  it("C252 ./, .\\ and backslash spellings are the same exact File; the term keeps the spelling, the ref is canonical", async () => {
+    for (const task of ["src/auth/session.ts", "./src/auth/session.ts", "src\\auth\\session.ts", ".\\src\\auth\\session.ts",
+      "Modify src/auth/session.ts.", "Modify ./src/auth/session.ts.", "Modify src\\auth\\session.ts."]) {
+      const r = await repo.compile({ task, budget: 6000 });
+      expect(r.packet?.seeds.map((s) => [s.ref, s.match]), task).toEqual([["src/auth/session.ts", "path"]]);
+      expect(active(r), task).toEqual(["D-001"]);
+    }
+    const dotted = await repo.compile({ task: ".\\src\\auth\\session.ts", budget: 6000 });
+    expect(dotted.packet?.seeds[0]?.term).toBe(".\\src\\auth\\session.ts");
+  });
+
+  it("C252 absolute, UNC and repository-escaping spellings are never exact path seeds", async () => {
+    for (const task of ["/src/auth/session.ts", "C:\\repo\\src\\auth\\session.ts", "\\\\server\\share\\src\\auth\\session.ts", "../src/auth/session.ts", "src/../../secret.ts"]) {
+      const r = await repo.compile({ task, budget: 6000 });
+      expect(r.packet?.seeds.some((s) => s.match === "path"), task).toBe(false);
+    }
+  });
+
+  it("C252 spellings follow C249: no path words in BM25, the other words stay; several spellings of one File are one seed", async () => {
+    const r = await repo.compile({ task: "Modify .\\src\\auth\\session.ts payment retry", budget: 6000 });
+    expect(seeds(r)[0]).toBe("src/auth/session.ts/path");
+    expect(keywordSeeds(r).some((s) => s.startsWith("src/auth/"))).toBe(false);
+    expect(keywordSeeds(r)).toContain("src/payment/retry.ts");
+    const many = await repo.compile({ task: "src/auth/session.ts ./src/auth/session.ts .\\src\\auth\\session.ts", budget: 6000 });
+    expect(seeds(many)).toEqual(["src/auth/session.ts/path"]);
+    expect(active(many)).toEqual(["D-001"]);
+  });
+
+  it("C252 isPathSignal agrees with resolution", () => {
+    for (const p of ["src/auth/session.ts", "./src/auth/session.ts", "src\\auth\\session.ts", ".\\src\\auth\\session.ts"]) expect(isPathSignal(p), p).toBe(true);
+    for (const p of ["/src/auth/session.ts", "C:\\repo\\a.ts", "\\\\server\\share\\a.ts", "../a.ts", "src/../../a.ts", "package.json", "src/a.ts.", "src/a.ts b"]) expect(isPathSignal(p), p).toBe(false);
   });
 
   it("7-8 an ID with a path: both exact, no path words; an ID with words: the words stay", async () => {
