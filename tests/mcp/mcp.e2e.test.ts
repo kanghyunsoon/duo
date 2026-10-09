@@ -261,8 +261,9 @@ describe("Truth lookups and dirty-baseline Review provenance through MCP (TASK-0
     expect(r.structuredContent.verdict).toBe("BLOCK");
     // H-73 (C240): people read adoption-baseline wording; the machine values above are unchanged.
     const summary = String(r.content[0]?.text);
-    expect(summary).toContain("(not-in-adoption-baseline) [blocking]");
-    expect(summary).toContain("(in-adoption-baseline, touched)");
+    // C241 (T49): a Decision claim's tags also carry its lifecycle.
+    expect(summary).toContain("(not-in-adoption-baseline) [blocking; current authority]");
+    expect(summary).toContain("(in-adoption-baseline, touched) [current authority]");
     expect(summary).not.toMatch(/\((?:introduced|pre-existing|pre-existing-touched)\)/u);
     const human = duoctl(root, ["review", "--task", "AUTH-03"]).stdout;
     expect(human).toContain("[blocking, not-in-adoption-baseline]");
@@ -406,7 +407,7 @@ describe("H-73 provenance wording: an edited existing import line is not called 
     const ko = duoctl(p.root, ["review", "--locale", "ko"]).stdout;
     expect(ko).toContain("[blocking, 채택 기준선에 없음]");
     const summary = String(mcp.content[0]?.text);
-    expect(summary).toContain("(not-in-adoption-baseline) [blocking]");
+    expect(summary).toContain("(not-in-adoption-baseline) [blocking; current authority]");
     for (const out of [human, ko, summary]) {
       expect(out).not.toMatch(/introduced/u);
       expect(out).not.toMatch(/new import|newly introduced import|introduced relation/iu);

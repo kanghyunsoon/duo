@@ -9,7 +9,7 @@
  * free of bugs.
  */
 import type { GitDiffEnd } from "@duo-director/analyzer";
-import type { Diagnostic, EntityRef, Evidence, EvidenceBasis, RepoPath } from "@duo-director/core";
+import type { DecisionState, Diagnostic, EntityRef, Evidence, EvidenceBasis, RepoPath } from "@duo-director/core";
 import type { IndexStatus } from "@duo-director/graph";
 import type { KnowledgeGapAssessment } from "../gap/types.js";
 import type { LLMFailureCategory } from "../llm/contract/types.js";
@@ -81,6 +81,24 @@ export interface ReviewClaim {
   readonly violationKey?: string;
   /** Relative to the Adoption Baseline; absent without a usable baseline or for ALIGNED claims. */
   readonly provenance?: ViolationProvenance;
+  /**
+   * C241 (T49): lifecycle facts of the Decision this claim is about, read from the complete Project Truth the rules used.
+   * Present only for a deterministic claim whose subject is a Decision found in that Truth. Explanation only: it is set
+   * after the verdict, is not part of the claim ID and is not written to a Review Record.
+   */
+  readonly decisionAuthority?: DecisionAuthority;
+}
+
+/**
+ * The Decision's own lifecycle fields as Project Truth has them (C241). active is the rules' authority test
+ * (confirmed and not superseded). supersedes and supersededBy are the direct relations only, never a resolved chain,
+ * and are shown as written even when they disagree with the other Decision (supersede-integrity judges that).
+ */
+export interface DecisionAuthority {
+  readonly state: DecisionState;
+  readonly active: boolean;
+  readonly supersedes: string | null;
+  readonly supersededBy: string | null;
 }
 
 export interface ChangedHunk {

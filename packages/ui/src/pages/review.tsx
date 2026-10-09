@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { api } from "../api.js";
 import { Command, Empty, ErrorBox, Label, Page, Provenance, Section, Verdict } from "../components.js";
+import { authorityParts } from "../authority.js";
 import { GapList } from "./context.js";
 import { EvidenceList } from "./evidence.js";
 import type { Claim, Evidence, ReviewResult, SemanticAssist } from "../types.js";
@@ -17,7 +18,7 @@ export function ClaimTable(props: { readonly claims: readonly Claim[]; readonly 
       <tbody>{props.claims.map((c) => (
         <tr key={c.id}>
           <td><Label text={c.alignment} tone={c.alignment === "ALIGNED" ? "ok" : c.alignment === "CONFLICT" ? (c.blockEligible ? "block" : "warn") : "info"} />{c.blockEligible ? <Label text="blocking" tone="block" /> : null}{c.drift ? <Label text="drift" tone="warn" /> : null}</td>
-          <td>{c.rule}</td><td><code>{c.subject.id}</code></td>
+          <td>{c.rule}</td><td><code>{c.subject.id}</code>{c.decisionAuthority === undefined ? null : <div className="muted small">{authorityParts(c.decisionAuthority).join(" · ")}</div>}</td>
           <td>{c.reason}{c.observed === undefined ? null : <div className="muted small">{c.observed}</div>}</td>
           <td><Provenance value={c.provenance} /></td>
           <td>

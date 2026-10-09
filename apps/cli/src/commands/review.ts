@@ -4,7 +4,7 @@
  * index-required (--refresh indexes first); only --record writes, through recordReview(). A verdict
  * is not a process error: the exit code follows it only with --fail-on (or --strict).
  */
-import { provenanceLabel, recordReview, renderGapQuestions, reviewLlmMetric, type ReviewResult, type Verdict } from "@duo-director/director";
+import { decisionAuthorityLabel, provenanceLabel, recordReview, renderGapQuestions, reviewLlmMetric, type ReviewResult, type Verdict } from "@duo-director/director";
 import { normalizeRepoPath, type RepoPath } from "@duo-director/core";
 import { indexRepository } from "@duo-director/graph";
 import { diffEnd, projectReview, withGraphWriter } from "@duo-director/integration";
@@ -38,6 +38,8 @@ function renderReview(env: Env, r: ReviewResult): string[] {
   for (const c of shown) {
     const tags = [c.blockEligible ? "blocking" : "", c.provenance === undefined ? "" : provenanceLabel(c.provenance, L), c.drift ? "drift" : ""].filter((x) => x !== "").join(", ");
     out.push(`  ${c.alignment.padEnd(9)} ${c.rule.padEnd(26)} ${c.subject.id} · ${c.reason}${tags === "" ? "" : ` [${tags}]`}`);
+    // C241: the lifecycle of the Decision a shown claim is about (current authority, supersedes, superseded by).
+    if (c.decisionAuthority !== undefined) out.push(`            ${t(L, "review.authority", { label: decisionAuthorityLabel(c.decisionAuthority, L) })}`);
     const pointers = c.evidenceIds.map((id) => ev.get(id)?.pointer).filter((p) => p?.path !== undefined).slice(0, 3)
       .map((p) => `${p?.path ?? ""}${p?.lines === undefined ? "" : `:${p.lines[0]}-${p.lines[1]}`}`);
     if (pointers.length > 0) out.push(`            evidence: ${pointers.join(", ")}`);

@@ -73,6 +73,23 @@ describe("UI components (T18.1)", () => {
     expect(stale).toContain("duoctl index");
   });
 
+  it("C241: a live Review shows a Decision claim's lifecycle under its subject; other rows are unchanged", () => {
+    const claim = { id: "claim-1", rule: "decision-forbids", subject: { kind: "decision", id: "D-002" }, alignment: "CONFLICT", reason: "forbidden-symbol", evidenceIds: [], basis: [], blockEligible: true, drift: false };
+    const requirement = { id: "claim-2", rule: "test-coverage", subject: { kind: "requirement", id: "REQ-001" }, alignment: "PARTIAL", reason: "no-related-test", evidenceIds: [], basis: [], blockEligible: false, drift: false };
+    const r: ReviewResult = {
+      status: "ready", verdict: "BLOCK", baseline: { status: "present" }, diff: { identity: "sha256:d", from: "HEAD", to: "WORKTREE", files: [] },
+      claims: [{ ...claim, decisionAuthority: { state: "confirmed", active: true, supersedes: "D-001", supersededBy: null } }, requirement],
+      evidence: [], limitations: [], metrics: { llmCalls: 0 }, semanticAssist: { status: "not-requested", calls: 0, cacheHits: 0, claims: [], skippedChecks: [] },
+    };
+    const out = html(<ReviewView r={r} />);
+    expect(out).toContain("<code>D-002</code><div class=\"muted small\">current authority · supersedes D-001</div>");
+    expect(out).toContain("<code>REQ-001</code></td>");
+    const superseded = html(<ReviewView r={{ ...r, claims: [{ ...claim, subject: { kind: "decision", id: "D-001" }, decisionAuthority: { state: "superseded", active: false, supersedes: null, supersededBy: "D-002" } }] }} />);
+    expect(superseded).toContain("superseded · superseded by D-002");
+    expect(superseded).not.toContain("current authority");
+    expect(html(<ReviewView r={{ ...r, claims: [claim] }} />)).toContain("<code>D-002</code></td>");
+  });
+
   it("T40 N1: a failed review shows the Truth error and no verdict", () => {
     const failed = html(<ReviewView r={{ status: "failed", baseline: { status: "unknown" }, claims: [], evidence: [], limitations: [], metrics: { llmCalls: 0 },
       diagnostics: [{ code: "PROJECT_TRUTH_INVALID", message: "Project Truth could not be read completely (1 error: .duo-project/decisions/D-001.yaml)." }] } as unknown as ReviewResult} />);

@@ -28,7 +28,7 @@ import type { LLMProvider } from "../llm/contract/types.js";
 import { loadAdoptionBaseline } from "../adoption/baseline.js";
 import { PRE_T18_STRUCTURAL_LANGUAGES } from "../adoption/types.js";
 import { reviewVerdict } from "./aggregate.js";
-import type { RuleContext } from "./claims.js";
+import { withDecisionAuthority, type RuleContext } from "./claims.js";
 import { collectDiff } from "./diff.js";
 import { externalSourceDrift } from "./drift.js";
 import {
@@ -236,7 +236,8 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
   const result: ReviewResult = {
     format: "duo.review/1", status: "ready", request: requestIdentity, baseline, freshness,
     diff: { identity: diff.value.identity, from: diff.value.from, to: diff.value.to, files: allFiles },
-    seeds, verdict: verdict.verdict, verdictBasis: verdict.basis, claims, evidence,
+    // C241: lifecycle facts are added after the verdict and the semantic step, so neither sees them.
+    seeds, verdict: verdict.verdict, verdictBasis: verdict.basis, claims: withDecisionAuthority(truth, claims), evidence,
     ...(gaps === undefined ? {} : { gaps }),
     context: {
       profile: "review", seeds: reviewPacket?.seeds.map((s) => s.id) ?? [],

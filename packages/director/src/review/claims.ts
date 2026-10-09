@@ -12,7 +12,7 @@ import type { ContextPacket } from "../context/types.js";
 import { repositoryEvidence, truthEvidence } from "../evidence/sources.js";
 import type { EvidenceStore } from "../evidence/store.js";
 import { blockEligible } from "../llm/contract/evidence.js";
-import type { Alignment, ChangedFile, DiffSeed, ReviewClaim, ReviewRule, TestRunEvidence } from "./types.js";
+import type { Alignment, ChangedFile, DecisionAuthority, DiffSeed, ReviewClaim, ReviewRule, TestRunEvidence } from "./types.js";
 
 export interface RuleContext {
   readonly root: string;
@@ -123,6 +123,20 @@ export function seedEvidence(ctx: RuleContext, seed: DiffSeed): (string | undefi
 
 export function isActive(d: { readonly state: string; readonly supersededBy: string | null }): boolean {
   return d.state === "confirmed" && d.supersededBy === null;
+}
+
+/**
+ * C241 (T49): each claim about a Decision gets that Decision's lifecycle facts from the same complete Truth the rules
+ * read (exact ID match, isActive for active). Other claims are returned as they are. Nothing else in a claim changes.
+ */
+export function withDecisionAuthority(truth: Pick<ProjectTruth, "decisions">, claims: readonly ReviewClaim[]): ReviewClaim[] {
+  const decisions = new Map(truth.decisions.map((d) => [d.id, d] as const));
+  return claims.map((c) => {
+    const d = c.subject.kind === "decision" ? decisions.get(c.subject.id) : undefined;
+    if (d === undefined) return c;
+    const decisionAuthority: DecisionAuthority = { state: d.state, active: isActive(d), supersedes: d.supersedes, supersededBy: d.supersededBy };
+    return { ...c, decisionAuthority };
+  });
 }
 
 export function requirementRef(id: string) {

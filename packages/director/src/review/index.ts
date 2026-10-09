@@ -5,6 +5,7 @@ export {
 } from "./record.js";
 export { nonApplicationReason, type NonApplicationReason } from "./scope.js";
 export { PROVENANCE_LABELS, provenanceLabel, type ProvenanceLocale } from "./provenance-label.js";
+export { AUTHORITY_LABELS, decisionAuthorityLabel, decisionAuthorityParts } from "./authority-label.js";
 export { reviewVerdict, type VerdictResult } from "./aggregate.js";
 export { semanticSchema } from "./semantic.js";
 export type * from "./types.js";

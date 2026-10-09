@@ -80,7 +80,10 @@ export interface Claim {
   readonly id: string; readonly rule: string; readonly subject: { readonly kind: string; readonly id: string }; readonly alignment: string;
   readonly reason: string; readonly expected?: string; readonly observed?: string; readonly evidenceIds: readonly string[]; readonly basis: readonly string[];
   readonly blockEligible: boolean; readonly drift: boolean; readonly provenance?: string;
+  /** C241: present for a live Review claim about a Decision (never in a Review Record). */
+  readonly decisionAuthority?: DecisionAuthority;
 }
+export interface DecisionAuthority { readonly state: string; readonly active: boolean; readonly supersedes: string | null; readonly supersededBy: string | null }
 export interface SemanticAssist {
   readonly status: string; readonly failure?: string; readonly provider?: { readonly id: string; readonly model?: string };
   readonly claims: readonly { readonly claimId: string; readonly alignment: string; readonly reason?: string; readonly evidenceIds: readonly string[] }[];
