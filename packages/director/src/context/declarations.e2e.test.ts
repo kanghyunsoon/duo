@@ -70,8 +70,9 @@ describe("linked C++ declarations and definitions (T24.3, C218)", () => {
   it("a qualified name whose candidates are one linked group is one target with both ranges", async () => {
     const r = await compile("Basic.Foo");
     expect(r.status).toBe("ready");
-    // Both members match the qualified name; the task's words also give keyword seeds (unchanged).
+    // Both members match the qualified name. C251 (T50): the token resolved to one group, so its words are not BM25 input.
     expect(r.resolution?.seeds.filter((s) => s.match === "symbol").map((s) => s.id).sort()).toEqual([C, H]);
+    expect(r.resolution?.seeds.filter((s) => s.match === "keyword")).toEqual([]);
     const items = native(r).filter((c) => c.id === H || c.id === C);
     expect(items).toHaveLength(1);
     const t = items[0]?.text ?? "";

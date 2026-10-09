@@ -41,11 +41,13 @@ export function refOfNode(node: Pick<GraphNode, "ref">): string {
 }
 
 /**
- * The task tokens BM25 reads: not definition or proposal IDs, and not tokens that resolved to an exact File path seed
- * (C249, T46). Other words, including path-like tokens that matched no File, stay keyword input.
+ * The task tokens BM25 reads: not definition or proposal IDs, and not tokens consumed by an exact seed. exactTokens holds
+ * the tokens that resolved to an existing File as a path seed (C249, T46) or to a Symbol (qualified name, unique name or
+ * one callable group, C251, T50). Other words, including path-like or name-like tokens that matched nothing or were
+ * ambiguous, stay keyword input.
  */
-export function keywordQueryTokens(tokens: readonly string[], idTokens: ReadonlySet<string>, pathTokens: ReadonlySet<string>): string[] {
-  return tokens.filter((t) => !idTokens.has(t) && !pathTokens.has(t));
+export function keywordQueryTokens(tokens: readonly string[], idTokens: ReadonlySet<string>, exactTokens: ReadonlySet<string>): string[] {
+  return tokens.filter((t) => !idTokens.has(t) && !exactTokens.has(t));
 }
 
 const SEPARATORS = /[\s,;:!?()[\]{}<>"'`]+/u;
@@ -200,32 +202,33 @@ export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphRead
 
   const symbols = listAll(store, "symbol");
   const files = listAll(store, "file");
-  // C249 (T46): a token that resolved to an existing File as an exact path seed is not reused as keyword input;
-  // otherwise its path words (src, auth, ts ...) pull unrelated files, and the Decisions governing them, in by BM25.
-  const pathTokens = new Set<string>();
+  // C249 (T46), C251 (T50): a token that resolved to an existing File or a Symbol as an exact seed is not reused as
+  // keyword input; otherwise its words (src, auth, ts ...; session, open ...) pull unrelated files and symbols, and the
+  // Decisions governing them, in by BM25. Unresolved and ambiguous tokens stay keyword input.
+  const exactTokens = new Set<string>();
   for (const { token, pathText } of words) {
     if (idTokens.has(token)) continue;
     const p = pathOf(pathText);
     const node = p === undefined ? undefined : store.getNode(fileRef(p));
     // term: the path as the task spells it ("./src/a.ts", "src\\a.ts"); ref stays the canonical RepoPath.
-    if (node !== undefined) { add(node, "path", pathText, SEED_STRENGTH.path); exact++; pathTokens.add(token); continue; }
+    if (node !== undefined) { add(node, "path", pathText, SEED_STRENGTH.path); exact++; exactTokens.add(token); continue; }
     if (token.includes("/")) continue;
     const name = token.replace(/\(\)$/u, "");
     if (!NAME_TOKEN.test(name) || name.length < 3) continue;
     const qualified = symbols.filter((s) => s.payload.qualifiedName === name);
-    if (qualified.length === 1 && qualified[0] !== undefined) { add(qualified[0], "symbol", token, SEED_STRENGTH.symbol); exact++; continue; }
+    if (qualified.length === 1 && qualified[0] !== undefined) { add(qualified[0], "symbol", token, SEED_STRENGTH.symbol); exact++; exactTokens.add(token); continue; }
     if (qualified.length > 1 && name.includes(".")) {
-      if (oneGroup(groups, qualified)) { for (const n of qualified) add(n, "symbol", token, SEED_STRENGTH.symbol); exact++; continue; }
+      if (oneGroup(groups, qualified)) { for (const n of qualified) add(n, "symbol", token, SEED_STRENGTH.symbol); exact++; exactTokens.add(token); continue; }
       if (qualified.length <= SYMBOL_NAME_MAX_MATCHES) ambiguities.push({ term: name, reason: "qualified-name", options: qualified.map(option) });
       continue;
     }
     const named = qualified.length > 1 ? qualified : symbols.filter((s) => s.payload.name === name);
-    if (named.length === 1 && named[0] !== undefined) { add(named[0], "symbol-name", token, SEED_STRENGTH["symbol-name"]); exact++; }
-    else if (oneGroup(groups, named)) { for (const n of named) add(n, "symbol-name", token, SEED_STRENGTH["symbol-name"]); exact++; }
+    if (named.length === 1 && named[0] !== undefined) { add(named[0], "symbol-name", token, SEED_STRENGTH["symbol-name"]); exact++; exactTokens.add(token); }
+    else if (oneGroup(groups, named)) { for (const n of named) add(n, "symbol-name", token, SEED_STRENGTH["symbol-name"]); exact++; exactTokens.add(token); }
     else if (named.length > 1 && named.length <= SYMBOL_NAME_MAX_MATCHES) ambiguities.push({ term: name, reason: "symbol-name", options: named.map(option) });
   }
 
-  const ranked = bm25(keywordDocs(truth, store, symbols, files), searchTerms(keywordQueryTokens(tokens, idTokens, pathTokens).join(" ")));
+  const ranked = bm25(keywordDocs(truth, store, symbols, files), searchTerms(keywordQueryTokens(tokens, idTokens, exactTokens).join(" ")));
   const best = ranked[0]?.score ?? 0;
   const keyword = ranked.filter((r) => r.score >= best * KEYWORD.minFraction).slice(0, KEYWORD.top);
   if (exact === 0 && ambiguities.length === 0) {
