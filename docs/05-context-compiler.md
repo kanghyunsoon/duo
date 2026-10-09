@@ -50,7 +50,7 @@ Compiler는 시작할 때 `inspectIndex`(T08.1)를 부르고 current일 때만 G
 | 신호 | 규칙 | 강도 |
 |---|---|---|
 | ID | Task의 정의 ID(Requirement, Decision, Constraint, Issue, Milestone). Issue key는 대소문자 무관(`game-42`). Graph에 없으면 `unresolvedIds` | 1.0 |
-| 경로 | `/`가 있는 token이 File Node 경로와 정확히 같음 | 1.0 |
+| 경로 | 구분자(`/` 또는 `\`)가 있는 저장소 상대 경로 token이 core `normalizeRepoPath`로 정규화한 뒤 존재하는 File Node 경로와 같음. task에는 POSIX·역슬래시 구분자와 선택적 `./`·`.\`를 쓸 수 있고 저장되는 RepoPath는 POSIX다(C252, T47). 절대 경로·저장소 밖 경로·구분자 없는 root 파일은 경로 신호가 아니다. seed `term`은 task의 표기, `ref`는 canonical 경로 | 1.0 |
 | Symbol | token이 qualifiedName과 정확히 같은 Symbol 하나 | 1.0 |
 | Symbol 이름 | token이 이름과 같은 Symbol 하나 | 0.9 |
 | diff | `explicitSeeds`의 Entity(Graph에 있을 때). explicit(T13) | 1.0 |
@@ -78,7 +78,7 @@ Proposal ID(`P-018`)는 seed가 아니라 그 proposal을 PENDING HUMAN DECISION
 - Project Node는 지나가지 않는다. Milestone, Decision, Issue는 자기 seed 항목(depth 0)일 때만 확장한다. Decision 하나가 여러 Requirement를 governs하거나 Milestone이 모든 Requirement를 requires해도 형제 Requirement가 최고 weight로 끌려오지 않는다.
 - SUPERSEDES는 따라가지 않는다. 활성 Decision은 Project Truth의 `superseded_by`로 찾는다.
 - **언어 친화(T18.0)**: code 후보(File, Symbol, Test)가 자기를 데려온 code seed와 다른 언어 계열이면 순서 값에 `CROSS_LANGUAGE_FACTOR`(0.5)를 곱한다. Java Symbol이 seed면 Java subgraph가 먼저이고, 같은 Requirement를 구현한 Python·TypeScript 코드는 그 뒤에 남는다. TypeScript·TSX·JavaScript는 한 계열이고 Truth seed와 Analyzer 없는 파일은 언어가 없어 곱하지 않는다(TS만 있는 저장소의 순서는 그대로).
-- weight는 비교 순서로만 쓰고 Packet에 노출하지 않는다. Packet의 `rank`는 순서다. 정책을 바꾸면 `CONTEXT_POLICY_VERSION`(현재 "4": 3은 T42 H-76 explicit primary seed 우선, 4는 T46 C249 exact path token을 BM25 입력에서 제외)을 올린다.
+- weight는 비교 순서로만 쓰고 Packet에 노출하지 않는다. Packet의 `rank`는 순서다. 정책을 바꾸면 `CONTEXT_POLICY_VERSION`(현재 "5": 3은 T42 H-76 explicit primary seed 우선, 4는 T46 C249 exact path token을 BM25 입력에서 제외, 5는 T47 C252 `./`·역슬래시 경로 표기를 canonical RepoPath로 해석)을 올린다.
 
 ## 후보 분류
 
