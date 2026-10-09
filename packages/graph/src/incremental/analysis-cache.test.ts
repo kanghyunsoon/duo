@@ -73,7 +73,9 @@ describe("analysis cache check (T25.1)", () => {
     const shuffled = [...keys].reverse();
     expect(await readCachedAnalyses(root, shuffled)).toEqual(shuffled.map((k) => reference(root, k)));
     expect(await readCachedAnalyses(root, [])).toEqual([]);
-  });
+    // C253 (T48): about 0.3 s alone, about 5 s under the full suite on Windows. The default 5 s timeout let the
+    // unfinished reads run on into the next tests, so this test gets its own limit.
+  }, 30_000);
 
   it("a symlinked cache directory makes every entry a miss, as before", async () => {
     const { root, keys } = cacheWithFailures();
@@ -95,6 +97,8 @@ describe("analysis cache check (T25.1)", () => {
     const original = fs.promises.readFile.bind(fs.promises);
     let inFlight = 0, peak = 0, n = 0;
     vi.spyOn(fs.promises, "readFile").mockImplementation((async (...args: Parameters<typeof fs.promises.readFile>) => {
+      // Only this test's reads count: a read from another test's cache passes through uncounted (C253).
+      if (!String(args[0]).startsWith(root)) return original(...args);
       inFlight++; peak = Math.max(peak, inFlight);
       // Later keys finish first: reverse completion order.
       await new Promise((r) => setTimeout(r, 20 - (n++ % 20)));
