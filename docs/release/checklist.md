@@ -15,6 +15,21 @@
 | `pnpm test:conformance` | RC를 격리 prefix에 설치 → runtime tree(설치 트리 = `dist/runtime-tree.json`, package 밖 설치 0)·notices → C209 init 반복(`DUO_C209_RUNS`, 기본 20) → 설치된 duoctl로 CLI·MCP·install journey와 RC 전용 검사 → 문서·help 대조 → `.dist/release-conformance.json` | 필요(npm install) |
 | `pnpm release:verify-published` | publish **뒤** 확인(T21): registry의 name·version·integrity·license·engines·bin → 빈 npm 설정과 새 cache로 임시 prefix에 `npm install -g` → 설치된 파일 수(bundled `node_modules/` 포함, npm이 만든 `.bin` 제외)·LICENSE·runtime tree(0.2.1부터 설치 트리 = `dist/runtime-tree.json`, 그 전 version은 `npm-shrinkwrap.json` 존재) → PATH의 `duoctl --version`·`--version --json`·`--help` → 새 Git 저장소에서 `init`→`status` → origin의 `v<version>` tag commit → GitHub Release(draft 아님) → `.dist/release-published.json`. 기대 integrity와 commit은 `--integrity`·`--commit` 또는 같은 version의 `.dist/release-candidate.json`. publish·tag·login을 하지 않고 npm credential을 읽지 않는다. CI와 `pnpm verify`에는 넣지 않는다 | 필요 |
 
+## 0.3.0-rc.4 (H-74, 2026-10-10 prerelease, dist-tag `next`, `v0.3.0-rc.4` = `96031d8`)
+
+Prerelease on branch `next`: rc.3 이후의 T44(review-pending), T45(Issue `implements.paths`, H-78), T46·T47·T50(Context exact path·Symbol token, `./`·역슬래시 경로), T49(Review Decision lifecycle), T48(test 격리)을 담는다. H-74 exact target `96031d8983978a201e353342f1c67309dcbfecb3`. stable 0.3.0 승격은 하지 않았고 `next`를 `main`에 merge하지 않았다. External Validation 01은 정확히 0.2.1이다. [release notes](https://github.com/kanghyunsoon/duo/blob/next/docs/release/notes-0.3.0-rc.4.md)
+
+- [x] version 0.3.0-rc.4, release lock(diff는 version 2줄, 67 packages), release notes(`next` `96031d8` = source candidate). T50 product commit `2df00b7`의 verify·docs·CI(37923824859) 통과 기록은 별도이고 gate는 새 commit에서 다시 실행
+- [x] tarball `duo-director-cli-0.3.0-rc.4.tgz` 24,378,111 B(unpacked 114,184,681 B), 7,468 files, bundled 67, sha1 `2eeb53fa43f1b433599856b2d98be2281f2b461e`, sha256 `af782c381740ee25a22dc81058e996bb1f496d87a5af3097d1ea0c164d62ceee`, integrity `sha512-1c94ejdonhqRnBD5UBau7AlLaprGRNNK6Bf+RSUzc7YBScS/1dIlXDGYb9ziSooiQqOITSW/mRRBJfJgYTGZ/w==`, runtime tree `264ab643bb960f509d537f4097c56120b4f368123fe729fd5d1b330d64d09251`. preflight 재pack과 독립 pack 모두 byte 동일
+- [x] CI 3 OS(run 37935400981) success
+- [x] `pnpm release:preflight` READY(ready·codeReady·externalReady true, blockers 0, releaseChannel prerelease, branch next = next, upstream origin/next, dry-run tag next): verify, grammar, benchmark smoke, 배포 E2E, conformance(97/0, C209 20/0), upgrade(0.2.0 → RC), audit high/critical 0·deprecated 0, secret·절대경로 0, license 비허용 0, dry-run 7,468 = RC. 앞선 두 번은 BLOCKED: 1차 CI 진행 중·npm 로그인 만료, 2차 full verify 부하에서 `tests/install/install.e2e.test.ts`의 두 번째 MCP probe(30초)가 `verify-failed`(같은 commit의 다른 verify·packed conformance·CI·단독 5회 통과, 코드 변경 없이 재실행, 부하 의존 flaky로 기록)
+- [x] upgrade 0.2.2 → RC, 설치 matrix npm 10/11/12 global과 npm 11 local(runtime tree, package 밖 설치 0, MCP 9, BLOCK, `--fail-on block` 4, invalid Truth fail-closed), 칸별 T42(TASK-014 7/7, TASK-010 6/6)·canonical Decision(틀린 digest 거부)·T46/T47/T50 Context, packed T49·N1 e2e, T45(TASK-015 → D-004·D-005), T44 PTY(2개 확정, 1개 pending, non-TTY 거부), downgrade rc.4 → 0.2.2 fail-closed(`imported_paths`, `implements.paths`; 0.2.1은 누락·PASS)
+- [x] H-74 기록(main `b6c8aaa`, target `96031d8`)
+- [x] npm publish `@duo-director/cli@0.3.0-rc.4` `--tag next --access public`(검증한 tarball 그대로, 2FA 1회): registry integrity·shasum·fileCount = RC, `next` = 0.3.0-rc.4, `latest` = 0.2.2 그대로, rc.3 공개 상태 그대로
+- [x] registry 설치(`@duo-director/cli@next`) npm 10/11/12 global과 npm 11 local: `duoctl 0.3.0-rc.4`, runtime tree, package 밖 설치 0, doctor, MCP 9, canonical BLOCK, invalid Truth fail-closed, T42, T46/T47/T50, T45
+- [x] annotated tag `v0.3.0-rc.4` → `96031d8`, GitHub Release "DUO 0.3.0-rc.4"(draft 아님, prerelease true, tarball 첨부). GitHub latest release는 계속 v0.2.2
+- [x] `pnpm release:verify-published` OK(problems 0, channel prerelease, dist-tags next 0.3.0-rc.4·latest 0.2.2, tag commit = H-74 target)
+
 ## 0.3.0-rc.3 (H-74, C247, 2026-10-07 prerelease, dist-tag `next`, `v0.3.0-rc.3` = `ea4a561`)
 
 Prerelease on branch `next`: rc.2와 같은 제품(MCP SDK 2.2.0)에 release channel 수정(C247)만 더했다. H-74 exact target `ea4a5617292024486e53d2fb58fd0c76fa8bf729`. stable 0.3.0 승격은 하지 않았고 `next`를 `main`에 merge하지 않았다. External Validation 01은 정확히 0.2.1이다.
