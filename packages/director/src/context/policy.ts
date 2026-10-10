@@ -18,8 +18,10 @@ import type { ContextTier } from "./types.js";
  * exact path seeding.
  * 6: C251 (T50): a task token that resolved to an exact Symbol seed (qualified name, unique name or one callable group)
  * is not reused as BM25 keyword input.
+ * 7: C256 (T54): a task path keeps the leading dots of its first directory (".github/workflows/ci.yml") for exact path
+ * resolution.
  */
-export const CONTEXT_POLICY_VERSION = "6";
+export const CONTEXT_POLICY_VERSION = "7";
 
 /** Per-hop multiplier. A candidate's order value is seed strength × Π hop weights (best path). */
 export const EDGE_WEIGHTS: Readonly<Record<Exclude<GraphEdgeType, "SUPERSEDES">, number>> = {

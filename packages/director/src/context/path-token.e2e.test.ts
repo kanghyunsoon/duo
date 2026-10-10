@@ -148,7 +148,7 @@ describe("exact path tokens are not BM25 input (C249, T46)", () => {
     expect(r.packet?.seeds.every((s) => s.match === "keyword")).toBe(true);
     expect(keywordSeeds(r)).toContain("D-001");
   });
-it("cache: policy 4 packets miss first, then hit with the same bytes", async () => {
+it("cache: packets of the current policy miss first, then hit with the same bytes", async () => {
     const a = await repo.compile({ task: "Modify src/auth/session.ts", budget: 6000 }, { cache: true });
     const b = await repo.compile({ task: "Modify src/auth/session.ts", budget: 6000 }, { cache: true });
     expect(a.cache.status).toBe("miss");

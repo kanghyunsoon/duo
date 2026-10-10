@@ -61,7 +61,9 @@ interface TaskWord {
   readonly token: string;
   /**
    * The same word as a path is written (C252, T47): only trailing sentence dots removed, so a leading "./" or ".\\"
-   * survives and reaches normalizeRepoPath. Other leading dots are removed as in token.
+   * survives and reaches normalizeRepoPath. C256 (T54): when the word has a separator its leading dots stay too, so a
+   * first directory such as ".github" or "..cache" is kept and normalizeRepoPath decides ("../" is still outside the
+   * repository). A word without a separator uses token.
    */
   readonly pathText: string;
 }
@@ -70,7 +72,7 @@ function taskWords(task: string): TaskWord[] {
   return task.split(SEPARATORS).map((w) => {
     const token = w.replace(/^[.]+|[.]+$/gu, "");
     const trimmed = w.replace(/[.]+$/u, "");
-    return { token, pathText: /^\.[\\/]/u.test(trimmed) ? trimmed : token };
+    return { token, pathText: /[\\/]/u.test(trimmed) ? trimmed : token };
   }).filter((w) => w.token.length > 0);
 }
 
