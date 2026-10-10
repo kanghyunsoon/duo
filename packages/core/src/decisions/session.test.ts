@@ -19,6 +19,13 @@ const write = (p: string, text: string) => { fs.mkdirSync(path.dirname(path.join
 const snapshot = () => fs.readdirSync(path.join(root, ".duo-project"), { recursive: true, encoding: "utf8" }).filter((f) => !/^runtime/u.test(f)).sort()
   .map((f) => [f, fs.statSync(path.join(root, ".duo-project", f)).isFile() ? fs.readFileSync(path.join(root, ".duo-project", f), "utf8") : "<dir>"]);
 const svc = () => createDecisionService({ root, clock: () => new Date("2026-10-07T00:00:00.000Z") });
+/**
+ * C255 (T53): the tests that run whole session simulations (Truth copy, preview and confirm per proposal, several
+ * plans) take about 0.4 s alone and up to 3.1 s in the full suite, but went past the default 5 s under extra load
+ * (7.1 s with a parallel MCP prober, 6.6 s with the CPU twice oversubscribed). They get their own limit; the rest keep
+ * the default.
+ */
+const SIMULATION_TIMEOUT = 30_000;
 const reviewed = async (ids: string[]) => Promise.all(ids.map(async (id) => ({ id, digest: (await svc().previewConfirm(id)).value?.digest ?? "" })));
 
 beforeEach(async () => {
@@ -49,7 +56,7 @@ describe("planConfirmSession (T44, F-07)", () => {
     expect(snapshot()).toEqual(before);
     // The real confirms bound to the plan digests succeed one by one with the ordinary confirm.
     for (const item of items) expect((await svc().confirm(human, item.id, { expectedDigest: item.preview.digest })).value?.decisionId).toBe(item.preview.expectedDecisionId);
-  });
+  }, SIMULATION_TIMEOUT);
 
   it("refuses when a proposal changed after the review", async () => {
     const r = await reviewed(["P-001", "P-002"]);
@@ -72,7 +79,7 @@ describe("planConfirmSession (T44, F-07)", () => {
     const dependent = await planConfirmSession({ root }, await reviewed(["P-001", "P-006"]));
     expect(dependent.diagnostics.map((d) => d.code)).toEqual(["DECISION_SESSION_CONFLICT"]);
     expect(dependent.diagnostics[0]?.message).toContain("supersedes D-002, which this session creates");
-  });
+  }, SIMULATION_TIMEOUT);
 
   it("refuses duplicate, empty and non-proposal selections", async () => {
     expect((await planConfirmSession({ root }, [])).diagnostics.map((d) => d.code)).toEqual(["INVALID_ID"]);
