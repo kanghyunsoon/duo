@@ -26,7 +26,9 @@ afterAll(async () => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- parsed CLI JSON
 type Json = any;
 const TASK = "Add a token signer and trim token values before verification";
-const NOTE = "No confirmed Requirement or Decision is linked to this task.";
+// C258 (T59): the missing-intent note speaks about the assembled context, never about "this task" or Decisions existing.
+const NOTE = "The context DUO assembled contains no confirmed Requirement or Decision intent.";
+const OLD_NOTE = "No confirmed Requirement or Decision is linked to this task.";
 const UNRESOLVED = "REQ-999 is not in the Project Truth. Which Requirement or Issue do you mean?";
 const recordId = (body: unknown) => "review-" + sha256Text(stableJson(body)).slice(7, 23);
 const shown = (r: Json) => (r.gaps?.gaps ?? []).filter((g: Json) => g.action !== "ignore");
@@ -139,9 +141,14 @@ describe("H-80: missing-intent is surfaced, not a WARN by itself (Benchmark 1 fi
     expect((byId.get(out.meta.record.id)?.review as Json).verdict).toBe("PASS");
     expect(byId.get(out.meta.record.id)?.format).toBe("duo.review-record/1");
     expect(byId.get(out.meta.record.id)?.gaps).toEqual(byId.get(oldId)?.gaps);
+    // C258: the record keeps language-neutral gap fields only, so the wording is not part of its body or ID.
+    const recordText = fs.readFileSync(path.join(repo, out.meta.record.path), "utf8");
+    expect(recordText).not.toContain(NOTE);
+    expect(recordText).not.toContain(OLD_NOTE);
+    expect(recordText).toContain('"kind": "missing-intent"');
   });
 
-  it("the violation stays BLOCK on the same claims; only the gap ID leaves verdictBasis.warn, so the Record ID changes", () => {
+  it("the violation stays BLOCK on the same claims; only the gap ID leaves verdictBasis.warn, so the Record ID changes", async () => {
     on("main");
     const r = duoctl(repo, [...change(), "--json"]).json().result;
     const introduced = r.claims.find((c: Json) => c.provenance === "introduced");
@@ -153,9 +160,21 @@ describe("H-80: missing-intent is surfaced, not a WARN by itself (Benchmark 1 fi
     expect(r.verdict).toBe("BLOCK");
     expect(r.verdictBasis).toEqual({ blocking: [introduced.id], ask: [], warn: [touched.id] });
     expect(exits(change())).toEqual({ default: 0, block: 4, ask: 4, warn: 4, strict: 4 });
+    // C258: the D-001 claims and the missing-intent note sit together without the note denying a confirmed Decision.
+    const human = duoctl(repo, change()).stdout;
+    expect(human).toMatch(/CONFLICT\s+decision-forbids\s+D-001/u);
+    expect(human).toContain("Knowledge gaps:\n  - " + NOTE);
+    expect(human).not.toContain(OLD_NOTE);
     const before = reviewRecordBody({ ...r, verdictBasis: { ...r.verdictBasis, warn: [touched.id, shown(r)[0].id] } });
     expect((before?.review as Json).verdict).toBe("BLOCK");
     expect(recordId(reviewRecordBody(r))).not.toBe(recordId(before));
+    const s = await startMcp(repo);
+    sessions.push(s);
+    const block = await s.call("duo_review_changes", { from: commits.baseline, to: commits.change });
+    expect(block.structuredContent.verdict).toBe("BLOCK");
+    expect(block.content.map((c) => c.text ?? "").join("\n")).toContain([
+      "- CONFLICT decision-forbids D-001: forbidden-symbol (not-in-adoption-baseline) [blocking; current authority]", "Knowledge gaps:", "- " + NOTE,
+    ].join("\n"));
   });
 
   it("a real WARN (a touched pre-existing violation) with the gap is still WARN and still fails --fail-on warn and --strict", () => {

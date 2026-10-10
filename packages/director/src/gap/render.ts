@@ -37,7 +37,9 @@ const TEMPLATES: Readonly<Record<GapLocale, Templates>> = {
     unresolved: (id) => `${id} is not in the Project Truth. Which Requirement or Issue do you mean?`,
     pending: (id, title, on) => `${id} "${title}" is an unconfirmed proposal. This task${on} depends on it; please confirm or reject it.`,
     declared: (owner, text) => `Open question in ${owner}: "${text}". It affects this task; please decide it.`,
-    missingIntent: () => "No confirmed Requirement or Decision is linked to this task.",
+    // C258 (T59): the signal is about the assembled context (Context packet intent tier), not about the task or the
+    // Project Truth as a whole; a review may have no task and its rules may still apply a confirmed Decision.
+    missingIntent: () => "The context DUO assembled contains no confirmed Requirement or Decision intent.",
     note: (owner, text) => `${owner}: UNKNOWN ${text}`,
     pendingNote: (id, title) => `${id} "${title}" is PENDING / NOT CONFIRMED`,
   },
@@ -46,7 +48,7 @@ const TEMPLATES: Readonly<Record<GapLocale, Templates>> = {
     unresolved: (id) => `${id}가 현재 Project Truth에 없습니다. 어떤 Requirement/Issue를 의미하는지 확인이 필요합니다.`,
     pending: (id, title, on) => `${id} "${title}"는 아직 확정되지 않은 제안입니다. 이 작업${on}은 이 결정에 의존하므로 확정 또는 거절이 필요합니다.`,
     declared: (owner, text) => `${owner}의 미확정 사항: "${text}". 이 작업에 영향을 주므로 값을 정해 주세요.`,
-    missingIntent: () => "이 작업과 연결된 확정 Requirement/Decision이 없습니다.",
+    missingIntent: () => "DUO가 구성한 Context에 확정된 Requirement/Decision intent가 없습니다.",
     note: (owner, text) => `${owner}: UNKNOWN ${text}`,
     pendingNote: (id, title) => `${id} "${title}"는 확정되지 않은 제안입니다(PENDING / NOT CONFIRMED)`,
   },

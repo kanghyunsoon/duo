@@ -81,4 +81,5 @@
 | Unchanged | `duo.review/1`(ReviewResult 형식, verdict enum, claim schema, `verdictBasis` 형식), `duo.gap-assessment/1`(gap kind·relevance·reasons·action `surface`·metrics), `duo.review-record/1` 형식, CLI·MCP·UI API 형식, MCP tool 9개와 input schema, 명령·옵션·종료 코드의 의미, `CONTEXT_POLICY_VERSION` 8 |
 | Review Record | Record body에 verdict와 verdictBasis가 들어가고 ID는 body의 hash다. 그래서 missing-intent gap이 있는 Review를 새로 기록하면 이전 정책의 같은 Review와 다른 ID가 난다(WARN → PASS인 경우와, verdict는 같고 verdictBasis.warn만 바뀐 경우 모두). 기존 Record는 다시 쓰지 않으며 그대로 읽힌다 |
 | 사람이 읽는 출력 | MCP `duo_review_changes` text 요약에 CLI와 같은 Knowledge gap 문구를 붙인다(문구는 계약이 아니다). CLI·UI 표시는 그대로다 |
+| 사람이 읽는 문구 (T59, C258) | missing-intent 문구를 en "The context DUO assembled contains no confirmed Requirement or Decision intent.", ko "DUO가 구성한 Context에 확정된 Requirement/Decision intent가 없습니다."로 바꿨다(옛 문구는 "this task"와 Decision 부재를 과장했다). CLI review·context 출력, MCP review·context text, `duo.context/1`의 렌더된 문장 필드(`gaps.surfaced[].note`) 값이 바뀐다. 형식, gap 데이터, verdict, Review Record body·ID, Context Packet은 그대로다 |
 | External Validation | External Validation 01은 정확히 0.2.1이며 그 버전의 기존 WARN 동작이 계속 관찰된다 |
