@@ -349,7 +349,7 @@ TASK-011. Gap은 "지금 작업에 중요한데 아직 정해지지 않은 것"�
 | `ambiguous-target` | Context `ambiguous`(선택지 포함) | ask |
 | `unresolved-target` | Task에 쓴 ID가 Project Truth에 없음 | ask |
 | `pending-decision` | Packet `pendingDecisions`. `requiresHumanDecision`이면 ask, 아니면 surface | ask / surface |
-| `missing-intent` | seed 없음, 또는 `no-confirmed-intent` signal | surface |
+| `missing-intent` | seed 없음, 또는 `no-confirmed-intent` signal | surface(Review verdict 근거 아님, H-80) |
 
 모델 `KnowledgeGap { id, source, kind, text?(Declared만), anchors, location?, relevance, reasons, action, key?, resolution?, term?, options?, target?, pending? }`와 평가 결과 `KnowledgeGapAssessment`는 [05 Knowledge Gap assessment](05-context-compiler.md#knowledge-gap-assessment)에 있다.
 
@@ -550,7 +550,7 @@ DecisionAuthority { state, active, supersedes, supersededBy }   // C241(T49): su
 
 - Claim ID는 `claim-` + hash(rule, subject, 구분 key, diff identity)이며 실행 시각이나 발견 순서를 쓰지 않는다.
 - `decisionAuthority`(C241, T49, additive): subject가 Decision이고 rule이 읽은 같은 complete Project Truth에 그 ID가 있으면 붙는다. `state`·`supersedes`·`supersededBy`는 그 Decision 파일의 값 그대로이고, `active`는 rule이 쓰는 authority 판정(`confirmed`이고 `supersededBy`가 없음)이다. 직접 관계만 담고 chain을 풀거나 Git history에서 추론하지 않으며, 두 Decision의 값이 서로 맞지 않아도 고치지 않는다(판정은 `supersede-integrity`). verdict·claim ID·evidence 뒤에 붙는 설명이라 판정 signal이 아니고, semantic assist 입력과 Review Record body(따라서 Record ID)에 들어가지 않는다. Requirement·Constraint·file·test claim과 LLM semantic claim에는 없다.
-- PASS는 "DUO가 현재 Evidence 범위에서 방향 위반을 찾지 못했다"는 뜻이지 버그가 없다는 뜻이 아니다.
+- PASS는 "DUO가 현재 Evidence 범위에서 방향 위반을 찾지 못했다"는 뜻이지 버그가 없다는 뜻이 아니다. PASS에도 surface된 `missing-intent` gap이 있을 수 있다(H-80): 확정 intent 연결을 찾지 못했다는 coverage signal이며 `verdictBasis.warn`에 들어가지 않는다. 다른 surface gap은 WARN 근거다.
 - T13.1 규칙: `unlinked-addition`(R-SCOPE, task가 있을 때 task 맥락 밖이고 IMPLEMENTS가 없는 추가 application 파일 → UNKNOWN drift, 의미 후보, BLOCK 불가), `external-source-drift`(R-DRIFT, 명시적 `{path, hash, section?}`의 hash 불일치 → PARTIAL). limitation `external-source-unavailable`(원격·저장소 밖·secret·없는 파일), `external-source-hash-invalid`.
 - `semanticAssist.provider`: 호출한 Provider의 `id`, 보고된 `model`, `cacheIdentity`(secret 없음).
 

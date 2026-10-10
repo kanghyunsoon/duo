@@ -86,7 +86,7 @@ large cold no-op(정상 상태): module import 0.9 s, registry 0.06 s, SQLite op
 
 ## Review
 
-`fixtures/review/app` 시나리오(장기 실행, 5회 median, 적용 후): PASS 1.61 s, WARN 1.70 s, BLOCK 1.46 s, ASK 1.73 s, 분석기 없는 언어(`.rs` 추가) 1.46 s. 마지막 시나리오의 WARN은 확정 Intent와 이어지지 않은 새 파일의 `missing-intent` gap 때문이다. 같은 파일을 `.ts`로 추가해도 WARN이므로 분석기 부재가 판정을 올리지 않으며, `structural-analysis-unavailable`은 limitation으로만 보고된다. 단계는 freshness와 Truth·baseline 읽기 약 0.55~0.72 s, Git diff 0.65~1.3 s, context 30~60 ms, gap·rules·evidence·aggregate < 12 ms. 이 측정 뒤 `ReviewPerformance`에 freshnessMs와 gapMs를 따로 기록하도록 했다. 같은 요청을 반복하면 결과가 byte 단위로 같았다. baseline provenance(pre-existing-touched는 WARN, introduced는 BLOCK)는 adoption·MCP e2e가 계속 검증한다. large clean Review: 3.9~4.5 s(cold).
+`fixtures/review/app` 시나리오(장기 실행, 5회 median, 적용 후): PASS 1.61 s, WARN 1.70 s, BLOCK 1.46 s, ASK 1.73 s, 분석기 없는 언어(`.rs` 추가) 1.46 s. 마지막 시나리오의 WARN은 확정 Intent와 이어지지 않은 새 파일의 `missing-intent` gap 때문이다(H-80 이전 측정. H-80 뒤에는 missing-intent gap만으로 WARN이 되지 않는다). 같은 파일을 `.ts`로 추가해도 WARN이므로 분석기 부재가 판정을 올리지 않으며, `structural-analysis-unavailable`은 limitation으로만 보고된다. 단계는 freshness와 Truth·baseline 읽기 약 0.55~0.72 s, Git diff 0.65~1.3 s, context 30~60 ms, gap·rules·evidence·aggregate < 12 ms. 이 측정 뒤 `ReviewPerformance`에 freshnessMs와 gapMs를 따로 기록하도록 했다. 같은 요청을 반복하면 결과가 byte 단위로 같았다. baseline provenance(pre-existing-touched는 WARN, introduced는 BLOCK)는 adoption·MCP e2e가 계속 검증한다. large clean Review: 3.9~4.5 s(cold).
 
 ## MCP와 UI
 

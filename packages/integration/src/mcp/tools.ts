@@ -8,7 +8,7 @@
  * a Decision, write Truth, record a Review, index or capture the Adoption Baseline.
  */
 import { compileRepoPattern, DEFINITION_ID_PATTERN, MCP_SERVER_NAME, normalizeRepoPath, normalizeRepoPattern, type RepoPath } from "@duo-director/core";
-import { ambiguityRemediation, decisionAuthorityParts, MAX_BUDGET, MIN_BUDGET, provenanceLabel, redactSecrets, renderContextMarkdown, reviewLlmMetric, type ReviewResult, type SeedAmbiguity, type TokenCountMemo } from "@duo-director/director";
+import { ambiguityRemediation, decisionAuthorityParts, MAX_BUDGET, MIN_BUDGET, provenanceLabel, redactSecrets, renderContextMarkdown, renderGapQuestions, reviewLlmMetric, type ReviewResult, type SeedAmbiguity, type TokenCountMemo } from "@duo-director/director";
 import { z } from "zod";
 import type { LLMProviderPool } from "../llm/factory.js";
 import { NOT_INITIALIZED_FORMAT, type Operation } from "../operations/common.js";
@@ -200,7 +200,15 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
         `Semantic assistance (supplemental, never blocks): ${a.status}${a.failure === undefined ? "" : ` (${a.failure})`}`,
         ...a.claims.filter((c) => c.alignment !== "ALIGNED").map((c) => `- semantic ${c.alignment} ${c.claimId}: ${c.reason}`),
       ];
-      return [`Verdict ${r.verdict ?? "-"} · ${r.claims.length} claims · llm calls ${r.metrics.llmCalls}`, ...lines, ...semantic].join("\n");
+      // H-80: the same gap wording as the CLI (renderGapQuestions, en), so a PASS still shows a surfaced missing-intent gap.
+      const q = r.gaps === undefined ? undefined : renderGapQuestions(r.gaps, { locale: "en" });
+      const gaps = q === undefined || (q.primaryQuestion === undefined && q.notes.length === 0) ? [] : [
+        "Knowledge gaps:",
+        ...(q.primaryQuestion === undefined ? [] : [`Question for the human: ${q.primaryQuestion}`]),
+        ...q.additionalQuestions.map((a) => `Question for the human: ${a.question}`),
+        ...q.notes.map((n) => `- ${n.note}`),
+      ];
+      return [`Verdict ${r.verdict ?? "-"} · ${r.claims.length} claims · llm calls ${r.metrics.llmCalls}`, ...lines, ...gaps, ...semantic].join("\n");
     },
   },
   duo_get_requirement: {

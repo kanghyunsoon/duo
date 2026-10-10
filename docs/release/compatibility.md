@@ -70,3 +70,15 @@
 | Unchanged | Truth를 다 읽은 저장소의 review·context 결과와 JSON, 다른 모든 CLI·MCP·UI API 형식, MCP tool 9개와 input schema, `duo.review-record/1`, `duo.adoption-baseline/2`, project.yaml `schema_version: 1`, 명령·옵션, analysis identity |
 | Dependency (security) | upstream High advisory GHSA-6qxp-vccf-f47h 때문에 MCP SDK release group(`@modelcontextprotocol/client`·`server`·`core`)을 2.1.0 → 2.2.0으로 올린다. 다른 bundled package·license·install script는 그대로(67 package). MCP protocol version, tool 9개와 schema, `duo_get_status`, stdio launch probe(install verify, doctor) 동작은 같다 |
 | Downgrade | DUO 0.3이 쓴 저장소(예: `forbids.imported_paths`)를 열 수 있는 가장 낮은 버전은 0.2.2다. 0.2.2는 그 field를 이해하지 않고 review를 거부한다. 0.2.1 이하로 여는 것은 지원하지 않는다(C244) |
+
+## 0.3.0 개발 변경: missing-intent verdict (branch `next`, T58, H-80)
+
+0.3.0-rc.5 뒤 `next`의 변경이며 아직 공개 prerelease에 들어가지 않았다. 형식 변경이 아니라 같은 `/1`의 판정 정정이다(C239, C110).
+
+| 분류 | 내용 |
+|---|---|
+| Behavior correction | Review는 surface된 `missing-intent` Knowledge Gap 하나만으로 WARN을 내지 않는다. 그 gap은 `verdictBasis.warn`에 들어가지 않고, 다른 WARN·ASK·BLOCK 근거가 없으면 verdict는 PASS다. 다른 surface gap(검색으로만 닿은 pending Decision, related declared UNKNOWN)은 계속 WARN이고 ASK·BLOCK·claim 판정은 그대로다. missing-intent만 있는 Review에서 `--fail-on warn`·`--strict`는 2 대신 0으로 끝난다 |
+| Unchanged | `duo.review/1`(ReviewResult 형식, verdict enum, claim schema, `verdictBasis` 형식), `duo.gap-assessment/1`(gap kind·relevance·reasons·action `surface`·metrics), `duo.review-record/1` 형식, CLI·MCP·UI API 형식, MCP tool 9개와 input schema, 명령·옵션·종료 코드의 의미, `CONTEXT_POLICY_VERSION` 8 |
+| Review Record | Record body에 verdict와 verdictBasis가 들어가고 ID는 body의 hash다. 그래서 missing-intent gap이 있는 Review를 새로 기록하면 이전 정책의 같은 Review와 다른 ID가 난다(WARN → PASS인 경우와, verdict는 같고 verdictBasis.warn만 바뀐 경우 모두). 기존 Record는 다시 쓰지 않으며 그대로 읽힌다 |
+| 사람이 읽는 출력 | MCP `duo_review_changes` text 요약에 CLI와 같은 Knowledge gap 문구를 붙인다(문구는 계약이 아니다). CLI·UI 표시는 그대로다 |
+| External Validation | External Validation 01은 정확히 0.2.1이며 그 버전의 기존 WARN 동작이 계속 관찰된다 |
