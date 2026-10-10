@@ -63,7 +63,8 @@ interface TaskWord {
    * The same word as a path is written (C252, T47): only trailing sentence dots removed, so a leading "./" or ".\\"
    * survives and reaches normalizeRepoPath. C256 (T54): when the word has a separator its leading dots stay too, so a
    * first directory such as ".github" or "..cache" is kept and normalizeRepoPath decides ("../" is still outside the
-   * repository). A word without a separator uses token.
+   * repository). H-79 (T55): a word without a separator keeps them too (".gitignore"); it is a root File candidate
+   * only through rootFileOf, never through pathOf.
    */
   readonly pathText: string;
 }
@@ -72,7 +73,7 @@ function taskWords(task: string): TaskWord[] {
   return task.split(SEPARATORS).map((w) => {
     const token = w.replace(/^[.]+|[.]+$/gu, "");
     const trimmed = w.replace(/[.]+$/u, "");
-    return { token, pathText: /[\\/]/u.test(trimmed) ? trimmed : token };
+    return { token, pathText: trimmed };
   }).filter((w) => w.token.length > 0);
 }
 
@@ -84,6 +85,17 @@ function taskWords(task: string): TaskWord[] {
 function pathOf(pathText: string): RepoPath | undefined {
   if (!pathText.includes("/") && !pathText.includes("\\")) return undefined;
   return normalizeRepoPath(pathText).value;
+}
+
+/**
+ * H-79 (T55, C257): a word without a separator that is written like a file name, a leading dot (".gitignore") or a
+ * dot inside ("package.json"), names that root File when it is indexed. A name without a dot ("LICENSE") is not a
+ * candidate; "./LICENSE" is. Resolution decides whether the File exists and whether a Symbol reading comes first.
+ */
+function rootFileOf(pathText: string): { readonly path: RepoPath; readonly leadingDot: boolean } | undefined {
+  if (pathText.includes("/") || pathText.includes("\\") || !pathText.includes(".")) return undefined;
+  const p = normalizeRepoPath(pathText).value;
+  return p === undefined || p !== pathText ? undefined : { path: p, leadingDot: pathText.startsWith(".") };
 }
 
 /** A symbol name or qualified name the task can name (one token). */
@@ -214,9 +226,15 @@ export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphRead
     const node = p === undefined ? undefined : store.getNode(fileRef(p));
     // term: the path as the task spells it ("./src/a.ts", "src\\a.ts"); ref stays the canonical RepoPath.
     if (node !== undefined) { add(node, "path", pathText, SEED_STRENGTH.path); exact++; exactTokens.add(token); continue; }
+    // H-79: an indexed root File named without a separator. A leading dot wins over a Symbol reading of the same word;
+    // a dot inside only applies when no Symbol matches the word (below).
+    const root = rootFileOf(pathText);
+    const rootNode = root === undefined ? undefined : store.getNode(fileRef(root.path));
+    const asRootFile = () => { if (rootNode !== undefined) { add(rootNode, "path", pathText, SEED_STRENGTH.path); exact++; exactTokens.add(token); } };
+    if (rootNode !== undefined && root?.leadingDot === true) { asRootFile(); continue; }
     if (token.includes("/")) continue;
     const name = token.replace(/\(\)$/u, "");
-    if (!NAME_TOKEN.test(name) || name.length < 3) continue;
+    if (!NAME_TOKEN.test(name) || name.length < 3) { asRootFile(); continue; }
     const qualified = symbols.filter((s) => s.payload.qualifiedName === name);
     if (qualified.length === 1 && qualified[0] !== undefined) { add(qualified[0], "symbol", token, SEED_STRENGTH.symbol); exact++; exactTokens.add(token); continue; }
     if (qualified.length > 1 && name.includes(".")) {
@@ -225,6 +243,7 @@ export function resolveSeeds(task: string, truth: ProjectTruth, store: GraphRead
       continue;
     }
     const named = qualified.length > 1 ? qualified : symbols.filter((s) => s.payload.name === name);
+    if (qualified.length === 0 && named.length === 0) { asRootFile(); continue; }
     if (named.length === 1 && named[0] !== undefined) { add(named[0], "symbol-name", token, SEED_STRENGTH["symbol-name"]); exact++; exactTokens.add(token); }
     else if (oneGroup(groups, named)) { for (const n of named) add(n, "symbol-name", token, SEED_STRENGTH["symbol-name"]); exact++; exactTokens.add(token); }
     else if (named.length > 1 && named.length <= SYMBOL_NAME_MAX_MATCHES) ambiguities.push({ term: name, reason: "symbol-name", options: named.map(option) });

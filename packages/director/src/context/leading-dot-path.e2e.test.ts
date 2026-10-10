@@ -1,7 +1,7 @@
 /**
  * C256 (T54): a task path whose first directory starts with a dot (".github/workflows/ci.yml") is an exact path seed
  * like any other repository path: the word keeps its leading dots when it has a separator and core normalizeRepoPath
- * decides. A root file without a separator ("package.json") is still not a path signal (separate policy).
+ * decides. A root file without a separator ("package.json") was a separate policy: H-79 (T55, root-file-path.e2e).
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -84,9 +84,8 @@ describe("leading-dot directory paths are exact path seeds (C256, T54)", () => {
     expect(words.packet?.seeds.some((s) => s.ref === "D-002" && s.match === "keyword")).toBe(true);
   });
 
-  it("11-12 a bare root file stays a keyword word; ./ and .\\ root files stay exact", async () => {
-    const bare = await repo.compile({ task: "package.json", budget: 6000 });
-    expect(bare.packet?.seeds.some((s) => s.match === "path")).toBe(false);
+  it("11-12 ./ and .\\ root files stay exact; since H-79 (T55) a bare dotted root file name is exact too", async () => {
+    expect(seeds(await repo.compile({ task: "package.json", budget: 6000 }))).toEqual([["package.json", "path"]]);
     for (const task of ["./package.json", ".\\package.json"]) expect(seeds(await repo.compile({ task, budget: 6000 })), task).toEqual([["package.json", "path"]]);
   });
 

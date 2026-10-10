@@ -20,8 +20,10 @@ import type { ContextTier } from "./types.js";
  * is not reused as BM25 keyword input.
  * 7: C256 (T54): a task path keeps the leading dots of its first directory (".github/workflows/ci.yml") for exact path
  * resolution.
+ * 8: H-79 (T55, C257): an indexed root File named without a separator (a leading dot, or a dot inside when no Symbol
+ * matches the word) is an exact path seed.
  */
-export const CONTEXT_POLICY_VERSION = "7";
+export const CONTEXT_POLICY_VERSION = "8";
 
 /** Per-hop multiplier. A candidate's order value is seed strength × Π hop weights (best path). */
 export const EDGE_WEIGHTS: Readonly<Record<Exclude<GraphEdgeType, "SUPERSEDES">, number>> = {
