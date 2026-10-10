@@ -1,6 +1,6 @@
 {
   "name": "@duo-director/cli",
-  "version": "0.3.0-rc.4",
+  "version": "0.3.0-rc.5",
   "private": true,
   "description": "DUO: AI Project Direction Layer for Coding Agents (duoctl)",
   "license": "Apache-2.0",
