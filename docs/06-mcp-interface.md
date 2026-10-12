@@ -149,7 +149,7 @@ inspectAgentIntegration → planAgentIntegration(쓰기 0) → IntegrationPlan �
 - `duoctl mcp --root-from git-cwd | env:<NAME>`: 이 두 형식만 받는다. 결과는 다시 Git top level로 검증한다(`MCP_ROOT_UNRESOLVED`, `SCAN_ROOT_INVALID`). `--root`와 함께 쓸 수 없다. 설정에 절대 경로가 없으므로 clone·이동 뒤에도 같은 설정이 새 위치의 저장소를 연다.
 - Launcher(`DuoLauncher { kind, command, argsPrefix }`): 기본 `path` = PATH의 `duoctl`(설치된 실행 파일), `--launcher npx` = `npx --no-install duoctl`(project에 `@duo-director/cli`가 설치되어 `node_modules/.bin/duoctl`이 있을 때만. 내려받지 않는다, C162). verify는 launcher provenance(kind, resolved, localBin, 응답한 version)를 보인다. 설정에 개발자의 소스 경로를 쓰지 않는다. 설치 시 Agent가 찾을 수 있는지 확인하고 못 찾으면 `AGENT_LAUNCHER_UNAVAILABLE`로 막는다. 상대 경로 command는 거부, 절대 경로는 API로만 가능하며 이식성 경고를 낸다. 저장소 root에 `duoctl`, `duoctl.cmd` 같은 파일이 있으면(Windows의 process 검색이 작업 디렉터리를 볼 수 있음) conflict다. Windows에서 Codex가 `duoctl.cmd` shim을 `command = "duoctl"`로 실행하는 것을 확인했다.
 - 기존 항목: not-configured(추가), already-configured(unchanged), drifted(DUO 블록이 다름: 갱신), compatible-different-format(다른 모양의 DUO launch: JSON은 확인 후 교체, TOML 블록 밖이면 사람이 지우도록 conflict), conflict(같은 이름의 다른 command, 읽을 수 없는 파일, 깨진 marker, symlink). conflict는 `--yes`로도 덮어쓰지 않는다.
-- Bridge: `<!-- duo-director:begin -->` … `<!-- duo-director:end -->` 블록. 없으면 한 줄 띄우고 추가, 있으면 블록만 갱신, marker가 깨졌으면 conflict. 블록 밖 사람 글은 바꾸지 않는다. 내용(10줄 이하, 저장소 정보 없음):
+- Bridge: `<!-- duo-director:begin -->` … `<!-- duo-director:end -->` 블록. 없으면 한 줄 띄우고 추가, 있으면 블록만 갱신, marker가 깨졌으면 conflict. 블록 밖 사람 글은 바꾸지 않는다. MCP client마다 tool을 보이는 방식이 달라(이름 그대로, 중첩, 지연 노출) 마지막 두 줄이 tool을 찾는 법, CLI fallback, proposal tool이 없을 때 사람에게 알리는 법을 준다(#8, H-84). 내용(10줄 이하, 저장소 정보 없음):
 
 ```markdown
 <!-- duo-director:begin -->
@@ -159,6 +159,8 @@ inspectAgentIntegration → planAgentIntegration(쓰기 0) → IntegrationPlan �
 - After meaningful code changes: run `duoctl index`, then call duo_review_changes.
 - If the review returns ASK, show the human its question. Never bypass BLOCK by editing Project Truth (.duo-project/).
 - To change a decision, call duo_propose_decision. You cannot confirm or reject decisions; a human does.
+- If the duo_* tools are not listed by name, look for the tools of the duo-director MCP server (some clients nest or defer MCP tools). If they are unavailable, run `duoctl status`, `duoctl context "<task>"` and `duoctl review` in a shell instead.
+- If duo_propose_decision is unavailable, do not edit .duo-project/ yourself: tell the human "DUO's decision proposal tool is unavailable in this client/session" and ask them to request the proposal in a session where DUO's MCP tools are available.
 <!-- duo-director:end -->
 ```
 

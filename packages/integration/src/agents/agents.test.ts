@@ -52,6 +52,26 @@ describe("bridge contract (what the agent is told)", () => {
     expect(text).toMatch(/Never bypass BLOCK by editing Project Truth/u);
     expect(text).toMatch(/duo_propose_decision\. You cannot confirm or reject decisions/u);
   });
+  it("says how to reach DUO when the client does not list the tools by name: the duo-director server, then the CLI; without the proposal tool, tell the human and never edit Truth (#8)", () => {
+    expect(text).toMatch(/If the duo_\* tools are not listed by name, look for the tools of the duo-director MCP server \(some clients nest or defer MCP tools\)/u);
+    expect(text).toContain("run `duoctl status`, `duoctl context \"<task>\"` and `duoctl review` in a shell instead.");
+    expect(text).toMatch(/If duo_propose_decision is unavailable, do not edit \.duo-project\/ yourself/u);
+    expect(text).toContain("\"DUO's decision proposal tool is unavailable in this client/session\"");
+    // The CLI has no propose command; the block must not invent one.
+    expect(text).not.toMatch(/duoctl (?:propose|decision propose)/u);
+    const npx = bridgeLines("npx --no-install duoctl").join("\n");
+    for (const sub of ["status", "context \"<task>\"", "review"]) expect(npx).toContain(`\`npx --no-install duoctl ${sub}\``);
+  });
+  it("an installed 0.3.1 block is outdated; updating it replaces only the block, removing it restores the human text byte for byte", () => {
+    const old = [...lines.slice(0, 7), BRIDGE_MARKERS.end];
+    const human = "# Team rules\n\nUse tabs.\n";
+    const installed = upsertBlock(human, old, BRIDGE_MARKERS);
+    expect(inspectBridge(installed, lines)).toBe("outdated");
+    const updated = upsertBlock(installed, lines, BRIDGE_MARKERS);
+    expect(updated.startsWith(human)).toBe(true);
+    expect(inspectBridge(updated, lines)).toBe("current");
+    expect(removeBlock(updated, BRIDGE_MARKERS)).toBe(human);
+  });
   it("is short and has no repository context (AC-017-05)", () => {
     expect(lines.length - 2).toBeLessThanOrEqual(10);
     expect(text).not.toMatch(/[A-Za-z]:\\|\/Users\/|\/home\//u);
