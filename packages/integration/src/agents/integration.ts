@@ -219,7 +219,11 @@ function nextContents(root: string, plan: AgentIntegrationPlan): Map<string, str
     if (plan.mcp.action === "create" || plan.mcp.action === "modify") out.set(adapter.mcpTarget, adapter.write(mcpText, planned) ?? mcpText ?? "");
     if (plan.bridge.action === "create" || plan.bridge.action === "modify") out.set(adapter.bridgeTarget, upsertBlock(bridgeText, bridgeLines(launcherDisplay(plan.launcher)), BRIDGE_MARKERS));
   } else {
-    if (mcpText !== undefined && (plan.mcp.action === "modify" || plan.mcp.action === "delete")) out.set(adapter.mcpTarget, adapter.remove(mcpText) ?? mcpText);
+    if (mcpText !== undefined && (plan.mcp.action === "modify" || plan.mcp.action === "delete")) {
+      // remove(): a string is the modified file, null means the file held only DUO content (delete it), undefined means nothing to remove (#6).
+      const removed = adapter.remove(mcpText);
+      if (removed !== undefined) out.set(adapter.mcpTarget, removed);
+    }
     if (bridgeText !== undefined && (plan.bridge.action === "modify" || plan.bridge.action === "delete")) {
       const next = removeBlock(bridgeText, BRIDGE_MARKERS) ?? bridgeText;
       out.set(adapter.bridgeTarget, next.trim() === "" ? null : next);

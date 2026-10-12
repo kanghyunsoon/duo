@@ -243,3 +243,23 @@ describe("install preconditions and clone portability (TASK-017)", () => {
     expect(duoctl(moved, ["install", "status", "--json"], "", env).json().result.agents.map((a: { status: string }) => a.status)).toEqual(["configured", "configured"]);
   });
 });
+
+describe("duoctl install remove on configuration DUO created (#6)", () => {
+  it("deletes the config file DUO created and says so; status is not-configured; a second remove changes nothing", () => {
+    const p = initialized();
+    for (const [agent, target] of [["codex", ".codex/config.toml"], ["claude-code", ".mcp.json"]] as const) {
+      expect(exists(p, target)).toBe(false);
+      expect(install(p, [agent, "--yes"]).code).toBe(0);
+      const r = install(p, ["remove", agent, "--yes"]);
+      expect(r.code).toBe(0);
+      expect(r.json().result.plan.mcp.action).toBe("delete");
+      expect(r.json().result.apply.changed).toContainEqual({ path: target, action: "delete" });
+      expect(exists(p, target)).toBe(false);
+      const status = duoctl(p.root, ["install", "status", agent, "--json"], "", env).json().result.agents;
+      expect(status.map((a: { status: string }) => a.status)).toEqual(["not-configured"]);
+      const before = stable(p);
+      expect(install(p, ["remove", agent, "--yes"]).json().result.plan.noop).toBe(true);
+      expect(stable(p)).toEqual(before);
+    }
+  });
+});

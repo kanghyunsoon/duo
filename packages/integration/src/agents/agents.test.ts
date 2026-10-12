@@ -5,7 +5,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { BRIDGE_MARKERS, bridgeLines, inspectBridge } from "./bridge.js";
 import { claudeCodeAdapter } from "./claude-code.js";
 import { CODEX_MARKERS, codexAdapter } from "./codex.js";
-import { planAgentIntegration } from "./integration.js";
+import { applyAgentIntegration, inspectAgentIntegration, planAgentIntegration, planAgentRemoval } from "./integration.js";
 import { checkLauncher, NPX_LAUNCHER, PATH_LAUNCHER } from "./launcher.js";
 import { findBlock, removeBlock, upsertBlock } from "./managed-block.js";
 
@@ -131,5 +131,76 @@ describe("launcher and plan", () => {
     expect(plan.blockers.map((d) => d.code)).toEqual(expect.arrayContaining(["AGENT_NOT_INITIALIZED", "AGENT_LAUNCHER_UNAVAILABLE"]));
     expect(plan).toMatchObject({ willCreate: [".codex/config.toml"], willModify: ["AGENTS.md"] });
     expect(fs.readdirSync(root, { recursive: true })).toEqual(before);
+  });
+});
+
+describe("remove applies what it plans (#6)", () => {
+  const agents = [
+    { id: "codex", adapter: codexAdapter, mcp: ".codex/config.toml", bridge: "AGENTS.md" },
+    { id: "claude-code", adapter: claudeCodeAdapter, mcp: ".mcp.json", bridge: "CLAUDE.md" },
+  ] as const;
+  type Agent = (typeof agents)[number];
+  /** What install leaves behind: the DUO entry (merged into mcpHuman if given) and the bridge block (appended to bridgeHuman). */
+  const installed = (root: string, a: Agent, mcpHuman?: string, bridgeHuman?: string) => {
+    fs.mkdirSync(path.dirname(path.join(root, a.mcp)), { recursive: true });
+    fs.writeFileSync(path.join(root, a.mcp), a.adapter.write(mcpHuman, a.adapter.plannedEntry(PATH_LAUNCHER)) as string);
+    fs.writeFileSync(path.join(root, a.bridge), upsertBlock(bridgeHuman, bridgeLines("duoctl"), BRIDGE_MARKERS));
+  };
+  const read = (root: string, rel: string) => fs.readFileSync(path.join(root, rel), "utf8");
+
+  for (const a of agents) {
+    it(`${a.id}: a configuration file DUO created is deleted; plan, result and status agree; a second remove is a no-op`, async () => {
+      const root = tmp();
+      installed(root, a);
+      expect(inspectAgentIntegration(root, a.id).status).toBe("configured");
+      const plan = planAgentRemoval(root, a.id);
+      expect(plan).toMatchObject({ mcp: { action: "delete" }, bridge: { action: "delete" }, willDelete: [a.mcp, a.bridge] });
+      const applied = await applyAgentIntegration(root, plan);
+      expect(applied.diagnostics).toEqual([]);
+      expect(applied.value?.changed).toEqual([{ path: a.mcp, action: "delete" }, { path: a.bridge, action: "delete" }]);
+      expect(fs.readdirSync(root)).toEqual([]); // the files are gone, and .codex/ with them when it is empty
+      expect(inspectAgentIntegration(root, a.id).status).toBe("not-configured");
+      expect(planAgentRemoval(root, a.id).noop).toBe(true);
+    });
+  }
+
+  it("files that existed before install keep their other content (Codex TOML and the bridge files byte for byte, .mcp.json servers and keys)", async () => {
+    const toml = "# Team settings\napproval_policy = \"on-request\"\n\n[mcp_servers.other]\ncommand = \"o\" # keep\n";
+    const json = JSON.stringify({ mcpServers: { other: { command: "o", args: [] } }, x: 1 }, null, 2) + "\n";
+    const notes = "# Team rules\n\nUse tabs.\n";
+    for (const [a, human] of [[agents[0], toml], [agents[1], json]] as const) {
+      const root = tmp();
+      installed(root, a, human, notes);
+      const plan = planAgentRemoval(root, a.id);
+      expect(plan).toMatchObject({ mcp: { action: "modify" }, bridge: { action: "modify" } });
+      expect((await applyAgentIntegration(root, plan)).value?.changed).toEqual([{ path: a.mcp, action: "modify" }, { path: a.bridge, action: "modify" }]);
+      expect(read(root, a.mcp)).toBe(human);
+      expect(read(root, a.bridge)).toBe(notes);
+      expect(inspectAgentIntegration(root, a.id).status).toBe("not-configured");
+    }
+  });
+
+  it("a duo-director entry DUO does not manage is left in place: no write, a warning", async () => {
+    const root = tmp();
+    const byHand = "[mcp_servers.duo-director]\ncommand = \"duoctl\"\nargs = [\"mcp\", \"--root-from\", \"git-cwd\", \"--agent\", \"codex\"]\n";
+    fs.mkdirSync(path.join(root, ".codex"));
+    fs.writeFileSync(path.join(root, ".codex/config.toml"), byHand);
+    const plan = planAgentRemoval(root, "codex");
+    expect(plan).toMatchObject({ mcp: { action: "none" }, noop: true });
+    expect(plan.warnings.join(" ")).toMatch(/not DUO-managed/u);
+    expect((await applyAgentIntegration(root, plan)).value?.changed).toEqual([]);
+    expect(read(root, ".codex/config.toml")).toBe(byHand);
+  });
+
+  it("a removal plan made before the file changed is refused (AGENT_PLAN_STALE) and writes nothing", async () => {
+    const root = tmp();
+    installed(root, agents[0]);
+    const plan = planAgentRemoval(root, "codex");
+    fs.appendFileSync(path.join(root, ".codex/config.toml"), "# edited\n");
+    const before = read(root, ".codex/config.toml");
+    const applied = await applyAgentIntegration(root, plan);
+    expect(applied.diagnostics.map((d) => d.code)).toEqual(["AGENT_PLAN_STALE"]);
+    expect(read(root, ".codex/config.toml")).toBe(before);
+    expect(fs.existsSync(path.join(root, "AGENTS.md"))).toBe(true);
   });
 });
