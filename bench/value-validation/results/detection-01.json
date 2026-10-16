@@ -1,0 +1,634 @@
+{
+  "format": "duo.value-validation-detection/1",
+  "at": "2026-10-15T05:55:06.126Z",
+  "node": "v24.18.0",
+  "duoctl": "duoctl 0.3.3",
+  "eslint": "v10.11.0",
+  "fixture": {
+    "fixture": "value-validation-01/1",
+    "condition": "C",
+    "adoption": "d5610abbb2fa80e69819e81ebb3f131bc765c965",
+    "setup": [
+      {
+        "step": "add static checks (B)",
+        "ms": 86
+      },
+      {
+        "step": "confirm D-001",
+        "ms": 153
+      },
+      {
+        "step": "confirm D-002",
+        "ms": 13
+      },
+      {
+        "step": "confirm D-003",
+        "ms": 12
+      },
+      {
+        "step": "duoctl init",
+        "ms": 2755
+      },
+      {
+        "step": "duoctl install codex",
+        "ms": 2193
+      },
+      {
+        "step": "duoctl index",
+        "ms": 966
+      }
+    ]
+  },
+  "results": [
+    {
+      "id": "N1",
+      "category": 1,
+      "rule": "R1",
+      "truth": "compliant",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "new UI page uses src/db/client.js",
+      "approval": [],
+      "eslint": {
+        "outcome": "pass",
+        "ms": 569,
+        "messages": []
+      },
+      "duo": {
+        "outcome": "pass",
+        "verdict": "PASS",
+        "exit": 0,
+        "ms": 1918,
+        "claims": [],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "N2",
+      "category": 1,
+      "rule": "R3",
+      "truth": "compliant",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "new token helper without a session store",
+      "approval": [],
+      "eslint": {
+        "outcome": "pass",
+        "ms": 513,
+        "messages": []
+      },
+      "duo": {
+        "outcome": "pass",
+        "verdict": "PASS",
+        "exit": 0,
+        "ms": 2092,
+        "claims": [],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "N3",
+      "category": 1,
+      "rule": "R2",
+      "truth": "compliant",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "adds an allowed dependency (date-fns)",
+      "approval": [],
+      "eslint": {
+        "outcome": "pass",
+        "ms": 512,
+        "messages": []
+      },
+      "duo": {
+        "outcome": "pass",
+        "verdict": "PASS",
+        "exit": 0,
+        "ms": 3556,
+        "claims": [],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "N4",
+      "category": 1,
+      "rule": "none",
+      "truth": "compliant",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "changes how the orders page renders",
+      "approval": [],
+      "eslint": {
+        "outcome": "pass",
+        "ms": 511,
+        "messages": []
+      },
+      "duo": {
+        "outcome": "pass",
+        "verdict": "PASS",
+        "exit": 0,
+        "ms": 1968,
+        "claims": [],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "V1",
+      "category": 2,
+      "rule": "R1",
+      "truth": "violation",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "new UI page imports legacy-db",
+      "approval": [],
+      "eslint": {
+        "outcome": "block",
+        "ms": 544,
+        "messages": [
+          "src/ui/customer-page.js:1 no-restricted-imports '../db/legacy-db.js' import is restricted from being used by a pattern. R1: UI code must not import src/db/legacy-db.js; use src/db/client.js."
+        ]
+      },
+      "duo": {
+        "outcome": "block",
+        "verdict": "BLOCK",
+        "exit": 4,
+        "ms": 1923,
+        "claims": [
+          {
+            "rule": "decision-forbids-import",
+            "subject": "D-001",
+            "alignment": "CONFLICT",
+            "reason": "forbidden-import",
+            "provenance": "introduced",
+            "observed": "forbidden import on a changed line: src/ui/customer-page.js:1 import \"../db/legacy-db.js\" resolves to src/db/legacy-db.js"
+          }
+        ],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "V2",
+      "category": 2,
+      "rule": "R1",
+      "truth": "violation",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "existing UI page gains an import of legacy-db",
+      "approval": [],
+      "eslint": {
+        "outcome": "block",
+        "ms": 561,
+        "messages": [
+          "src/ui/orders-page.js:2 no-restricted-imports '../db/legacy-db.js' import is restricted from being used by a pattern. R1: UI code must not import src/db/legacy-db.js; use src/db/client.js."
+        ]
+      },
+      "duo": {
+        "outcome": "block",
+        "verdict": "BLOCK",
+        "exit": 4,
+        "ms": 2094,
+        "claims": [
+          {
+            "rule": "decision-forbids-import",
+            "subject": "D-001",
+            "alignment": "CONFLICT",
+            "reason": "forbidden-import",
+            "provenance": "introduced",
+            "observed": "forbidden import on a changed line: src/ui/orders-page.js:2 import \"../db/legacy-db.js\" resolves to src/db/legacy-db.js"
+          }
+        ],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "V3",
+      "category": 2,
+      "rule": "R2",
+      "truth": "violation",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "adds the moment dependency",
+      "approval": [],
+      "eslint": {
+        "outcome": "block",
+        "ms": 569,
+        "messages": [
+          "R2: forbidden dependency: moment"
+        ]
+      },
+      "duo": {
+        "outcome": "block",
+        "verdict": "BLOCK",
+        "exit": 4,
+        "ms": 2119,
+        "claims": [
+          {
+            "rule": "decision-forbids",
+            "subject": "D-002",
+            "alignment": "CONFLICT",
+            "reason": "forbidden-dependency",
+            "provenance": "introduced",
+            "observed": "moment added to package.json"
+          }
+        ],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "V4",
+      "category": 2,
+      "rule": "R3",
+      "truth": "violation",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "new RedisSessionStore class",
+      "approval": [],
+      "eslint": {
+        "outcome": "block",
+        "ms": 501,
+        "messages": [
+          "src/auth/redis-session-store.js:1 no-restricted-syntax R3: no new SessionStore symbols (stateless authentication)."
+        ]
+      },
+      "duo": {
+        "outcome": "block",
+        "verdict": "BLOCK",
+        "exit": 4,
+        "ms": 1868,
+        "claims": [
+          {
+            "rule": "decision-forbids",
+            "subject": "D-003",
+            "alignment": "CONFLICT",
+            "reason": "forbidden-symbol",
+            "provenance": "introduced",
+            "observed": "RedisSessionStore.get changed in src/auth/redis-session-store.js"
+          }
+        ],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "L1",
+      "category": 3,
+      "rule": "R1",
+      "truth": "violation",
+      "scope": {
+        "eslint": "out",
+        "duo": "out"
+      },
+      "summary": "UI page imports legacyQuery through the existing src/db/index.js barrel",
+      "approval": [],
+      "eslint": {
+        "outcome": "pass",
+        "ms": 533,
+        "messages": []
+      },
+      "duo": {
+        "outcome": "pass",
+        "verdict": "PASS",
+        "exit": 0,
+        "ms": 1875,
+        "claims": [],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "L2",
+      "category": 3,
+      "rule": "R1",
+      "truth": "violation",
+      "scope": {
+        "eslint": "out",
+        "duo": "out"
+      },
+      "summary": "UI page loads legacy-db with a computed dynamic import",
+      "approval": [],
+      "eslint": {
+        "outcome": "pass",
+        "ms": 557,
+        "messages": []
+      },
+      "duo": {
+        "outcome": "pass",
+        "verdict": "PASS",
+        "exit": 0,
+        "ms": 1931,
+        "claims": [],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "L3",
+      "category": 3,
+      "rule": "R1",
+      "truth": "violation",
+      "scope": {
+        "eslint": "out",
+        "duo": "in"
+      },
+      "summary": "UI page requires legacy-db through createRequire",
+      "approval": [],
+      "eslint": {
+        "outcome": "pass",
+        "ms": 526,
+        "messages": []
+      },
+      "duo": {
+        "outcome": "block",
+        "verdict": "BLOCK",
+        "exit": 4,
+        "ms": 1927,
+        "claims": [
+          {
+            "rule": "decision-forbids-import",
+            "subject": "D-001",
+            "alignment": "CONFLICT",
+            "reason": "forbidden-import",
+            "provenance": "introduced",
+            "observed": "forbidden import on a changed line: src/ui/require-page.js:4 require \"../db/legacy-db.js\" resolves to src/db/legacy-db.js"
+          }
+        ],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "L4",
+      "category": 3,
+      "rule": "R1",
+      "truth": "compliant",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "new service (not UI) imports legacy-db, which R1 allows",
+      "approval": [],
+      "eslint": {
+        "outcome": "pass",
+        "ms": 535,
+        "messages": []
+      },
+      "duo": {
+        "outcome": "block",
+        "verdict": "BLOCK",
+        "exit": 4,
+        "ms": 2048,
+        "claims": [
+          {
+            "rule": "decision-forbids-import",
+            "subject": "D-001",
+            "alignment": "CONFLICT",
+            "reason": "forbidden-import",
+            "provenance": "introduced",
+            "observed": "forbidden import on a changed line: src/services/archive.js:1 import \"../db/legacy-db.js\" resolves to src/db/legacy-db.js"
+          }
+        ],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "L5",
+      "category": 3,
+      "rule": "R3",
+      "truth": "violation",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "session store as an arrow function constant",
+      "approval": [],
+      "eslint": {
+        "outcome": "block",
+        "ms": 524,
+        "messages": [
+          "src/auth/cache.js:1 no-restricted-syntax R3: no new SessionStore symbols (stateless authentication)."
+        ]
+      },
+      "duo": {
+        "outcome": "block",
+        "verdict": "BLOCK",
+        "exit": 4,
+        "ms": 1982,
+        "claims": [
+          {
+            "rule": "decision-forbids",
+            "subject": "D-003",
+            "alignment": "CONFLICT",
+            "reason": "forbidden-symbol",
+            "provenance": "introduced",
+            "observed": "createSessionStore changed in src/auth/cache.js"
+          }
+        ],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "H1",
+      "category": 4,
+      "rule": "R2",
+      "truth": "compliant",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "a person approves moment; then the dependency is added",
+      "approval": [
+        {
+          "by": "person",
+          "action": "edit scripts/check-deps.mjs"
+        },
+        {
+          "by": "person",
+          "action": "edit AGENTS.md"
+        },
+        {
+          "by": "person",
+          "action": "edit docs/decisions.md"
+        },
+        {
+          "by": "person",
+          "action": "write .duo-project/decisions/D-004.yaml (supersedes D-002)"
+        },
+        {
+          "by": "person",
+          "action": "duoctl decision confirm D-004 (D-002 becomes superseded)"
+        }
+      ],
+      "eslint": {
+        "outcome": "pass",
+        "ms": 524,
+        "messages": []
+      },
+      "duo": {
+        "outcome": "pass",
+        "verdict": "PASS",
+        "exit": 0,
+        "ms": 2043,
+        "claims": [],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "D1",
+      "category": 6,
+      "rule": "R1",
+      "truth": "compliant",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "edits a non-import line of the legacy UI page",
+      "approval": [],
+      "eslint": {
+        "outcome": "pass",
+        "ms": 543,
+        "messages": []
+      },
+      "duo": {
+        "outcome": "pass",
+        "verdict": "PASS",
+        "exit": 0,
+        "ms": 2131,
+        "claims": [],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "D2",
+      "category": 6,
+      "rule": "R3",
+      "truth": "compliant",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "edits the body of the legacy MemorySessionStore",
+      "approval": [],
+      "eslint": {
+        "outcome": "pass",
+        "ms": 513,
+        "messages": []
+      },
+      "duo": {
+        "outcome": "warn",
+        "verdict": "WARN",
+        "exit": 0,
+        "ms": 2104,
+        "claims": [
+          {
+            "rule": "decision-forbids",
+            "subject": "D-003",
+            "alignment": "CONFLICT",
+            "reason": "forbidden-symbol",
+            "provenance": "pre-existing-touched",
+            "observed": "MemorySessionStore.get changed in src/auth/memory-session-store.js"
+          }
+        ],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    },
+    {
+      "id": "D3",
+      "category": 6,
+      "rule": "R1",
+      "truth": "violation",
+      "scope": {
+        "eslint": "in",
+        "duo": "in"
+      },
+      "summary": "the legacy UI page gains a second import of legacy-db",
+      "approval": [],
+      "eslint": {
+        "outcome": "block",
+        "ms": 527,
+        "messages": [
+          "src/ui/legacy-orders-page.js:4 no-restricted-imports '../db/legacy-db.js' import is restricted from being used by a pattern. R1: UI code must not import src/db/legacy-db.js; use src/db/client.js."
+        ]
+      },
+      "duo": {
+        "outcome": "warn",
+        "verdict": "WARN",
+        "exit": 0,
+        "ms": 2153,
+        "claims": [
+          {
+            "rule": "decision-forbids-import",
+            "subject": "D-001",
+            "alignment": "CONFLICT",
+            "reason": "forbidden-import",
+            "provenance": "pre-existing-touched",
+            "observed": "forbidden import on a changed line: src/ui/legacy-orders-page.js:4 import \"../db/legacy-db.js\" resolves to src/db/legacy-db.js"
+          }
+        ],
+        "limitations": [
+          "calls-exact-only",
+          "no-task-scope"
+        ]
+      }
+    }
+  ]
+}
