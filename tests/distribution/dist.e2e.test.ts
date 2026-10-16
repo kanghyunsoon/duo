@@ -49,7 +49,10 @@ async function spawnConfigured(entry: { command: string; args: readonly string[]
 beforeAll(() => {
   pack = packReport();
   prefix = tmp("duo-prefix-");
+  const t = performance.now();
   const r = npm(["install", "-g", "--prefix", prefix, pack.tarball, "--no-audit", "--no-fund", "--loglevel=error"], prefix, isolatedEnv([]));
+  // #37: the global install of the same tarball, to compare with the project-local install phases.
+  console.log(`global install (ms): ${Math.round(performance.now() - t)}`);
   if (r.status !== 0) throw new Error(`npm install -g failed: ${r.stderr}`);
   bin = IS_WIN ? prefix : path.join(prefix, "bin");
   pkgDir = path.join(prefix, ...(IS_WIN ? [] : ["lib"]), "node_modules", "@duo-director", "cli");
@@ -396,32 +399,43 @@ describe("global install (temporary npm prefix)", () => {
 
 describe("project-local install (npx --no-install duoctl)", () => {
   it("with @duo-director/cli installed in the project, npx --no-install duoctl runs it and the npx launcher is configured and verified", async () => {
-    const p = project();
-    const local = isolatedEnv([]); // no global duoctl on PATH
-    const inst = npm(["install", "-D", pack.tarball, "--no-audit", "--no-fund", "--loglevel=error"], p.root, local);
-    expect(inst.status, inst.stderr).toBe(0);
-    // The same runtime tree as the global install: inside the package, nothing hoisted into the project (H-65).
-    const tree = compareInstalledTree(path.join(p.root, "node_modules", "@duo-director", "cli"), path.join(p.root, "node_modules"));
-    expect([...tree.mismatches, ...tree.extra, ...tree.outside]).toEqual([]);
-    p.git("add", "-A");
-    p.git("commit", "-qm", "add duoctl as a devDependency");
-    const npx = (args: string[], input = "") => runOnPath("npx", ["--no-install", "duoctl", ...args], p.root, local, input);
-    const bins = fs.readdirSync(path.join(p.root, "node_modules", ".bin"));
-    expect(bins.filter((b) => b.startsWith("duoctl"))).not.toEqual([]);
-    const version = npx(["--version"]);
-    expect(version.stdout.trim(), `code ${version.code} · stderr: ${version.stderr} · bins: ${bins.join(",")} · npx: ${which("npx", local.PATH ?? "")}`).toBe(`duoctl ${pack.version}`);
-    expect(npx(["init", "--non-interactive", "--answers", "-", "--json"], "[]").code).toBe(0);
-    const r = npx(["install", "codex", "--launcher", "npx", "--non-interactive", "--yes", "--json"]);
-    expect(r.code, r.stderr).toBe(0);
-    expect(r.json().result.verify).toMatchObject({ ok: true, launcher: { kind: "npx", command: "npx", argsPrefix: ["--no-install", "duoctl"], version: pack.version } });
-    const entry = codexEntry(fs.readFileSync(path.join(p.root, ".codex", "config.toml"), "utf8"));
-    expect(entry.command).toBe("npx");
-    const client = await spawnConfigured(entry, path.join(p.root, "src"), local);
+    // #37: per-phase wall time, printed even when the test fails, so a slow Windows runner shows where the time went.
+    const phases: Record<string, number> = {};
+    const timed = <T>(name: string, f: () => T): T => { const t = performance.now(); try { return f(); } finally { phases[name] = Math.round(performance.now() - t); } };
     try {
-      expect((await client.listTools()).tools).toHaveLength(9);
-      expect((await client.callTool({ name: "duo_get_status", arguments: {} })).structuredContent).toMatchObject({ initialized: true });
+      const p = project();
+      const local = isolatedEnv([]); // no global duoctl on PATH
+      const inst = timed("npmInstall", () => npm(["install", "-D", pack.tarball, "--no-audit", "--no-fund", "--loglevel=error"], p.root, local));
+      expect(inst.status, `npm install -D: status ${inst.status}, signal ${inst.signal}, error ${inst.error?.message ?? "none"}, ${phases.npmInstall} ms · stderr: ${inst.stderr}`).toBe(0);
+      // The same runtime tree as the global install: inside the package, nothing hoisted into the project (H-65).
+      const tree = timed("compareTree", () => compareInstalledTree(path.join(p.root, "node_modules", "@duo-director", "cli"), path.join(p.root, "node_modules")));
+      expect([...tree.mismatches, ...tree.extra, ...tree.outside]).toEqual([]);
+      // Like a real project, node_modules is ignored: only package.json and the lockfile are committed, and DUO does not
+      // index thousands of dependency files (#37: committing them made git add, commit and init take minutes on Windows).
+      fs.writeFileSync(path.join(p.root, ".gitignore"), "node_modules/\n");
+      timed("gitCommit", () => { p.git("add", "-A"); p.git("commit", "-qm", "add duoctl as a devDependency"); });
+      expect(p.git("ls-files").split("\n").filter((f) => f.startsWith("node_modules/"))).toEqual([]);
+      const npx = (args: string[], input = "") => { const t = performance.now(); try { return runOnPath("npx", ["--no-install", "duoctl", ...args], p.root, local, input); } finally { phases["npx " + args[0]] = Math.round(performance.now() - t); } };
+      const bins = fs.readdirSync(path.join(p.root, "node_modules", ".bin"));
+      expect(bins.filter((b) => b.startsWith("duoctl"))).not.toEqual([]);
+      const version = npx(["--version"]);
+      expect(version.stdout.trim(), `code ${version.code} · stderr: ${version.stderr} · bins: ${bins.join(",")} · npx: ${which("npx", local.PATH ?? "")}`).toBe(`duoctl ${pack.version}`);
+      expect(npx(["init", "--non-interactive", "--answers", "-", "--json"], "[]").code).toBe(0);
+      const r = npx(["install", "codex", "--launcher", "npx", "--non-interactive", "--yes", "--json"]);
+      expect(r.code, r.stderr).toBe(0);
+      expect(r.json().result.verify).toMatchObject({ ok: true, launcher: { kind: "npx", command: "npx", argsPrefix: ["--no-install", "duoctl"], version: pack.version } });
+      const entry = codexEntry(fs.readFileSync(path.join(p.root, ".codex", "config.toml"), "utf8"));
+      expect(entry.command).toBe("npx");
+      const client = await spawnConfigured(entry, path.join(p.root, "src"), local);
+      try {
+        expect((await client.listTools()).tools).toHaveLength(9);
+        expect((await client.callTool({ name: "duo_get_status", arguments: {} })).structuredContent).toMatchObject({ initialized: true });
+      } finally {
+        await client.close();
+      }
     } finally {
-      await client.close();
+      console.log(`project-local install phases (ms): ${JSON.stringify(phases)}`);
+      recordMetric("projectLocalInstallPhasesMs", phases);
     }
   });
 
