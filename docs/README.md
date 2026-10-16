@@ -76,6 +76,9 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [roadmap/0.3.0-t62-stable-promotion-audit.md](roadmap/0.3.0-t62-stable-promotion-audit.md) | T62 0.3.0 Stable Promotion Decision Audit(branch next, 감사만): evidence baseline, stable 조건, T61 평가, F-26/C259 판단(known limitation), 그 밖의 finding, External Validation 관계, stable source 제약(stable은 main에서만, next → main merge 필요), product delta, stable notes 한계, release guard, 판정 PROMOTE-WITH-GUARD, H-81 제안 문구 |
 | [validation/external-validation-01/README.md](validation/external-validation-01/README.md) | External Validation 01 protocol(T33, H-66 아래 H-67): 사전 등록 질문, 28일 모집 window와 clock-start rule, 독립 maintainer 3명 cohort, eligibility, Day 0 pre-declared alternative, 14일 observation, useful·noise·Truth abandonment 정의, 작성자 개입 기록, exit interview, continue·kill·inconclusive 기준, dropout, privacy·telemetry 없음, product freeze, C239~C241 관찰, 모집 문구(한·영)와 기록 양식. 상태 `recruiting`(2026-10-04T09:37:54Z부터, deadline 2026-11-01T09:37:54Z), recruitment execution(H-68), participant 전 운영 해석(H-69) |
 | [conflicts.md](conflicts.md) | 원본 충돌, Human 결정 기록(H-*), 미결 사항 |
+| [team/README.md](team/README.md) | 6인 팀 온보딩과 협업 규칙(T82): 0.3.3에 있는 것과 계획인 것, 개발 환경, Issue → Draft PR → 작성자 아닌 review·3 OS CI → maintainer merge, PR에 쓸 것, maintainer 승인이 필요한 변경, AI가 쓴 코드의 책임, 첫 기여 |
+| [team/roles-and-plan.md](team/roles-and-plan.md) | 팀 역할(FS-1·FS-2·AI-1~4), 첫 작업과 후속 작업, Issue 분담표(#2~#8, #25~#35), 병렬 작업 충돌 지점, 첫 2주 일정, branch ruleset·CODEOWNERS 제안(적용하지 않음) |
+| [team/branch-protection.md](team/branch-protection.md) | branch·tag ruleset 다섯 개(T83 제안, T84 검증): next는 PR·작성자 아닌 승인 1·3 OS CI·squash, main은 maintainer fast-forward만, main·next force push·삭제와 v* tag 이동·삭제는 bypass 없이 금지, v* 생성은 maintainer만, 임시 branch·tag로 한 사전 검증, release 절차 대조표, 운영 규칙과 남은 위험 |
 | [adr/](adr/README.md) | ADR-001~014 |
 | [tasks/TASKS.md](tasks/TASKS.md) | TASK-000~020(TASK-012A/012B 포함), 의존성, E2E 매핑 |
 
