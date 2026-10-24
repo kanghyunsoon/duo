@@ -12,13 +12,14 @@
 //   node bench/value-validation/agent.mjs --out <dir> --duoctl <duoctl.js> --duoctl-bin <dir with duoctl on PATH> --core <core dist index.js>
 //        [--tasks T1,T2] [--conditions A,B,C] [--reps 3] [--seed 81] [--timeout-min 20]
 //        (--dry-run | --selftest | --model <model> --i-understand-this-uses-codex)
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { CASES } from "./cases.mjs";
 import { generate, git } from "./fixture.mjs";
 import { readEvents, sumAll } from "./measure.mjs";
 import { judge } from "./oracle.mjs";
+import { installSignalCleanup, startProcess } from "./process.mjs";
 import { TASKS } from "./tasks.mjs";
 
 const a = process.argv.slice(2);
@@ -67,32 +68,31 @@ async function templates() {
 /** Codex event parsing lives in measure.mjs (pure, unit-tested); re-exported for existing callers. */
 export { readEvents };
 
+// Issue #66: Codex runs without a shell-joined command line, and a timeout stops its whole process tree (process.mjs).
+// The timeout is the timer's own flag; stderr text is never read back to decide it.
 function runCodex(repo, prompt, files, env) {
-  return new Promise((resolve) => {
-    const args = ["exec", "--json", "--skip-git-repo-check", "-s", "workspace-write", "-C", repo, "-m", opts.model, "-o", files.final, "-c", 'approval_policy="never"', "-c", 'projects."' + repo.replaceAll("\\", "\\\\") + '".trust_level="trusted"', "-"];
-    const t = performance.now();
-    const p = spawn(opts.codex, args, { cwd: repo, env, shell: process.platform === "win32", windowsHide: true });
-    const log = fs.createWriteStream(files.events);
-    p.stdout.pipe(log); p.stderr.on("data", (d) => fs.appendFileSync(files.stderr, d));
-    p.stdin.end(prompt);
-    const timer = setTimeout(() => { fs.appendFileSync(files.stderr, "\nTIMEOUT\n"); p.kill(); }, opts.timeoutMin * 60_000);
-    let logError;
-    log.on("error", (error) => { logError ??= error; });
-    p.on("close", (code) => {
-      clearTimeout(timer);
-      const wallSeconds = Math.round((performance.now() - t) / 100) / 10;
+  const args = ["exec", "--json", "--skip-git-repo-check", "-s", "workspace-write", "-C", repo, "-m", opts.model, "-o", files.final, "-c", 'approval_policy="never"', "-c", 'projects."' + repo.replaceAll("\\", "\\\\") + '".trust_level="trusted"', "-"];
+  const { child, result } = startProcess(opts.codex, args, { cwd: repo, env, input: prompt, timeoutMs: opts.timeoutMin * 60_000 });
+  const log = fs.createWriteStream(files.events);
+  let logError;
+  log.on("error", (error) => { logError ??= error; });
+  child.stdout.pipe(log); child.stderr.on("data", (d) => fs.appendFileSync(files.stderr, d));
+  return result.then((p) => new Promise((resolve) => {
+      const wallSeconds = Math.round(p.wallMs / 100) / 10;
       // Resolve only after the event log has flushed (finish) or failed (error), so the last turn.completed is not lost.
       let settled = false;
       const done = () => {
         if (settled) return; settled = true;
-        resolve({ exit: code, wallSeconds, timedOut: fs.existsSync(files.stderr) && fs.readFileSync(files.stderr, "utf8").includes("TIMEOUT"), ...(logError === undefined ? {} : { logError: String(logError.message ?? logError) }) });
+        resolve({
+          exit: p.exit, wallSeconds, timedOut: p.timedOut, ...(p.timedOut ? { terminated: p.terminated, killAttempts: p.killAttempts, pid: p.pid } : {}),
+          ...(p.spawnError === undefined ? {} : { spawnError: p.spawnError }), ...(logError === undefined ? {} : { logError: String(logError.message ?? logError) }),
+        });
       };
       if (logError !== undefined || log.writableFinished) return done();
       log.once("finish", done);
       log.once("error", (error) => { logError ??= error; done(); });
       log.end();
-    });
-  });
+  }));
 }
 
 function acceptance(repo, task) {
@@ -125,6 +125,7 @@ async function main() {
   fs.mkdirSync(out, { recursive: true });
   if (opts.selftest) return selftest();
   if (!opts.dryRun && (opts.model === undefined || !flag("--i-understand-this-uses-codex"))) throw new Error("real runs need --model <model> and --i-understand-this-uses-codex (they use the runner's Codex quota); use --dry-run to check the setup");
+  if (!opts.dryRun) installSignalCleanup();
   const env = { ...process.env, PATH: (opts.duoctlBin ? opts.duoctlBin + path.delimiter : "") + process.env.PATH };
   const duoctl = opts.conditions.includes("C") ? checkDuoctl(env) : null;
   const info = await templates();
@@ -148,6 +149,12 @@ async function main() {
       if (opts.dryRun) { record.sessions.push({ dryRun: true, command: [opts.codex, "exec", "--json", "-s", "workspace-write", "-C", repo, "-m", "<model>", "-"].join(" ") }); continue; }
       const r = await runCodex(repo, prompt, files, env);
       record.sessions.push({ ...r, events: readEvents(files.events) });
+      if (r.timedOut && r.terminated !== true) {
+        // The session may still be running: record it and stop, so no later run overlaps it or shares its quota.
+        Object.assign(record, { status: "kill-failed", wallSeconds: null, usage: null });
+        results.runs.push(record); fs.writeFileSync(resultsFile, JSON.stringify(results, null, 2));
+        throw new Error(run.id + " session " + (i + 1) + " did not stop after the " + opts.timeoutMin + "-minute timeout (root PID " + r.pid + "); stopped before the next run. End that process tree, then resume.");
+      }
     }
     const evs = record.sessions.map((s) => s.events).filter((e) => e !== undefined);
     // A session without usage (or a session whose event log could not be written) makes the run's token totals NOT MEASURED.
