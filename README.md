@@ -276,6 +276,14 @@ Bug reports, UX friction reports and small fixes are welcome. Start with [CONTRI
 
 New to the project? [START_HERE](docs/community/START_HERE.md) walks through forking, branching from `next`, the checks to run and opening the pull request.
 
+## Community recognition
+
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/kanghyunsoon/badge.svg)](https://hub.xerj.org/contributors/kanghyunsoon)
+
+A DUO Decision compliance implementation was selected as a reference example for the [XERJ Corpus Hub](https://hub.xerj.org/contributors/kanghyunsoon) on 2026-10-14. The hub is an external, open collection of implementations that coding agents can look up as worked examples. The selected work is commit [`dd36d54`](https://github.com/kanghyunsoon/duo/commit/dd36d5424c091f512c70a856af683fe2b3195e98), the reviewed-snapshot contract and fail-closed review for incomplete analysis. On 2026-10-21 the hub listed the DUO corpus as in licence review and not yet installable.
+
+This is an external listing. It is not a contribution to the XERJ repository, a partnership, a certification or evidence of production use.
+
 ## License and security
 
 DUO is released under the [Apache License 2.0](LICENSE). Third-party licenses for bundled software (React in the UI, Tree-sitter grammars, npm dependencies) are in `dist/THIRD_PARTY_NOTICES.md` and `dist/grammars/LICENSE-*` inside the package.
