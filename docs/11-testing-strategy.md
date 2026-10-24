@@ -43,6 +43,8 @@
 
 TASK-020부터 아래 시나리오는 `pnpm test:conformance`가 packed tarball을 격리된 prefix에 설치한 뒤 **설치된 `duoctl`로** 실행한다(C210). 계약별 검증 위치는 [release/product-contract.md](release/product-contract.md)에 있다.
 
+CI(T131)에서는 같은 `verify` Job 안에서 이 시나리오 파일을 한 번만 실행한다. `pnpm test`는 `DUO_TEST_DEFER_CONFORMANCE=1`로 이 파일들을 건너뛰고, 뒤의 release conformance 단계가 같은 커밋에서 distribution E2E 단계가 만든 tarball(`.dist/pack.json`의 integrity로 확인)을 설치해 실행한다. 파일 목록은 `vitest.conformance-files.ts` 하나를 두 설정이 함께 읽는다. 로컬 `pnpm test`와 `pnpm test:conformance`(build·pack 포함), RC 검증 절차는 바뀌지 않는다.
+
 1. 기존 저장소 → `duoctl init --non-interactive --answers -` → 최소 Truth, 첫 index, Adoption Baseline, llm calls 0. dirty 저장소는 정책 없이 쓰기 0, `--baseline-policy head`로 채택(`tests/cli/existing-project`, C209 반복 `scripts/release/init-repro.mjs`)
 2. `duoctl install codex`, `duoctl install claude-code` → 생성된 설정의 명령으로 MCP 실제 기동, clone 이식성(`tests/install/`, `tests/distribution/`)
 3. MCP `duo_get_context` / CLI `context`: 기대 Entity(AUTH-03 → AUTH-03, D-015, AuthService.refresh, 관련 Test) 포함, budget 이하, 중복 이름은 ambiguous(`tests/conformance`, `tests/mcp`)

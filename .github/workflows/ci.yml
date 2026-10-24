@@ -44,7 +44,13 @@ jobs:
       # AC-005-01: the official grammar WASM files load into web-tree-sitter and parse on this OS.
       - name: tree-sitter grammar smoke test
         run: pnpm test:grammars
-      - run: pnpm test
+      # T131: the CLI/MCP/install journeys and RC-only checks (vitest.conformance-files.ts) run once per OS, in the
+      # release conformance step below, against the tarball packed from this commit instead of also against the
+      # workspace build here. Locally, pnpm test still runs them.
+      - name: Run pnpm test
+        run: pnpm test
+        env:
+          DUO_TEST_DEFER_CONFORMANCE: "1"
       - name: benchmark correctness smoke (small fixture, JSON contract)
         run: pnpm benchmark:smoke
       - name: validate docs traceability
@@ -55,7 +61,10 @@ jobs:
       - name: distribution E2E (packed @duo-director/cli)
         run: pnpm test:dist
       # TASK-020: CLI/MCP/install journeys and RC-only checks against the installed release candidate; C209 init repetitions.
+      # T131: the build above and the tarball the distribution E2E step packed are reused (checked against pack.json)
+      # instead of building and packing a second time. pnpm test:conformance still builds and packs for local and RC runs.
+      # One command line with &&: on Windows (pwsh) a failing first line of a multi-line run would not stop the step.
       - name: release conformance (installed release candidate)
-        run: pnpm test:conformance
+        run: node scripts/ci/check-packed-artifact.mjs && node scripts/release/conformance.mjs
         env:
           DUO_C209_RUNS: "6"
