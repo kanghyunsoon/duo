@@ -1,6 +1,6 @@
 # Contributing to DUO
 
-Thank you for helping. DUO is a small project with one maintainer, so small and focused contributions are the easiest to review and merge.
+Thank you for helping. DUO is a small project with one maintainer and a small core team, so small and focused contributions are the easiest to review and merge. Team members also follow [docs/team/README.md](docs/team/README.md).
 
 ## Before you start
 
@@ -43,6 +43,7 @@ Package dependency directions are checked by `pnpm check:boundaries` and ESLint.
 - Describe any user-visible change: CLI output, exit codes, MCP results, generated files.
 - Keep backwards compatibility. If an output format, a schema or a stored file changes, say so in the pull request.
 - Make sure `pnpm verify` passes.
+- Every pull request needs a review from someone other than its author and green CI on Windows, Ubuntu and macOS. The maintainer merges; authors do not merge their own pull requests.
 
 ## DUO-specific rules
 

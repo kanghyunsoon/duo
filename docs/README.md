@@ -84,6 +84,9 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [validation/value-validation-01/README.md](validation/value-validation-01/README.md) | Value Validation 01 protocol(T81, 내부 실험, 사전 등록): "DUO의 추가 비용보다 막는 위반·재작업이 큰가". 조건 A(AGENTS.md), B(+ESLint·hook·CI), C(+DUO 0.3.3), 6개 범주, Part 1 결정적 탐지(사례 17개, 실측), Part 2 에이전트 작업 7개(미실행), Part 3 Codex MCP 발견률(#8, 미실행), Part 4 사람 단계 시간, 지표·판정 규칙, 예상 사용량, 역할, 한계. 사례·정답 [scenarios.md](validation/value-validation-01/scenarios.md), 결과 [detection-results-01.md](validation/value-validation-01/detection-results-01.md), 양식 [report-template.md](validation/value-validation-01/report-template.md) |
 | [validation/external-validation-02/README.md](validation/external-validation-02/README.md) | External Validation 02 protocol(T81, 0.3.3, 상태 not-started): EV01과 분리, Stage 1 초기 사용성(10~15분)과 Stage 2 지속 사용(7~14일), 자기 보고 지표, 사전 선언 판정, 개인정보·부담, 모집 계획(사용자 승인 뒤), 모집 문구(한·영) |
 | [conflicts.md](conflicts.md) | 원본 충돌, Human 결정 기록(H-*), 미결 사항 |
+| [team/README.md](team/README.md) | 6인 팀 온보딩과 협업 규칙(T82): 0.3.3에 있는 것과 계획인 것, 개발 환경, Issue → Draft PR → 작성자 아닌 review·3 OS CI → maintainer merge, PR에 쓸 것, maintainer 승인이 필요한 변경, AI가 쓴 코드의 책임, 첫 기여 |
+| [team/roles-and-plan.md](team/roles-and-plan.md) | 팀 역할(BE-1·FE-1·AI-1~4)과 Jira owner 레이블, 첫 작업과 후속 작업, Issue 분담표(#2~#8, #25~#37), 병렬 작업 충돌 지점, 첫 2주 일정, branch ruleset·CODEOWNERS 제안(적용하지 않음) |
+| [team/branch-protection.md](team/branch-protection.md) | branch·tag ruleset 다섯 개(T83 제안, T84 검증): next는 PR·작성자 아닌 승인 1·3 OS CI·squash, main은 maintainer fast-forward만, main·next force push·삭제와 v* tag 이동·삭제는 bypass 없이 금지, v* 생성은 maintainer만, 임시 branch·tag로 한 사전 검증, release 절차 대조표, 운영 규칙과 남은 위험 |
 | [adr/](adr/README.md) | ADR-001~014 |
 | [tasks/TASKS.md](tasks/TASKS.md) | TASK-000~020(TASK-012A/012B 포함), 의존성, E2E 매핑 |
 
