@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { createDiagnostic, failure, guardWrite, PROJECT_FILE_NAME, STATE_DIR_NAME, success, writeFileAtomic, type Diagnostic, type ParseResult } from "@duo-director/core";
+import { createDiagnostic, failure, guardWrite, PROJECT_FILE_NAME, STATE_DIR_NAME, success, writeFileAtomic, type Diagnostic, type ParseResult, type WriteKind } from "@duo-director/core";
 import { redactSecrets } from "@duo-director/director";
 import { probeMcpLaunch } from "../mcp/probe.js";
 import { TOOLS } from "../mcp/tools.js";
@@ -31,23 +31,39 @@ export const agentAdapter = (agent: AgentId): AgentIntegrationAdapter => ADAPTER
 export const EXPECTED_MCP_TOOLS: readonly string[] = Object.keys(TOOLS).sort();
 
 const BACKUP_DIR = `${STATE_DIR_NAME}/runtime/backup`;
+const ownershipPath = (agent: AgentId) => `${STATE_DIR_NAME}/runtime/agent-integration/${agent}.json`;
 
 interface ReadFile { readonly text?: string; readonly hash: string | null; readonly problem?: string }
 
-function readTarget(root: string, rel: string): ReadFile {
-  const guarded = guardWrite(root, rel, "agent-integration");
+function readTarget(root: string, rel: string, kind: WriteKind = "agent-integration"): ReadFile {
+  const guarded = guardWrite(root, rel, kind);
   const abs = path.join(root, rel);
   let bytes: Buffer;
   try {
     const st = fs.lstatSync(abs);
     if (!st.isFile()) return { hash: "not-a-file", problem: `${rel} is not a regular file` };
     bytes = fs.readFileSync(abs);
-  } catch {
-    return guarded.value === undefined ? { hash: null, problem: guarded.diagnostics.map((d) => d.message).join("; ") } : { hash: null };
+  } catch (error) {
+    if (guarded.value === undefined) return { hash: null, problem: guarded.diagnostics.map((d) => d.message).join("; ") };
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? { hash: null } : { hash: null, problem: `Cannot read ${rel}` };
   }
   const hash = createHash("sha256").update(bytes).digest("hex");
   if (guarded.value === undefined) return { hash, problem: guarded.diagnostics.map((d) => d.message).join("; ") };
   return { text: bytes.toString("utf8"), hash };
+}
+
+/** Only install-time evidence permits deleting an empty file; missing history is not ownership. */
+function readOwnership(root: string, adapter: AgentIntegrationAdapter): ReadFile & { readonly created: readonly string[] } {
+  const file = readTarget(root, ownershipPath(adapter.id), "regenerable");
+  if (file.text === undefined) return { ...file, created: [] };
+  try {
+    const value = JSON.parse(file.text) as { format?: unknown; created?: unknown } | null;
+    const targets = [adapter.mcpTarget, adapter.bridgeTarget];
+    if (value?.format === "duo.agent-file-ownership/1" && Array.isArray(value.created)
+      && value.created.every((p: unknown) => typeof p === "string" && targets.includes(p))
+      && new Set(value.created).size === value.created.length) return { ...file, created: value.created as string[] };
+  } catch { /* Invalid records must not authorize deletion. */ }
+  return { ...file, created: [], problem: `${ownershipPath(adapter.id)}: invalid file ownership record` };
 }
 
 const initialized = (root: string) => fs.existsSync(path.join(root, STATE_DIR_NAME, PROJECT_FILE_NAME));
@@ -113,6 +129,8 @@ export function planAgentIntegration(root: string, agent: AgentId, options: Plan
   const blockers: Diagnostic[] = [];
   const conflicts: IntegrationConflict[] = [];
   const warnings: string[] = [];
+  const ownership = readOwnership(root, adapter);
+  if (ownership.problem !== undefined) conflicts.push({ target: ownershipPath(agent), reason: ownership.problem });
   if (!initialized(root)) blockers.push(createDiagnostic("AGENT_NOT_INITIALIZED", `${root} is not a DUO project yet: run duoctl init first (install never initializes)`));
   const launch = checkLauncher(root, launcher, effectiveLauncherHost(launcher, options.host ?? currentHost()));
   blockers.push(...launch.diagnostics);
@@ -162,7 +180,7 @@ export function planAgentIntegration(root: string, agent: AgentId, options: Plan
     requirements: { duoctlAvailable: launch.available, projectTrustRequired: adapter.projectTrustRequired, approvalRequired: adapter.approvalRequired },
     ...summarize(actions), conflicts, warnings, blockers,
     applicable: blockers.length === 0, noop: actions.every(([, a]) => a === "none"),
-    files: [{ path: adapter.mcpTarget, hash: mcpFile.hash }, { path: adapter.bridgeTarget, hash: bridgeFile.hash }],
+    files: [{ path: adapter.mcpTarget, hash: mcpFile.hash }, { path: adapter.bridgeTarget, hash: bridgeFile.hash }, { path: ownershipPath(agent), hash: ownership.hash }],
   };
 }
 
@@ -173,6 +191,11 @@ export function planAgentRemoval(root: string, agent: AgentId): AgentIntegration
   const launcher = launcherOf(state.mcp.current) ?? PATH_LAUNCHER;
   const conflicts: IntegrationConflict[] = [];
   const warnings: string[] = [];
+  const ownership = readOwnership(root, adapter);
+  if (ownership.problem !== undefined) conflicts.push({ target: ownershipPath(agent), reason: ownership.problem });
+  if (ownership.hash === null && (state.mcp.managed || state.bridge.status === "current" || state.bridge.status === "outdated")) {
+    warnings.push("File ownership is unknown for this installation; empty files are kept after removing DUO content.");
+  }
   const mcpFile = readTarget(root, adapter.mcpTarget);
   const bridgeFile = readTarget(root, adapter.bridgeTarget);
   let mcpAction: FileAction = "none";
@@ -180,7 +203,7 @@ export function planAgentRemoval(root: string, agent: AgentId): AgentIntegration
     conflicts.push({ target: adapter.mcpTarget, reason: mcpFile.problem });
     mcpAction = "blocked";
   } else if (mcpFile.text !== undefined) {
-    const next = adapter.remove(mcpFile.text);
+    const next = adapter.remove(mcpFile.text, !ownership.created.includes(adapter.mcpTarget));
     mcpAction = fileAction(mcpFile.text, next);
     if (next === undefined && state.mcp.status !== "not-configured") warnings.push(`${adapter.mcpTarget}: the ${SERVER_NAME} entry is not DUO-managed (${state.mcp.status}); it is left in place`);
   }
@@ -190,7 +213,7 @@ export function planAgentRemoval(root: string, agent: AgentId): AgentIntegration
     bridgeAction = "blocked";
   } else if (bridgeFile.text !== undefined) {
     const next = removeBlock(bridgeFile.text, BRIDGE_MARKERS);
-    bridgeAction = fileAction(bridgeFile.text, next === undefined ? undefined : next.trim() === "" ? null : next);
+    bridgeAction = fileAction(bridgeFile.text, next === undefined ? undefined : ownership.created.includes(adapter.bridgeTarget) && next.trim() === "" ? null : next);
   }
   const blockers = conflicts.map((c) => createDiagnostic("AGENT_INTEGRATION_CONFLICT", `${c.target}: ${c.reason}`));
   const actions: [string, FileAction][] = [[adapter.mcpTarget, mcpAction], [adapter.bridgeTarget, bridgeAction]];
@@ -201,7 +224,7 @@ export function planAgentRemoval(root: string, agent: AgentId): AgentIntegration
     requirements: { duoctlAvailable: true, projectTrustRequired: adapter.projectTrustRequired, approvalRequired: adapter.approvalRequired },
     ...summarize(actions), conflicts, warnings, blockers,
     applicable: blockers.length === 0, noop: actions.every(([, a]) => a === "none"),
-    files: [{ path: adapter.mcpTarget, hash: mcpFile.hash }, { path: adapter.bridgeTarget, hash: bridgeFile.hash }],
+    files: [{ path: adapter.mcpTarget, hash: mcpFile.hash }, { path: adapter.bridgeTarget, hash: bridgeFile.hash }, { path: ownershipPath(agent), hash: ownership.hash }],
   };
 }
 
@@ -220,14 +243,14 @@ function nextContents(root: string, plan: AgentIntegrationPlan): Map<string, str
     if (plan.mcp.action === "create" || plan.mcp.action === "modify") out.set(adapter.mcpTarget, adapter.write(mcpText, planned) ?? mcpText ?? "");
     if (plan.bridge.action === "create" || plan.bridge.action === "modify") out.set(adapter.bridgeTarget, upsertBlock(bridgeText, bridgeLines(launcherDisplay(plan.launcher)), BRIDGE_MARKERS));
   } else {
+    const ownership = readOwnership(root, adapter);
     if (mcpText !== undefined && (plan.mcp.action === "modify" || plan.mcp.action === "delete")) {
-      // remove(): a string is the modified file, null means the file held only DUO content (delete it), undefined means nothing to remove (#6).
-      const removed = adapter.remove(mcpText);
+      const removed = adapter.remove(mcpText, !ownership.created.includes(adapter.mcpTarget));
       if (removed !== undefined) out.set(adapter.mcpTarget, removed);
     }
     if (bridgeText !== undefined && (plan.bridge.action === "modify" || plan.bridge.action === "delete")) {
       const next = removeBlock(bridgeText, BRIDGE_MARKERS) ?? bridgeText;
-      out.set(adapter.bridgeTarget, next.trim() === "" ? null : next);
+      out.set(adapter.bridgeTarget, ownership.created.includes(adapter.bridgeTarget) && next.trim() === "" ? null : next);
     }
   }
   return out;
@@ -241,9 +264,11 @@ function nextContents(root: string, plan: AgentIntegrationPlan): Map<string, str
 export async function applyAgentIntegration(root: string, plan: AgentIntegrationPlan, options: { readonly clock?: () => Date } = {}): Promise<ParseResult<ApplyResult>> {
   if (!plan.applicable) return failure(plan.blockers.length > 0 ? plan.blockers : [createDiagnostic("AGENT_INTEGRATION_CONFLICT", "the plan cannot be applied")]);
   for (const f of plan.files) {
-    if (readTarget(root, f.path).hash !== f.hash) return failure([createDiagnostic("AGENT_PLAN_STALE", `${f.path} changed after the plan was made; plan again`)]);
+    if (readTarget(root, f.path, f.path === ownershipPath(plan.agent) ? "regenerable" : "agent-integration").hash !== f.hash) return failure([createDiagnostic("AGENT_PLAN_STALE", `${f.path} changed after the plan was made; plan again`)]);
   }
   const next = nextContents(root, plan);
+  const adapter = ADAPTERS[plan.agent];
+  const ownership = readOwnership(root, adapter);
   const originals = new Map<string, string | undefined>();
   for (const rel of next.keys()) originals.set(rel, readTarget(root, rel).text);
   const backups: string[] = [];
@@ -272,6 +297,18 @@ export async function applyAgentIntegration(root: string, plan: AgentIntegration
         await writeFileAtomic(g.value.absolute, text);
         changed.push({ path: rel, action: originals.get(rel) === undefined ? "create" : "modify" });
       }
+    }
+    if (!plan.noop) {
+      const g = guardWrite(root, ownershipPath(plan.agent), "regenerable");
+      if (g.value === undefined) throw Object.assign(new Error("guard"), { diagnostics: g.diagnostics });
+      if (plan.operation === "install") {
+        const targets: [string, boolean][] = [
+          [adapter.mcpTarget, plan.mcp.action === "create" || (plan.mcp.status !== "not-configured" && ownership.created.includes(adapter.mcpTarget))],
+          [adapter.bridgeTarget, plan.bridge.action === "create" || (plan.bridge.status !== "absent" && ownership.created.includes(adapter.bridgeTarget))],
+        ];
+        const created = targets.filter(([, own]) => own).map(([rel]) => rel);
+        await writeFileAtomic(g.value.absolute, JSON.stringify({ format: "duo.agent-file-ownership/1", created }, null, 2) + "\n");
+      } else if (ownership.text !== undefined) await fsp.rm(g.value.absolute);
     }
   } catch (error) {
     for (const c of changed) {
