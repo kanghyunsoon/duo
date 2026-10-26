@@ -16,7 +16,7 @@
 | `pnpm release:verify-published` | publish **뒤** 확인(T21): registry의 name·version·integrity·license·engines·bin → 빈 npm 설정과 새 cache로 임시 prefix에 `npm install -g` → 설치된 파일 수(bundled `node_modules/` 포함, npm이 만든 `.bin` 제외)·LICENSE·runtime tree(0.2.1부터 설치 트리 = `dist/runtime-tree.json`, 그 전 version은 `npm-shrinkwrap.json` 존재) → PATH의 `duoctl --version`·`--version --json`·`--help` → 새 Git 저장소에서 `init`→`status` → origin의 `v<version>` tag commit → GitHub Release(draft 아님) → release channel(stable: dist-tag latest = version, GitHub Release prerelease 아님; prerelease: dist-tag next = version, latest는 stable version 그대로, GitHub Release prerelease) → `.dist/release-published.json`. 기대 integrity와 commit은 `--integrity`·`--commit` 또는 같은 version의 `.dist/release-candidate.json`. publish·tag·login을 하지 않고 npm credential을 읽지 않는다. CI와 `pnpm verify`에는 넣지 않는다 | 필요 |
 | `pnpm release:authorization` | publish **직전** 확인(H-81, T63; T60 사고 재발 방지): `.dist/release-candidate.json`의 version·commit에 대해 Human Decision 행(`docs/conflicts.md`의 H-n 행)이 전체 commit SHA와 정확한 version(0.3.0은 0.3.0-rc.6과 다름)을 담는지, `docs/release/checklist.md`에 그 version을 제목에 담고 commit(7자 이상)을 적은 절이 있는지, 두 파일에 program source처럼 보이는 줄(JavaScript처럼 시작하는 줄, fs require)이 없는지, 후보 commit 뒤로 `docs/` 밖이 바뀌지 않았는지 확인 → `.dist/release-authorization.json`. 기록은 working tree가 아니라 Git ref에서 읽는다: stable은 push된 `HEAD`(main), prerelease는 `origin/main`. 그래서 checklist의 해당 version 절(후보 SHA 포함)은 publish 전에 먼저 쓰고, publish 뒤 결과를 채운다 | 없음(Git만) |
 
-## 0.4.0-rc.1 (H-92, 2026-10-26 승인, prerelease 미게시, dist-tag `next`, `v0.4.0-rc.1` = `beac63a`)
+## 0.4.0-rc.1 (H-92, 2026-10-26 prerelease, dist-tag `next`, `v0.4.0-rc.1` = `beac63a`)
 
 Prerelease on branch `next`: 0.3.4 이후의 Work map, UI local API, MCP annotation, launcher 검사와 0.3.4 보안 dependency를 담는다. H-92 exact target `beac63aee7b5df68ef463c82bfaa6bd7ce3baf2c`. `latest`는 0.3.4 그대로이고 `next`를 `main`에 merge하지 않는다. External Validation 01은 정확히 0.2.1이다. [release notes](https://github.com/kanghyunsoon/duo/blob/next/docs/release/notes-0.4.0-rc.1.md)
 
@@ -28,8 +28,11 @@ Prerelease on branch `next`: 0.3.4 이후의 Work map, UI local API, MCP annotat
 - [x] upgrade 0.2.0 → RC(T147·T148 preflight), 0.3.3·0.3.4 → RC(T140, 같은 tree)
 - [x] security: artifact `release:audit` 0, workspace `pnpm audit --prod` 0. dev-only vitest 계열 advisory는 #91
 - [x] H-92 기록(2026-10-26, Maintainer kanghyunsoon 승인(T152), target `beac63a`, PR #92 `main` docs 전용 갱신, `main-stable` 관리자 예외 1회, 독립 승인 없음)
-- [ ] `release:authorization` OK(이 기록이 `origin/main`에 반영된 뒤 `next` `beac63a`에서 실행)
-- [ ] npm publish `--tag next`, registry 검증, tag `v0.4.0-rc.1`, GitHub prerelease, `release:verify-published`(별도 Maintainer 승인 대상, 미실행)
+- [x] `release:authorization` OK(H-92, record `origin/main` `013208e`, 후보 뒤 변경은 `docs/`만). T152와 게시 직전(T154)에 `node scripts/release/authorization.mjs`로 실행(#90)
+- [x] npm publish `@duo-director/cli@0.4.0-rc.1` `--tag next --access public`(T154 Maintainer 승인, 검증한 tarball 그대로, 사람의 2FA 승인, 2026-10-26 07:1x UTC, 1회 시도). shasum `db3079b87aeed81ad459c8db09add7fa16a4ebdd`·integrity·fileCount 7,468·unpacked 114,587,452 B = RC, registry tarball sha256 `a983e730…dfbb4f` = RC, `next` = 0.4.0-rc.1, `latest` = 0.3.4 그대로
+- [x] annotated tag `v0.4.0-rc.1` → `beac63a`, GitHub Release "DUO 0.4.0-rc.1 (prerelease)"(draft 아님, prerelease, GitHub latest release는 v0.3.4 그대로, tarball 첨부, asset sha256 = RC). 본문에 known issue #104 명시
+- [x] `release:verify-published` OK(problems 0, channel prerelease, dist-tags next 0.4.0-rc.1·latest 0.3.4, tag commit = H-92 target, 설치 파일 7,468·runtime tree 67, init/status 정상). `node scripts/release/verify-published.mjs`로 실행(#90)
+- [ ] known issue #104 미해결: `install remove`가 install 전부터 있던 빈 설정·bridge 파일(`.mcp.json`, `CLAUDE.md`, `AGENTS.md`, `.codex/config.toml`)을 삭제한다. H-92 승인 뒤 발견, 0.3.x와 같은 동작, T154에서 Maintainer가 known issue 공개를 조건부 승인
 
 ## 0.3.4 (H-93, 2026-10-25 stable security patch, dist-tag `latest`, `v0.3.4` = `76247bf`)
 
