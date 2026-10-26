@@ -1,6 +1,6 @@
 # Contributing to DUO
 
-Thank you for helping. DUO is maintained by a small team, so small and focused contributions are the easiest to review and merge.
+Thank you for helping. DUO is a small project with one maintainer and a small core team, so small and focused contributions are the easiest to review and merge. Team members also follow [docs/team/README.md](docs/team/README.md).
 
 ## Before you start
 
@@ -17,9 +17,11 @@ Thank you for helping. DUO is maintained by a small team, so small and focused c
 - **Language.** Ask questions in Korean or English. Please write issue titles, pull request titles and descriptions, and code comments in English so every contributor can read the record. Do not worry about polished English.
 - **AI tools are welcome.** You may use coding agents or AI assistants. You are responsible for the change: read it, understand it, run the checks yourself and answer review questions about it. Say in the pull request if an agent wrote a large part of it.
 - **One pull request, one problem.** Code changes need tests. Documentation changes need `pnpm docs:validate`.
-- **Review is a normal step.** "Changes requested" means the change is close, not rejected. Push fixes to the same branch and reply to each comment. A first-time contributor's CI starts after a maintainer approves the workflow run.
+- **Review is a normal step.** "Changes requested" means the change is close, not rejected. Push fixes to the same branch and reply to each comment. For contributors outside the team, each CI run starts after a maintainer has read the change and approved the workflow run, including runs for new pushes.
 - **No guaranteed merge.** A maintainer merges after a reviewer who is not the author approves and CI passes on Windows, Ubuntu and macOS. During a release freeze, approved pull requests may wait until the release is out.
 - **Slow reply?** If nobody answers your issue or pull request within a week, leave one follow-up comment. Please do not open a duplicate.
+- **Changes to sensitive files get a stricter review.** Pull requests that touch `.github/workflows/`, a `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.npmrc`, `vitest*.config.ts`, `scripts/` (including release scripts), the CLI or the agent and MCP integration are reviewed line by line before CI runs. Explain why such a change is needed. A dependency or install-script change without a clear reason will be declined.
+- **How maintainers run your code.** Maintainers read a pull request before any of it runs. Outside code runs in GitHub-hosted CI or in a throwaway environment without credentials, never on a maintainer machine that holds npm, GitHub admin, SSH or API credentials. Green CI does not prove a change is safe, and automated scanners do not replace a person's review.
 - **Bug or vulnerability?** A bug goes in a public issue with the bug template. Anything that could let someone read secrets, run code or bypass a Decision check goes through [SECURITY.md](SECURITY.md) privately.
 - **Credit.** Your merged commits, reviews and issues are public GitHub history, and you may use them in a portfolio. Starring the repository is never required to contribute.
 
@@ -56,6 +58,7 @@ Package dependency directions are checked by `pnpm check:boundaries` and ESLint.
 - Describe any user-visible change: CLI output, exit codes, MCP results, generated files.
 - Keep backwards compatibility. If an output format, a schema or a stored file changes, say so in the pull request.
 - Make sure `pnpm verify` passes.
+- Every pull request needs a review from someone other than its author and green CI on Windows, Ubuntu and macOS. The maintainer merges; authors do not merge their own pull requests.
 
 ## DUO-specific rules
 

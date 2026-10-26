@@ -59,7 +59,8 @@ Open a pull request from your fork to **`kanghyunsoon/duo` base `next`**. Fill i
 
 - Ask questions in Korean or English. Write issue and pull request titles, descriptions and code comments in English.
 - AI coding tools are fine. You are responsible for what you submit: understand it, run the checks and answer review questions.
-- Your first pull request's CI starts after a maintainer approves the workflow run. "Changes requested" is a normal step; push fixes to the same branch.
+- CI for contributors outside the team starts after a maintainer reads the change and approves the run, again after each new push. "Changes requested" is a normal step; push fixes to the same branch.
+- Changes to workflows, `package.json`, the lockfile, `scripts/` or the agent and MCP integration get a stricter review. Say why the change is needed.
 - If nobody replies within a week, leave one follow-up comment on the same issue or pull request.
 - Merging is not guaranteed. While a release is frozen, approved pull requests may wait until it ships.
 - Merged work is public GitHub history you can use in a portfolio. Starring the repository is not required.
