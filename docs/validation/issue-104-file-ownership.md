@@ -1,6 +1,6 @@
 # Issue #104: preserve files that existed before agent installation (H-94)
 
-Status: **Implemented against H-94** ([Decision PR #117](https://github.com/kanghyunsoon/duo/pull/117), [review on PR #113](https://github.com/kanghyunsoon/duo/pull/113#pullrequestreview-5651389679)). Remains Draft until #117 merges into `next`.
+Status: **Implemented against H-94** ([Decision PR #117](https://github.com/kanghyunsoon/duo/pull/117) merged on `next`, [review on PR #113](https://github.com/kanghyunsoon/duo/pull/113#pullrequestreview-5661245527)).
 
 - GitHub: [#104](https://github.com/kanghyunsoon/duo/issues/104) · [PR #113](https://github.com/kanghyunsoon/duo/pull/113).
 - Jira: [S15P31A106-348](https://ssafy.atlassian.net/browse/S15P31A106-348).
@@ -45,9 +45,11 @@ Content alone never decides whether a file may be deleted. When `applyAgentInteg
 - **Re-install and update keep the first answer (H-94 (11)).** Updating an existing installation preserves `existedBefore`, `preSha256` and `backup` for pre-existing files, and keeps `existedBefore: false` for DUO-created files that still hold only DUO content while refreshing `postSha256`.
 - **Exact original bytes (H-94 (8), (9)).** When `existedBefore: true`, the current file still matches `postSha256`, and the original backup exists with sha256 equal to `preSha256` (and held no prior DUO entry/block), removal restores those exact bytes (including hand-formatted `.mcp.json`). If the user edited the file after install, removal strips only DUO's entry/block and never overwrites user edits with the backup.
 - **Missing or invalid record fallback (H-94 (5)-(7), (10)).** When the record is missing (older DUO install, another clone, cleaned runtime) or fails validation (corrupted JSON, wrong digest, unknown format, symlink), no file is deleted. If DUO's entry or block is clearly identifiable, removal strips only that part, keeps the file (`modify`) and adds a warning explaining why (`no install record` or `invalid install record`). If the managed area is malformed or cannot be parsed safely, removal reports `AGENT_INTEGRATION_CONFLICT` and changes nothing.
+- **Retiring the record on remove (including `modified since DUO installed it`).** Successful removal always deletes `.duo-project/runtime/agent-integration/<agent>.json`, even when a file originally created by DUO was kept because the user edited it after install (`modified since DUO installed it`). Once DUO is uninstalled and the kept file holds only the user's own content, any later `duoctl install` observes it as a pre-existing user file (`existedBefore: true`) and will never delete it.
 - **Plan = apply (H-94 (6)).** `planAgentRemoval` and `applyAgentIntegration` share `decideTargetRemoval`, and `applyAgentIntegration` verifies that every target's computed action matches the planned action before writing. Keeping a file uses the existing `modify` action in `duo.agent-integration-plan/1`; adding the runtime record to `plan.files` is an internal stale-plan check within the existing `files: readonly FileSnapshot[]` contract.
 
 ## Validation
 
-- `pnpm exec vitest run packages/integration/src/agents/`: 5 files, 91 tests passed.
+- `pnpm exec vitest run packages/integration/src/agents/ tests/install/install.e2e.test.ts`: 6 files, 105 tests passed.
 - `pnpm check:boundaries`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm docs:validate` and `git diff --check`: passed.
+- 3-OS GitHub Actions CI (`verify` on Ubuntu, Windows and macOS): passed on `943960e` (run [40426418776](https://github.com/kanghyunsoon/duo/actions/runs/40426418776)).
