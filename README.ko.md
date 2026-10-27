@@ -266,6 +266,14 @@ npm install -g .dist/duo-director-cli-<version>.tgz
 
 처음 기여한다면 [첫 기여 안내](docs/community/START_HERE.ko.md)에서 fork, `next` 기준 branch, 실행할 검사, pull request 여는 방법을 볼 수 있습니다.
 
+## 외부 커뮤니티 소개
+
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/kanghyunsoon/badge.svg)](https://hub.xerj.org/contributors/kanghyunsoon)
+
+DUO의 Decision compliance 구현 사례가 2026-10-14에 [XERJ Corpus Hub](https://hub.xerj.org/contributors/kanghyunsoon)의 참고 사례로 선정됐습니다. XERJ Corpus Hub는 Coding Agent가 구현 예시로 찾아볼 수 있게 공개 구현을 모아 둔 외부 저장소입니다. 선정된 것은 commit [`dd36d54`](https://github.com/kanghyunsoon/duo/commit/dd36d5424c091f512c70a856af683fe2b3195e98)(Review의 reviewed snapshot 계약과 불완전한 분석의 fail-closed 처리)입니다. 2026-10-21 기준 hub에서 DUO corpus는 license 검토 중이며 아직 설치할 수 없는 상태로 표시됩니다.
+
+외부 목록에 소개된 것이며 XERJ 저장소에 직접 기여한 것, 공식 파트너십, 기술 인증, 실제 운영 사용 성과를 뜻하지 않습니다.
+
 ## License와 보안
 
 DUO는 [Apache License 2.0](LICENSE)으로 배포합니다. 배포 package에 들어 있는 제3자 소프트웨어(UI의 React, Tree-sitter grammar, npm 의존성)의 license는 package 안의 `dist/THIRD_PARTY_NOTICES.md`와 `dist/grammars/LICENSE-*`에 있습니다.
