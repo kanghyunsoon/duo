@@ -87,3 +87,33 @@ Local file-set check (`vitest list`): the full run has 145 files, the deferred r
 - The RC gates (`release:preflight`, `release:audit`, `release:upgrade`, `release:authorization`, `release:verify-published`) and `pnpm test:conformance` are untouched.
 - The distribution E2E is unchanged, including the deterministic second pack (111 s on Windows) and the project-local npx install (about 3 min).
 - Further savings would reduce what a pull request verifies on Windows, for example running the full distribution E2E only on `next` pushes or RC candidates. Those need a Maintainer decision and a ruleset plan, because required checks must still report on every pull request. They are not part of this PR.
+
+## T164 re-measurement (2026-10-27, after merging `next` `14eef0e`)
+
+The PR now sits on `next` with #95, #113, #117, #108 and #119. The only conflict was the `vitest.config.ts` exclude list: `tests/bench/**` from #95 is kept in the base list. The `tests/mcp-benchmark-timeout.test.ts` regression from #95 still runs in `pnpm test`, because it is not a conformance file.
+
+**File sets** (`vitest list --filesOnly` on `22b788f`): full 150, deferred 137, conformance 13, distribution 1. The deferred and conformance sets are disjoint (intersection 0), and their union equals the full set (no file is dropped or added). The #104 suites (`packages/integration/src/agents/lifecycle.test.ts`, `removal-ownership.test.ts`), `apps/cli/src/cli.test.ts` and the MCP benchmark timeout test stay in `pnpm test`. The 13 moved files run once, against the packed CLI. CI logs on all three OSes show `pnpm test` with 137 files, `check-packed-artifact: reusing …`, C209 with 0 anomalies of 6, and `conformance: suite: 118 passed`.
+
+**Stale-artifact guard** (new in `22b788f`). `check-packed-artifact.mjs` now also checks the package name. It refuses a working tree with tracked changes, and it refuses a `pack.json` or tarball older than the checked-out commit. Local fault checks: a tracked edit gives exit 1, a back-dated tarball gives exit 1, and a wrong version gives exit 1. A pwsh `a && b` line stops with exit 1 when `a` fails.
+
+**Paired runs.** Before is `next` `14eef0e` (run 40452628700); after is this PR (run 40459017227). Both are re-run on the same commit, and attempts 2 and 3 of each started at the same minute. Times are job durations in minutes, with `pnpm test` / dist E2E / conformance in brackets.
+
+| | Before (`14eef0e`) | After (`22b788f`) |
+|---|---|---|
+| Attempt 1 (not concurrent) | Windows 25.8 (8.8/8.6/6.7), runner sum 45.0 | Windows 23.9 (7.5/8.1/5.9), runner sum 36.9 |
+| Attempt 2 (06:33 UTC) | Windows 32.3 (13.3/8.3/8.3), runner sum 57.5 | failed: #126 flake on Windows, not comparable |
+| Attempt 3 (07:10 UTC) | Windows 32.1 (13.4/8.4/7.8); run failed on macOS from the #126 flake | Windows 24.6 (8.1/7.9/6.2), runner sum 43.5 |
+
+At the same start time (attempt 3), Windows, which sets the wall time, took 24.6 instead of 32.1 minutes (−7.5 min, −23%). Across all measured Windows jobs, before was 25.8/32.3/32.1 and after was 23.9/24.6. Ubuntu and macOS jobs were shorter after in every pair. Runner variance is large: two `next` push runs earlier the same day took 23.0 and 25.8 minutes without this change. So this is a small sample, not a guarantee.
+
+**Survey of the last 40 successful `ci` runs** (2026-10-26 01:47 to 2026-10-27 05:22 UTC, 27 `pull_request` and 13 `push`; queue time under 0.1 min at p90):
+
+| Job | p50 | p90 | max |
+|---|---:|---:|---:|
+| Windows | 32.6 | 35.7 | 37.0 |
+| Ubuntu | 11.6 | 12.8 | 22.3 |
+| macOS | 11.9 | 14.6 | 15.2 |
+| Wall (Windows-bound) | 32.6 | 35.8 | 37.1 |
+| Runner minutes per run | 56.0 | 61.5 | 68.5 |
+
+The slowest steps by p50 are Windows `pnpm test` 12.8, Windows dist E2E 9.2, Windows conformance 8.2, macOS `pnpm test` 5.9 and Ubuntu `pnpm test` 5.1. Of the last 300 `ci` runs, 255 succeeded, 7 failed, 37 were cancelled (superseded by `concurrency`) and 1 waits for approval. Only 3 of 288 commits ran both as `push` and `pull_request`.
