@@ -55,13 +55,14 @@ Open a pull request from your fork to **`kanghyunsoon/duo` base `next`**. Fill i
 - Agents may propose Decisions; only a person confirms them. Never weaken a Decision or a test expectation to get a PASS.
 - Never post credentials, tokens or private project files. Report vulnerabilities privately as described in [SECURITY.md](../../SECURITY.md).
 
-## 5. Working with us
+## Working with us
 
+- Claim before you start: comment on the issue with what you plan to change and wait until a maintainer assigns it to you, so two people do not work on the same thing.
 - Ask questions in Korean or English. Write issue and pull request titles, descriptions and code comments in English.
-- AI coding tools are fine. You are responsible for what you submit: understand it, run the checks and answer review questions.
+- AI coding tools are fine. You are responsible for what you submit: understand it, run the checks and answer review questions. Fill in the AI assistance line of the pull request template.
 - CI for contributors outside the team starts after a maintainer reads the change and approves the run, again after each new push. "Changes requested" is a normal step; push fixes to the same branch.
-- Changes to workflows, `package.json`, the lockfile, `scripts/` or the agent and MCP integration get a stricter review. Say why the change is needed.
-- If nobody replies within a week, leave one follow-up comment on the same issue or pull request.
+- Changes to sensitive files get a stricter review, for example workflows, `package.json`, the lockfile, `scripts/`, the CLI or the agent and MCP integration (full list in CONTRIBUTING). Say why the change is needed.
+- If nobody replies within a week, leave one follow-up comment on the same issue or pull request. Do not open a duplicate issue.
 - Merging is not guaranteed. While a release is frozen, approved pull requests may wait until it ships.
 - Merged work is public GitHub history you can use in a portfolio. Starring the repository is not required.
 
