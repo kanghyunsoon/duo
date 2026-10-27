@@ -1,6 +1,6 @@
 # Claude Code MCP integration, end to end (#31)
 
-Status: phase A (no account usage) and phase B (a Claude Code login, [approved on #31](https://github.com/kanghyunsoon/duo/issues/31#issuecomment-6408945894)) ran on 2026-10-26. Every step passed. A headless run does not wait for the approval; that and two observations are under [Findings](#findings).
+Status: phase A (no account usage) and phase B (a Claude Code login, [approved on #31](https://github.com/kanghyunsoon/duo/issues/31#issuecomment-6408945894)) ran on 2026-10-26 on Windows 11 with public DUO 0.3.4 and Claude Code 2.1.308. Every DUO step passed. A4b (a headless run waits for the approval) is FAIL because of Claude Code's behaviour; see finding 1 under [Findings](#findings). macOS, Linux, DUO 0.4.0-rc.1 and Codex are **NOT TESTED** here.
 
 The question: when a person follows the README, does Claude Code start DUO's MCP server from the `.mcp.json` that `duoctl install claude-code` writes, list the 9 tools, and call them during a real task after the documented approval step? Does the `CLAUDE.md` bridge lead the agent to DUO, and does the CLI fallback work when the tools are missing?
 
@@ -97,6 +97,9 @@ Log in once inside the isolated folder with `claude auth login`. Each model sess
 | B2 First DUO tool call during a task | PASS | The agent loaded the DUO tools through Claude Code's tool search, then called `duo_get_status` (its third tool call), ran `duoctl index` for the stale index, called `duo_get_context`, edited `src/orders.js` and the test, ran the tests and `duoctl index`, and called `duo_review_changes` (`PASS`). Tests: 3 pass. |
 | B3 CLI fallback when the server is unavailable | PASS | With no MCP server, the agent searched for the DUO tools, waited 5 seconds, ran `duoctl status`, searched again, then ran `duoctl index` and `duoctl context` before editing, and `duoctl index` and `duoctl review` after the tests. |
 | B4 Bridge leads the agent to DUO | PASS | In B2 and B3 the agent followed the bridge in order: status, index when stale, context before the change, index and review after it. It changed only `src/orders.js` and `test/orders.test.js`; `.duo-project/` was not modified. |
+| macOS and Linux E2E | NOT TESTED | This run covered Windows 11 only. |
+| DUO 0.4.0-rc.1 E2E | NOT TESTED | This run used public DUO 0.3.4 only. |
+| Codex E2E | NOT TESTED | This run used Claude Code 2.1.308 only. |
 
 ## Usage
 
