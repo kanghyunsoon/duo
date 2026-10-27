@@ -162,6 +162,24 @@ export const MilestoneBlockSchema = z.strictObject({
   extensions,
 });
 
+/**
+ * imported_paths (H-72): repository path patterns; a changed import resolving to a matching file conflicts.
+ * importer_paths (#47): repository path patterns of the importing files that imported_paths applies to;
+ * absent means every changed file. An explicit empty list, or importer_paths without imported_paths, is
+ * invalid input, never "repository-wide".
+ */
+const forbidsShape = z.strictObject({
+  dependencies: texts().optional(), symbols: texts().optional(), paths: texts().optional(), imported_paths: texts().optional(), importer_paths: texts().optional(),
+}).superRefine((f, ctx) => {
+  if (f.importer_paths === undefined) return;
+  if (f.importer_paths.length === 0) {
+    ctx.addIssue({ code: "custom", path: ["importer_paths"], message: "must list at least one path pattern; omit it to apply imported_paths to every importer" });
+  }
+  if ((f.imported_paths?.length ?? 0) === 0) {
+    ctx.addIssue({ code: "custom", path: ["importer_paths"], message: "needs a non-empty imported_paths; importer_paths only narrows imported_paths" });
+  }
+});
+
 const decisionShape = {
   title: text(),
   kind: z.enum(["decision", "constraint"]).optional(),
@@ -170,8 +188,7 @@ const decisionShape = {
   rationale: text().optional(),
   owner: z.literal("human").optional(),
   governs: z.strictObject({ requirements: ids().optional(), paths: texts().optional(), symbols: texts().optional() }).optional(),
-  /** imported_paths (H-72): repository path patterns; a changed import resolving to a matching file conflicts. */
-  forbids: z.strictObject({ dependencies: texts().optional(), symbols: texts().optional(), paths: texts().optional(), imported_paths: texts().optional() }).optional(),
+  forbids: forbidsShape.optional(),
   supersedes: id().nullable().optional(),
   evidence: z.array(EvidencePointerSchema).optional(),
   source: sources,
