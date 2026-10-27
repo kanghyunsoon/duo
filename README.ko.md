@@ -118,7 +118,7 @@ duoctl doctor
   - Codex는 trust한 project에서만 `.codex/config.toml`을 읽습니다. Codex를 처음 열 때 나오는 trust 질문에서 이 폴더를 trust하거나, `~/.codex/config.toml`에 `[projects."/path/to/project"]`와 `trust_level = "trusted"`를 추가하세요. 그다음 Codex의 `/mcp`에 `duo-director`가 보입니다.
   - Claude Code는 `.mcp.json`의 서버를 쓰기 전에 승인을 묻습니다. project에서 `claude`를 실행해 workspace trust 대화상자를 수락하고 `duo-director`를 승인하세요. 승인 전에는 `claude mcp get duo-director`가 `Pending approval`을 보이고, `claude mcp reset-project-choices`로 다시 물을 수 있습니다.
 - `duoctl doctor`는 Git, Project Truth, index, 언어별 분석 수준, 연결한 Agent, 선택 LLM 설정을 확인하고 다음 할 일을 1~3개 보여 줍니다. 읽기만 합니다.
-- Agent 설정은 PATH에 있는 `duoctl`을 실행합니다. 예전 전역 설치가 남아 있다면 project 폴더의 일반 터미널에서 `duoctl --version`을 확인하세요. 버전이 달라도 install 검증은 아직 경고하지 않습니다([#40](https://github.com/kanghyunsoon/duo/issues/40)).
+- [0.4.0-rc.1](docs/release/notes-0.4.0-rc.1.md#agent-launcher-checks-40-75-81)에서는 실행 중인 CLI와 Agent의 PATH로 시작한 MCP 서버의 버전이 다르면 `duoctl install`이 `launcher-version-mismatch`를 경고하고 `duoctl doctor`는 두 버전과 확인된 실행 경로를 `version-mismatch`로 보고하며, 그 PATH에 `duoctl`이 없으면 install은 파일을 쓰지 않고 종료 코드 6으로 멈춥니다. project 폴더의 일반 터미널에서 `duoctl --version`을 확인한 뒤 예전 전역 설치를 업데이트하거나 `--launcher npx`로 Agent 설정을 다시 설치하세요.
 
 로컬 UI(`duoctl ui`)와 LLM 보조는 선택 사항입니다. 로컬 UI의 [Work map](docs/work-map.md)은 작업과 DUO 그래프의 관련 노드를 보여 줍니다.
 
