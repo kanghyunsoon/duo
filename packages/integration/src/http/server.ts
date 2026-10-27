@@ -198,10 +198,21 @@ export async function startDuoUiServer(options: DuoUiServerOptions): Promise<Duo
     const only = (m: "GET" | "POST") => {
       if (method !== m) throw new HttpError(405, "UI_METHOD_NOT_ALLOWED", `${method} is not allowed on /api/${route}`);
     };
+    // #77: the Decision detail and preview routes take no query, and the Decision list refuses a repeated name
+    // instead of keeping its last value. Checked after the method, so Host, session, Origin/CSRF and 405 keep their
+    // order. The messages are fixed and never echo a name or value.
+    const noQuery = () => {
+      if ([...url.searchParams.keys()].length > 0) throw new HttpError(400, "UI_REQUEST_INVALID", "this route takes no query parameters");
+    };
+    const noRepeatedQuery = () => {
+      const names = [...url.searchParams.keys()];
+      if (new Set(names).size !== names.length) throw new HttpError(400, "UI_REQUEST_INVALID", "a query parameter is repeated");
+    };
     const confirmMatch = /^proposals\/([^/]+)\/(confirm|reject)$/u.exec(route);
     const previewMatch = /^proposals\/([^/]+)\/preview$/u.exec(route);
     if (previewMatch !== null) {
       only("GET");
+      noQuery();
       let id: string;
       try {
         id = decodeURIComponent(previewMatch[1] as string);
@@ -241,6 +252,7 @@ export async function startDuoUiServer(options: DuoUiServerOptions): Promise<Duo
     const decisionMatch = /^decisions\/([^/]+)$/u.exec(route);
     if (decisionMatch !== null) {
       only("GET");
+      noQuery();
       let id: string;
       try {
         id = decodeURIComponent(decisionMatch[1] as string);
@@ -265,6 +277,7 @@ export async function startDuoUiServer(options: DuoUiServerOptions): Promise<Duo
       case "proposals": only("GET"); return { name: "proposals", body: data(await projectProposals(root)) };
       case "decisions": {
         only("GET");
+        noRepeatedQuery();
         const q = parse(SCHEMAS.decisions, query);
         return { name: "decisions", body: data(await projectDecisionList(root, { ...(q.state === undefined ? {} : { state: q.state }), ...(q.q === undefined ? {} : { q: q.q }) })) };
       }

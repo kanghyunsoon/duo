@@ -8,7 +8,7 @@ const packages = ["core", "analyzer", "graph", "director", "integration", "ui"];
 
 // Distribution E2E (packed artifact, npm installs) runs separately: pnpm test:dist.
 // The real OpenAI smoke test is opt-in only: pnpm test:openai-smoke (never in CI).
-const baseExclude = ["**/node_modules/**", "tests/distribution/**", "tests/openai-smoke/**", "tests/compatible-smoke/**", "tests/ui/ui.accessibility.e2e.test.ts"];
+const baseExclude = ["**/node_modules/**", "tests/distribution/**", "tests/openai-smoke/**", "tests/compatible-smoke/**", "tests/ui/ui.accessibility.e2e.test.ts", "tests/bench/**"];
 
 /**
  * T131: in CI the release conformance step of the same job runs CONFORMANCE_FILES against the tarball packed from the

@@ -27,11 +27,38 @@ export function npm(args, options = {}) {
   return cli === undefined ? run("npm", args, { shell: process.platform === "win32", ...options }) : run(process.execPath, [cli, ...args], options);
 }
 
+function quoteWindowsArgument(arg) {
+  if (/[\0\r\n]/u.test(arg)) throw new Error("Windows pnpm shims cannot pass NUL or line breaks literally");
+  let out = '"';
+  let backslashes = 0;
+  for (const ch of arg) {
+    if (ch === "\\") { backslashes++; continue; }
+    out += ch === '"' ? "\\".repeat(backslashes * 2 + 1) + '"' : "\\".repeat(backslashes) + ch;
+    backslashes = 0;
+  }
+  return out + "\\".repeat(backslashes * 2) + '"';
+}
+
+const escapeCmdMeta = (arg) => arg.replace(/([()\][%!^"\x60<>&|;, *?])/gu, "^$1");
+
+/** JS entry points need Node; standalone binaries must be executed directly. */
+export function pnpmInvocation(exec, exists = fs.existsSync, platform = process.platform, args = []) {
+  if (exec !== undefined && /pnpm/iu.test(exec) && exists(exec)) {
+    if (/\.(?:js|cjs|mjs)$/iu.test(exec)) return { command: process.execPath, args: [exec, ...args], shell: false };
+    if (platform === "win32" && /\.(?:cmd|bat)$/iu.test(exec)) {
+      // MSVC quoting preserves argv; cmd /c and the shim's %* each consume one caret-escaping layer.
+      const line = [escapeCmdMeta(path.win32.normalize(exec)), ...args.map((arg) => escapeCmdMeta(escapeCmdMeta(quoteWindowsArgument(arg))))].join(" ");
+      return { command: process.env.ComSpec || "cmd.exe", args: ["/d", "/v:off", "/s", "/c", `"${line}"`], shell: false, windowsVerbatimArguments: true };
+    }
+    return { command: exec, args: [...args], shell: false };
+  }
+  return { command: "pnpm", args: [...args], shell: platform === "win32" };
+}
+
 /** pnpm through the running package manager (pnpm run sets npm_execpath), else pnpm on PATH. */
 export function pnpm(args, options = {}) {
-  const exec = process.env.npm_execpath;
-  if (exec !== undefined && /pnpm/iu.test(exec) && fs.existsSync(exec)) return run(process.execPath, [exec, ...args], options);
-  return run("pnpm", args, { shell: process.platform === "win32", ...options });
+  const { command, args: argv, shell, windowsVerbatimArguments } = pnpmInvocation(process.env.npm_execpath, fs.existsSync, process.platform, args);
+  return run(command, argv, { shell, ...options, ...(windowsVerbatimArguments ? { shell: false, windowsVerbatimArguments: true } : {}) });
 }
 
 export function gitState() {

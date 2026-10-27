@@ -88,6 +88,21 @@
 | Downgrade | floor는 0.2.2. 0.3 전용 Truth를 쓰는 저장소를 0.2.2는 `PROJECT_TRUTH_INVALID`로 거부한다. 0.2.1 이하는 지원하지 않는다(C244) |
 | Known limitation | `outside-current-milestone` PARTIAL WARN noise(C259, 0.2.x와 같은 동작) |
 
+## 0.4.0-rc.1 변경 분류 (T134, branch `next`, dist-tag `next`)
+
+0.3.4 → 0.4.0-rc.1. prerelease이며 stable `latest`는 0.3.4다. 0.3.4의 보안 dependency update(#88·#89: MCP SDK 2.3.1, zod 4.6.7)를 같은 version으로 포함한다. 포함: #52·#79·#85·#86 Work map, #53·#54·#76·#78 UI local API, #61 MCP annotation, #75·#81 launcher 검사(#40). review·context·Decision 확정의 결과는 같은 입력에서 0.3.4와 같다.
+
+| 분류 | 내용 |
+|---|---|
+| Additive public | UI local API `duo.ui.decisions/1`·`duo.ui.decision-detail/1`·`duo.ui.preview/1`과 Work map route(`work-map`·`work-revision`·`work-expand`·`work-tasks`·`work-task-complete`·`work-events`). install verify JSON의 선택 필드 `verify.warnings`(`launcher-version-mismatch`), doctor warning `version-mismatch`(facts `cliVersion`·`serverVersion`·`resolved`, action `align-launcher`) |
+| MCP annotation | `duo_get_context`·`duo_review_changes`가 `readOnlyHint: false`·`idempotentHint: false`·`destructiveHint: true`(0.3.4까지 read-only). metrics와 Work map 활동 파일을 쓰기 때문이다. tool 이름·input schema·결과는 같다. 실제 Codex·Claude Code 승인 UX는 측정하지 않았다 |
+| Behavior correction | install plan은 agent의 실효 PATH에서 launcher를 찾지 못하면 exit 6으로 멈추고 쓰지 않는다(0.3.4까지 `Verify: ok`). `/api/decisions/{id}`·`/api/proposals/{id}/preview`의 query, `/api/decisions`의 반복 query 이름은 400 `UI_REQUEST_INVALID`(#77). Work map task 이름·agent label은 저장·표시 전에 secret redaction(#84) |
+| Internal-only | `runtime/work-tasks.json`(`duo.work-tasks/2`, 128 KiB), `cache/work-map.json`. 재생성 가능한 local 파일이며 init의 `.gitignore`에 이미 있다 |
+| Unchanged | Truth schema(`schema_version: 1`), Decision Lock 형식과 digest, `duo.review/1`·`duo.context/1`·`duo.context-packet/1`·`duo.gap-assessment/1`·`duo.review-record/1`·`duo.adoption-baseline/2`, `CONTEXT_POLICY_VERSION`, Graph 형식, MCP tool 9개, install plan 외 CLI 종료 코드, runtime dependency 트리(0.3.4 대비 shrinkwrap diff는 version 두 곳, 67 packages) |
+| Migration | 없음. Truth·lock·Record·agent 설정을 다시 쓰지 않는다. launcher 검사를 쓰려면 사람이 `duoctl install <agent>`를 다시 실행한다 |
+| Downgrade | 0.3.4는 같은 Truth를 읽고 Work map 파일을 무시한다. 0.3 Truth의 floor는 그대로 0.2.2 |
+| Known limitation | launcher PATH는 Windows에서만 측정(pnpm dlx 식별 불가, npm test/start·run-script·pnpm run 미측정, Yarn Classic 부분), redaction은 알려진 credential 형식만, 접근성 수동 검증 미완료(#73), C259·C260·#7·#4 그대로 |
+
 ## 0.3.3 변경 분류 (T78, H-87)
 
 0.3.2 → 0.3.3. UX·안정성 patch(H-87). 새 규칙과 새 검사 종류, dependency 변경, 형식 major 변경은 없다. review의 verdict·claim·evidence·gap, context, Decision 결과는 0.3.2와 같다(T77에서 같은 저장소·같은 변경으로 나란히 확인).
