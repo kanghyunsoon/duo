@@ -109,7 +109,7 @@
 
 | 분류 | 내용 |
 |---|---|
-| Additive Truth | Decision·proposal `forbids.importer_paths`(#47): `imported_paths`만 import하는 파일의 path pattern으로 좁힌다. `schema_version: 1` 그대로. 이 field가 없는 Decision의 lock digest와 review 결과는 같다. 빈 목록과 `imported_paths` 없는 사용은 잘못된 입력이다 |
+| Additive Truth | Decision·proposal `forbids.importer_paths`(#47): `imported_paths`만 import하는 파일의 path pattern으로 좁힌다. `schema_version: 1` 그대로. 이 field가 없는 Decision의 lock digest와 review 결과는 같다. 빈 목록과 `imported_paths` 없는 사용은 잘못된 입력이다(H-96) |
 | Additive public | MCP `duo_propose_decision`의 `forbids.importer_paths`(tool 9개 그대로), CLI confirm preview·UI의 Forbids scope 문구(importer_paths가 있을 때) |
 | Downgrade | `importer_paths`를 쓰는 저장소를 0.2.2+·0.3.x·0.4.0-rc.1로 열면 `SCHEMA_UNKNOWN_PROPERTY`로 `PROJECT_TRUTH_INVALID`(fail-closed, H-75). Decision이 조용히 빠지지 않는다 |
 
