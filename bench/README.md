@@ -8,7 +8,7 @@ pnpm benchmark:mcp:smoke
 pnpm test:mcp-benchmark
 ```
 
-The full run uses 10 iterations and 8 concurrent servers. Override these with `--iterations N` and `--concurrency N` after invoking the script directly. JSON is written to stdout so callers can store it as an artifact. Diagnostic failures use stderr and a non-zero exit code.
+The full run uses 10 iterations and 8 concurrent servers. Override these with `--iterations N` and `--concurrency N` after invoking the script directly. Initialization, `tools/list`, and each tool call have a 30-second deadline; use `--timeout-ms N` to change it. Timeouts identify their stage in the JSON error list, close the server transport, and produce a non-zero exit code. JSON is written to stdout so callers can store it as an artifact. Diagnostic failures use stderr and a non-zero exit code.
 
 Four scenarios are reported:
 

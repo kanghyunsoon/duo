@@ -4,21 +4,23 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
-import { Client } from "@modelcontextprotocol/client";
+import { Client, SdkError, SdkErrorCode } from "@modelcontextprotocol/client";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
 const workspace = fileURLToPath(new URL("../", import.meta.url));
 const cli = path.join(workspace, "apps", "cli", "dist", "main.js");
 const fixture = path.join(workspace, "fixtures", "context", "app");
 const smoke = process.argv.includes("--smoke");
+const serverScript = process.env.DUO_MCP_BENCHMARK_SERVER_SCRIPT;
 const option = (name, fallback) => {
   const index = process.argv.indexOf(name);
   return index < 0 ? fallback : Number.parseInt(process.argv[index + 1] ?? "", 10);
 };
 const iterations = option("--iterations", smoke ? 1 : 10);
 const concurrency = option("--concurrency", smoke ? 2 : 8);
-if (!Number.isInteger(iterations) || iterations < 1 || !Number.isInteger(concurrency) || concurrency < 1) {
-  throw new Error("--iterations and --concurrency must be positive integers");
+const timeoutMs = option("--timeout-ms", 30_000);
+if (!Number.isInteger(iterations) || iterations < 1 || !Number.isInteger(concurrency) || concurrency < 1 || !Number.isInteger(timeoutMs) || timeoutMs < 1) {
+  throw new Error("--iterations, --concurrency, and --timeout-ms must be positive integers");
 }
 
 const toolArguments = {
@@ -128,43 +130,70 @@ function verifyTools(tools) {
 async function open(root) {
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [cli, "mcp", "--root", root, "--agent", "mcp-benchmark"],
+    args: serverScript ? [serverScript] : [cli, "mcp", "--root", root, "--agent", "mcp-benchmark"],
     cwd: root,
     stderr: "pipe",
     env: { ...getDefaultEnvironment(), OPENAI_API_KEY: "", ANTHROPIC_API_KEY: "" },
   });
   const client = new Client({ name: "duo-mcp-benchmark", version: "1.0.0" });
   const started = performance.now();
-  await client.connect(transport);
-  return { client, transport, initializeMs: performance.now() - started };
+  try {
+    await client.connect(transport, { timeout: timeoutMs });
+    return { client, transport, initializeMs: performance.now() - started };
+  } catch (error) {
+    await transport.close().catch(() => undefined);
+    throw error;
+  }
 }
 
 async function prime(root) {
   const session = await open(root);
-  try { await session.client.listTools(); } finally { await session.transport.close(); }
+  try { await session.client.listTools(undefined, { timeout: timeoutMs }); } finally { await session.transport.close(); }
+}
+
+function errorEntry(stage, error) {
+  return {
+    stage,
+    kind: error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout ? "timeout" : "client-error",
+    detail: error instanceof Error ? error.message : String(error),
+  };
 }
 
 async function measure(root, warm) {
-  if (warm) await prime(root);
   const latencyMs = {};
   const errors = [];
+  if (warm) {
+    try { await prime(root); } catch (error) { errors.push(errorEntry("warmup", error)); }
+  }
   let session;
   try {
-    session = await open(root);
+    try {
+      session = await open(root);
+    } catch (error) {
+      errors.push(errorEntry("initialize", error));
+      return { latencyMs, errors };
+    }
     latencyMs.initialize = session.initializeMs;
     let started = performance.now();
-    const listed = await session.client.listTools();
+    let listed;
+    try {
+      listed = await session.client.listTools(undefined, { timeout: timeoutMs });
+    } catch (error) {
+      latencyMs["tools/list"] = performance.now() - started;
+      errors.push(errorEntry("tools/list", error));
+      return { latencyMs, errors };
+    }
     latencyMs["tools/list"] = performance.now() - started;
     verifyTools(listed.tools);
     for (const name of expectedNames) {
       started = performance.now();
       try {
-        const result = await session.client.callTool({ name, arguments: toolArguments[name] });
+        const result = await session.client.callTool({ name, arguments: toolArguments[name] }, { timeout: timeoutMs });
         latencyMs[name] = performance.now() - started;
         if (result.isError) errors.push({ stage: name, kind: "tool-error", detail: String(result.content?.[0]?.text ?? "unknown") });
       } catch (error) {
         latencyMs[name] = performance.now() - started;
-        errors.push({ stage: name, kind: "client-error", detail: error instanceof Error ? error.message : String(error) });
+        errors.push(errorEntry(name, error));
       }
     }
   } catch (error) {
@@ -187,7 +216,7 @@ async function scenario(template, temp, name, count, warm) {
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), "duo-mcp-benchmark-"));
 try {
-  if (!fs.existsSync(cli)) throw new Error("built CLI not found; run pnpm build first");
+  if (!serverScript && !fs.existsSync(cli)) throw new Error("built CLI not found; run pnpm build first");
   const template = prepareTemplate(temp);
   const scenarios = {};
   for (const [name, count, warm] of [["single-cold", 1, false], ["single-warm", 1, true], ["concurrent-cold", concurrency, false], ["concurrent-warm", concurrency, true]]) {
@@ -196,7 +225,7 @@ try {
   const result = {
     format: "duo.mcp-benchmark/1",
     environment: { platform: process.platform, arch: process.arch, node: process.version },
-    configuration: { iterations, concurrency, warmDefinition: "one unmeasured initialize and tools/list on the same fixture copy before the measured server start" },
+    configuration: { iterations, concurrency, timeoutMs, warmDefinition: "one unmeasured initialize and tools/list on the same fixture copy before the measured server start" },
     toolContract: { names: expectedNames, verified: true },
     scenarios,
   };
