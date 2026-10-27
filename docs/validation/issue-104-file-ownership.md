@@ -1,52 +1,53 @@
-# Issue #104: preserve files that existed before agent installation
+# Issue #104: preserve files that existed before agent installation (H-94)
 
-Status: **Draft proposal for maintainer review**, not an adopted Decision or a release authorization.
+Status: **Implemented against H-94** ([Decision PR #117](https://github.com/kanghyunsoon/duo/pull/117), [review on PR #113](https://github.com/kanghyunsoon/duo/pull/113#pullrequestreview-5651389679)). Remains Draft until #117 merges into `next`.
 
-- GitHub: [#104](https://github.com/kanghyunsoon/duo/issues/104).
+- GitHub: [#104](https://github.com/kanghyunsoon/duo/issues/104) · [PR #113](https://github.com/kanghyunsoon/duo/pull/113).
 - Jira: [S15P31A106-348](https://ssafy.atlassian.net/browse/S15P31A106-348).
-- Base: `next` at `beac63aee7b5df68ef463c82bfaa6bd7ce3baf2c`.
-- Environment: Windows, Node 24.18.0, pnpm 11.25.0. Tests use temporary project roots and a fake launcher; no account, model call or real agent configuration is used.
+- Base: `next` after #105 (`e0756e5`) and #56 (`1d5fb53`).
+- Environment: Windows 11, Node 24.18.0, pnpm 11.25.0. Tests use temporary project roots and a fake launcher; no account, model call or real agent configuration is used.
 
-## Reproduction
+## Reproduction and regression suite
 
-`removal-ownership.test.ts` exercises the same plan/apply API as the CLI. Before the fix, both preservation cases fail: removal plans delete `.codex/config.toml` and `AGENTS.md`, or `.mcp.json` and `CLAUDE.md`, although the files existed before install. The two cases starting without files pass and must keep passing.
+The #27 suite from [PR #105](https://github.com/kanghyunsoon/duo/pull/105) (`packages/integration/src/agents/lifecycle.test.ts`) is updated so its pinned `#104` assertion and `it.todo` become real preservation tests covering pre-existing `.mcp.json` (`{"mcpServers": {}}`), 0-byte `CLAUDE.md`, 0-byte `AGENTS.md` and empty `.codex/config.toml`, plus byte-for-byte restoration of a hand-formatted `.mcp.json` when untouched since install.
 
-The tests run install, install again, an older bridge update, remove, then a second remove. An existing `.mcp.json` starts as `{"mcpServers": {}}`; the text files start at zero bytes.
+`packages/integration/src/agents/removal-ownership.test.ts` supplements that suite with per-file mixed ownership, `postSha256` identity verification before whole-file deletion, repeated install/update preservation of `existedBefore`, tracked and untracked files, LF and CRLF line endings, missing or corrupted ownership records, unidentifiable managed areas, symlinked record paths, stale plans, same-clock backup protection, concurrent edits during backup I/O, and rollback safety.
 
-## Proposed behavior
+## H-94 Ownership record and removal rules
 
-Content alone cannot distinguish a user file from a file DUO created. The shared integration layer records only the latter target paths in `.duo-project/runtime/agent-integration/<agent>.json`:
+Content alone never decides whether a file may be deleted. When `applyAgentIntegration` installs or updates an agent in an initialized DUO project, it writes `.duo-project/runtime/agent-integration/<agent>.json` atomically through `guardWrite(..., "regenerable")`:
 
 ```json
 {
   "format": "duo.agent-file-ownership/1",
-  "created": [".mcp.json", "CLAUDE.md"]
+  "agent": "claude-code",
+  "created": [".mcp.json", "CLAUDE.md"],
+  "targets": {
+    ".mcp.json": {
+      "existedBefore": false,
+      "preSha256": null,
+      "backup": null,
+      "postSha256": "<sha256>"
+    },
+    "CLAUDE.md": {
+      "existedBefore": true,
+      "preSha256": "<sha256>",
+      "backup": ".duo-project/runtime/backup/agent-claude-code-<stamp>/CLAUDE.md",
+      "postSha256": "<sha256>"
+    }
+  },
+  "digest": "<sha256 of canonical body>"
 }
 ```
 
-The allowed paths are limited to that agent's two targets. The record contains no original contents, timestamps, credentials or absolute paths. It is local runtime state, not Project Truth, and need not be committed. Losing it reduces cleanup; it cannot grant permission to delete files.
+- **Allowlisted targets and digests only (H-94 (1), (3), (7)).** The record accepts only that agent's `mcpTarget` and `bridgeTarget`, verified by `digest`. It stores no file contents, secrets, credentials or absolute paths.
+- **Whole-file deletion requires creation evidence + matching `postSha256` (H-94 (3)).** A file is deleted only when a valid record marks `existedBefore: false` for that target, its current sha256 equals `postSha256`, and nothing remains after removing DUO's part.
+- **Re-install and update keep the first answer (H-94 (11)).** Updating an existing installation preserves `existedBefore`, `preSha256` and `backup` for pre-existing files, and keeps `existedBefore: false` for DUO-created files that still hold only DUO content while refreshing `postSha256`.
+- **Exact original bytes (H-94 (8), (9)).** When `existedBefore: true`, the current file still matches `postSha256`, and the original backup exists with sha256 equal to `preSha256` (and held no prior DUO entry/block), removal restores those exact bytes (including hand-formatted `.mcp.json`). If the user edited the file after install, removal strips only DUO's entry/block and never overwrites user edits with the backup.
+- **Missing or invalid record fallback (H-94 (5)-(7), (10)).** When the record is missing (older DUO install, another clone, cleaned runtime) or fails validation (corrupted JSON, wrong digest, unknown format, symlink), no file is deleted. If DUO's entry or block is clearly identifiable, removal strips only that part, keeps the file (`modify`) and adds a warning explaining why (`no install record` or `invalid install record`). If the managed area is malformed or cannot be parsed safely, removal reports `AGENT_INTEGRATION_CONFLICT` and changes nothing.
+- **Plan = apply (H-94 (6)).** `planAgentRemoval` and `applyAgentIntegration` share `decideTargetRemoval`, and `applyAgentIntegration` verifies that every target's computed action matches the planned action before writing. Keeping a file uses the existing `modify` action in `duo.agent-integration-plan/1`; adding the runtime record to `plan.files` is an internal stale-plan check within the existing `files: readonly FileSnapshot[]` contract.
 
-| Starting state | Proposed remove behavior |
-|---|---|
-| Existing empty configuration or bridge | Remove DUO's content and keep the empty file |
-| Target absent before install | Delete it only if no user content remains |
-| One target existed, the other was absent | Decide independently for each target |
-| Human additions after install | Retain them even in a file DUO created |
-| Old install, missing record, or another clone | Keep empty files and warn that ownership is unknown |
-| Invalid or redirected ownership record | Block mutations; do not infer ownership |
+## Validation
 
-Repeated installs and bridge updates retain the record. Successful removal retires it so a subsequent install observes the current user files anew. A no-op still writes nothing. The plan's `files` snapshots include the record hash; its public user-file action lists and apply `changed`/`backups` lists still describe only configuration and bridge files. Existing write guards, backups and rollback apply, including rollback when persisting or retiring the record fails.
-
-## Review decisions
-
-1. Approve or replace the local creation record approach.
-2. Approve the safe fallback for older installs: keeping empty files changes the former content-only deletion behavior. The warning explains it rather than claiming DUO knows the original owner.
-3. Decide release inclusion. This patch does not amend the confirmed ADR-011 or confirm a new Decision.
-
-The alternative of always keeping empty files is smaller but also leaves files behind on every fresh install/remove. Inferring ownership from dated backups cannot distinguish all repeated-install histories. The proposal uses explicit creation evidence to preserve fresh cleanup and existing empty files together.
-
-## Validation and integration
-
-The regression suite covers both agents, mixed ownership, updates, human additions, old installs, malformed records, stale plans, symlink guards, install rollback and remove rollback. Existing #6 cleanup coverage now performs a real install, rather than constructing files without creation evidence.
-
-[PR #105](https://github.com/kanghyunsoon/duo/pull/105) remains separate. Its current-behavior test for #104 and `it.todo` will need to become the preservation expectation when the branches are integrated; do not merge both expectations unchanged. #31, the second-remove message (#109), launcher selection, and setup/index behavior are outside this patch.
+- `pnpm exec vitest run packages/integration/src/agents/`: 5 files, 91 tests passed.
+- `pnpm check:boundaries`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm docs:validate` and `git diff --check`: passed.
