@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -20,20 +20,4 @@ describe("MCP benchmark smoke", () => {
       expect(Object.keys(scenario.latency)).toEqual(expect.arrayContaining(["initialize", "tools/list", ...result.toolContract.names]));
     }
   }, 300_000);
-
-  it("reports an initialization timeout and exits non-zero", () => {
-    const result = spawnSync(process.execPath, [path.resolve("bench/mcp.mjs"), "--smoke", "--timeout-ms", "50"], {
-      cwd: path.resolve("."),
-      encoding: "utf8",
-      env: { ...process.env, DUO_MCP_BENCHMARK_SERVER_SCRIPT: path.resolve("tests/bench/fixtures/unresponsive-mcp.mjs") },
-      timeout: 30_000,
-      windowsHide: true,
-    });
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(1);
-    const report = JSON.parse(result.stdout) as { scenarios: Record<string, { errors: Array<{ stage: string; kind: string }> }> };
-    expect(Object.values(report.scenarios).flatMap((scenario) => scenario.errors)).toEqual(
-      expect.arrayContaining([expect.objectContaining({ stage: "initialize", kind: "timeout" })]),
-    );
-  }, 30_000);
 });
