@@ -19,7 +19,8 @@
  *    and missing `imports-unresolved` limitation on computed dynamic imports (`import(\`../db/${name}.js\`)`),
  *    plus newly found L2b static no-substitution template literal (`import(\`../db/legacy-db.js\`)`).
  *    L2a is fixed by #50 (Maintainer Decision T158): the computed import now gives `imports-unresolved`.
- *    L2b stays pinned.
+ *    L2b is fixed by #50 L2b (H-90): a template literal without substitutions in import()/require() is the
+ *    same module reference as the string literal, so the forbidden import is claimed (BLOCK when introduced).
  *
  * Maintenance rule for pinned tests:
  * - Passing tests in this file pin current 0.3.3 behavior (`next` = `v0.3.3` product code) without
@@ -295,9 +296,9 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
       expect(message).not.toContain("${name}");
     });
 
-    it("pins current 0.3.3 behavior (L2b): static no-substitution template literal import(`../db/legacy-db.js`) is dropped because only.type !== 'string'", async () => {
-      // Root cause: `literalText(node)` in `ts-js-extract.ts` supports no-substitution `template_string`,
-      // but `Extractor.call` gates `this.module(...)` on `only?.type === "string"` instead of `literalText(only) !== undefined`.
+    it("L2b (#50, H-90): a static no-substitution template literal import(`../db/legacy-db.js`) is the forbidden import, introduced, BLOCK", async () => {
+      // `Extractor.call` (`packages/analyzer/src/language/tree-sitter/ts-js-extract.ts`) now accepts any literal
+      // (`literalText(only)`), so the template is the same module reference as the string literal.
       const res = await scenario((r) =>
         r.write(
           "src/ui/lazy-static-template.ts",
@@ -305,13 +306,39 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
         ),
       );
 
-      expect(res.verdict).toBe("PASS");
-      expect(forbiddenImports(res)).toEqual([]);
+      expect(res.verdict).toBe("BLOCK");
+      const claims = forbiddenImports(res);
+      expect(claims).toHaveLength(1);
+      expect(claims[0]).toMatchObject({ alignment: "CONFLICT", reason: "forbidden-import", provenance: "introduced", blockEligible: true });
+      expect(claims[0]?.observed).toContain('src/ui/lazy-static-template.ts:2 dynamic-import "../db/legacy-db.js"');
       expect(importLimits(res)).toEqual([]);
     });
 
-    it.todo(
-      "0.4 candidate (#50 L2b, needs its own Maintainer Decision; not approved in T158): extract no-substitution template literals in import()/require() as real imports (PASS → BLOCK)",
-    );
+    it("L2b (#50, H-90): require() with a static template literal is the same, introduced, BLOCK", async () => {
+      const res = await scenario((r) =>
+        r.write("src/ui/cjs-page.ts", "const { legacyQuery } = require(`../db/legacy-db.js`);\n\nexport const run = (): string => legacyQuery(\"cjs\");\n"),
+      );
+
+      expect(res.verdict).toBe("BLOCK");
+      const claims = forbiddenImports(res);
+      expect(claims).toHaveLength(1);
+      expect(claims[0]).toMatchObject({ provenance: "introduced", blockEligible: true });
+      expect(claims[0]?.observed).toContain('src/ui/cjs-page.ts:1 require "../db/legacy-db.js"');
+    });
+
+    it("L2b (#50, H-90): a static template import() in a file whose pair is already in the Adoption Baseline is pre-existing-touched, WARN (H-72 (10) key unchanged)", async () => {
+      const res = await scenario((r) =>
+        r.edit(
+          "src/ui/legacy-orders-page.ts",
+          "export function renderOrders(): string {",
+          "export async function loadLegacy(): Promise<unknown> {\n  return import(`../db/legacy-db.js`);\n}\n\nexport function renderOrders(): string {",
+        ),
+      );
+
+      expect(res.verdict).toBe("WARN");
+      const claims = forbiddenImports(res);
+      expect(claims).toHaveLength(1);
+      expect(claims[0]).toMatchObject({ provenance: "pre-existing-touched", blockEligible: false, violationKey: violationKey("decision-forbids-import", "D-001", `import:${fileNode("src/ui/legacy-orders-page.ts")}->${fileNode("src/db/legacy-db.ts")}`) });
+    });
   });
 });

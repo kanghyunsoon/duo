@@ -4,10 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import { nodeId, type EntityRef } from "@duo-director/core";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { checkGraph } from "../check.js";
+import { checkGraph, dumpGraph } from "../check.js";
 import { openNodeSqliteGraphStore } from "../store/node-sqlite/node-sqlite-graph-store.js";
 import type { GraphStore } from "../store/types.js";
 import { traverse } from "../traverse.js";
+import { indexRepository } from "../incremental/indexer.js";
+import { inspectIndex } from "../incremental/inspect.js";
+import { INDEX_STATE_FILE_PATH, INDEX_STATE_TOKEN_KEY, indexStateToken, readIndexState } from "../incremental/state.js";
+import { baseRegistry, cleanRebuild, edge, invariantProblems, makeRepo, memoryStore } from "../incremental/testing.js";
 import { applyGraphPlan } from "./apply.js";
 import { buildGraphPlan } from "./builder.js";
 import { collectGraphFacts } from "./collect.js";
@@ -216,5 +220,69 @@ describe("computed import() (#50 L2a)", () => {
     expect(computed.diagnostics.filter((d) => d.source?.path === "src/loader.ts")).toEqual([]);
     // The fixture's own module diagnostics are unchanged.
     expect(computed.diagnostics.filter((d) => d.code === "MODULE_UNRESOLVED").map((d) => d.source?.path)).toEqual(["src/app.ts"]);
+  });
+});
+
+describe("template literal import() and require() (#50 L2b)", () => {
+  const FILES: Record<string, string> = {
+    ".duo-project/project.yaml": "schema_version: 1\nname: l2b\n",
+    "src/db/legacy-db.ts": "export function legacyQuery(sql: string): string {\n  return sql;\n}\n",
+    "src/ui/lazy.ts": [
+      "export async function load(name: string) {",
+      "  const fixed = await import(`../db/legacy-db.js`);",
+      "  const computed = await import(`../db/${name}.js`);",
+      "  return [fixed, computed];",
+      "}",
+      "",
+    ].join("\n"),
+    "src/ui/cjs.ts": "const { legacyQuery } = require(`../db/legacy-db.js`);\nexport const run = (): string => legacyQuery(\"x\");\n",
+  };
+
+  it("resolves like the string literal: an IMPORTS edge, no MODULE_UNRESOLVED; a template with ${} stays computed", async () => {
+    const root = makeRepo(temps, FILES).root;
+    const facts = await collectGraphFacts(root);
+    if (facts.value === undefined) throw new Error(JSON.stringify(facts.diagnostics));
+    const plan = buildGraphPlan(facts.value);
+    expect(plan.moduleResolutions.filter((m) => m.from.startsWith("src/ui/")).map((m) => [m.from, m.specifier, m.location.startLine, m.result])).toEqual([
+      ["src/ui/cjs.ts", "../db/legacy-db.js", 1, expect.objectContaining({ status: "resolved", path: "src/db/legacy-db.ts" })],
+      ["src/ui/lazy.ts", "../db/legacy-db.js", 2, expect.objectContaining({ status: "resolved", path: "src/db/legacy-db.ts" })],
+      ["src/ui/lazy.ts", "", 3, { status: "unresolved", reason: "computed-specifier" }],
+    ]);
+    const imports = plan.edges.filter((e) => e.type === "IMPORTS").map((e) => `${nodeId(e.from)} -> ${nodeId(e.to)}`).sort();
+    expect(imports).toEqual(["file:src/ui/cjs.ts -> file:src/db/legacy-db.ts", "file:src/ui/lazy.ts -> file:src/db/legacy-db.ts"]);
+    expect(plan.diagnostics.filter((d) => d.code === "MODULE_UNRESOLVED")).toEqual([]);
+  });
+
+  it("an index made by the previous analyzer identity is stale, and one index run makes it current and equal to a clean rebuild", async () => {
+    const registry = await baseRegistry();
+    const store = memoryStore();
+    try {
+      const repo = makeRepo(temps, FILES);
+      const first = await indexRepository(repo.root, { store, registry });
+      if (first.value === undefined) throw new Error(JSON.stringify(first.diagnostics));
+      // An index written before #50 L2b: the TS/JS analyses carry another analyzer identity (facts=computed-imports-1).
+      const state = readIndexState(repo.root).state as unknown as { files: { path: string; analysis?: { identity: string } }[] };
+      for (const f of state.files) if (f.path.endsWith(".ts") && f.analysis !== undefined) f.analysis.identity = "sha256:before-50-l2b";
+      const token = indexStateToken(state as never);
+      fs.writeFileSync(path.join(repo.root, INDEX_STATE_FILE_PATH), `${JSON.stringify({ ...state, token })}\n`);
+      store.transaction((tx) => tx.writeMeta(INDEX_STATE_TOKEN_KEY, token));
+
+      const before = await inspectIndex(repo.root, { graph: store, registry });
+      expect(before.value?.status).toBe("stale");
+      expect(before.value?.wouldRebuild.parse).toEqual(["src/db/legacy-db.ts", "src/ui/cjs.ts", "src/ui/lazy.ts"]);
+      expect(before.value?.freshness.find((r) => r.path === "src/ui/lazy.ts")).toMatchObject({ analysis: "stale-analyzer" });
+
+      const again = await indexRepository(repo.root, { store, registry });
+      if (again.value === undefined) throw new Error(JSON.stringify(again.diagnostics));
+      const after = await inspectIndex(repo.root, { graph: store, registry });
+      expect(after.value?.status).toBe("current");
+      expect(edge(store, "file:src/ui/lazy.ts", "IMPORTS", "file:src/db/legacy-db.ts")).toBeDefined();
+      expect(edge(store, "file:src/ui/cjs.ts", "IMPORTS", "file:src/db/legacy-db.ts")).toBeDefined();
+      expect(invariantProblems(store, repo.root)).toEqual([]);
+      expect(dumpGraph(store)).toEqual(await cleanRebuild(repo.root, registry, 500));
+    } finally {
+      store.close();
+      registry.dispose();
+    }
   });
 });
