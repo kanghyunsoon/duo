@@ -13,6 +13,8 @@
  *    import edge under H-72 pair-level adoption provenance.
  * 3. L1 (S15P31A106-266 / Follow-up #49): Out of current analyzer scope (`scope.duo: "out"` in #24)
  *    on 1-hop barrel re-exports (`src/db/index.ts` re-exports `./legacy-db.js`, UI imports `../db/index.js`).
+ *    #49 Stage 1 (Maintainer Decision L1-C) now reports `imports-through-reexport` with the chain; the verdict
+ *    stays PASS. Binding-level origin matching (PASS → BLOCK) is Stage 2 and stays a todo.
  * 4. L2 (S15P31A106-267 / Follow-up #50): Out of current analyzer scope (`scope.duo: "out"` in #24)
  *    and missing `imports-unresolved` limitation on computed dynamic imports (`import(\`../db/${name}.js\`)`),
  *    plus newly found L2b static no-substitution template literal (`import(\`../db/legacy-db.js\`)`).
@@ -246,13 +248,11 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
   });
 
   describe("Case L1 (S15P31A106-266 / #49): out of current analyzer scope (scope.duo: out in #24) on 1-hop barrel re-export", () => {
-    it("pins current 0.3.3 behavior (L1): importing legacyQuery via barrel src/db/index.ts resolves to src/db/index.ts and returns PASS with no limitation", async () => {
-      // Root cause: `readIndexedModuleReferences` (`packages/graph/src/incremental/references.ts`) pairs each
-      // `entry.analysis.moduleReferences[j]` with its direct 1-hop module resolution (`src/db/index.ts`), and
-      // `decisionForbidsImport` (`packages/director/src/review/rules.ts`) only matches `target` against
-      // `d.forbids.importedPaths`. Even though `ExportIndex` (`packages/graph/src/build/exports.ts`) follows
-      // re-export chains up to `MAX_REEXPORT_DEPTH = 4` for `CALLS` edges, binding-level re-export targets are
-      // not stored on module resolutions or checked by `decisionForbidsImport`.
+    it("L1 (#49 Stage 1, Maintainer Decision L1-C): importing legacyQuery via barrel src/db/index.ts reports an imports-through-reexport limitation with the chain; the verdict stays PASS", async () => {
+      // `decisionForbidsImport` (`packages/director/src/review/rules.ts`) still matches only the resolved file
+      // (`src/db/index.ts`) against `d.forbids.importedPaths`. When that file re-exports, through indexed
+      // export-from chains of at most `MAX_REEXPORT_DEPTH = 4` hops, a name the import takes from a forbidden
+      // file, the review states that the chain was not checked binding by binding. No claim is made.
       const res = await scenario((r) =>
         r.write(
           "src/ui/report-page.ts",
@@ -262,11 +262,14 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
 
       expect(res.verdict).toBe("PASS");
       expect(forbiddenImports(res)).toEqual([]);
-      expect(importLimits(res)).toEqual([]);
+      expect(importLimits(res)).toEqual(["imports-through-reexport"]);
+      expect(res.limitations.find((l) => l.code === "imports-through-reexport")?.message).toContain(
+        "src/ui/report-page.ts:1 → src/db/index.ts → src/db/legacy-db.ts (D-001)",
+      );
     });
 
     it.todo(
-      "0.4 candidate (#49, needs Maintainer Decision): resolve TS/JS barrel re-export targets (or surface a limitation) when checking forbids.imported_paths",
+      "0.4 candidate (#49 Stage 2, needs a Human Decision row before merge): report forbidden-import when an exactly resolved named binding comes from a forbidden origin (PASS → BLOCK)",
     );
   });
 

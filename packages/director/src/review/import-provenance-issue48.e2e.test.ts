@@ -20,8 +20,9 @@
  * - P7a: The specifier changes to a `tsconfig` path alias that resolves to the same file.
  *   All of P1–P7a: current `next` behavior is one `pre-existing-touched` CONFLICT on the pair key,
  *   `blockEligible: false`, WARN.
- * - P7b: The specifier changes to the barrel `src/db/index.ts` that re-exports `legacy-db`. Current
- *   `next` behavior: no claim and no limitation, PASS (the L1 gap of #49).
+ * - P7b: The specifier changes to the barrel `src/db/index.ts` that re-exports `legacy-db`. Since #49
+ *   Stage 1 (L1-C): no claim, an `imports-through-reexport` limitation that names the chain, PASS.
+ *   Binding-level origin matching is #49 Stage 2.
  * - P8a: The `from` side did not resolve (the import pointed to a missing file) and the `to` side now
  *   resolves to `legacy-db`. Current `next` behavior: `introduced`, BLOCK, because the pair is not in
  *   the baseline.
@@ -255,16 +256,15 @@ describe("Issue #48: forbidden-import adoption provenance pinned fixtures (P1–
     expect(forbiddenImports(res)[0]?.observed).toContain('import "@db/legacy-db.js" resolves to src/db/legacy-db.ts');
   });
 
-  it("P7b: pins current next behavior (switching the specifier to the re-exporting barrel leaves no claim and no limitation, PASS)", async () => {
+  it("P7b (#49 Stage 1, Maintainer Decision L1-C): switching the specifier to the re-exporting barrel gives no claim and an imports-through-reexport limitation with the chain, PASS", async () => {
     const res = await scenario((r) => r.edit("src/ui/orders-page.ts", '"../db/legacy-db.js"', '"../db/index.js"'));
     expect(forbiddenImports(res)).toEqual([]);
-    expect(importLimits(res)).toEqual([]);
+    expect(importLimits(res)).toEqual(["imports-through-reexport"]);
+    expect(res.limitations.find((l) => l.code === "imports-through-reexport")?.message).toContain(
+      "src/ui/orders-page.ts:1 → src/db/index.ts → src/db/legacy-db.ts (D-001)",
+    );
     expect(res.verdict).toBe("PASS");
   });
-
-  it.todo(
-    "P7b follow-up (#49 Stage 1, Maintainer Decision L1-C): a changed import that reaches legacy-db through a re-export chain reports a limitation with the chain, without changing the verdict",
-  );
 
   it("P8a: pins current next behavior (the from side did not resolve and the to side now resolves to legacy-db: introduced, BLOCK)", async () => {
     const res = await scenario((r) => r.edit("src/ui/archive-page.ts", '"../db/legacy-db-v0.js"', '"../db/legacy-db.js"'));
