@@ -26,6 +26,12 @@ function hasForbids(forbids: unknown): boolean {
   return typeof forbids === "object" && forbids !== null && Object.values(forbids as Record<string, unknown>).some((v) => Array.isArray(v) && v.length > 0);
 }
 
+/** #47: forbids.importer_paths has at least one entry. */
+function hasImporterPaths(forbids: unknown): boolean {
+  const importers = typeof forbids === "object" && forbids !== null ? (forbids as Record<string, unknown>)["importer_paths"] : undefined;
+  return Array.isArray(importers) && importers.length > 0;
+}
+
 /** The candidate a confirm or reject acts on, as lines for stderr. */
 export function previewLines(L: Locale, p: ConfirmPreview, op: "confirm" | "reject"): string[] {
   const c = p.candidate;
@@ -46,7 +52,8 @@ export function previewLines(L: Locale, p: ConfirmPreview, op: "confirm" | "reje
     row("Title", show(L, c.title)), row("Question", show(L, c.question)), row("Answer", show(L, c.answer)), row("Kind", show(L, c.kind)),
     row("Rationale", show(L, c.rationale)), row("Governs", show(L, c.governs)), row("Forbids", show(L, c.forbids)),
     // T40 (N3): governs does not scope forbids; say so wherever forbids are set.
-    ...(hasForbids(c.forbids) ? [row("Forbids scope", t(L, "decision.preview.forbids-scope"))] : []),
+    // #47: importer_paths narrows imported_paths; the row says so instead of "repository-wide".
+    ...(hasForbids(c.forbids) ? [row("Forbids scope", t(L, hasImporterPaths(c.forbids) ? "decision.preview.forbids-scope-importers" : "decision.preview.forbids-scope"))] : []),
     row("Enforcement", show(L, c.enforcement)),
     row("Supersedes", supersedes),
     // H-71: the proposer as the proposal file records it (an audit label); a YAML Decision has none to show.

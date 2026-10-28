@@ -58,6 +58,7 @@ export function createLanguageModuleResolver(options: LanguageResolverOptions): 
     configFiles: (fromPath) => (TS_EXTENSION.test(fromPath) ? ts.configFiles(fromPath) : PY_EXTENSION.test(fromPath) ? pythonRoots().metadata : []),
     configDiagnostics: (configPath, opts) => (isPythonMetadataFile(configPath) ? [] : ts.configDiagnostics(configPath, opts)),
     resolve(request) {
+      if (request.syntax?.computed === true) return { status: "unresolved", reason: "computed-specifier" };
       if (isTs(request)) return ts.resolve(request);
       if (request.language === "python") return resolvePython(request, files, pythonRoots());
       if (request.language === "cpp") return resolveCppInclude(request, files, request.syntax?.system === true);

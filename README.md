@@ -118,7 +118,7 @@ duoctl doctor
   - Codex loads `.codex/config.toml` only in a trusted project. Trust the folder when Codex asks on first launch, or add it to your `~/.codex/config.toml` with `[projects."/path/to/project"]` and `trust_level = "trusted"`. In Codex, `/mcp` then lists `duo-director`.
   - Claude Code asks before it uses a server from `.mcp.json`. Run `claude` in the project, accept the workspace trust dialog and approve `duo-director`. Until then `claude mcp get duo-director` shows `Pending approval`; `claude mcp reset-project-choices` asks again.
 - `duoctl doctor` checks Git, Project Truth, the index, the analysis level per language, connected agents and the optional LLM settings, and lists the next one to three steps. It only reads.
-- The agent configuration starts whichever `duoctl` is on your PATH. If you also have an older global install, run `duoctl --version` in a normal terminal in the project. Install verification does not warn about a different version yet ([#40](https://github.com/kanghyunsoon/duo/issues/40)).
+- In [0.4.0-rc.1](docs/release/notes-0.4.0-rc.1.md#agent-launcher-checks-40-75-81), `duoctl install` warns (`launcher-version-mismatch`) when the CLI and the MCP server launched from the agent's PATH have different versions, and `duoctl doctor` reports `version-mismatch` with both versions and the resolved path; install stops with exit 6 without writing files if that PATH has no `duoctl`. Check `duoctl --version` in a normal terminal in the project, then update an older global install or reinstall the agent configuration with `--launcher npx`.
 
 The local UI (`duoctl ui`) and LLM assistance are optional.
 

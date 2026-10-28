@@ -4,8 +4,7 @@
  * older DUO wrote) → remove → remove again, in temp directories only. Planning sees a fake duoctl on a
  * PATH of its own; nothing is started and the developer's ~/.codex and Claude settings are never read.
  * "byte for byte" and "value-level" in the test names say how strictly a file comes back.
- * .duo-project/ (Truth and DUO's backups) is outside the comparison. A known defect is pinned as it is
- * today next to an it.todo; the fix must update the pinned assertion and turn the it.todo into a test.
+ * .duo-project/ (Truth and DUO's backups) is outside the comparison.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -138,10 +137,18 @@ describe("agent files across install → update → remove → remove again (#27
     });
   }
 
-  it("claude-code, hand-formatted .mcp.json: value-level only (same values and key order, the layout is DUO's JSON); CLAUDE.md byte for byte", async () => {
-    const root = repo({ ".mcp.json": JSON_BY_HAND, "CLAUDE.md": NOTES });
+  it("claude-code, hand-formatted .mcp.json: restored byte for byte from the verified pre-install backup when untouched; falls back to value-level when backup is absent (H-94)", async () => {
+    const user = { ".mcp.json": JSON_BY_HAND, "CLAUDE.md": NOTES };
+    const root = repo(user);
     await lifecycle(root, "claude-code");
-    const after = files(root);
+    expect(files(root)).toEqual(user);
+
+    // Without the backup, value-level preservation still holds.
+    const rootNoBackup = repo(user);
+    await apply(rootNoBackup, planAgentIntegration(rootNoBackup, "claude-code", { host }));
+    fs.rmSync(path.join(rootNoBackup, STATE_DIR_NAME, "runtime/backup"), { recursive: true, force: true });
+    await apply(rootNoBackup, planAgentRemoval(rootNoBackup, "claude-code"));
+    const after = files(rootNoBackup);
     expect(after[".mcp.json"]).not.toBe(JSON_BY_HAND);
     expect(JSON.stringify(JSON.parse(after[".mcp.json"] as string))).toBe(JSON.stringify(JSON.parse(JSON_BY_HAND)));
     expect(after["CLAUDE.md"]).toBe(NOTES);
@@ -169,19 +176,30 @@ describe("agent files across install → update → remove → remove again (#27
     expect(files(root)).toEqual({ ".mcp.json": JSON_2, "CLAUDE.md": NOTES });
   });
 
-  it("codex, text-level: a file without a final newline gets one; text a person adds below the DUO block stays, after DUO's blank line", async () => {
+  it("codex, text-level: a file without a final newline gets one when edited after install; text a person adds below the DUO block stays, after DUO's blank line", async () => {
     const root = repo({ ".codex/config.toml": "model = \"x\"", "AGENTS.md": "Use tabs." });
     await apply(root, planAgentIntegration(root, "codex", { host }));
     fs.appendFileSync(path.join(root, "AGENTS.md"), "Added later by a person.\n");
     await apply(root, planAgentRemoval(root, "codex"));
-    expect(files(root)).toEqual({ ".codex/config.toml": "model = \"x\"\n", "AGENTS.md": "Use tabs.\n\nAdded later by a person.\n" });
+    expect(files(root)).toEqual({ ".codex/config.toml": "model = \"x\"", "AGENTS.md": "Use tabs.\n\nAdded later by a person.\n" });
   });
 
-  it("claude-code, known defect #104 (pinned): remove deletes a user .mcp.json that had no other servers; CLAUDE.md comes back byte for byte", async () => {
-    const root = repo({ ".mcp.json": "{\n  \"mcpServers\": {}\n}\n", "CLAUDE.md": NOTES });
-    expect((await lifecycle(root, "claude-code")).remove).toEqual(["delete .mcp.json", "modify CLAUDE.md"]);
-    expect(files(root)).toEqual({ "CLAUDE.md": NOTES });
+  it("claude-code, #104 (H-94): remove preserves a user .mcp.json that had no other servers; CLAUDE.md comes back byte for byte", async () => {
+    const user = { ".mcp.json": "{\n  \"mcpServers\": {}\n}\n", "CLAUDE.md": NOTES };
+    const root = repo(user);
+    expect((await lifecycle(root, "claude-code")).remove).toEqual(["modify .mcp.json", "modify CLAUDE.md"]);
+    expect(files(root)).toEqual(user);
   });
 
-  it.todo("fix for #104: remove brings back a .mcp.json that existed before install ({\"mcpServers\": {}} stays)");
+  it("fix for #104 (H-94): remove brings back pre-existing empty .mcp.json, CLAUDE.md, AGENTS.md and .codex/config.toml byte for byte", async () => {
+    for (const [agent, user] of [
+      ["claude-code", { ".mcp.json": "{\"mcpServers\":{}}", "CLAUDE.md": "" }],
+      ["codex", { ".codex/config.toml": "", "AGENTS.md": "" }],
+    ] as const) {
+      const root = repo(user);
+      const t = TARGETS[agent];
+      expect((await lifecycle(root, agent)).remove).toEqual(["modify " + t.mcp, "modify " + t.bridge]);
+      expect(files(root)).toEqual(user);
+    }
+  });
 });
