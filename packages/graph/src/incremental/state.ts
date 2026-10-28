@@ -96,7 +96,7 @@ const moduleResolution = z.union([
     declarationOnly: z.boolean(), extensionSubstituted: z.boolean(), configPath: repoPath.optional(),
   }),
   z.strictObject({ status: z.literal("external"), reason: z.enum(["package", "builtin", "outside-repository", "system-include", "include-path"]) }),
-  z.strictObject({ status: z.literal("unresolved"), reason: z.enum(["not-found", "not-indexed"]) }),
+  z.strictObject({ status: z.literal("unresolved"), reason: z.enum(["not-found", "not-indexed", "computed-specifier"]) }),
   z.strictObject({ status: z.literal("ambiguous"), candidates: z.array(repoPath) }),
   z.strictObject({ status: z.literal("unsupported"), reason: z.string() }),
 ]);

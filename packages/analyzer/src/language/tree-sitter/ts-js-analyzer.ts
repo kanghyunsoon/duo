@@ -28,7 +28,9 @@ export const TS_JS_ANALYZER_VERSION = "4";
 export const TS_JS_CAPABILITIES: AnalyzerCapabilities = { files: true, symbols: "structural", tests: "structural", imports: "resolved", calls: "partial", typeResolution: "none" };
 
 function spec(id: string, extensions: Readonly<Record<string, GrammarId>>) {
-  return { id, version: TS_JS_ANALYZER_VERSION, extensions, capabilities: TS_JS_CAPABILITIES, callResolution: "module-bindings" as const, extract: extractTypeScriptJavaScript };
+  // computed-imports-1: import() with a non-literal argument is a module reference with syntax.computed (#50 L2a).
+  // Symbols do not change, so the payload analyzerVersion stays; cached analyses are made again.
+  return { id, version: TS_JS_ANALYZER_VERSION, extensions, capabilities: TS_JS_CAPABILITIES, callResolution: "module-bindings" as const, facts: "computed-imports-1", extract: extractTypeScriptJavaScript };
 }
 
 /** .ts .mts .cts (TypeScript grammar) and .tsx (TSX grammar). */

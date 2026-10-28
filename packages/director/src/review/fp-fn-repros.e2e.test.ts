@@ -14,6 +14,8 @@
  * 4. L2 (S15P31A106-267 / Follow-up #50): Out of current analyzer scope (`scope.duo: "out"` in #24)
  *    and missing `imports-unresolved` limitation on computed dynamic imports (`import(\`../db/${name}.js\`)`),
  *    plus newly found L2b static no-substitution template literal (`import(\`../db/legacy-db.js\`)`).
+ *    L2a is fixed by #50 (Maintainer Decision T158): the computed import now gives `imports-unresolved`.
+ *    L2b stays pinned.
  *
  * Maintenance rule for pinned tests:
  * - Passing tests in this file pin current 0.3.3 behavior (`next` = `v0.3.3` product code) without
@@ -245,11 +247,11 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
   });
 
   describe("Case L2 (S15P31A106-267 / #50): out of current analyzer scope (scope.duo: out in #24) and missing limitation on dynamic import", () => {
-    it("pins current 0.3.3 behavior (L2a): computed template-literal dynamic import is dropped by TS/JS extractor (PASS, 0 claims, 0 limitations)", async () => {
-      // Root cause: `Extractor.call` (`packages/analyzer/src/language/tree-sitter/ts-js-extract.ts`, lines 656-664)
-      // handles `fn.type === "import"` by checking `if (only?.type === "string") this.module(...)` and immediately
-      // returning. A template literal `import(\`../db/${name}.js\`)` has `only.type === "template_string"`, so no
-      // `ExtractedModuleReference` is emitted and `decisionForbidsImport` never emits `imports-unresolved`.
+    it("L2a (#50, Maintainer Decision T158): a computed dynamic import is reported as an imports-unresolved limitation; the verdict stays PASS", async () => {
+      // `Extractor.call` (`packages/analyzer/src/language/tree-sitter/ts-js-extract.ts`) records an import() whose
+      // argument is not a literal as a module reference with `syntax.computed` and no specifier; the resolver
+      // returns `unresolved` / `computed-specifier`, so `decisionForbidsImport` reports `imports-unresolved` on the
+      // changed line. No file is guessed and no claim is made (PASS/WARN/BLOCK/ASK unchanged).
       const res = await scenario((r) =>
         r.write(
           "src/ui/lazy-page.ts",
@@ -259,7 +261,11 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
 
       expect(res.verdict).toBe("PASS");
       expect(forbiddenImports(res)).toEqual([]);
-      expect(importLimits(res)).toEqual([]);
+      expect(importLimits(res)).toEqual(["imports-unresolved"]);
+      const message = res.limitations.find((l) => l.code === "imports-unresolved")?.message ?? "";
+      expect(message).toContain("src/ui/lazy-page.ts:2");
+      // The limitation names the line, not the expression.
+      expect(message).not.toContain("${name}");
     });
 
     it("pins current 0.3.3 behavior (L2b): static no-substitution template literal import(`../db/legacy-db.js`) is dropped because only.type !== 'string'", async () => {
@@ -278,7 +284,7 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
     });
 
     it.todo(
-      "0.4 candidate (#50, needs Maintainer Decision if verdict changes): extract no-substitution template literals in import()/require() and emit an unresolved-import limitation for computed dynamic specifiers",
+      "0.4 candidate (#50 L2b, needs its own Maintainer Decision; not approved in T158): extract no-substitution template literals in import()/require() as real imports (PASS → BLOCK)",
     );
   });
 });
