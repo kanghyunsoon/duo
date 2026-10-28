@@ -103,6 +103,16 @@
 | Downgrade | 0.3.4는 같은 Truth를 읽고 Work map 파일을 무시한다. 0.3 Truth의 floor는 그대로 0.2.2 |
 | Known limitation | launcher PATH는 Windows에서만 측정(pnpm dlx 식별 불가, npm test/start·run-script·pnpm run 미측정, Yarn Classic 부분), redaction은 알려진 credential 형식만, 접근성 수동 검증 미완료(#73), C259·C260·#7·#4 그대로 |
 
+## 0.4.0-rc.1 이후 `next` 변경 (미출시)
+
+다음 release에 들어갈 `next`의 변경. release 때 그 version 절로 옮긴다.
+
+| 분류 | 내용 |
+|---|---|
+| Additive Truth | Decision·proposal `forbids.importer_paths`(#47): `imported_paths`만 import하는 파일의 path pattern으로 좁힌다. `schema_version: 1` 그대로. 이 field가 없는 Decision의 lock digest와 review 결과는 같다. 빈 목록과 `imported_paths` 없는 사용은 잘못된 입력이다(H-96) |
+| Additive public | MCP `duo_propose_decision`의 `forbids.importer_paths`(tool 9개 그대로), CLI confirm preview·UI의 Forbids scope 문구(importer_paths가 있을 때) |
+| Downgrade | `importer_paths`를 쓰는 저장소를 0.2.2+·0.3.x·0.4.0-rc.1로 열면 `SCHEMA_UNKNOWN_PROPERTY`로 `PROJECT_TRUTH_INVALID`(fail-closed, H-75). Decision이 조용히 빠지지 않는다 |
+
 ## 0.3.3 변경 분류 (T78, H-87)
 
 0.3.2 → 0.3.3. UX·안정성 patch(H-87). 새 규칙과 새 검사 종류, dependency 변경, 형식 major 변경은 없다. review의 verdict·claim·evidence·gap, context, Decision 결과는 0.3.2와 같다(T77에서 같은 저장소·같은 변경으로 나란히 확인).

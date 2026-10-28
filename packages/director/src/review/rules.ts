@@ -410,6 +410,18 @@ function confirmedAfterBaseline(confirmedAt: string | undefined, recordedAt: str
   return Number.isFinite(c) && Number.isFinite(r) && c > r;
 }
 
+const compileRepoPatterns = (patterns: readonly string[] | undefined) => (patterns ?? []).flatMap((p) => compileRepoPattern(p) ?? []);
+
+/**
+ * #47: forbids.importer_paths narrows imported_paths to importing files that match it; without it every
+ * changed file is an importer (H-72). The adoption baseline (headBaselineFindings) applies the same filter.
+ */
+export function importerFilter(d: Decision): (path: RepoPath) => boolean {
+  if (d.forbids.importerPaths === undefined) return () => true;
+  const importer = compileRepoPatterns(d.forbids.importerPaths);
+  return (path) => importer.some((m) => m(path));
+}
+
 /**
  * H-72: a module reference (import, export-from, dynamic import, require, Python import, C++ quoted
  * include; type-only included) on a changed new-side line whose indexed resolution is exactly one
@@ -421,7 +433,7 @@ function confirmedAfterBaseline(confirmedAt: string | undefined, recordedAt: str
 export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonly claims: ReviewClaim[]; readonly limitations: ReviewLimitation[] }> {
   const decisions = ctx.truth.decisions.filter((d) => isActive(d) && (d.forbids.importedPaths?.length ?? 0) > 0).sort((a, b) => compareUtf8(a.id, b.id));
   if (decisions.length === 0) return { claims: [], limitations: [] };
-  const matchers = decisions.map((d) => ({ d, match: (d.forbids.importedPaths ?? []).flatMap((p) => compileRepoPattern(p) ?? []) }));
+  const matchers = decisions.map((d) => ({ d, match: compileRepoPatterns(d.forbids.importedPaths), importer: importerFilter(d) }));
   const changed = ctx.files.filter((f) => f.kind !== "deleted" && !f.binary && !f.path.startsWith(`${STATE_DIR_NAME}/`) && f.hunks.length > 0);
   // The index describes the working tree; another reviewed side is evaluated only where its text is the same.
   const usable: ChangedFile[] = [];
@@ -444,6 +456,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
     const r = indexed[i];
     if (r === undefined || r.status === "unavailable") { unavailable.push(f.path); return; }
     if (r.status !== "ok") return; // no analyzer (L0): the changed file's capability limitation is reported already
+    if (!matchers.some(({ importer }) => importer(f.path))) return; // #47: no Decision checks imports from this file
     for (const ref of r.references) {
       const hunks = f.hunks.filter((h) => overlapsLines(ref.location, hunkRange(h))).map((h) => h.evidenceId);
       if (hunks.length === 0) continue;
@@ -457,8 +470,8 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
         else if (s === "resolved") notIndexedTarget.push(where);
         continue; // external: forbids.dependencies, not imported_paths
       }
-      for (const { d, match } of matchers) {
-        if (!match.some((m) => m(target))) continue;
+      for (const { d, match, importer } of matchers) {
+        if (!importer(f.path) || !match.some((m) => m(target))) continue;
         const key = `${d.id}\n${f.path}\n${target}`;
         const g = groups.get(key) ?? { d, source: f.path, target, sites: [] };
         g.sites.push({ ref, hunks });
@@ -476,7 +489,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
     const c = makeClaim(ctx, {
       rule: "decision-forbids-import", subject: { kind: "decision", id: g.d.id }, key: `import:${g.source}->${g.target}`, alignment: "CONFLICT", reason: "forbidden-import",
       enforced: g.d.enforcement === "block",
-      expected: `no changed import resolves to ${(g.d.forbids.importedPaths ?? []).join(", ")} (${g.d.id})`,
+      expected: `no changed import${g.d.forbids.importerPaths === undefined ? "" : ` in ${g.d.forbids.importerPaths.join(", ")}`} resolves to ${(g.d.forbids.importedPaths ?? []).join(", ")} (${g.d.id})`,
       observed: `forbidden import on a changed line: ${where} resolves to ${g.target}`,
       evidence: [
         decisionEvidence(ctx, g.d.id),

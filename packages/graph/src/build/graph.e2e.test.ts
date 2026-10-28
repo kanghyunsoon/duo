@@ -186,3 +186,35 @@ describe("Project Graph E2E (TASK-007)", () => {
     expect(r.nodes.map((n) => n.node.id)).toEqual(["req:APP-01", "sym:src/auth/login.ts#login"]);
   });
 });
+
+describe("computed import() (#50 L2a)", () => {
+  let computed: GraphBuildPlan;
+  beforeAll(async () => {
+    const root = repoFromFixture();
+    fs.writeFileSync(path.join(root, "src/loader.ts"), [
+      "export async function load(name: string) {",
+      "  const page = await import(`./auth/${name}.js`);",
+      "  const raw = await import(name);",
+      "  const fixed = await import(\"./shared/format.js\");",
+      "  return [page, raw, fixed];",
+      "}",
+      "",
+    ].join("\n"));
+    const facts = await collectGraphFacts(root);
+    if (facts.value === undefined) throw new Error(JSON.stringify(facts.diagnostics));
+    computed = buildGraphPlan(facts.value);
+  });
+
+  it("is unresolved (computed-specifier) with no guessed file, no IMPORTS edge and no MODULE_UNRESOLVED", () => {
+    expect(computed.moduleResolutions.filter((m) => m.from === "src/loader.ts").map((m) => [m.specifier, m.location.startLine, m.result])).toEqual([
+      ["", 2, { status: "unresolved", reason: "computed-specifier" }],
+      ["", 3, { status: "unresolved", reason: "computed-specifier" }],
+      ["./shared/format.js", 4, expect.objectContaining({ status: "resolved", path: "src/shared/format.ts" })],
+    ]);
+    const imports = computed.edges.filter((e) => e.type === "IMPORTS" && nodeId(e.from) === "file:src/loader.ts").map((e) => nodeId(e.to));
+    expect(imports).toEqual(["file:src/shared/format.ts"]);
+    expect(computed.diagnostics.filter((d) => d.source?.path === "src/loader.ts")).toEqual([]);
+    // The fixture's own module diagnostics are unchanged.
+    expect(computed.diagnostics.filter((d) => d.code === "MODULE_UNRESOLVED").map((d) => d.source?.path)).toEqual(["src/app.ts"]);
+  });
+});
