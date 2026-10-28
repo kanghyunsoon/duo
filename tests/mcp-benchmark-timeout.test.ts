@@ -71,17 +71,57 @@ describe("MCP benchmark timeouts", () => {
       );
       const pids = fs.readFileSync(pidFile, "utf8").trim().split(/\s+/).map(Number);
       expect(pids.length, why).toBeGreaterThan(0);
+      // Each server is recorded twice: by the fake server itself and by the benchmark client. The client copy must be
+      // there even when the handshake fails, because the benchmark uses that PID to wait for the server to exit.
+      expect(pids.length, why).toBe(new Set(pids).size * 2);
       expect(pids.filter(processIsRunning), why).toEqual([]);
     } finally {
       fs.rmSync(temp, { recursive: true, force: true });
     }
   }, OUTER_LIMIT_MS + 5_000);
 
-  it("rejects an unknown --scenario as a benchmark failure (exit 2), not a stage timeout", () => {
-    const { result, ms } = runBenchmark(["--scenario", "no-such-scenario"], { DUO_MCP_BENCHMARK_SERVER_SCRIPT: FAKE });
+  it.each([
+    ["an unknown --scenario", ["--scenario", "no-such-scenario"], 'got "no-such-scenario"'],
+    ["--scenario without a value", ["--scenario"], "got no value"],
+  ])("rejects %s as a benchmark failure (exit 2), not a stage timeout", (_label, args, detail) => {
+    const { result, ms } = runBenchmark(args, { DUO_MCP_BENCHMARK_SERVER_SCRIPT: FAKE });
     const why = describeRun(result, ms);
     expect(result.status, why).toBe(2);
     expect(result.stdout, why).toBe("");
     expect(result.stderr, why).toContain("--scenario must be one of single-cold, single-warm, concurrent-cold, concurrent-warm");
+    expect(result.stderr, why).toContain(detail);
+  }, OUTER_LIMIT_MS + 5_000);
+
+  it.each([
+    ["initialize", "its directory does not exist", (temp: string) => path.join(temp, "missing", "pids.txt")],
+    ["tools/list", "it is a directory", (temp: string) => {
+      const dir = path.join(temp, "pids-dir");
+      fs.mkdirSync(dir);
+      return dir;
+    }],
+  ])("cleans up the server and exits 2 when the PID file cannot be written in %s mode (%s)", (mode, _reason, brokenPidFile) => {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "duo-mcp-pid-failure-test-"));
+    const serverPidFile = path.join(temp, "server-pids.txt");
+    try {
+      const { result, ms } = runBenchmark(["--scenario", "single-cold", "--iterations", "1", "--concurrency", "1", "--timeout-ms", "500"], {
+        DUO_MCP_BENCHMARK_FAKE_MODE: mode,
+        DUO_MCP_BENCHMARK_PID_FILE: brokenPidFile(temp),
+        DUO_MCP_BENCHMARK_SERVER_PID_FILE: serverPidFile,
+        DUO_MCP_BENCHMARK_SERVER_SCRIPT: FAKE,
+      });
+      const why = describeRun(result, ms);
+      // A harness failure: no report, and never disguised as the stage timeout the fake server would otherwise cause.
+      expect(result.error, why).toBeUndefined();
+      expect(result.signal, why).toBeNull();
+      expect(result.status, why).toBe(2);
+      expect(result.stdout, why).toBe("");
+      expect(result.stderr, why).toContain("mcp-benchmark: internal error");
+      expect(result.stderr, why).toContain("could not record server PID");
+      const pids = fs.readFileSync(serverPidFile, "utf8").trim().split(/\s+/).map(Number);
+      expect(pids.length, why).toBeGreaterThan(0);
+      expect(pids.filter(processIsRunning), why).toEqual([]);
+    } finally {
+      fs.rmSync(temp, { recursive: true, force: true });
+    }
   }, OUTER_LIMIT_MS + 5_000);
 });

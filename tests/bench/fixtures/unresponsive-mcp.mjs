@@ -1,7 +1,8 @@
 import fs from "node:fs";
 
 // Record this process before loading the SDK, so a slow start cannot delay it past a short client timeout.
-fs.appendFileSync(process.env.DUO_MCP_BENCHMARK_PID_FILE, `${process.pid}\n`);
+// DUO_MCP_BENCHMARK_SERVER_PID_FILE lets a test break the benchmark's own PID file while still seeing this process.
+fs.appendFileSync(process.env.DUO_MCP_BENCHMARK_SERVER_PID_FILE || process.env.DUO_MCP_BENCHMARK_PID_FILE, `${process.pid}\n`);
 const mode = process.env.DUO_MCP_BENCHMARK_FAKE_MODE;
 
 if (mode === "initialize") {

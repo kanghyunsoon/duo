@@ -14,12 +14,19 @@ const fixture = path.join(workspace, "fixtures", "context", "app");
 const smoke = process.argv.includes("--smoke");
 const serverScript = process.env.DUO_MCP_BENCHMARK_SERVER_SCRIPT;
 const pidFile = process.env.DUO_MCP_BENCHMARK_PID_FILE;
+/** A failure of the benchmark harness itself (exit 2). It is never reported as a stage error of the server under test. */
+class HarnessError extends Error {}
 /**
  * Test hook (#126): record every server process this benchmark started, from the client side, so a regression test
  * can check that none is left running. Recording here does not depend on how fast the server process boots.
  */
-function recordPid(transport) {
-  if (pidFile && transport.pid !== null && transport.pid !== undefined) fs.appendFileSync(pidFile, `${transport.pid}\n`);
+function recordPid(pid) {
+  if (!pidFile || pid === null || pid === undefined) return;
+  try {
+    fs.appendFileSync(pidFile, `${pid}\n`);
+  } catch (error) {
+    throw new HarnessError(`could not record server PID ${pid}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
 }
 const option = (name, fallback) => {
   const index = process.argv.indexOf(name);
@@ -40,8 +47,8 @@ const SCENARIOS = [["single-cold", 1, false], ["single-warm", 1, true], ["concur
 // --scenario <name> runs one scenario (the timeout regression tests use it); the default measures all four.
 const scenarioIndex = process.argv.indexOf("--scenario");
 const only = scenarioIndex < 0 ? undefined : process.argv[scenarioIndex + 1];
-if (only !== undefined && !SCENARIOS.some(([name]) => name === only)) {
-  usage(`--scenario must be one of ${SCENARIOS.map(([name]) => name).join(", ")}; got ${JSON.stringify(only ?? "")}`);
+if (scenarioIndex >= 0 && (only === undefined || !SCENARIOS.some(([name]) => name === only))) {
+  usage(`--scenario must be one of ${SCENARIOS.map(([name]) => name).join(", ")}; got ${only === undefined ? "no value" : JSON.stringify(only)}`);
 }
 
 const toolArguments = {
@@ -127,12 +134,17 @@ function verifyTools(tools) {
 /**
  * Close a server and make sure its process is gone. The SDK's close() sends SIGTERM and then SIGKILL without waiting
  * for the kill, so a benchmark that exits right after a timeout could leave the server running for a moment (#126).
+ * The PID comes from the session because a failed handshake makes the SDK detach the process (transport.pid becomes
+ * null) before the caller sees the error.
  */
-async function closeServer(transport) {
-  const pid = transport.pid;
+async function closeServer({ transport, pid }) {
+  // After a failed handshake the SDK has already detached the process and is closing it on unref'd timers; there is
+  // no session left to shut down gracefully, so terminate it now instead of waiting out the SDK's 2-second grace period.
+  const detached = transport.pid === null;
   await transport.close().catch(() => undefined);
   if (pid === null || pid === undefined) return;
   const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  if (detached && alive()) { try { process.kill(pid, "SIGTERM"); } catch { /* already gone */ } }
   for (let waited = 0; alive() && waited < 3_000; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
   if (alive()) { try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ } }
 }
@@ -150,25 +162,39 @@ async function open(root) {
       ...(serverScript ? {
         DUO_MCP_BENCHMARK_FAKE_MODE: process.env.DUO_MCP_BENCHMARK_FAKE_MODE ?? "",
         DUO_MCP_BENCHMARK_PID_FILE: process.env.DUO_MCP_BENCHMARK_PID_FILE ?? "",
+        DUO_MCP_BENCHMARK_SERVER_PID_FILE: process.env.DUO_MCP_BENCHMARK_SERVER_PID_FILE ?? "",
       } : {}),
     },
   });
   const client = new Client({ name: "duo-mcp-benchmark", version: "1.0.0" });
+  // Capture the PID as soon as the process is spawned, before the SDK can detach it on a failed handshake.
+  let pid = null;
+  const start = transport.start.bind(transport);
+  transport.start = async () => {
+    await start();
+    pid = transport.pid;
+  };
   const started = performance.now();
+  let connectError;
   try {
     await client.connect(transport, { timeout: timeoutMs });
-    recordPid(transport);
-    return { client, transport, initializeMs: performance.now() - started };
   } catch (error) {
-    recordPid(transport);
-    await closeServer(transport);
-    throw error;
+    connectError = error;
   }
+  const initializeMs = performance.now() - started;
+  let recordError;
+  try { recordPid(pid); } catch (error) { recordError = error; }
+  if (connectError !== undefined || recordError !== undefined) {
+    // Clean up first, whatever failed; a recording failure is a harness failure, never a stage error.
+    await closeServer({ transport, pid });
+    throw recordError ?? connectError;
+  }
+  return { client, transport, pid, initializeMs };
 }
 
 async function prime(root) {
   const session = await open(root);
-  try { await session.client.listTools(undefined, { timeout: timeoutMs }); } finally { await closeServer(session.transport); }
+  try { await session.client.listTools(undefined, { timeout: timeoutMs }); } finally { await closeServer(session); }
 }
 
 function errorEntry(stage, error) {
@@ -183,13 +209,19 @@ async function measure(root, warm) {
   const latencyMs = {};
   const errors = [];
   if (warm) {
-    try { await prime(root); } catch (error) { errors.push(errorEntry("warmup", error)); }
+    try {
+      await prime(root);
+    } catch (error) {
+      if (error instanceof HarnessError) throw error;
+      errors.push(errorEntry("warmup", error));
+    }
   }
   let session;
   try {
     try {
       session = await open(root);
     } catch (error) {
+      if (error instanceof HarnessError) throw error;
       errors.push(errorEntry("initialize", error));
       return { latencyMs, errors };
     }
@@ -217,9 +249,10 @@ async function measure(root, warm) {
       }
     }
   } catch (error) {
+    if (error instanceof HarnessError) throw error;
     errors.push({ stage: "session", kind: "process-error", detail: error instanceof Error ? error.message : String(error) });
   } finally {
-    if (session) await closeServer(session.transport);
+    if (session) await closeServer(session);
   }
   return { latencyMs, errors };
 }
@@ -229,14 +262,23 @@ async function scenario(template, temp, name, count, warm) {
   for (let iteration = 0; iteration < iterations; iteration += 1) {
     const roots = Array.from({ length: count }, (_, worker) => path.join(temp, `${name}-${iteration}-${worker}`));
     roots.forEach((root) => copyFixture(template, root));
-    samples.push(...await Promise.all(roots.map((root) => measure(root, warm))));
+    // Settle every worker before failing, so no server outlives the benchmark when one worker hits a harness error.
+    const settled = await Promise.allSettled(roots.map((root) => measure(root, warm)));
+    const failed = settled.find((outcome) => outcome.status === "rejected");
+    if (failed) throw failed.reason;
+    samples.push(...settled.map((outcome) => outcome.value));
   }
   return { samples: samples.length, latency: summarize(samples), errorCount: samples.reduce((sum, sample) => sum + sample.errors.length, 0), errors: samples.flatMap((sample) => sample.errors) };
 }
 
 // Exit codes: 0 every stage answered, 1 the report lists stage errors (timeouts, tool or client errors),
 // 2 the benchmark itself failed before it could report (no JSON on stdout; the reason is on stderr).
+// The report is written only after the temporary fixture copies are removed: a removal failure usually means a server
+// process still holds its working directory, so it is a benchmark failure (exit 2), not a stage error (#126).
+const formatError = (error) => (error instanceof Error ? error.stack ?? error.message : String(error));
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), "duo-mcp-benchmark-"));
+let result;
+const failures = [];
 try {
   if (!serverScript && !fs.existsSync(cli)) throw new Error("built CLI not found; run pnpm build first");
   const template = prepareTemplate(temp);
@@ -245,18 +287,27 @@ try {
     if (only !== undefined && name !== only) continue;
     scenarios[name] = await scenario(template, temp, name, count, warm);
   }
-  const result = {
+  result = {
     format: "duo.mcp-benchmark/1",
     environment: { platform: process.platform, arch: process.arch, node: process.version },
     configuration: { iterations, concurrency, timeoutMs, ...(only === undefined ? {} : { scenario: only }), warmDefinition: "one unmeasured initialize and tools/list on the same fixture copy before the measured server start" },
     toolContract: { names: expectedNames, verified: true },
     scenarios,
   };
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  if (Object.values(scenarios).some((scenario) => scenario.errorCount > 0)) process.exitCode = 1;
 } catch (error) {
-  process.stderr.write(`mcp-benchmark: internal error: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+  failures.push(`internal error: ${formatError(error)}`);
+}
+try {
+  // On Windows a just-terminated server can hold its working directory for a few milliseconds after it is reported
+  // dead. fs.promises.rm retries EPERM/EBUSY; fs.rmSync on Node 24 (Windows) fails at once despite maxRetries (#126).
+  await fs.promises.rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+} catch (error) {
+  failures.push(`could not remove ${temp}: ${formatError(error)}`);
+}
+if (failures.length > 0) {
+  for (const failure of failures) process.stderr.write(`mcp-benchmark: ${failure}\n`);
   process.exitCode = 2;
-} finally {
-  fs.rmSync(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+} else {
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  if (Object.values(result.scenarios).some((scenario) => scenario.errorCount > 0)) process.exitCode = 1;
 }
