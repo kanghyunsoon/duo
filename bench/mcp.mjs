@@ -13,15 +13,35 @@ const cli = path.join(workspace, "apps", "cli", "dist", "main.js");
 const fixture = path.join(workspace, "fixtures", "context", "app");
 const smoke = process.argv.includes("--smoke");
 const serverScript = process.env.DUO_MCP_BENCHMARK_SERVER_SCRIPT;
+const pidFile = process.env.DUO_MCP_BENCHMARK_PID_FILE;
+/**
+ * Test hook (#126): record every server process this benchmark started, from the client side, so a regression test
+ * can check that none is left running. Recording here does not depend on how fast the server process boots.
+ */
+function recordPid(transport) {
+  if (pidFile && transport.pid !== null && transport.pid !== undefined) fs.appendFileSync(pidFile, `${transport.pid}\n`);
+}
 const option = (name, fallback) => {
   const index = process.argv.indexOf(name);
   return index < 0 ? fallback : Number.parseInt(process.argv[index + 1] ?? "", 10);
+};
+/** Invalid arguments are a benchmark failure (exit 2), never a stage error (exit 1). */
+const usage = (message) => {
+  process.stderr.write(`mcp-benchmark: ${message}\n`);
+  process.exit(2);
 };
 const iterations = option("--iterations", smoke ? 1 : 10);
 const concurrency = option("--concurrency", smoke ? 2 : 8);
 const timeoutMs = option("--timeout-ms", 30_000);
 if (!Number.isInteger(iterations) || iterations < 1 || !Number.isInteger(concurrency) || concurrency < 1 || !Number.isInteger(timeoutMs) || timeoutMs < 1) {
-  throw new Error("--iterations, --concurrency, and --timeout-ms must be positive integers");
+  usage("--iterations, --concurrency, and --timeout-ms must be positive integers");
+}
+const SCENARIOS = [["single-cold", 1, false], ["single-warm", 1, true], ["concurrent-cold", concurrency, false], ["concurrent-warm", concurrency, true]];
+// --scenario <name> runs one scenario (the timeout regression tests use it); the default measures all four.
+const scenarioIndex = process.argv.indexOf("--scenario");
+const only = scenarioIndex < 0 ? undefined : process.argv[scenarioIndex + 1];
+if (only !== undefined && !SCENARIOS.some(([name]) => name === only)) {
+  usage(`--scenario must be one of ${SCENARIOS.map(([name]) => name).join(", ")}; got ${JSON.stringify(only ?? "")}`);
 }
 
 const toolArguments = {
@@ -43,6 +63,11 @@ function command(command, args, cwd) {
 
 function prepareTemplate(temp) {
   const root = path.join(temp, "template");
+  // A fake server (DUO_MCP_BENCHMARK_SERVER_SCRIPT) never reads the repository, so it gets an empty directory and no Git.
+  if (serverScript) {
+    fs.mkdirSync(root);
+    return root;
+  }
   fs.cpSync(fixture, root, { recursive: true });
   command("git", ["init", "-q"], root);
   command("git", ["config", "user.email", "benchmark@invalid.local"], root);
@@ -99,6 +124,19 @@ function verifyTools(tools) {
   }
 }
 
+/**
+ * Close a server and make sure its process is gone. The SDK's close() sends SIGTERM and then SIGKILL without waiting
+ * for the kill, so a benchmark that exits right after a timeout could leave the server running for a moment (#126).
+ */
+async function closeServer(transport) {
+  const pid = transport.pid;
+  await transport.close().catch(() => undefined);
+  if (pid === null || pid === undefined) return;
+  const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  for (let waited = 0; alive() && waited < 3_000; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
+  if (alive()) { try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ } }
+}
+
 async function open(root) {
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -119,16 +157,18 @@ async function open(root) {
   const started = performance.now();
   try {
     await client.connect(transport, { timeout: timeoutMs });
+    recordPid(transport);
     return { client, transport, initializeMs: performance.now() - started };
   } catch (error) {
-    await transport.close().catch(() => undefined);
+    recordPid(transport);
+    await closeServer(transport);
     throw error;
   }
 }
 
 async function prime(root) {
   const session = await open(root);
-  try { await session.client.listTools(undefined, { timeout: timeoutMs }); } finally { await session.transport.close(); }
+  try { await session.client.listTools(undefined, { timeout: timeoutMs }); } finally { await closeServer(session.transport); }
 }
 
 function errorEntry(stage, error) {
@@ -179,7 +219,7 @@ async function measure(root, warm) {
   } catch (error) {
     errors.push({ stage: "session", kind: "process-error", detail: error instanceof Error ? error.message : String(error) });
   } finally {
-    await session?.transport.close().catch(() => undefined);
+    if (session) await closeServer(session.transport);
   }
   return { latencyMs, errors };
 }
@@ -194,23 +234,29 @@ async function scenario(template, temp, name, count, warm) {
   return { samples: samples.length, latency: summarize(samples), errorCount: samples.reduce((sum, sample) => sum + sample.errors.length, 0), errors: samples.flatMap((sample) => sample.errors) };
 }
 
+// Exit codes: 0 every stage answered, 1 the report lists stage errors (timeouts, tool or client errors),
+// 2 the benchmark itself failed before it could report (no JSON on stdout; the reason is on stderr).
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), "duo-mcp-benchmark-"));
 try {
   if (!serverScript && !fs.existsSync(cli)) throw new Error("built CLI not found; run pnpm build first");
   const template = prepareTemplate(temp);
   const scenarios = {};
-  for (const [name, count, warm] of [["single-cold", 1, false], ["single-warm", 1, true], ["concurrent-cold", concurrency, false], ["concurrent-warm", concurrency, true]]) {
+  for (const [name, count, warm] of SCENARIOS) {
+    if (only !== undefined && name !== only) continue;
     scenarios[name] = await scenario(template, temp, name, count, warm);
   }
   const result = {
     format: "duo.mcp-benchmark/1",
     environment: { platform: process.platform, arch: process.arch, node: process.version },
-    configuration: { iterations, concurrency, timeoutMs, warmDefinition: "one unmeasured initialize and tools/list on the same fixture copy before the measured server start" },
+    configuration: { iterations, concurrency, timeoutMs, ...(only === undefined ? {} : { scenario: only }), warmDefinition: "one unmeasured initialize and tools/list on the same fixture copy before the measured server start" },
     toolContract: { names: expectedNames, verified: true },
     scenarios,
   };
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   if (Object.values(scenarios).some((scenario) => scenario.errorCount > 0)) process.exitCode = 1;
+} catch (error) {
+  process.stderr.write(`mcp-benchmark: internal error: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+  process.exitCode = 2;
 } finally {
-  fs.rmSync(temp, { recursive: true, force: true });
+  fs.rmSync(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }

@@ -1,15 +1,17 @@
 import fs from "node:fs";
-import { Server } from "../../../packages/integration/node_modules/@modelcontextprotocol/server/dist/index.mjs";
-import { StdioServerTransport } from "../../../packages/integration/node_modules/@modelcontextprotocol/server/dist/stdio.mjs";
-import { expectedOutputProperties, expectedSchemas } from "../../../bench/mcp-contract.mjs";
 
-const mode = process.env.DUO_MCP_BENCHMARK_FAKE_MODE;
+// Record this process before loading the SDK, so a slow start cannot delay it past a short client timeout.
 fs.appendFileSync(process.env.DUO_MCP_BENCHMARK_PID_FILE, `${process.pid}\n`);
+const mode = process.env.DUO_MCP_BENCHMARK_FAKE_MODE;
 
 if (mode === "initialize") {
   process.stdin.resume();
   setInterval(() => undefined, 1_000);
 } else {
+  const { Server } = await import("../../../packages/integration/node_modules/@modelcontextprotocol/server/dist/index.mjs");
+  const { StdioServerTransport } = await import("../../../packages/integration/node_modules/@modelcontextprotocol/server/dist/stdio.mjs");
+  const { expectedOutputProperties, expectedSchemas } = await import("../../../bench/mcp-contract.mjs");
+
   const server = new Server({ name: "unresponsive-mcp", version: "1.0.0" }, { capabilities: { tools: {} } });
   server.setRequestHandler("tools/list", async () => {
     if (mode === "tools/list") return new Promise(() => undefined);
