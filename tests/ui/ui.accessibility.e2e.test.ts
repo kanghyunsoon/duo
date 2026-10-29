@@ -93,6 +93,32 @@ function isPlaywrightTimeout(error: unknown): boolean {
   return error instanceof Error && error.name === "TimeoutError";
 }
 
+async function focusSnapshot(page: Page): Promise<{ readonly target: string; readonly focusVisible: boolean; readonly indicatorVisible: boolean; readonly unobscured: boolean; readonly inViewport: boolean }> {
+  return page.evaluate(() => {
+    const element = document.activeElement;
+    if (!(element instanceof HTMLElement)) return { target: "none", focusVisible: false, indicatorVisible: false, unobscured: false, inViewport: false };
+    const body = element === document.body;
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    let withinScrollClips = true;
+    for (let parent = element.parentElement; parent !== null; parent = parent.parentElement) {
+      const overflow = getComputedStyle(parent);
+      if (/(auto|scroll|hidden|clip)/u.test(`${overflow.overflowX} ${overflow.overflowY}`)) {
+        const bounds = parent.getBoundingClientRect();
+        withinScrollClips &&= rect.right > bounds.left && rect.left < bounds.right && rect.bottom > bounds.top && rect.top < bounds.bottom;
+      }
+    }
+    const target = body ? "BODY" : element instanceof HTMLAnchorElement ? `a:${element.getAttribute("href")}` :
+      element instanceof HTMLButtonElement ? `button:${element.getAttribute("aria-label") || element.textContent?.trim()}` :
+        element.tagName === "SUMMARY" ? `summary:${element.textContent?.trim()}` : `${element.tagName}:${element.id || element.getAttribute("data-testid") || "unidentified"}`;
+    return { target, focusVisible: body || element.matches(":focus-visible"),
+      indicatorVisible: body || style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0,
+      unobscured: body || (top === element || element.contains(top)) && withinScrollClips,
+      inViewport: body || rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.bottom <= innerHeight };
+  });
+}
+
 const runsDir = path.join(ROOT, ".duo-a11y-runs");
 const runId = `${new Date().toISOString().replaceAll(/[:.]/gu, "-")}-${process.pid}`;
 const outputDir = path.join(runsDir, runId);
@@ -598,88 +624,105 @@ describe("DUO UI accessibility audit 297", () => {
       await navPage.keyboard.press("Enter");
       await navPage.waitForURL(/\/search$/u, { timeout: 5_000 }).catch(() => undefined);
       const navigationPass = navFirst === "#main" && actualNavigation.length === expectedNavigation.length && actualNavigation.every((href, index) => href === expectedNavigation[index]) && new URL(navPage.url()).pathname === "/search";
-      await page.keyboard.press("Tab");
-      const first = await page.evaluate(() => ({ text: document.activeElement?.textContent?.trim(), href: (document.activeElement as HTMLAnchorElement | null)?.getAttribute("href") }));
-      const focusState = await page.evaluate(() => {
-        const element = document.activeElement;
-        if (!(element instanceof HTMLElement)) return { focusVisible: false, unobscured: false, inViewport: false };
-        const rect = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-        let withinScrollClips = true;
-        for (let parent = element.parentElement; parent !== null; parent = parent.parentElement) {
-          const overflow = getComputedStyle(parent);
-          if (/(auto|scroll|hidden|clip)/u.test(`${overflow.overflowX} ${overflow.overflowY}`)) {
-            const bounds = parent.getBoundingClientRect();
-            withinScrollClips &&= rect.right > bounds.left && rect.left < bounds.right && rect.bottom > bounds.top && rect.top < bounds.bottom;
-          }
-        }
-        return { focusVisible: element.matches(":focus-visible"),
-          indicatorVisible: style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0,
-          unobscured: (top === element || element.contains(top)) && withinScrollClips, inViewport: rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.bottom <= innerHeight };
-      });
-      const focusScreenshot = path.join(outputDir, "keyboard-navigation", `attempt-${activeAttemptIndex}`, "step-2.png");
-      fs.mkdirSync(path.dirname(focusScreenshot), { recursive: true });
-      await page.screenshot({ path: focusScreenshot, fullPage: true, animations: "disabled" });
-      const skipLinkPass = first.href === "#main";
-      await page.keyboard.press("Enter");
-      const mainFocused = await page.evaluate(() => document.activeElement?.id === "main");
-      const tabSequence: { target: string; focusVisible: boolean; indicatorVisible: boolean; unobscured: boolean; inViewport: boolean }[] = [];
-      for (let index = 0; index < 7; index++) {
-        await page.keyboard.press("Tab");
-        tabSequence.push(await page.evaluate(() => {
-          const element = document.activeElement;
-          if (!(element instanceof HTMLElement)) return { target: "none", focusVisible: false, indicatorVisible: false, unobscured: false, inViewport: false };
-          const rect = element.getBoundingClientRect();
-          const style = getComputedStyle(element);
-          const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-          let withinScrollClips = true;
-          for (let parent = element.parentElement; parent !== null; parent = parent.parentElement) {
-            const overflow = getComputedStyle(parent);
-            if (/(auto|scroll|hidden|clip)/u.test(`${overflow.overflowX} ${overflow.overflowY}`)) {
-              const bounds = parent.getBoundingClientRect();
-              withinScrollClips &&= rect.right > bounds.left && rect.left < bounds.right && rect.bottom > bounds.top && rect.top < bounds.bottom;
-            }
-          }
-          const target = element === document.body ? "BODY" : element instanceof HTMLAnchorElement ? `a:${element.getAttribute("href")}` :
-            element instanceof HTMLButtonElement ? `button:${element.getAttribute("aria-label") || element.textContent?.trim()}` :
-            element instanceof HTMLElement && element.tagName === "SUMMARY" ? `summary:${element.textContent?.trim()}` : `${element.tagName}:${element.id || element.getAttribute("data-testid") || "unidentified"}`;
-          return { target,
-            focusVisible: element === document.body || element.matches(":focus-visible"),
-            indicatorVisible: element === document.body || style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0,
-            unobscured: element === document.body || (top === element || element.contains(top)) && withinScrollClips,
-            inViewport: element === document.body || rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.bottom <= innerHeight };
-        }));
-      }
       const expectedOverviewSequence = ["button:Refresh", "a:/entity/M1", "a:/decisions", `a:/reviews/${reviewId}`, "summary:Analysis coverage", "a:/coverage", "summary:Declared knowledge gaps (1)"];
-      const actualOverviewSequence = tabSequence.slice(0, expectedOverviewSequence.length).map((entry) => entry.target);
-      const sequenceComparison = compareFocusSequence(expectedOverviewSequence, actualOverviewSequence);
-      const summary = page.locator("summary").filter({ hasText: "Declared knowledge gaps" });
-      const summaryWasOpen = await summary.evaluate((element) => element.parentElement?.hasAttribute("open") ?? false);
-      await page.keyboard.press("Space");
-      const summarySpaceChanged = await summary.evaluate((element) => !(element.parentElement?.hasAttribute("open") ?? false)) === summaryWasOpen;
-      await page.keyboard.press("Space");
-      const summaryRestored = await summary.evaluate((element) => element.parentElement?.hasAttribute("open") ?? false) === summaryWasOpen;
-      await page.keyboard.press("Tab");
-      const trailingFocus = await page.evaluate(() => {
-        const element = document.activeElement as HTMLElement | null;
-        const target = element === document.body ? "BODY" : element?.tagName === "A" ? `a:${element.getAttribute("href")}` :
-          element?.tagName === "BUTTON" ? `button:${element.getAttribute("aria-label") || element.textContent?.trim()}` :
-            `${element?.tagName ?? "none"}:${element?.id || element?.getAttribute("data-testid") || "unidentified"}`;
-        return { target, insideMain: element?.closest("main") !== null };
-      });
-      const sequenceValid = sequenceComparison.pass && !trailingFocus.insideMain && trailingFocus.target !== "BODY" && tabSequence.every((entry) =>
+      const controlHtml = `<!doctype html><html><head><title>Normal HTML focus control</title></head><body><main id="main" tabindex="-1">
+        <button type="button">Refresh</button><a href="/entity/M1">M1</a><a href="/decisions">Pending decisions</a>
+        <a href="/reviews/${reviewId}">Review record</a><details open><summary>Analysis coverage</summary></details>
+        <a href="/coverage">Coverage</a><details open><summary>Declared knowledge gaps (1)</summary></details>
+      </main></body></html>`;
+      const expectedControlForward = [...expectedOverviewSequence, "BODY"];
+      const expectedControlReverse = [...expectedOverviewSequence].reverse();
+      const viewportResults: { viewport: string; first: string; skipLinkPass: boolean; focusPass: boolean; mainFocused: boolean;
+        forward: readonly string[]; reverse: readonly string[]; forwardComparison: ReturnType<typeof compareFocusSequence>;
+        reverseComparison: ReturnType<typeof compareFocusSequence>; pageBoundary: string;
+        controlForward: readonly string[]; controlReverse: readonly string[]; controlForwardComparison: ReturnType<typeof compareFocusSequence>;
+        controlReverseComparison: ReturnType<typeof compareFocusSequence>; boundaryMatchesControl: boolean; summarySpaceChanged: boolean; summaryRestored: boolean;
+        sequencePass: boolean; focusScreenshots: string[] }[] = [];
+      const focusScreenshots: string[] = [];
+
+      for (const viewport of VIEWPORTS) {
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await page.goto(new URL("/overview", server.origin).href);
+        if (!await waitForLoadedScreen(page)) throw new AuditToolError(`Overview did not load at ${viewport.name}`);
+        await page.keyboard.press("Tab");
+        const first = await focusSnapshot(page);
+        const firstHref = await page.evaluate(() => (document.activeElement as HTMLAnchorElement | null)?.getAttribute("href"));
+        const focusPass = first.focusVisible && first.indicatorVisible && first.unobscured && first.inViewport;
+        const focusScreenshot = path.join(outputDir, "keyboard-navigation", `attempt-${activeAttemptIndex}`, `step-2-${viewport.name}.png`);
+        fs.mkdirSync(path.dirname(focusScreenshot), { recursive: true });
+        await page.screenshot({ path: focusScreenshot, fullPage: true, animations: "disabled" });
+        focusScreenshots.push(path.relative(ROOT, focusScreenshot).replaceAll("\\", "/"));
+
+        await page.keyboard.press("Enter");
+        const mainFocused = await page.evaluate(() => document.activeElement?.id === "main");
+        const tabSequence = [];
+        for (let index = 0; index < expectedOverviewSequence.length; index++) {
+          await page.keyboard.press("Tab");
+          tabSequence.push(await focusSnapshot(page));
+        }
+        const actualForward = tabSequence.map((entry) => entry.target);
+        const forwardComparison = compareFocusSequence(expectedOverviewSequence, actualForward);
+
+        const summary = page.locator("summary").filter({ hasText: "Declared knowledge gaps" });
+        const summaryWasOpen = await summary.evaluate((element) => element.parentElement?.hasAttribute("open") ?? false);
+        await page.keyboard.press("Space");
+        const summarySpaceChanged = await summary.evaluate((element) => !(element.parentElement?.hasAttribute("open") ?? false)) === summaryWasOpen;
+        await page.keyboard.press("Space");
+        const summaryRestored = await summary.evaluate((element) => element.parentElement?.hasAttribute("open") ?? false) === summaryWasOpen;
+        await page.keyboard.press("Tab");
+        const pageBoundary = (await focusSnapshot(page)).target;
+        const reverseSequence = [];
+        for (let index = 0; index < expectedOverviewSequence.length; index++) {
+          await page.keyboard.press("Shift+Tab");
+          reverseSequence.push(await focusSnapshot(page));
+        }
+        const actualReverse = reverseSequence.map((entry) => entry.target);
+        const reverseComparison = compareFocusSequence([...expectedOverviewSequence].reverse(), actualReverse);
+        const sequencePass = forwardComparison.pass && reverseComparison.pass && tabSequence.every((entry) =>
+          entry.focusVisible && entry.indicatorVisible && entry.unobscured && entry.inViewport) && reverseSequence.every((entry) =>
           entry.focusVisible && entry.indicatorVisible && entry.unobscured && entry.inViewport);
-      const focusPass = focusState.focusVisible && focusState.indicatorVisible && focusState.unobscured && focusState.inViewport;
-      const extra: Finding[] = skipLinkPass && mainFocused && sequenceValid && focusPass && summarySpaceChanged && summaryRestored && navigationPass ? [] : [{ status: "제품 문제",
-        detail: JSON.stringify({ first, focusState, skipLinkPass, mainFocused, expectedNavigation, actualNavigation, navigationPass, expectedOverviewSequence, actualOverviewSequence, trailingFocus, sequenceComparison, sequenceValid, summaryWasOpen, summarySpaceChanged, summaryRestored, tabSequence }) }];
-      const result = await auditPage(page, "keyboard-navigation", "Global navigation", "키보드 순차 탐색", undefined, undefined, extra,
-        [path.relative(ROOT, focusScreenshot).replaceAll("\\", "/")]);
-      await closeContext(context); return { ...result, steps: [...(result.steps ?? []), { stepIndex: 2, expected: expectedNavigation,
+
+        await navPage.setViewportSize({ width: viewport.width, height: viewport.height });
+        await navPage.setContent(controlHtml);
+        await navPage.evaluate(() => document.getElementById("main")?.focus());
+        const controlForward: string[] = [];
+        for (let index = 0; index < expectedControlForward.length; index++) {
+          await navPage.keyboard.press("Tab");
+          controlForward.push((await focusSnapshot(navPage)).target);
+        }
+        const controlForwardComparison = compareFocusSequence(expectedControlForward, controlForward);
+        const controlReverse: string[] = [];
+        for (let index = 0; index < expectedControlReverse.length; index++) {
+          await navPage.keyboard.press("Shift+Tab");
+          controlReverse.push((await focusSnapshot(navPage)).target);
+        }
+        const controlReverseComparison = compareFocusSequence(expectedControlReverse, controlReverse);
+        const boundaryMatchesControl = pageBoundary === controlForward.at(-1) && pageBoundary === "BODY";
+        viewportResults.push({ viewport: viewport.name, first: first.target, skipLinkPass: firstHref === "#main", focusPass, mainFocused,
+          forward: actualForward, reverse: actualReverse, forwardComparison, reverseComparison, pageBoundary,
+          controlForward, controlReverse, controlForwardComparison, controlReverseComparison, boundaryMatchesControl,
+          summarySpaceChanged, summaryRestored, sequencePass, focusScreenshots: [focusScreenshots.at(-1) ?? ""] });
+      }
+
+      const internalPass = viewportResults.every((result) => result.skipLinkPass && result.focusPass && result.mainFocused && result.sequencePass &&
+        result.summarySpaceChanged && result.summaryRestored && result.controlForwardComparison.pass && result.controlReverseComparison.pass && result.boundaryMatchesControl);
+      const extra: Finding[] = [
+        ...(!navigationPass || !internalPass ? [{ status: "제품 문제" as const, detail: JSON.stringify({ expectedNavigation, actualNavigation, navigationPass, viewportResults }) }] : []),
+        { status: "미검증", detail: "Browser UI focus leaving and returning was not observable; page-internal traversal and BODY boundary behavior were compared with a normal HTML control at desktop and mobile sizes." },
+      ];
+      const result = await auditPage(page, "keyboard-navigation", "Global navigation", "정방향·역방향 페이지 순서와 HTML 대조", undefined, undefined, extra,
+        focusScreenshots);
+      await closeContext(context);
+      return { ...result, steps: [...(result.steps ?? []), { stepIndex: 2, expected: expectedNavigation,
         actual: { navFirst, actualNavigation, navigatedUrl: navPage.url() }, url: navPage.url(), activeElementId: "a:/search", dialogState: "closed",
-        judgment: navigationPass ? "통과" : "제품 문제" }, { stepIndex: 3, expected: expectedOverviewSequence,
-        actual: { sequence: actualOverviewSequence, trailingFocus }, url: page.url(), activeElementId: trailingFocus.target, dialogState: "closed",
-        judgment: sequenceValid && summarySpaceChanged && summaryRestored ? "통과" : "제품 문제", ...(result.screenshot === undefined ? {} : { screenshot: result.screenshot }) }] };
+        judgment: navigationPass ? "통과" : "제품 문제" }, { stepIndex: 3, expected: { forward: expectedOverviewSequence, reverse: [...expectedOverviewSequence].reverse() },
+        actual: { viewports: viewportResults.map(({ viewport, forward, reverse, forwardComparison, reverseComparison, sequencePass }) =>
+          ({ viewport, forward, reverse, forwardComparison, reverseComparison, sequencePass })) }, url: page.url(), activeElementId: "button:Refresh", dialogState: "closed",
+        judgment: internalPass ? "통과" : "제품 문제", ...(result.screenshot === undefined ? {} : { screenshot: result.screenshot }) },
+      { stepIndex: 4, expected: { controlForward: expectedControlForward, controlReverse: expectedControlReverse, browserUiBoundary: "manual evidence required" },
+        actual: { viewports: viewportResults.map(({ viewport, pageBoundary, controlForward, controlReverse, controlForwardComparison, controlReverseComparison, boundaryMatchesControl }) =>
+          ({ viewport, pageBoundary, controlForward, controlReverse, controlForwardComparison, controlReverseComparison, boundaryMatchesControl })), browserUiBoundaryObserved: false },
+        url: page.url(), activeElementId: viewportResults.at(-1)?.pageBoundary ?? "none", dialogState: "closed", judgment: "미검증" } ] };
     });
 
     await executeCase("modal-keyboard", "Pending decisions", "Confirm·Reject 모달 포커스·순환·닫기", async () => {
