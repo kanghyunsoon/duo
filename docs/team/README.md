@@ -39,10 +39,37 @@ DUO는 coding agent가 일하는 저장소에 사람이 확정한 설계 결정(
    ```
 4. PR template의 항목을 채운다(아래 §4).
 5. CI `verify` 3 OS(Windows·Ubuntu·macOS)를 기다린다. Ubuntu·macOS는 10~15분, Windows는 40~60분 걸린다. Windows에서 `project-local install (npx --no-install duoctl)` 테스트 하나만 시간 초과로 실패하면 알려진 문제 #37이다. 로그를 PR에 링크하고 maintainer에게 재실행을 요청한다. 다른 실패는 PR에서 고친다.
-6. 준비되면 Draft를 "Ready for review"로 바꾸고, 작성자가 아닌 팀원 1명 이상에게 review를 요청한다. Reviewer는 변경을 직접 실행해 보고 Approve 또는 Request changes를 남긴다.
-7. Maintainer가 squash merge한다. 작성자가 자기 PR을 merge하지 않는다.
+6. 준비되면 Draft를 "Ready for review"로 바꾸고, 작성자가 아닌 팀원 1명 이상에게 review를 요청한다. 바뀐 경로의 영역 책임자에게는 CODEOWNERS가 자동으로 요청한다(§3a). Reviewer는 변경을 직접 실행해 보고 Approve 또는 Request changes를 남긴다.
+7. 일반 PR은 영역 책임자(작성자가 아닌 사람) 또는 maintainer가 squash merge한다. §5의 변경은 maintainer가 merge한다. 작성자는 자기 PR을 merge하지 않는다(§3a).
 
 막히면(blocked) Issue에 무엇을 시도했고 무엇이 막혔는지 적고 `help wanted`를 요청한다. 하루 넘게 혼자 붙잡지 않는다. 질문은 Issue 댓글이나 [Discussions](https://github.com/kanghyunsoon/duo/discussions)에 남긴다. 보안 취약점은 공개 Issue가 아니라 [SECURITY.md](../../SECURITY.md)의 비공개 신고를 쓴다.
+
+## 3a. 영역 책임자와 리뷰(T178)
+
+리뷰와 일반 PR merge를 maintainer 한 명에게 몰지 않기 위해 영역별 책임자를 둔다. [.github/CODEOWNERS](../../.github/CODEOWNERS)가 바뀐 경로의 책임자에게 리뷰를 자동으로 요청한다. 이 파일은 권고용이다: `next` ruleset은 code owner 승인을 요구하지 않으므로(`require_code_owner_review: false`) 작성자가 아닌 write 권한 팀원 누구의 승인이든 유효하다.
+
+| 영역 | 경로 | 책임자(1차 리뷰) |
+|---|---|---|
+| Core / Decision | `packages/core/` | kanghyunsoon, strdeok |
+| Analyzer / Review | `packages/analyzer/`, `packages/director/` | kang987654, ghkim1632 |
+| Graph / Indexing | `packages/graph/` | kang987654, kanghyunsoon |
+| MCP / Integration, CLI | `packages/integration/`, `apps/cli/` | Alexjung0115, strdeok(integration), kanghyunsoon(CLI) |
+| UI / UX | `packages/ui/`, `tests/ui/` | strdeok, Alexjung0115 |
+| CI / Test | `tests/`, `bench/`, `fixtures/`, `vitest*.config.ts`, `.github/workflows/` | ghkim1632, s2vn9wxx |
+| Docs / Community | `docs/`, `docs/community/`, `CONTRIBUTING.md`, `README*.md`, Issue·PR template | s2vn9wxx, ghkim1632 |
+
+위 표에 없는 경로(`tsconfig*`, `eslint.config.js`, `scripts/` 등 저장소 설정)는 기본값으로 maintainer에게 요청된다.
+
+규칙:
+
+1. 영역 책임자가 먼저 리뷰한다. 책임자가 작성자면 같은 영역의 다른 책임자나 다른 팀원이 리뷰한다.
+2. 작성자는 자기 PR을 승인하거나 merge하지 않는다.
+3. 작성자가 아닌 사람의 승인과 CI `verify` 3 OS 통과가 있으면, §5에 해당하지 않는 일반 PR은 영역 책임자(작성자 아님) 또는 maintainer가 squash merge한다.
+4. §5의 변경(Decision 권한·형식·verdict 의미, release, 보안, 유료 실행, 외부 모집)과 `.github/workflows/`, 패키지 manifest·lockfile, `scripts/release/`, `docs/conflicts.md`의 변경은 maintainer가 최종 판단하고 merge한다.
+5. 리뷰 요청 뒤 이틀(48시간) 안에 응답이 없으면 PR 작성자가 같은 영역의 다른 책임자나 다른 팀원에게 리뷰를 다시 요청한다. 같은 사람에게 반복해서 멘션하지 않는다.
+6. Maintainer가 자리를 비우면 3의 일반 PR은 영역 책임자가 계속 merge한다. 4의 변경, release, npm publish, tag, ruleset, 관리자 권한은 maintainer가 돌아올 때까지 기다린다.
+
+이 규칙은 기존 write 권한 안에서 운영한다. 관리자 권한, npm publish, tag, release, ruleset은 바뀌지 않는다.
 
 ## 4. PR에 쓸 것
 
