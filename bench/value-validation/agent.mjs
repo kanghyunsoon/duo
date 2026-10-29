@@ -16,7 +16,8 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { CASES } from "./cases.mjs";
-import { generate, git } from "./fixture.mjs";
+import { checkResults, experimentIdentity, openExperiment, RESULTS_FORMAT, templateError, templateProblems } from "./experiment.mjs";
+import { FIXTURE_VERSION, generate, git } from "./fixture.mjs";
 import { readEvents, sumAll } from "./measure.mjs";
 import { judge } from "./oracle.mjs";
 import { TASKS } from "./tasks.mjs";
@@ -46,12 +47,32 @@ export function schedule({ tasks, conditions, reps, seed }) {
 
 const sh = (cmd, args, cwd, env) => spawnSync(cmd, args, { cwd, env: env ?? process.env, encoding: "utf8", shell: process.platform === "win32", windowsHide: true, maxBuffer: 1 << 28 });
 
-/** Templates with their timed setup (condition C also installs DUO's Codex integration). B and C install ESLint once. */
+/**
+ * Templates with their timed setup (condition C also installs DUO's Codex integration). B and C install ESLint once.
+ * Issue #67: every cached template is checked first (fixture version, DUO version for C, HEAD = recorded adoption commit,
+ * no changed tracked file); only then are missing ones built, so a mismatch writes nothing.
+ */
 async function templates() {
   const dir = path.join(out, "templates"); const info = {};
+  const problems = [];
   for (const c of opts.conditions) {
     const root = path.join(dir, c);
-    if (fs.existsSync(path.join(root, ".git"))) { info[c] = JSON.parse(fs.readFileSync(path.join(dir, c + ".json"), "utf8")); continue; }
+    if (!fs.existsSync(path.join(root, ".git"))) continue;
+    let meta = null;
+    try { meta = JSON.parse(fs.readFileSync(path.join(dir, c + ".json"), "utf8")); } catch { /* reported below */ }
+    let head = "unreadable"; let trackedChanges = "unreadable";
+    try {
+      head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+      // --no-optional-locks: status must not refresh .git/index, so checking a template never rewrites it.
+      trackedChanges = execFileSync("git", ["--no-optional-locks", "status", "--porcelain", "--untracked-files=no"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    } catch { /* reported as a HEAD or change mismatch */ }
+    const p = templateProblems(meta, { condition: c, fixtureVersion: FIXTURE_VERSION, duoVersion: DUO_VERSION, head, trackedChanges });
+    if (p.length > 0) problems.push(...p); else info[c] = meta;
+  }
+  if (problems.length > 0) throw templateError(out, problems);
+  for (const c of opts.conditions) {
+    if (info[c] !== undefined) continue;
+    const root = path.join(dir, c);
     const g = await generate(root, c, { duoctl: opts.duoctl, core: opts.core });
     if (c !== "A") {
       const t = performance.now(); const r = sh("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"], root); if (r.status !== 0) throw new Error("npm install " + c + ": " + r.stderr); g.setup.push({ step: "npm install (ESLint)", ms: Math.round(performance.now() - t) });
@@ -59,6 +80,7 @@ async function templates() {
       if (c === "C") { const ti = performance.now(); spawnSync(process.execPath, [opts.duoctl, "index"], { cwd: root, windowsHide: true }); g.setup.push({ step: "duoctl index", ms: Math.round(performance.now() - ti) }); }
       g.adoption = git(root, "rev-parse", "HEAD").trim();
     }
+    if (c === "C") g.duoVersion = DUO_VERSION;
     info[c] = g; fs.writeFileSync(path.join(dir, c + ".json"), JSON.stringify(g, null, 2));
   }
   return info;
@@ -125,14 +147,23 @@ async function main() {
   fs.mkdirSync(out, { recursive: true });
   if (opts.selftest) return selftest();
   if (!opts.dryRun && (opts.model === undefined || !flag("--i-understand-this-uses-codex"))) throw new Error("real runs need --model <model> and --i-understand-this-uses-codex (they use the runner's Codex quota); use --dry-run to check the setup");
+  // Issue #67: the experiment identity is checked (or recorded, in a new directory) before anything else is read or written.
+  const unknown = [...opts.tasks.filter((id) => !TASKS.some((t) => t.id === id)), ...opts.conditions.filter((c) => !["A", "B", "C"].includes(c))];
+  if (unknown.length > 0) throw new Error("unknown task or condition: " + unknown.join(", "));
+  const identity = experimentIdentity(opts, {
+    taskDefinitions: opts.tasks.map((id) => TASKS.find((t) => t.id === id)), fixtureVersion: FIXTURE_VERSION,
+    fixtureSource: fs.readFileSync(new URL("./fixture.mjs", import.meta.url), "utf8"), duoVersion: DUO_VERSION,
+  });
+  openExperiment(out, identity);
   const env = { ...process.env, PATH: (opts.duoctlBin ? opts.duoctlBin + path.delimiter : "") + process.env.PATH };
   const duoctl = opts.conditions.includes("C") ? checkDuoctl(env) : null;
-  const info = await templates();
   const plan = schedule(opts);
+  const checked = checkResults(out, plan, identity);
+  const info = await templates();
   fs.writeFileSync(path.join(out, "schedule.json"), JSON.stringify({ seed: opts.seed, model: opts.model ?? null, timeoutMin: opts.timeoutMin, duoctl, runs: plan }, null, 2));
   const resultsFile = path.join(out, "runs.json");
-  const results = fs.existsSync(resultsFile) ? JSON.parse(fs.readFileSync(resultsFile, "utf8")) : { format: "duo.value-validation-agents/1", templates: info, runs: [] };
-  const done = new Set(results.runs.map((r) => r.id));
+  const results = checked.results ?? { format: RESULTS_FORMAT, templates: info, runs: [] };
+  const done = checked.done;
   for (const run of plan) {
     if (done.has(run.id)) continue;
     const task = TASKS.find((t) => t.id === run.task);
