@@ -97,7 +97,7 @@ Human: duoctl decision confirm|reject <id>  또는  UI Confirm/Reject ─▶ cor
 
 ## Freshness
 
-Context, Review, MCP Tool은 인덱싱하지 않는다. index가 current가 아니면 `index-required`를 돌려주고, 인덱싱은 `duoctl index`(또는 CLI `--refresh`)가 명시적으로 한다(T10.1, TASK-015, TASK-016, C139). Indexer의 변경 탐지는 Scanner의 현재 파일 목록과 `contentHash`를 이전 `generated/index-state.json`의 fingerprint와 비교해서 한다(TASK-004 `compareFingerprints`, TASK-008 Indexer). stat(size, mtime)은 이후 hash 계산을 줄이는 hint로만 쓸 수 있고, 내용이 같은지는 `contentHash`로만 판단한다(C33). 변경이 없으면 parse하지 않는다(REQ-INDEX-002).
+CLI의 Context·Review와 UI는 인덱싱하지 않는다. index가 current가 아니면 `index-required`를 돌려주고, 인덱싱은 `duoctl index`(또는 CLI `--refresh`)가 명시적으로 한다(T10.1, TASK-015, TASK-016, C139). MCP의 `duo_get_context`·`duo_review_changes`만 예외로, index가 stale이면 graph의 `refreshIndexIfSafe`로 공통 writer lock 아래 한 번 증분 갱신하고 결과의 `indexRefresh`에 알린다. 안전하지 않으면(index 없음·호환 안 됨, lock 대기 5초 초과, 갱신 중 입력 변경 등) `index-required`와 이유를 그대로 돌려준다(#4, T179). Indexer의 변경 탐지는 Scanner의 현재 파일 목록과 `contentHash`를 이전 `generated/index-state.json`의 fingerprint와 비교해서 한다(TASK-004 `compareFingerprints`, TASK-008 Indexer). stat(size, mtime)은 이후 hash 계산을 줄이는 hint로만 쓸 수 있고, 내용이 같은지는 `contentHash`로만 판단한다(C33). 변경이 없으면 parse하지 않는다(REQ-INDEX-002).
 
 ## 실행 형태와 동시성
 
