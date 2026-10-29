@@ -370,7 +370,9 @@ export function evaluateConcurrencyOracle({
         );
       }
     } else {
-      // Partial success under contention: count of new proposals must match succeededCount + initial proposals
+      // Partial success under contention: intentionally compares only the proposal count here
+      // when the baseline has at least as many proposals as workers; C1b checks absence of
+      // partial or corrupted writes separately via corruptedFiles, danglingLocks, and truth.ok.
       const expectedProposals =
         baselineSnapshot.truth.proposalIds.length - (outcomes.length - succeededCount);
       if (
