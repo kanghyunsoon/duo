@@ -195,7 +195,7 @@ duoctl review                      # CI에서는 duoctl review --fail-on block
 duoctl decision list               # 대기 중인 제안. 확정과 거절은 터미널에서
 ```
 
-MCP Tool은 인덱싱하지 않습니다. Agent가 `index-required`를 받으면 `duoctl index`를 실행합니다. 명령: [CLI reference](docs/07-cli-interface.md). MCP Tool과 설치 계약: [MCP interface](docs/06-mcp-interface.md).
+`duo_get_context`와 `duo_review_changes`는 index가 stale이고 안전하면 한 번 갱신하고 결과에 알립니다. 그래도 Agent가 `index-required`(이유 포함)를 받으면 `duoctl index`를 실행합니다. 명령: [CLI reference](docs/07-cli-interface.md). MCP Tool과 설치 계약: [MCP interface](docs/06-mcp-interface.md).
 
 ## 선택 LLM 보조
 

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createDecisionService } from "@duo-director/core";
+import { withIndexWriteLock } from "@duo-director/graph";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { LLMProviderPool } from "../../packages/integration/src/llm/factory.js";
 import { TOOLS, type WorkActivityStore } from "../../packages/integration/src/mcp/tools.js";
@@ -46,8 +47,12 @@ describe("duo-director MCP: protocol, tool list as the permission contract, argu
       });
     }
     const describe = (n: string) => tools.find((t) => t.name === n)?.description ?? "";
-    expect(describe("duo_get_context")).toMatch(/Does not modify Project Truth, source code or the index.*Appends a local runtime metric.*index-required/su);
-    expect(describe("duo_review_changes")).toContain("Does not modify Project Truth, source code or the index");
+    // #4: the maintainer-approved contract for the automatic refresh.
+    const refreshContract = "Does not modify Project Truth or source code. When the index is stale and it is safe, refreshes DUO's regenerable index once and says so in the result.";
+    expect(describe("duo_get_context")).toContain(refreshContract);
+    expect(describe("duo_get_context")).toMatch(/Appends a local runtime metric.*cannot be refreshed safely, returns status index-required with the reason/su);
+    expect(describe("duo_review_changes")).toContain(refreshContract);
+    expect(describe("duo_review_changes")).toContain("cannot be refreshed safely, returns status index-required with the reason");
     expect(describe("duo_review_changes")).toContain("Appends a local runtime metric");
     expect(describe("duo_review_changes")).toContain("does not persist a formal Review Record");
     expect(describe("duo_propose_decision")).toMatch(/proposal only.*Cannot confirm or reject a decision/su);
@@ -155,28 +160,84 @@ describe("existing project through MCP: freshness, CLI parity, WAL, metrics, pro
     expect(missing.structuredContent).toMatchObject({ format: "duo.trace/1", status: "not-found" });
   });
 
-  it("the same MCP process sees a stale index, returns index-required without indexing, and sees the CLI index", async () => {
+  it("#4: duo_get_context refreshes a stale index once, answers, says so, and writes only regenerable state", async () => {
     p.edit("src/scheduler.ts", "% 7", "% 5");
     const before = snapshot(p.root);
     expect((await s.call("duo_get_status")).structuredContent.index).toMatchObject({ status: "stale", changes: { files: 1 } });
     const ctx = await s.call("duo_get_context", { task: "Scheduler.next" });
     expect(ctx.isError).toBeFalsy();
-    expect(ctx.structuredContent.status).toBe("index-required");
-    expect(ctx.content[0]?.text).toContain("duoctl index");
-    const rv = await s.call("duo_review_changes", {});
-    expect(rv.isError).toBeFalsy();
-    expect(rv.structuredContent.status).toBe("index-required");
-    // Nothing indexed by the reads; metered calls update only metrics and local work activity.
-    const withoutRuntime = (items: ReturnType<typeof snapshot>) => items.filter(([f]) => !f.endsWith("metrics.jsonl") && !f.endsWith("work-tasks.json"));
-    expect(withoutRuntime(snapshot(p.root))).toEqual(withoutRuntime(before));
-    // The CLI writes the graph while this MCP server is running.
-    const idx = duoctl(p.root, ["index", "--json"]);
-    expect(idx.code).toBe(0);
+    expect(ctx.structuredContent).toMatchObject({ status: "ready", indexRefresh: { refreshed: true } });
+    expect(ctx.content[0]?.text).toContain("The DUO index was stale; DUO refreshed it once before answering.");
     expect((await s.call("duo_get_status")).structuredContent.index.status).toBe("current");
-    expect((await s.call("duo_get_context", { task: "Scheduler.next" })).structuredContent.status).toBe("ready");
+    // Only DUO's regenerable state (generated/, cache/, runtime/) changed: no Project Truth, no source, nothing else.
+    const regenerable = /^\.duo-project[\\/](?:generated|cache|runtime)[\\/]/u;
+    const outside = (items: ReturnType<typeof snapshot>) => items.filter(([f]) => !regenerable.test(f));
+    expect(outside(snapshot(p.root))).toEqual(outside(before));
+    // A current index is read as it is: no second refresh and no indexRefresh field.
+    const again = (await s.call("duo_get_context", { task: "Scheduler.next" })).structuredContent;
+    expect(again.status).toBe("ready");
+    expect(again.indexRefresh).toBeUndefined();
     const ready = (await s.call("duo_review_changes", {})).structuredContent;
     expect(ready).toMatchObject({ format: "duo.review/1", status: "ready", metrics: { llmCalls: 0 } });
+    expect(ready.indexRefresh).toBeUndefined();
     expect(ready.diff.files.map((f: { path: string }) => f.path)).toContain("src/scheduler.ts");
+    // The explicit CLI index still works on the refreshed index while this server runs.
+    expect(duoctl(p.root, ["index", "--json"]).code).toBe(0);
+  });
+
+  // #4: the README commit step moves HEAD without changing a file; that used to stop MCP reads until someone ran duoctl index.
+  it("#4: duo_review_changes refreshes once after HEAD moves with no file change, and answers with the same note", async () => {
+    p.git("commit", "-q", "--allow-empty", "-m", "move HEAD only");
+    expect((await s.call("duo_get_status")).structuredContent.index).toMatchObject({ status: "stale", changes: { files: 0 } });
+    const rv = await s.call("duo_review_changes", {});
+    expect(rv.isError).toBeFalsy();
+    expect(rv.structuredContent).toMatchObject({ format: "duo.review/1", status: "ready", indexRefresh: { refreshed: true } });
+    expect(rv.content[0]?.text).toContain("The DUO index was stale; DUO refreshed it once before answering.");
+    expect((await s.call("duo_get_status")).structuredContent.index.status).toBe("current");
+  });
+
+  it("#4: two MCP servers reading a stale index at the same time refresh it once and leave one valid index", async () => {
+    const other = await open(p.root);
+    p.edit("src/scheduler.ts", "% 5", "% 3");
+    const both = await Promise.all([s.call("duo_get_context", { task: "Scheduler.next" }), other.call("duo_get_context", { task: "Scheduler.next" })]);
+    // The common writer lock lets exactly one refresh. The other read finds the index current after waiting (refreshed: false),
+    // reads it current, or gives up after the 5 s lock wait with the lock-timeout reason (a refresh can take longer on Windows).
+    const refreshed = both.filter((r) => r.structuredContent.indexRefresh?.refreshed === true);
+    expect(refreshed).toHaveLength(1);
+    expect(refreshed[0]?.structuredContent.status).toBe("ready");
+    for (const r of both.filter((x) => x !== refreshed[0])) {
+      const c = r.structuredContent;
+      if (c.status === "index-required") expect(c.indexRefresh.reason).toContain("Index lock timeout");
+      else expect(c.status).toBe("ready");
+    }
+    expect((await other.call("duo_get_status")).structuredContent.index.status).toBe("current");
+    expect((await s.call("duo_get_status")).structuredContent.index.status).toBe("current");
+    expect(duoctl(p.root, ["index", "--json"]).code).toBe(0);
+  });
+
+  it("#4: an index that cannot be refreshed safely keeps index-required with the reason (lock timeout, missing index)", async () => {
+    p.edit("src/scheduler.ts", "% 3", "% 2");
+    // Another writer holds the common index lock longer than a read waits for it.
+    const held = await withIndexWriteLock(p.root, async () => {
+      const ctx = await s.call("duo_get_context", { task: "Scheduler.next" });
+      expect(ctx.structuredContent).toMatchObject({ status: "index-required", indexRefresh: { refreshed: false } });
+      expect(ctx.structuredContent.indexRefresh.reason).toMatch(/lock/iu);
+      expect(ctx.content[0]?.text).toMatch(/duoctl index.*Automatic index refresh was not done: /su);
+      const rv = await s.call("duo_review_changes", {});
+      expect(rv.structuredContent).toMatchObject({ status: "index-required", indexRefresh: { refreshed: false } });
+      expect(rv.content[0]?.text).toContain("Automatic index refresh was not done: ");
+    });
+    expect(held.diagnostics).toEqual([]);
+    // A read never bootstraps a missing index.
+    const db = path.join(p.root, ".duo-project", "generated", "graph.db");
+    for (const f of [db, `${db}-wal`, `${db}-shm`]) fs.rmSync(f, { force: true });
+    const missing = (await s.call("duo_get_context", { task: "Scheduler.next" })).structuredContent;
+    expect(missing).toMatchObject({ status: "index-required", indexRefresh: { refreshed: false } });
+    expect(missing.indexRefresh.reason).toContain("existing compatible index");
+    expect(fs.existsSync(db)).toBe(false);
+    // The explicit CLI still builds it.
+    expect(duoctl(p.root, ["index", "--json"]).code).toBe(0);
+    expect((await s.call("duo_get_context", { task: "Scheduler.next" })).structuredContent.status).toBe("ready");
   });
 
   it("no reader is left open between tool calls: a full rebuild and a WAL checkpoint succeed while the server runs", async () => {

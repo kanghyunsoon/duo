@@ -28,7 +28,7 @@ Tool은 9개로 고정한다(H-10). 새 Tool이 필요하면 별도 Spec과 ADR�
 - Root: 시작할 때 한 번 정한다. `--root`(없으면 cwd), 또는 `--root-from git-cwd`(작업 디렉터리를 포함한 Git work tree의 top level), `--root-from env:<NAME>`(서버 환경 변수의 절대 경로, Claude Code의 `CLAUDE_PROJECT_DIR`). 결과는 **Git work tree의 top level**이어야 한다(`openGitProvider`: 저장소가 아니면 `GIT_REPOSITORY_REQUIRED`, 하위 디렉터리면 `SCAN_ROOT_INVALID`, `--root-from`을 풀 수 없으면 `MCP_ROOT_UNRESOLVED`). 위로 올라가며 `.duo-project/`를 찾지 않는다. 서버 하나는 저장소 하나만 다룬다. 시작 실패는 stderr에 진단을 쓰고 종료 코드 1이며 stdout은 비어 있다.
 - stdout에는 JSON-RPC 메시지만 쓴다. 진단과 metric 쓰기 경고는 stderr로 보낸다. CLI renderer는 호출하지 않는다.
 - 종료: client가 stdin을 닫거나 SIGINT/SIGTERM을 받으면 연결을 닫고 종료 코드 0으로 끝난다. 호출 사이에 열린 GraphStore, statement, transaction이 없으므로 따로 정리할 handle이 없다.
-- **Freshness**: Tool은 인덱싱하지 않는다(T00 초안의 "실행 전 증분 인덱싱"을 대체, C139). index가 current가 아니면 context와 review는 정상 결과 `status: "index-required"`를 돌려주고, Agent 또는 Human이 `duoctl index`를 명시적으로 실행한다. MCP에는 index 쓰기 Tool이 없다. freshness 판정은 매 호출 graph의 `inspectIndex()`이며 mtime 전용 판정, TTL cache, watcher는 없다(T19 측정 뒤 결정).
+- **Freshness**: index가 stale이면 `duo_get_context`와 `duo_review_changes`는 graph의 `refreshIndexIfSafe`(공통 writer lock, lock 대기 5초)로 한 번 증분 갱신하고, 새 graph reader로 한 번만 다시 읽는다. 결과에는 `indexRefresh: { refreshed }`를 넣고, 갱신했으면 text 요약 첫 줄에 알린다. 갱신이 안전하지 않으면(index 없음·호환 안 됨, lock timeout, 갱신 중 저장소 입력 변경 등) 정상 결과 `status: "index-required"`와 `indexRefresh: { refreshed: false, reason }`을 돌려주고 Agent 또는 Human이 `duoctl index`를 실행한다. 없는 index를 새로 만들거나 full rebuild하지 않으며 Project Truth와 source는 바꾸지 않는다(#4, T179). 다른 Tool과 CLI는 인덱싱하지 않는다(C139). MCP에는 index 쓰기 Tool이 없다. freshness 판정은 매 호출 graph의 `inspectIndex()`이며 mtime 전용 판정, TTL cache, watcher는 없다(T19 측정 뒤 결정).
 - 응답: `structuredContent`는 shared operation의 payload이고, `content`(text)는 그 payload를 요약한 renderer 결과다. 판단 로직은 text renderer에 없다. Agent는 structuredContent를 신뢰한다.
 
 ## Tool 목록과 Domain Service
@@ -130,7 +130,7 @@ CLI와 MCP는 같은 shared operation을 호출한다. `duoctl status|context|re
 
 ## Server instructions
 
-초기화 응답의 `instructions`(`MCP_INSTRUCTIONS`)에는 서버 전체 원칙 다섯 문장만 둔다: DUO가 confirmed direction을 가짐, 구현 전 `duo_get_context`와 변경 후 `duo_review_changes`, Tool은 인덱싱하지 않으니 index-required면 `duoctl index`, pending proposal과 surfaced gap은 확정이 아님, Agent는 제안만 가능. Codex는 이 필드를 서버 전체 guidance로 읽는다(처음 512자가 자기완결). 작업 순서는 bridge(AGENTS.md·CLAUDE.md)에 두고 중복하지 않는다.
+초기화 응답의 `instructions`(`MCP_INSTRUCTIONS`)에는 서버 전체 원칙 다섯 문장만 둔다: DUO가 confirmed direction을 가짐, 구현 전 `duo_get_context`와 변경 후 `duo_review_changes`, context·review는 안전하면 stale index를 한 번 갱신하고 그래도 index-required면 `duoctl index`, pending proposal과 surfaced gap은 확정이 아님, Agent는 제안만 가능. Codex는 이 필드를 서버 전체 guidance로 읽는다(처음 512자가 자기완결). 작업 순서는 bridge(AGENTS.md·CLAUDE.md)에 두고 중복하지 않는다.
 
 ## Agent integration (duoctl install)
 
