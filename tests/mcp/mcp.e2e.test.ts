@@ -179,6 +179,25 @@ describe("existing project through MCP: freshness, CLI parity, WAL, metrics, pro
     expect(ready.diff.files.map((f: { path: string }) => f.path)).toContain("src/scheduler.ts");
   });
 
+  // #4: a commit that changes no file (the README commit step) still stops MCP reads until someone runs duoctl index.
+  it("#4 repro: HEAD moves with no file change, and MCP context/review return index-required", async () => {
+    p.git("commit", "-q", "--allow-empty", "-m", "move HEAD only");
+    try {
+      expect((await s.call("duo_get_status")).structuredContent.index).toMatchObject({ status: "stale", changes: { files: 0 } });
+      expect((await s.call("duo_get_context", { task: "Scheduler.next" })).structuredContent.status).toBe("index-required");
+      expect((await s.call("duo_review_changes", {})).structuredContent.status).toBe("index-required");
+    } finally {
+      p.git("reset", "-q", "--soft", "HEAD~1"); // back to the indexed HEAD for the next tests
+    }
+    expect((await s.call("duo_get_status")).structuredContent.index.status).toBe("current");
+  });
+  // #4 / Jira S15P31A106-322: enabled once BE S15P31A106-321 provides the locked, safe refresh.
+  it.todo("#4: duo_get_context on a stale index refreshes once, answers, and says the index was refreshed");
+  it.todo("#4: duo_review_changes on a stale index refreshes once and answers with the same note");
+  it.todo("#4: an automatic refresh writes only regenerable index state, never Project Truth or the working tree");
+  it.todo("#4: two MCP servers refreshing at the same time leave one valid index");
+  it.todo("#4: an index that cannot be refreshed safely still returns index-required with the reason");
+
   it("no reader is left open between tool calls: a full rebuild and a WAL checkpoint succeed while the server runs", async () => {
     await s.call("duo_get_context", { task: "Scheduler.next" });
     await s.call("duo_impact", { node: "Scheduler.next" });
