@@ -22,8 +22,8 @@ export const WRITE_AREAS: Readonly<Record<WriteKind, readonly string[]>> = {
   "agent-integration": [],
 };
 
-/** The only files outside the state directory DUO may write, and only as "agent-integration" (T17). */
-export const AGENT_INTEGRATION_FILES: readonly string[] = [".codex/config.toml", ".mcp.json", "AGENTS.md", "CLAUDE.md"];
+/** The only files outside the state directory DUO may write, and only as "agent-integration" (T17; the two skill files only with --with-skill, S15P31A106-358). */
+export const AGENT_INTEGRATION_FILES: readonly string[] = [".codex/config.toml", ".mcp.json", "AGENTS.md", "CLAUDE.md", ".agents/skills/duo/SKILL.md", ".claude/skills/duo/SKILL.md"];
 
 export interface AllowedWrite {
   readonly path: RepoPath;

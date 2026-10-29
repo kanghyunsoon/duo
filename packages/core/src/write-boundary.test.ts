@@ -62,12 +62,13 @@ describe("AC-002-04 write boundary policy", () => {
     expect(codes(checkWriteBoundary(root, "src/a.ts", "project-truth", { restrictTo: ["src/"] }))).toEqual(["WRITE_NOT_ALLOWED"]);
   });
 
-  it("agent-integration (T17) is exactly the four Agent files at the repository root, and only as that kind", () => {
-    for (const f of [".codex/config.toml", ".mcp.json", "AGENTS.md", "CLAUDE.md"]) {
+  it("agent-integration (T17) is exactly the Agent files DUO manages, and only as that kind", () => {
+    for (const f of [".codex/config.toml", ".mcp.json", "AGENTS.md", "CLAUDE.md", ".agents/skills/duo/SKILL.md", ".claude/skills/duo/SKILL.md"]) {
       expect(checkWriteBoundary(root, f, "agent-integration").value).toMatchObject({ path: f, kind: "agent-integration" });
       expect(codes(checkWriteBoundary(root, f, "project-truth"))).toEqual(["WRITE_NOT_ALLOWED"]);
     }
-    for (const f of ["src/AGENTS.md", ".codex/hooks.json", "package.json", `${S}/project.yaml`, "agents.md"]) {
+    // Only DUO's own skill path: other skills, other files in the skill folder and the folders themselves stay off limits.
+    for (const f of ["src/AGENTS.md", ".codex/hooks.json", "package.json", `${S}/project.yaml`, "agents.md", ".claude/skills/other/SKILL.md", ".agents/skills/duo/notes.md", ".claude/skills/duo", ".claude/settings.json"]) {
       expect(codes(checkWriteBoundary(root, f, "agent-integration"))).toEqual(["WRITE_NOT_ALLOWED"]);
     }
     expect(codes(checkWriteBoundary(root, "../AGENTS.md", "agent-integration"))).not.toEqual([]);

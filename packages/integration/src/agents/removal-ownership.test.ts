@@ -10,6 +10,7 @@ import { codexAdapter } from "./codex.js";
 import { applyAgentIntegration, inspectAgentIntegration, planAgentIntegration, planAgentRemoval } from "./integration.js";
 import { PATH_LAUNCHER } from "./launcher.js";
 import { upsertBlock } from "./managed-block.js";
+import { SKILL_TEXT } from "./skill.js";
 
 const temps: string[] = [];
 afterAll(() => temps.forEach((dir) => fs.rmSync(dir, { recursive: true, force: true })));
@@ -302,4 +303,87 @@ describe("file ownership across install and remove (#104, H-94)", () => {
     expect(removal.willDelete).toEqual([]);
     expect(removal.warnings.join(" ")).toContain("symlink");
   });
+});
+
+describe("opt-in project skill with --with-skill (S15P31A106-358, H-94)", () => {
+  for (const adapter of adapters) {
+    const record = `.duo-project/runtime/agent-integration/${adapter.id}.json`;
+    const targets = (f: ReturnType<typeof fixture>) => (JSON.parse(f.read(record)) as { targets: Record<string, { existedBefore: boolean }> }).targets;
+    const plan = (f: ReturnType<typeof fixture>, withSkill: boolean) => planAgentIntegration(f.root, adapter.id, { host: f.host, withSkill });
+
+    it(`${adapter.id}: the default install writes no skill and its plan has no skill field`, async () => {
+      const f = fixture();
+      const p = plan(f, false);
+      expect(p.skill).toBeUndefined();
+      expect((await applyAgentIntegration(f.root, p)).diagnostics).toEqual([]);
+      expect(fs.existsSync(path.join(f.root, adapter.skillTarget))).toBe(false);
+      expect(targets(f)[adapter.skillTarget]).toBeUndefined();
+    });
+
+    it(`${adapter.id}: creates the skill, keeps it on re-install with or without the option, and remove deletes it; remove again is a no-op`, async () => {
+      const f = fixture();
+      const first = plan(f, true);
+      expect(first.skill).toEqual({ target: adapter.skillTarget, status: "absent", action: "create" });
+      expect(first.warnings.join(" ")).toContain("not verified yet");
+      expect((await applyAgentIntegration(f.root, first)).diagnostics).toEqual([]);
+      expect(f.read(adapter.skillTarget)).toBe(SKILL_TEXT);
+      expect(targets(f)[adapter.skillTarget]?.existedBefore).toBe(false);
+      expect(plan(f, true).noop).toBe(true);
+      const without = plan(f, false);
+      expect(without.noop).toBe(true);
+      expect(without.skill).toEqual({ target: adapter.skillTarget, status: "current", action: "none" });
+
+      const removal = planAgentRemoval(f.root, adapter.id);
+      expect(removal.willDelete).toContain(adapter.skillTarget);
+      expect((await applyAgentIntegration(f.root, removal)).diagnostics).toEqual([]);
+      expect(fs.existsSync(path.join(f.root, adapter.skillTarget))).toBe(false);
+      expect(fs.existsSync(path.join(f.root, record))).toBe(false);
+      expect(planAgentRemoval(f.root, adapter.id).noop).toBe(true);
+    });
+
+    it(`${adapter.id}: never overwrites or deletes a skill the user already had at that path`, async () => {
+      const f = fixture();
+      const mine = "---\nname: duo\ndescription: my own skill\n---\n\nMine.\n";
+      f.write(adapter.skillTarget, mine);
+      const blocked = plan(f, true);
+      expect(blocked.applicable).toBe(false);
+      expect(blocked.skill).toEqual({ target: adapter.skillTarget, status: "foreign", action: "blocked" });
+      expect(blocked.conflicts.map((c) => c.target)).toEqual([adapter.skillTarget]);
+      expect((await applyAgentIntegration(f.root, blocked)).value).toBeUndefined();
+      expect(f.read(adapter.skillTarget)).toBe(mine);
+
+      expect((await applyAgentIntegration(f.root, plan(f, false))).diagnostics).toEqual([]);
+      expect(targets(f)[adapter.skillTarget]).toBeUndefined();
+      const removal = planAgentRemoval(f.root, adapter.id);
+      expect(removal.skill).toBeUndefined();
+      expect((await applyAgentIntegration(f.root, removal)).diagnostics).toEqual([]);
+      expect(f.read(adapter.skillTarget)).toBe(mine);
+    });
+
+    it(`${adapter.id}: a copy of DUO's skill text that existed before install is kept on remove`, async () => {
+      const f = fixture();
+      f.write(adapter.skillTarget, SKILL_TEXT);
+      const p = plan(f, true);
+      expect(p.skill).toEqual({ target: adapter.skillTarget, status: "current", action: "none" });
+      expect((await applyAgentIntegration(f.root, p)).diagnostics).toEqual([]);
+      expect(targets(f)[adapter.skillTarget]?.existedBefore).toBe(true);
+      const removal = planAgentRemoval(f.root, adapter.id);
+      expect(removal.willDelete).not.toContain(adapter.skillTarget);
+      expect(removal.warnings).toContain(`keep ${adapter.skillTarget} (it existed before DUO)`);
+      expect((await applyAgentIntegration(f.root, removal)).diagnostics).toEqual([]);
+      expect(f.read(adapter.skillTarget)).toBe(SKILL_TEXT);
+    });
+
+    it(`${adapter.id}: a DUO-created skill the user edited is kept on remove with a warning`, async () => {
+      const f = fixture();
+      expect((await applyAgentIntegration(f.root, plan(f, true))).diagnostics).toEqual([]);
+      const edited = `${SKILL_TEXT}\nTeam note.\n`;
+      f.write(adapter.skillTarget, edited);
+      const removal = planAgentRemoval(f.root, adapter.id);
+      expect(removal.willDelete).not.toContain(adapter.skillTarget);
+      expect(removal.warnings).toContain(`keep ${adapter.skillTarget} (modified since DUO installed it)`);
+      expect((await applyAgentIntegration(f.root, removal)).diagnostics).toEqual([]);
+      expect(f.read(adapter.skillTarget)).toBe(edited);
+    });
+  }
 });
