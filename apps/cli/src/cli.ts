@@ -62,6 +62,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, Options>> = {
   install: { yes: { type: "boolean", short: "y" }, launcher: { type: "string" } },
   ui: { port: { type: "string" }, open: { type: "boolean" } },
 };
+const DISCOVERY_OPTIONS: Options = Object.assign({}, GLOBAL, ...Object.values(COMMAND_OPTIONS));
 
 const HELP = [
   `${PRODUCT_NAME} ${VERSION} — AI Project Direction Layer for Coding Agents`,
@@ -88,7 +89,8 @@ const HELP = [
 ].join("\n");
 
 function parse(argv: readonly string[]) {
-  const command = argv.find((a) => !a.startsWith("-"));
+  const discovered = parseArgs({ args: [...argv], options: DISCOVERY_OPTIONS, allowPositionals: true, strict: true });
+  const command = discovered.positionals[0];
   const spec = { ...GLOBAL, ...(command === undefined ? {} : COMMAND_OPTIONS[command] ?? {}) };
   return { command, parsed: parseArgs({ args: [...argv], options: spec, allowPositionals: true, strict: true }) };
 }
