@@ -42,3 +42,34 @@ describe("T37 lock digest compatibility (H-72)", () => {
     expect(verifyDecisionLock(parse(edited)).value.status).toBe("mismatch");
   });
 });
+
+describe("#47 forbids.importer_paths: lock digest and input validation", () => {
+  const withImports = PRE_T37.full[0].replace("  dependencies: [express-session]\n", "  dependencies: [express-session]\n  imported_paths: [src/legacy/db.ts]\n");
+  const errors = (text: string) => parseDecisionFile(".duo-project/decisions/D-001.yaml", text).diagnostics.filter((d) => d.severity === "error");
+
+  it("a Decision without importer_paths keeps its digest; importer_paths is locked content when present", () => {
+    for (const [name, [text, digest]] of Object.entries(PRE_T37)) {
+      const d = parse(text);
+      expect(decisionLockDigest(d), name).toBe(digest);
+      expect("importerPaths" in d.forbids, name).toBe(false);
+    }
+    const plain = decisionLockDigest(parse(withImports));
+    const scoped = withImports.replace("  imported_paths: [src/legacy/db.ts]\n", "  imported_paths: [src/legacy/db.ts]\n  importer_paths: [src/ui/**]\n");
+    const d = parse(scoped);
+    expect(d.forbids.importerPaths).toEqual(["src/ui/**"]);
+    const digest = decisionLockDigest(d);
+    expect(digest).not.toBe(plain);
+    const confirmed = scoped.replace("state: proposed", "state: confirmed") + `lock:\n  digest: "${digest}"\n`;
+    expect(verifyDecisionLock(parse(confirmed)).value.status).toBe("valid");
+    expect(verifyDecisionLock(parse(confirmed.replace("importer_paths: [src/ui/**]", "importer_paths: [src/**]"))).value.status).toBe("mismatch");
+  });
+
+  it("an empty importer_paths, importer_paths without imported_paths and a malformed pattern are invalid input", () => {
+    const empty = errors(withImports.replace("  imported_paths: [src/legacy/db.ts]\n", "  imported_paths: [src/legacy/db.ts]\n  importer_paths: []\n"));
+    expect(empty.map((e) => [e.code, e.message])).toEqual([["SCHEMA_INVALID_VALUE", expect.stringContaining("forbids.importer_paths: must list at least one path pattern")]]);
+    const alone = errors(PRE_T37.full[0].replace("  dependencies: [express-session]\n", "  dependencies: [express-session]\n  importer_paths: [src/ui/**]\n"));
+    expect(alone.map((e) => [e.code, e.message])).toEqual([["SCHEMA_INVALID_VALUE", expect.stringContaining("forbids.importer_paths: needs a non-empty imported_paths")]]);
+    const outside = errors(withImports.replace("  imported_paths: [src/legacy/db.ts]\n", "  imported_paths: [src/legacy/db.ts]\n  importer_paths: [../outside/**]\n"));
+    expect(outside.length).toBeGreaterThan(0);
+  });
+});

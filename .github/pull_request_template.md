@@ -2,6 +2,8 @@
 
 <!-- What does this pull request change? -->
 
+AI assistance: <!-- none / partly / mostly. You are responsible for the change either way (see CONTRIBUTING). -->
+
 ## Why
 
 <!-- The problem it solves. -->

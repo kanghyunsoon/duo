@@ -63,6 +63,17 @@ describe("duo_propose_decision input contract (H-71)", () => {
     expect(d).toMatch(/does not prove the import relation is newly introduced/u);
   });
 
+  it("#47 forbids.importer_paths: narrows imported_paths only; empty, alone or uncompilable is refused, and the description says so", () => {
+    expect(ok({ forbids: { imported_paths: ["src/db/legacy-db.ts"], importer_paths: ["src/ui/**"] }, enforcement: "block" })).toBe(true);
+    expect(ok({ forbids: { imported_paths: ["src/db/legacy-db.ts"], importer_paths: [] } })).toBe(false);
+    expect(ok({ forbids: { paths: ["src/legacy/**"], importer_paths: ["src/ui/**"] } })).toBe(false);
+    expect(ok({ forbids: { imported_paths: [], importer_paths: ["src/ui/**"] } })).toBe(false);
+    for (const p of ["../outside/**", "/abs/**", ""]) expect(ok({ forbids: { imported_paths: ["src/db/legacy-db.ts"], importer_paths: [p] } }), p).toBe(false);
+    const d = TOOLS.duo_propose_decision.description;
+    expect(d).toMatch(/Forbids are repository-wide: they apply to matching changes anywhere in the repository, except that forbids.importer_paths narrows forbids.imported_paths/u);
+    expect(d).toMatch(/governs describes what the Decision concerns \(for tracing and context\); it does not scope forbids/u);
+  });
+
   it("O the tool list is unchanged: nine tools, no confirm or reject", () => {
     const names = Object.keys(TOOLS);
     expect(names).toHaveLength(9);

@@ -94,7 +94,7 @@ export async function installCommand(env: Env, sub: string | undefined, arg: str
     const human = renderPlan(env, plan);
     const step = await confirmAndApply(env, "install", plan, human);
     if (step.outcome !== undefined) return step.outcome;
-    if (plan.noop) human.push(t(env.locale, "install.unchanged"));
+    if (plan.noop) human.push(t(env.locale, "install.remove-unchanged", { agent: arg }));
     return { command: "install", exitCode: EXIT.OK, result: { plan, ...(step.applied === undefined ? {} : { apply: step.applied }) }, diagnostics: [], human, metric: { status: plan.noop ? "unchanged" : "removed", agent: arg } };
   }
   if (!isAgentId(sub)) return usage("install", `unknown agent '${sub}' (${agents})`);

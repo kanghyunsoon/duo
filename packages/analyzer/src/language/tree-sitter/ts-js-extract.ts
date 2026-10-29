@@ -660,6 +660,7 @@ class Extractor {
     const only = args?.type === "arguments" && args.namedChildren.length === 1 ? args.namedChildren[0] : undefined;
     if (fn.type === "import") {
       if (only?.type === "string") this.module(node, only, "dynamic-import", false, []);
+      else this.computedImport(node, args);
       return;
     }
     if (fn.type === "identifier" && fn.text === "require" && only?.type === "string") {
@@ -684,6 +685,17 @@ class Extractor {
     this.callSites.push({
       kind, calleeText: compact(callee.text), ...structure, ...(enclosing === undefined ? {} : { enclosingSymbol: enclosing }), location: location(this.path, node),
     });
+  }
+
+  /**
+   * #50 L2a: an import() whose first argument is not a literal is a reference with no static specifier, so
+   * review can say it was not checked. The expression is not kept (it can carry anything). Literal
+   * arguments are left as they are: a template literal without substitutions is #50 L2b, not decided.
+   */
+  private computedImport(node: Node, args: Node | null): void {
+    const first = args?.type === "arguments" ? args.namedChildren.find((c) => c.type !== "comment") : undefined;
+    if (first === undefined || first.type === "spread_element" || first.type === "string" || literalText(first) !== undefined) return;
+    this.moduleReferences.push({ specifier: "", kind: "dynamic-import", typeOnly: false, bindings: [], reexports: [], syntax: { computed: true }, location: location(this.path, node) });
   }
 
   private module(statement: Node, specifier: Node, kind: ModuleReferenceKind, typeOnly: boolean, bindings: ImportBinding[], reexports: ReExportBinding[] = []): void {

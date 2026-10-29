@@ -6,14 +6,20 @@
  * 1. L4 (S15P31A106-264 / Follow-up #47): Importer scope contract limit (`forbids.imported_paths`
  *    is repository-wide per H-72 / T40 N3; `governs.paths` does not narrow `forbids`).
  *    0.3.3 contract expects BLOCK; #24 benchmark oracle (R1) marks service-layer import compliant.
+ *    Fixed by #47 (Maintainer Decision): D-001 now sets `forbids.importer_paths: [src/ui/**]`, so the
+ *    service layer PASSes and the UI layer still BLOCKs.
  * 2. D3 (S15P31A106-265 / Follow-up #48): False negative (WARN instead of BLOCK) when adding a
  *    second forbidden import statement in a file that already had a baseline-recorded `File -> File`
  *    import edge under H-72 pair-level adoption provenance.
  * 3. L1 (S15P31A106-266 / Follow-up #49): Out of current analyzer scope (`scope.duo: "out"` in #24)
  *    on 1-hop barrel re-exports (`src/db/index.ts` re-exports `./legacy-db.js`, UI imports `../db/index.js`).
+ *    #49 Stage 1 (Maintainer Decision L1-C) now reports `imports-through-reexport` with the chain; the verdict
+ *    stays PASS. Binding-level origin matching (PASS → BLOCK) is Stage 2 and stays a todo.
  * 4. L2 (S15P31A106-267 / Follow-up #50): Out of current analyzer scope (`scope.duo: "out"` in #24)
  *    and missing `imports-unresolved` limitation on computed dynamic imports (`import(\`../db/${name}.js\`)`),
  *    plus newly found L2b static no-substitution template literal (`import(\`../db/legacy-db.js\`)`).
+ *    L2a is fixed by #50 (Maintainer Decision T158): the computed import now gives `imports-unresolved`.
+ *    L2b stays pinned.
  *
  * Maintenance rule for pinned tests:
  * - Passing tests in this file pin current 0.3.3 behavior (`next` = `v0.3.3` product code) without
@@ -64,6 +70,7 @@ const FILES: Record<string, string> = {
     "  paths: [src/ui/**]",
     "forbids:",
     "  imported_paths: [src/db/legacy-db.ts]",
+    "  importer_paths: [src/ui/**]",
     "enforcement: block",
     "",
   ].join("\n"),
@@ -145,14 +152,27 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
     return review(repo);
   };
 
-  describe("Case L4 (S15P31A106-264 / #47): contract limit on importer scope (0.3.3 contract: BLOCK vs #24 R1 oracle: compliant)", () => {
-    it("pins current 0.3.3 behavior (L4): service layer importing legacy-db is BLOCKED because forbids.imported_paths is repository-wide under H-72 / T40 N3", async () => {
-      // Root cause: `decisionForbidsImport` in `packages/director/src/review/rules.ts` iterates over `usable`
-      // without filtering by `f.path`, because under H-72 / T40 N3 `governs.paths` does not narrow `forbids`.
+  describe("Case L4 (S15P31A106-264 / #47): importer scope (forbids.importer_paths, Maintainer Decision on #47)", () => {
+    it("L4 (#47): with importer_paths: [src/ui/**] the service layer importing legacy-db PASSes", async () => {
+      // `decisionForbidsImport` (`packages/director/src/review/rules.ts`) skips a Decision whose
+      // `forbids.importer_paths` does not match the changed file; `governs.paths` still does not narrow `forbids`.
       const res = await scenario((r) =>
         r.write(
           "src/services/archive.ts",
           'import { legacyQuery } from "../db/legacy-db.js";\n\nexport function archiveOrders(): string {\n  return legacyQuery("DELETE FROM orders");\n}\n',
+        ),
+      );
+
+      expect(res.verdict).toBe("PASS");
+      expect(forbiddenImports(res)).toEqual([]);
+      expect(importLimits(res)).toEqual([]);
+    });
+
+    it("L4 control (#47): a UI file importing legacy-db is still BLOCKED, and the claim names the importer filter", async () => {
+      const res = await scenario((r) =>
+        r.write(
+          "src/ui/archive-page.ts",
+          'import { legacyQuery } from "../db/legacy-db.js";\n\nexport function renderArchive(): string {\n  return legacyQuery("SELECT * FROM archive");\n}\n',
         ),
       );
 
@@ -166,12 +186,20 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
         provenance: "introduced",
         blockEligible: true,
         subject: { kind: "decision", id: "D-001" },
+        expected: "no changed import in src/ui/** resolves to src/db/legacy-db.ts (D-001)",
       });
     });
 
-    it.todo(
-      "0.4 candidate (#47, needs Maintainer Decision): allow scoping forbids.imported_paths by importer path globs so allowed layers PASS",
-    );
+    it("L4 baseline (#47): the Adoption Baseline applies the same importer filter as review", () => {
+      const dir = path.join(repo.root, ".duo-project/reviews");
+      const baselines = fs.readdirSync(dir).filter((f) => f.startsWith("adoption-"));
+      expect(baselines).toHaveLength(1);
+      const record = JSON.parse(fs.readFileSync(path.join(dir, baselines[0] ?? ""), "utf8")) as { findings: { rule: string; offending: string }[] };
+      // src/db/index.ts re-exports legacy-db but is not an importer under src/ui/**, so it is not a baseline pair.
+      expect(record.findings.filter((f) => f.rule === "decision-forbids-import").map((f) => f.offending)).toEqual([
+        `import:${fileNode("src/ui/legacy-orders-page.ts")}->${fileNode("src/db/legacy-db.ts")}`,
+      ]);
+    });
   });
 
   describe("Case D3 (S15P31A106-265 / #48): false negative when adding a second forbidden import statement in a baseline-exempt file", () => {
@@ -220,13 +248,11 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
   });
 
   describe("Case L1 (S15P31A106-266 / #49): out of current analyzer scope (scope.duo: out in #24) on 1-hop barrel re-export", () => {
-    it("pins current 0.3.3 behavior (L1): importing legacyQuery via barrel src/db/index.ts resolves to src/db/index.ts and returns PASS with no limitation", async () => {
-      // Root cause: `readIndexedModuleReferences` (`packages/graph/src/incremental/references.ts`) pairs each
-      // `entry.analysis.moduleReferences[j]` with its direct 1-hop module resolution (`src/db/index.ts`), and
-      // `decisionForbidsImport` (`packages/director/src/review/rules.ts`) only matches `target` against
-      // `d.forbids.importedPaths`. Even though `ExportIndex` (`packages/graph/src/build/exports.ts`) follows
-      // re-export chains up to `MAX_REEXPORT_DEPTH = 4` for `CALLS` edges, binding-level re-export targets are
-      // not stored on module resolutions or checked by `decisionForbidsImport`.
+    it("L1 (#49 Stage 1, Maintainer Decision L1-C): importing legacyQuery via barrel src/db/index.ts reports an imports-through-reexport limitation with the chain; the verdict stays PASS", async () => {
+      // `decisionForbidsImport` (`packages/director/src/review/rules.ts`) still matches only the resolved file
+      // (`src/db/index.ts`) against `d.forbids.importedPaths`. When that file re-exports, through indexed
+      // export-from chains of at most `MAX_REEXPORT_DEPTH = 4` hops, a name the import takes from a forbidden
+      // file, the review states that the chain was not checked binding by binding. No claim is made.
       const res = await scenario((r) =>
         r.write(
           "src/ui/report-page.ts",
@@ -236,20 +262,23 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
 
       expect(res.verdict).toBe("PASS");
       expect(forbiddenImports(res)).toEqual([]);
-      expect(importLimits(res)).toEqual([]);
+      expect(importLimits(res)).toEqual(["imports-through-reexport"]);
+      expect(res.limitations.find((l) => l.code === "imports-through-reexport")?.message).toContain(
+        "src/ui/report-page.ts:1 → src/db/index.ts → src/db/legacy-db.ts (D-001)",
+      );
     });
 
     it.todo(
-      "0.4 candidate (#49, needs Maintainer Decision): resolve TS/JS barrel re-export targets (or surface a limitation) when checking forbids.imported_paths",
+      "0.4 candidate (#49 Stage 2, needs a Human Decision row before merge): report forbidden-import when an exactly resolved named binding comes from a forbidden origin (PASS → BLOCK)",
     );
   });
 
   describe("Case L2 (S15P31A106-267 / #50): out of current analyzer scope (scope.duo: out in #24) and missing limitation on dynamic import", () => {
-    it("pins current 0.3.3 behavior (L2a): computed template-literal dynamic import is dropped by TS/JS extractor (PASS, 0 claims, 0 limitations)", async () => {
-      // Root cause: `Extractor.call` (`packages/analyzer/src/language/tree-sitter/ts-js-extract.ts`, lines 656-664)
-      // handles `fn.type === "import"` by checking `if (only?.type === "string") this.module(...)` and immediately
-      // returning. A template literal `import(\`../db/${name}.js\`)` has `only.type === "template_string"`, so no
-      // `ExtractedModuleReference` is emitted and `decisionForbidsImport` never emits `imports-unresolved`.
+    it("L2a (#50, Maintainer Decision T158): a computed dynamic import is reported as an imports-unresolved limitation; the verdict stays PASS", async () => {
+      // `Extractor.call` (`packages/analyzer/src/language/tree-sitter/ts-js-extract.ts`) records an import() whose
+      // argument is not a literal as a module reference with `syntax.computed` and no specifier; the resolver
+      // returns `unresolved` / `computed-specifier`, so `decisionForbidsImport` reports `imports-unresolved` on the
+      // changed line. No file is guessed and no claim is made (PASS/WARN/BLOCK/ASK unchanged).
       const res = await scenario((r) =>
         r.write(
           "src/ui/lazy-page.ts",
@@ -259,7 +288,11 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
 
       expect(res.verdict).toBe("PASS");
       expect(forbiddenImports(res)).toEqual([]);
-      expect(importLimits(res)).toEqual([]);
+      expect(importLimits(res)).toEqual(["imports-unresolved"]);
+      const message = res.limitations.find((l) => l.code === "imports-unresolved")?.message ?? "";
+      expect(message).toContain("src/ui/lazy-page.ts:2");
+      // The limitation names the line, not the expression.
+      expect(message).not.toContain("${name}");
     });
 
     it("pins current 0.3.3 behavior (L2b): static no-substitution template literal import(`../db/legacy-db.js`) is dropped because only.type !== 'string'", async () => {
@@ -278,7 +311,7 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
     });
 
     it.todo(
-      "0.4 candidate (#50, needs Maintainer Decision if verdict changes): extract no-substitution template literals in import()/require() and emit an unresolved-import limitation for computed dynamic specifiers",
+      "0.4 candidate (#50 L2b, needs its own Maintainer Decision; not approved in T158): extract no-substitution template literals in import()/require() as real imports (PASS → BLOCK)",
     );
   });
 });

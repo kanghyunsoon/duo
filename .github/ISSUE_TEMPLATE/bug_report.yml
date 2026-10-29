@@ -22,7 +22,7 @@ body:
     attributes:
       label: DUO version
       description: Output of `duoctl --version`.
-      placeholder: "0.3.1"
+      placeholder: "0.3.4"
     validations:
       required: true
   - type: input

@@ -145,6 +145,32 @@ describe("module references", () => {
     expect(calls(a)).toEqual([["identifier", "require", null, 13]]);
   });
 
+  it("records import() with a non-literal argument as computed, without the expression (#50 L2a)", () => {
+    const text = [
+      "const key = \"x\";",
+      "const a = import(key);",
+      "const b = import(`./pages/${key}.js`);",
+      "const c = import(base + \"/secret-token-123.js\", { with: { type: \"json\" } });",
+      "const d = import(/* webpackChunkName: \"x\" */ `./literal.js`);",
+      "const e = import(\"./plain.js\");",
+      "const f = import(`./no-substitution.js`);",
+      "const g = import(...parts);",
+      "const h = import();",
+      "",
+    ].join("\n");
+    const a = analyzeText("computed.ts", text).value;
+    expect(a?.moduleReferences.map((m) => [m.specifier, m.kind, m.syntax ?? null, m.location.startLine])).toEqual([
+      ["", "dynamic-import", { computed: true }, 2],
+      ["", "dynamic-import", { computed: true }, 3],
+      ["", "dynamic-import", { computed: true }, 4],
+      ["./plain.js", "dynamic-import", null, 6],
+    ]);
+    // The expression is not kept anywhere in the analysis.
+    expect(JSON.stringify(a?.moduleReferences)).not.toContain("secret-token-123");
+    // Literal templates stay as they are (#50 L2b is not decided), with or without a leading comment.
+    expect(a?.moduleReferences.some((m) => m.location.startLine === 5 || m.location.startLine === 7)).toBe(false);
+  });
+
   it("covers every extension", () => {
     expect(analyze("module.mts").moduleReferences.map((m) => [m.specifier, m.kind])).toEqual([["./x.mjs", "dynamic-import"]]);
     expect(analyze("common.cts").moduleReferences.map((m) => [m.specifier, m.kind])).toEqual([["node:fs", "require"]]);
