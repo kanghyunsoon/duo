@@ -111,6 +111,8 @@
 |---|---|
 | Additive Truth | Decision·proposal `forbids.importer_paths`(#47): `imported_paths`만 import하는 파일의 path pattern으로 좁힌다. `schema_version: 1` 그대로. 이 field가 없는 Decision의 lock digest와 review 결과는 같다. 빈 목록과 `imported_paths` 없는 사용은 잘못된 입력이다(H-96) |
 | Additive public | MCP `duo_propose_decision`의 `forbids.importer_paths`(tool 9개 그대로), CLI confirm preview·UI의 Forbids scope 문구(importer_paths가 있을 때) |
+| Verdict | TS·JS `import()`·`require()`의 치환 없는 template literal(`` import(`../db/x.js`) ``)이 같은 문자열 literal과 같은 module reference다(#50 L2b, H-90). 금지 대상이면 새로 생긴 쌍은 `forbidden-import` BLOCK, Adoption Baseline에 있는 쌍은 WARN. 치환이 있는 template·식은 그대로 `imports-unresolved`(#50 L2a) |
+| Index | TS/JS analyzer identity(`facts=template-imports-1`)가 바뀌어 기존 index는 stale이고 다음 `duoctl index` 한 번으로 current가 된다. index state 형식은 그대로 |
 | Downgrade | `importer_paths`를 쓰는 저장소를 0.2.2+·0.3.x·0.4.0-rc.1로 열면 `SCHEMA_UNKNOWN_PROPERTY`로 `PROJECT_TRUTH_INVALID`(fail-closed, H-75). Decision이 조용히 빠지지 않는다 |
 
 ## 0.3.3 변경 분류 (T78, H-87)
