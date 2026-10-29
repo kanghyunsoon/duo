@@ -1,6 +1,6 @@
 # MCP tool discovery on Codex and Claude Code (#8)
 
-Status: **procedure only. No agent session has run.** The account-quota runs are not approved yet ([#8](https://github.com/kanghyunsoon/duo/issues/8#issuecomment-6484261673)); the target version and the session budget will be stated with the approval. The free signals below were measured on 2026-10-29 on Windows 11 / Node 24.18.0 without Codex, Claude Code or a login.
+Status: **procedure only. No account-quota run has happened, and none is approved.** The maintainer decided on 2026-10-29 (T176, [#8](https://github.com/kanghyunsoon/duo/issues/8#issuecomment-6485142489)) not to run the measurement for now. If it becomes necessary, a separate proposal with the minimum runs per agent and a hard usage cap comes first, and the target version is chosen with that approval. The free signals below were measured on 2026-10-29 on Windows 11 / Node 24.18.0 without a login: no model call was answered and no account usage was spent.
 
 The question: when DUO is installed the documented way, how often does the agent's first DUO call go through DUO's MCP tools, how often does it fall back to the `duoctl` CLI, and how often does it use neither? T75 measured 0.3.2 with Codex only ([#8](https://github.com/kanghyunsoon/duo/issues/8#issuecomment-6157866448)). Since then 0.3.3 added the faster `duoctl mcp` start and the re-check line (#19), and 0.4 added the launcher check (#75, #81). Nothing has been measured with real agent sessions since.
 
@@ -23,6 +23,44 @@ The configured entries on `next`:
 
 - Codex, `.codex/config.toml`: `command = "duoctl"`, `args = ["mcp", "--root-from", "git-cwd", "--agent", "codex"]`.
 - Claude Code, `.mcp.json`: `"type": "stdio"`, `"command": "duoctl"`, `"args": ["mcp", "--root-from", "env:CLAUDE_PROJECT_DIR", "--agent", "claude-code"]`.
+
+## Skill listing (S15P31A106-358)
+
+Per the [maintainer's answer on #8](https://github.com/kanghyunsoon/duo/issues/8#issuecomment-6489584101), a project skill is a candidate for an opt-in install option, not the default install, and the bridge block stays as it is. The first question is whether both agents list a skill placed in the repository. A draft `duo` skill was put in a scratch repository prepared as above (`duoctl init`, `duoctl install codex` and `claude-code` from `next`, commit, `duoctl index`):
+
+- Claude Code: `.claude/skills/duo/SKILL.md`
+- Codex: `.agents/skills/duo/SKILL.md`
+
+Both files hold the same text. It only describes how to reach DUO's existing tools:
+
+```markdown
+---
+name: duo
+description: Reach DUO's project direction tools (the duo-director MCP server) before planning, implementing or reviewing code changes in this repository, including when the duo_* tools are deferred, nested or not listed yet, and use the duoctl CLI when they stay unavailable.
+---
+
+# Reach DUO
+
+1. Look for the tools of the `duo-director` MCP server: `duo_get_status`, `duo_get_context`, `duo_review_changes`, `duo_propose_decision` and the other `duo_*` tools.
+   - If your client defers MCP tools behind a tool search, search for `duo-director` or `duo_get_status` and load the tools by name.
+   - If your client nests MCP tools (for example under a code runner), look for the `duo-director` server's tools there.
+   - If they are not listed when the session starts, wait a few seconds and check again: the server can take a few seconds to start.
+2. Then follow the DUO block in `AGENTS.md` / `CLAUDE.md`: `duo_get_status`, `duo_get_context` for the task, and `duo_review_changes` after meaningful changes.
+3. If the tools stay unavailable, run `duoctl status`, `duoctl context "<task>"` and `duoctl review` in a shell instead. Without `duo_propose_decision`, do not edit `.duo-project/`: tell the human the proposal tool is unavailable in this session.
+```
+
+Both agents were installed into an isolated npm prefix, with `CODEX_HOME` and `CLAUDE_CONFIG_DIR` in the scratch folder, no `OPENAI_*`, `ANTHROPIC_*`, `CLAUDE_*` or `CODEX_*` variables, and no login (`codex login status`: `Not logged in`; `claude auth status`: `"loggedIn": false`).
+
+| Check | Codex 0.165.0 | Claude Code 2.1.308 |
+|---|---|---|
+| How it was read | `codex debug prompt-input` renders the model-visible input locally, without a model call | `claude -p "Reply with OK." --output-format stream-json --verbose --max-turns 1` with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`; the `system/init` event, then `Not logged in`, cost 0, 0 tokens |
+| Project skill folder read | `<repo>/.agents/skills` is listed as a skill root. `.claude/skills` is not read. | `.claude/skills` |
+| `duo` skill listed | Yes, name and description under "Available skills" | Yes, first entry of `skills`; `/duo` is in `slash_commands` |
+| Without trusting the project | Same result with no `trust_level` override | Not applicable in `-p` mode |
+| DUO bridge block | Included (`AGENTS.md`) | Not shown in `system/init` |
+| `duo-director` server | Not part of this render | `connected`, all 9 `mcp__duo-director__duo_*` tools listed (32 tools in total) |
+
+So the project paths are `.agents/skills/<name>/SKILL.md` for Codex and `.claude/skills/<name>/SKILL.md` for Claude Code, and both agents list the skill without a login or a trust step. **NOT TESTED**: whether either agent loads the skill body and follows it during a task, and whether it changes which path the first DUO call takes. That needs model sessions, which are not approved (T176). Without a login Claude Code loaded no connectors, so the deferred-tool case from #31 (finding 3) did not occur here either.
 
 ## Procedure
 
