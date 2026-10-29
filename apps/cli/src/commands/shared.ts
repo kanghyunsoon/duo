@@ -1,7 +1,7 @@
 /** Helpers shared by the CLI commands (T15): environment, analyzer registry, graph access, actor. */
 import { createDefaultAnalyzerRegistry, readGitUserName, type AnalyzerRegistry } from "@duo-director/analyzer";
 import { createDiagnostic, loadProjectTruth, type DecisionActor, type Diagnostic, type LoadedProject, type ParseResult } from "@duo-director/core";
-import { openProjectGraphReader, openProjectGraphStore, type GraphStore } from "@duo-director/graph";
+import { openProjectGraphReader, withProjectGraphWriter, type GraphStore } from "@duo-director/graph";
 import type { Io } from "../io.js";
 import { t, type Locale } from "../messages.js";
 import { EXIT, failed, type Outcome } from "../output.js";
@@ -50,13 +50,9 @@ export async function withReader<T>(root: string, fn: (graph: GraphStore) => Pro
 }
 
 export async function withWriter<T>(root: string, fn: (graph: GraphStore) => Promise<T>): Promise<T> {
-  const opened = openProjectGraphStore(root);
-  if (opened.value === undefined) throw new CliFailure(opened.diagnostics);
-  try {
-    return await fn(opened.value);
-  } finally {
-    opened.value.close();
-  }
+  const locked = await withProjectGraphWriter(root, fn);
+  if (locked.value === undefined) throw new CliFailure(locked.diagnostics);
+  return locked.value.result;
 }
 
 /** The human at this terminal, named by Git user.name. Local-first: a display name, not an authentication. */
