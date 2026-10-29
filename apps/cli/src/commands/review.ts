@@ -36,7 +36,7 @@ function renderReview(env: Env, r: ReviewResult, unscoped: readonly string[] = [
   const ev = new Map(r.evidence.map((e) => [e.id, e] as const));
   const shown = r.claims.filter((c) => env.verbose || c.alignment !== "ALIGNED");
   for (const c of shown) {
-    const tags = [c.blockEligible ? "blocking" : "", c.provenance === undefined ? "" : provenanceLabel(c.provenance, L), c.drift ? "drift" : ""].filter((x) => x !== "").join(", ");
+    const tags = [c.blockEligible ? "blocking" : "", c.provenance === undefined ? "" : provenanceLabel(c.provenance, L), c.drift ? "drift" : "", c.informational === true ? "information" : ""].filter((x) => x !== "").join(", ");
     out.push(`  ${c.alignment.padEnd(9)} ${c.rule.padEnd(26)} ${c.subject.id} · ${c.reason}${tags === "" ? "" : ` [${tags}]`}`);
     // C241: the lifecycle of the Decision a shown claim is about (current authority, supersedes, superseded by).
     if (c.decisionAuthority !== undefined) out.push(`            ${t(L, "review.authority", { label: decisionAuthorityLabel(c.decisionAuthority, L) })}`);

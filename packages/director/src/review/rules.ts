@@ -233,16 +233,36 @@ export function decisionGovernance(ctx: RuleContext, conflicted: ReadonlySet<str
 export function requirementImplementation(ctx: RuleContext): ReviewClaim[] {
   const current = ctx.truth.config.currentMilestone;
   const out: ReviewClaim[] = [];
+  // H-100 (#59 C259): implementing another milestone's Requirement is a fact, not a WARN basis. One
+  // informational claim per changed file keeps every Requirement ID and its evidence.
+  const outsideByFile = new Map<RepoPath, { ids: string[]; seeds: DiffSeed[] }>();
   for (const [id, seeds] of [...implemented(ctx)].sort(([a], [b]) => compareUtf8(a, b))) {
     const r = ctx.truth.requirements.find((x) => x.id === id);
     if (r === undefined) continue;
-    const outside = current !== null && r.milestone !== null && r.milestone !== current;
+    if (current !== null && r.milestone !== null && r.milestone !== current) {
+      for (const s of seeds) {
+        const f = outsideByFile.get(s.path) ?? { ids: [], seeds: [] };
+        if (!f.ids.includes(id)) f.ids.push(id);
+        if (!f.seeds.includes(s)) f.seeds.push(s);
+        outsideByFile.set(s.path, f);
+      }
+      continue;
+    }
     const c = makeClaim(ctx, {
-      rule: "requirement-implementation", subject: { kind: "requirement", id }, alignment: outside ? "PARTIAL" : "UNKNOWN",
-      reason: outside ? "outside-current-milestone" : "meaning-not-decidable", semantic: !outside,
-      expected: outside ? `changes serve the current milestone ${current}` : `the changed code does what ${id} asks`,
-      observed: `${seeds.map((s) => s.ref).join(", ")} implement ${id}${outside ? ` (milestone ${r.milestone})` : " (declared or annotated link; meaning not checked)"}`,
+      rule: "requirement-implementation", subject: { kind: "requirement", id }, alignment: "UNKNOWN", reason: "meaning-not-decidable", semantic: true,
+      expected: `the changed code does what ${id} asks`,
+      observed: `${seeds.map((s) => s.ref).join(", ")} implement ${id} (declared or annotated link; meaning not checked)`,
       evidence: [requirementEvidence(ctx, id), ...seeds.flatMap((s) => seedEvidence(ctx, s))],
+    });
+    if (c !== undefined) out.push(c);
+  }
+  for (const [file, { ids, seeds }] of [...outsideByFile].sort(([a], [b]) => compareUtf8(a, b))) {
+    const milestones = ids.map((id) => `${id} (milestone ${ctx.truth.requirements.find((x) => x.id === id)?.milestone ?? "?"})`);
+    const c = makeClaim(ctx, {
+      rule: "requirement-implementation", subject: { kind: "file", id: file }, alignment: "PARTIAL", reason: "outside-current-milestone", informational: true,
+      expected: `changes serve the current milestone ${current}`,
+      observed: `${seeds.map((s) => s.ref).join(", ")} implement ${milestones.join(", ")}`,
+      evidence: [...ids.map((id) => requirementEvidence(ctx, id)), ...seeds.flatMap((s) => seedEvidence(ctx, s))],
     });
     if (c !== undefined) out.push(c);
   }

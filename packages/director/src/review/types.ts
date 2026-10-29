@@ -82,6 +82,11 @@ export interface ReviewClaim {
   /** Relative to the Adoption Baseline; absent without a usable baseline or for ALIGNED claims. */
   readonly provenance?: ViolationProvenance;
   /**
+   * H-100 (#59 C259): a fact shown in JSON and detailed output that is never a WARN or BLOCK basis
+   * (reviewVerdict skips it), whatever its alignment. Absent otherwise.
+   */
+  readonly informational?: true;
+  /**
    * C241 (T49): lifecycle facts of the Decision this claim is about, read from the complete Project Truth the rules used.
    * Present only for a deterministic claim whose subject is a Decision found in that Truth. Explanation only: it is set
    * after the verdict, is not part of the claim ID and is not written to a Review Record.
