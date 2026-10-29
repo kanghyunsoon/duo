@@ -4,7 +4,6 @@ import { createDiagnostic, failure, requireCompleteTruth, loadProjectTruth, succ
 import { GRAPH_DB_FILE_PATH, indexRepository, openProjectGraphReader, openProjectGraphStore, type IndexOptions } from "./indexer.js";
 import { inspectIndex } from "./inspect.js";
 import { withIndexWriteLock, type IndexWriteLockOptions } from "./write-lock.js";
-import { captureIndexInputs } from "./inputs.js";
 import { INDEX_STATE_TOKEN_KEY, readIndexState } from "./state.js";
 
 export interface RefreshIndexResult { readonly refreshed: boolean }
@@ -25,15 +24,11 @@ async function refreshUnderGuard(root: string, options: RefreshIndexOptions): Pr
   const locked = await withIndexWriteLock(root, async (lease): Promise<ParseResult<RefreshIndexResult>> => {
     const truth = requireCompleteTruth(loadProjectTruth(root));
     if (truth.value === undefined) return failure(truth.diagnostics);
-    const scope = { include: truth.value.truth.config.index.include, exclude: truth.value.truth.config.index.exclude };
     const truthSignature = JSON.stringify(truth.value.truth);
-    const extra = Object.keys(readIndexState(root).state?.configs ?? {});
-    const before = await captureIndexInputs(root, extra, scope);
-    if (before.value === undefined) return failure(before.diagnostics);
-    const stable = async () => {
-      const after = await captureIndexInputs(root, extra, scope);
-      return after.value?.signature === before.value?.signature && JSON.stringify(loadProjectTruth(root).value?.truth) === truthSignature;
-    };
+    // Files, configs and Git state are verified by the indexer before its write and by the inspection
+    // after it (T180: no separate full-repository snapshot). Truth is compared here as well because the
+    // loader also reads Truth files the scan does not see; those are refused below anyway.
+    const stable = async () => JSON.stringify(loadProjectTruth(root).value?.truth) === truthSignature;
     const moved = () => failure<RefreshIndexResult>([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: repository inputs changed during recovery")]);
     const dbFile = path.join(path.resolve(root), GRAPH_DB_FILE_PATH);
     const identity = fs.existsSync(dbFile) ? fs.statSync(dbFile) : undefined;
@@ -67,6 +62,8 @@ async function refreshUnderGuard(root: string, options: RefreshIndexOptions): Pr
       if (indexed.value === undefined) return failure(indexed.diagnostics);
       if (indexed.diagnostics.some((d) => d.severity === "error")) return failure(indexed.diagnostics);
       const checked = await inspectIndex(root, { ...options, graph: writer.value });
+      // A file, config or Git change after the indexer's pre-write check shows up as stale here.
+      if (checked.value?.status === "stale") return moved();
       if (checked.value?.status !== "current" || checked.diagnostics.some((d) => d.severity === "error")) {
         return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh could not verify a current index after writing"), ...checked.diagnostics]);
       }
