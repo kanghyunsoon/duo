@@ -1,0 +1,50 @@
+# Advisory code owners (T178). GitHub requests a review from the owners of the changed paths.
+# The next-integration ruleset does not require code-owner approval (require_code_owner_review: false):
+# any reviewer who is not the author can approve. See docs/team/README.md "영역 책임자와 리뷰".
+# The last matching pattern wins.
+
+# Anything not listed below
+*                                   @kanghyunsoon
+
+# Core / Decision lifecycle and Project Truth
+/packages/core/                     @kanghyunsoon @strdeok
+
+# Analyzer, review rules and Context (Decision compliance)
+/packages/analyzer/                 @kang987654 @ghkim1632
+/packages/director/                 @kang987654 @ghkim1632
+
+# Graph / indexing
+/packages/graph/                    @kang987654 @kanghyunsoon
+
+# MCP / agent integration and the CLI
+/packages/integration/              @Alexjung0115 @strdeok
+/apps/cli/                          @Alexjung0115 @kanghyunsoon
+
+# UI / UX
+/packages/ui/                       @strdeok @Alexjung0115
+/tests/ui/                          @strdeok @Alexjung0115
+
+# CI, tests and benchmarks
+/tests/                             @ghkim1632 @s2vn9wxx
+/bench/                             @ghkim1632 @s2vn9wxx
+/.github/workflows/                 @kanghyunsoon @ghkim1632 @s2vn9wxx
+
+# Docs and community
+/docs/                              @s2vn9wxx @ghkim1632
+/docs/community/                    @s2vn9wxx @ghkim1632
+/CONTRIBUTING.md                    @s2vn9wxx @ghkim1632
+/docs/team/                         @kanghyunsoon @s2vn9wxx
+
+# Maintainer decisions: Decision records, architecture, security, release and supply chain
+/docs/conflicts.md                  @kanghyunsoon
+/docs/adr/                          @kanghyunsoon
+/docs/release/                      @kanghyunsoon
+/scripts/release/                   @kanghyunsoon
+/scripts/pack-cli.mjs               @kanghyunsoon
+/SECURITY.md                        @kanghyunsoon
+/LICENSE                            @kanghyunsoon
+/package.json                       @kanghyunsoon
+/pnpm-lock.yaml                     @kanghyunsoon
+/pnpm-workspace.yaml                @kanghyunsoon
+/.npmrc                             @kanghyunsoon
+/.github/CODEOWNERS                 @kanghyunsoon
