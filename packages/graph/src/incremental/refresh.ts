@@ -51,8 +51,12 @@ async function refreshUnderGuard(root: string, options: RefreshIndexOptions): Pr
     let status;
     try { status = await inspectIndex(root, { graph: opened.value, ...options }); } finally { opened.value.close(); }
     if (status.value === undefined) return failure(status.diagnostics);
+    if (status.value.status !== "current" && status.value.status !== "stale") return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Safe index refresh requires an existing compatible index (${status.value.status}); run duoctl index explicitly`), ...status.diagnostics]);
+    // Use current scan membership: newly added visible Truth is safe to incrementally index.
+    const recorded = new Set(status.value.freshness.filter((file) => file.file !== "deleted" && file.file !== "unknown").map((file) => file.path));
+    const unobserved = truth.value.truth.files.filter((file) => !recorded.has(file));
+    if (unobserved.length > 0) return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Safe index refresh cannot verify Truth inputs absent from the index scan: ${unobserved.join(", ")}. Check Git ignore/index include rules and run duoctl index explicitly`)]);
     if (status.value.status === "current") return await stable() && sameIndex(expectedToken) ? success({ refreshed: false }) : moved();
-    if (status.value.status !== "stale") return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Safe index refresh requires an existing compatible index (${status.value.status}); run duoctl index explicitly`), ...status.diagnostics]);
     if (expectedToken === undefined || !sameIndex(expectedToken)) return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: existing index state changed or disappeared")]);
     const writer = openProjectGraphStore(root, { existingOnly: true });
     if (writer.value === undefined) return failure(writer.diagnostics);

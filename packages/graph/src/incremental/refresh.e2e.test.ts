@@ -81,12 +81,37 @@ describe("safe index recovery and shared writer lock", () => {
     r.write(".duo-project/intent/constraints.yaml", "constraints: []\n");
     expect((await index(r)).value).toBeDefined();
     r.write("src/a.ts", "export const a = 2;\n");
-    const result = await refreshIndexIfSafe(r.root, { registry, onPhase: (phase) => {
-      if (phase === "analysis") r.write(".duo-project/intent/constraints.yaml", "# changed while ignored\nconstraints: []\n");
-    } });
-    expect(result.value).toBeUndefined();
-    expect(result.diagnostics[0]?.message).toContain("inputs changed");
+    const store = openProjectGraphStore(r.root).value!;
+    try {
+      const result = await indexRepository(r.root, { store, registry, onPhase: (phase) => {
+        if (phase === "analysis") r.write(".duo-project/intent/constraints.yaml", "# changed while ignored\nconstraints: []\n");
+      } });
+      expect(result.value).toBeUndefined();
+      expect(result.diagnostics[0]?.message).toContain("inputs changed");
+    } finally { store.close(); }
   });
+  it("incrementally refreshes newly added Truth when the current scan observes it", async () => {
+    const r = repo();
+    expect((await index(r)).value).toBeDefined();
+    r.write(".duo-project/intent/constraints.yaml", "constraints: []\n");
+    expect((await refreshIndexIfSafe(r.root, { registry })).value).toEqual({ refreshed: true });
+    expect(readIndexState(r.root).state?.files.some((file) => file.path === ".duo-project/intent/constraints.yaml")).toBe(true);
+  });
+  for (const stale of [false, true]) {
+    it(`refuses unobserved ignored Truth before claiming an index ${stale ? "refreshed" : "current"}`, async () => {
+      const r = repo();
+      r.write(".git/info/exclude", ".duo-project/intent/\n");
+      r.write(".duo-project/intent/constraints.yaml", "constraints: []\n");
+      expect((await index(r)).value).toBeDefined();
+      const state = r.read(INDEX_STATE_FILE_PATH);
+      r.write(".duo-project/intent/constraints.yaml", "# changed before recovery\nconstraints: []\n");
+      if (stale) r.write("src/a.ts", "export const a = 2;\n");
+      const result = await refreshIndexIfSafe(r.root, { registry });
+      expect(result.value).toBeUndefined();
+      expect(result.diagnostics[0]?.message).toContain("Truth inputs absent from the index");
+      expect(r.read(INDEX_STATE_FILE_PATH)).toBe(state);
+    });
+  }
   for (const wasPresent of [false, true]) {
     it(`rejects an ignored config ${wasPresent ? "changed" : "created"} after resolution before commit`, async () => {
       const r = repo();
