@@ -14,6 +14,14 @@ export type RefreshIndexOptions = Pick<IndexOptions, "registry" | "historyWindow
  * Never bootstrap or recreate missing/incompatible indexes. CLI remains explicitly driven.
  */
 export async function refreshIndexIfSafe(root: string, options: RefreshIndexOptions = {}): Promise<ParseResult<RefreshIndexResult>> {
+  try {
+    return await refreshUnderGuard(root, options);
+  } catch (error) {
+    return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Safe index refresh failed: ${error instanceof Error ? error.message : String(error)}`)]);
+  }
+}
+
+async function refreshUnderGuard(root: string, options: RefreshIndexOptions): Promise<ParseResult<RefreshIndexResult>> {
   const locked = await withIndexWriteLock(root, async (lease): Promise<ParseResult<RefreshIndexResult>> => {
     const extra = Object.keys(readIndexState(root).state?.configs ?? {});
     const before = await captureIndexInputs(root, extra);
