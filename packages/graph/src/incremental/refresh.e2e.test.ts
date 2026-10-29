@@ -201,6 +201,20 @@ describe("safe index recovery and shared writer lock", () => {
       } finally { store.close(); }
     }, 60_000);
   }
+  for (const stale of [false, true]) {
+    it(`does not report ${stale ? "a refresh" : "a current index"} when a source changes after the inspection read it (T181)`, async () => {
+      const r = repo();
+      expect((await index(r)).value).toBeDefined();
+      if (stale) r.write("src/a.ts", "export const a = 2;\n");
+      let inspections = 0;
+      const result = await refreshIndexIfSafe(r.root, { registry, onPhase: (phase) => {
+        // The last inspection's analysis phase: after it has fingerprinted every file.
+        if (phase === "analysis" && ++inspections === (stale ? 3 : 1)) r.write("src/a.ts", "export const a = 9;\n");
+      } });
+      expect(result.value).toBeUndefined();
+      expect(result.diagnostics[0]?.message).toContain("inputs changed");
+    });
+  }
   it("does not report successful recovery when inputs change after the commit", async () => {
     const r = repo();
     expect((await index(r)).value).toBeDefined();
