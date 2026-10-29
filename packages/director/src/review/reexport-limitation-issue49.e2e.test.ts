@@ -6,7 +6,8 @@
  * source → origin pair (the same key as a direct import of that file, H-72 (10)), with the re-export chain
  * as evidence. With an Adoption Baseline that evaluated re-export origins (marker
  * `decision-forbids-import-origin`) a new pair is `introduced` (BLOCK); with an older baseline it is
- * `unverified-at-adoption` (WARN) with the `imports-reexport-origin-not-baselined` limitation.
+ * `unverified-at-adoption` (WARN) with the `imports-reexport-origin-not-baselined` limitation. Without any
+ * baseline it is the same as a direct import: the claim has no provenance and is BLOCK-eligible.
  *
  * Stage 1 (#124, Jira S15P31A106-346): anything ambiguous keeps the `imports-through-reexport` limitation with
  * the chain and no claim: namespace and side-effect imports of a barrel (every name), `export * as ns`, a name
@@ -132,7 +133,7 @@ const forbiddenImports = (res: ReviewResult) => res.claims.filter((c) => c.rule 
 const importLimits = (res: ReviewResult) => res.limitations.filter((l) => l.code.startsWith("imports-"));
 const throughReexport = (res: ReviewResult) => res.limitations.filter((l) => l.code === "imports-through-reexport");
 
-async function adoptedRepo(from: string, ids: readonly string[] = ["D-001"]): Promise<{ repo: ContextRepo; baseline: AdoptionBaselineRecord }> {
+async function confirmedRepo(from: string, ids: readonly string[] = ["D-001"]): Promise<ContextRepo> {
   const repo = makeContextRepo(temps, registry, from);
   for (const id of ids) {
     const c = await createDecisionService({ root: repo.root, clock: at("2026-09-01T00:00:00.000Z") }).confirm(human, id);
@@ -140,6 +141,11 @@ async function adoptedRepo(from: string, ids: readonly string[] = ["D-001"]): Pr
   }
   repo.git("add", "-A");
   repo.git("commit", "-q", "-m", "confirm Decisions");
+  return repo;
+}
+
+async function adoptedRepo(from: string, ids: readonly string[] = ["D-001"]): Promise<{ repo: ContextRepo; baseline: AdoptionBaselineRecord }> {
+  const repo = await confirmedRepo(from, ids);
   await repo.index();
   const b = await withGraph(repo.root, (graph) =>
     captureAdoptionBaseline(repo.root, { graph, registry, historyWindow: HISTORY, actor: human, clock: at("2026-09-02T00:00:00.000Z") }),
@@ -303,6 +309,25 @@ describe("Issue #49 Stage 2 (H-98 (5)): a baseline recorded before re-export ori
   it("a direct import is still judged by the decision-forbids-import coverage: introduced, BLOCK", async () => {
     const res = await write(repo, "src/ui/page.ts", 'import { legacyQuery } from "../db/legacy-db.js";\n');
     expectClaim(res, "src/ui/page.ts", "introduced", "BLOCK");
+    expect(importLimits(res)).toEqual([]);
+  });
+});
+
+describe("Issue #49 Stage 2 (H-98 (1)(2)) without an Adoption Baseline", () => {
+  let repo: ContextRepo;
+
+  beforeAll(async () => {
+    repo = await confirmedRepo(fixture);
+  });
+
+  it("a named import through the barrel is the same as a direct import of the origin: claim, BLOCK, no provenance", async () => {
+    const res = await write(repo, "src/ui/page.ts", 'import { legacyQuery } from "../db/index.js";\n');
+    expect(res.baseline.status).toBe("missing");
+    expect(res.verdict).toBe("BLOCK");
+    const claims = forbiddenImports(res);
+    expect(claims).toHaveLength(1);
+    expect(claims[0]).toMatchObject({ alignment: "CONFLICT", reason: "forbidden-import", violationKey: pairKey("src/ui/page.ts"), blockEligible: true });
+    expect(claims[0]).not.toHaveProperty("provenance");
     expect(importLimits(res)).toEqual([]);
   });
 });
