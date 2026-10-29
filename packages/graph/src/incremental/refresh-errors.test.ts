@@ -4,11 +4,12 @@ import { afterAll, expect, it } from "vitest";
 import { FINGERPRINT_FILE_PATH } from "@duo-director/analyzer";
 import { indexRepository, openProjectGraphStore } from "./indexer.js";
 import { refreshIndexIfSafe } from "./refresh.js";
-import { INDEX_WRITE_LOCK_PATH } from "./write-lock.js";
+import { withIndexWriteLock } from "./write-lock.js";
 import { baseRegistry, makeRepo } from "./testing.js";
 
 const temps: string[] = [];
 afterAll(() => temps.forEach((root) => fs.rmSync(root, { recursive: true, force: true })));
+const released = async (root: string) => (await withIndexWriteLock(root, async () => true, { lockTimeoutMs: 0 })).value === true;
 it("converts a source deletion during analysis to a recovery refusal and releases the lock", async () => {
   const repo = makeRepo(temps, { ".duo-project/project.yaml": "schema_version: 1\nname: error\n", "src/a.ts": "export const a = 1;\n" });
   const registry = await baseRegistry();
@@ -23,7 +24,7 @@ it("converts a source deletion during analysis to a recovery refusal and release
     expect(result.value).toBeUndefined();
     expect(result.diagnostics[0]?.code).toBe("GRAPH_WRITE_REFUSED");
     expect(result.diagnostics[0]?.message).toContain("Safe index refresh failed:");
-    expect(fs.existsSync(path.join(repo.root, INDEX_WRITE_LOCK_PATH))).toBe(false);
+    expect(await released(repo.root)).toBe(true);
   } finally { registry.dispose(); }
 }, 120_000);
 
@@ -43,7 +44,7 @@ for (const automatic of [false, true]) {
         : await indexRepository(repo.root, { store, registry });
       expect(result.value === undefined).toBe(automatic);
       expect(result.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: "FILE_WRITE_ERROR", severity: automatic ? "error" : "warning" })]));
-      expect(fs.existsSync(path.join(repo.root, INDEX_WRITE_LOCK_PATH))).toBe(false);
+      expect(await released(repo.root)).toBe(true);
     } finally { store.close(); registry.dispose(); }
   }, 120_000);
 }

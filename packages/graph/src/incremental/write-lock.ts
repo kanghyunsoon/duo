@@ -2,8 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { checkWriteBoundary, createDiagnostic, failure, STATE_DIR_NAME, success, type ParseResult } from "@duo-director/core";
+import { tryAcquireFileLock, type HeldFileLock } from "../store/node-sqlite/file-lock.js";
 
-export const INDEX_WRITE_LOCK_PATH = `${STATE_DIR_NAME}/generated/index-write.lock`;
+/**
+ * T180: an operating-system file lock (released when the holder exits, also on a crash or kill).
+ * The lock directory used by #143 at .duo-project/generated/index-write.lock is no longer used.
+ */
+export const INDEX_WRITE_LOCK_PATH = `${STATE_DIR_NAME}/generated/index-writer.lock`;
 export interface IndexWriteLockOptions { readonly lockTimeoutMs?: number }
 export interface IndexWriteLease { readonly root: string }
 const leases = new WeakMap<IndexWriteLease, { active: boolean; indexing: boolean; pending: Set<Promise<unknown>> }>();
@@ -28,7 +33,8 @@ export async function useIndexWriteLease<T>(root: string, lease: IndexWriteLease
 }
 
 /** Serialize every index writer, including DB open/recreation and sidecar/cache writes.
- * No time-based lock stealing: an interrupted writer requires explicit operator cleanup.
+ * The lock belongs to the holding process: if it exits without releasing (crash, Ctrl+C, kill), the
+ * operating system releases it, so no stale lock is left and nothing is ever taken over by age.
  */
 export async function withIndexWriteLock<T>(root: string, fn: (lease: IndexWriteLease) => Promise<T>, options: IndexWriteLockOptions = {}): Promise<ParseResult<T>> {
   let rootDir: string;
@@ -41,32 +47,39 @@ export async function withIndexWriteLock<T>(root: string, fn: (lease: IndexWrite
   const timeout = options.lockTimeoutMs ?? 5000;
   if (!Number.isFinite(timeout) || timeout < 0) return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Index lock timeout must be a finite non-negative number")]);
   const deadline = performance.now() + timeout;
-  // Reject symlinked write directories before creating anything outside this worktree.
+  // Reject symlinked write directories or lock file before creating anything outside this worktree.
   try {
-    for (const relative of [STATE_DIR_NAME, `${STATE_DIR_NAME}/generated`]) {
-      const dir = path.join(rootDir, relative);
-      if (fs.existsSync(dir) && fs.lstatSync(dir).isSymbolicLink()) {
-        return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Index lock refused: symlink directory ${relative}`)]);
+    for (const relative of [STATE_DIR_NAME, `${STATE_DIR_NAME}/generated`, INDEX_WRITE_LOCK_PATH]) {
+      const entry = path.join(rootDir, relative);
+      if (fs.existsSync(entry) && fs.lstatSync(entry).isSymbolicLink()) {
+        return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Index lock refused: symlink ${relative}`)]);
       }
     }
     fs.mkdirSync(path.dirname(file), { recursive: true });
   } catch (error) {
     return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Index lock unavailable: ${(error as Error).message}`)]);
   }
+  let held: HeldFileLock | undefined;
   for (;;) {
-    try { fs.mkdirSync(file); break; } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-        return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Index lock unavailable: ${(error as Error).message}`)]);
-      }
-      if (performance.now() >= deadline) return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Index lock timeout: ${INDEX_WRITE_LOCK_PATH} is held; no index write was started`)]);
-      await setTimeout(20);
+    try {
+      held = tryAcquireFileLock(file);
+    } catch (error) {
+      return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Index lock unavailable: ${(error as Error).message}`)]);
     }
+    if (held !== undefined) break;
+    if (performance.now() >= deadline) {
+      return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Index lock timeout: another DUO index writer in this worktree holds ${INDEX_WRITE_LOCK_PATH}; no index write was started. Run again when it finishes`)]);
+    }
+    await setTimeout(20);
   }
   const lease = Object.freeze({ root: rootDir });
   const state = { active: true, indexing: false, pending: new Set<Promise<unknown>>() };
   leases.set(lease, state);
   try { return success(await fn(lease)); } finally {
-    await finishIndexWriteLease(lease);
-    fs.rmdirSync(file);
+    try {
+      await finishIndexWriteLease(lease);
+    } finally {
+      held.release();
+    }
   }
 }

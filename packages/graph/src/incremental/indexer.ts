@@ -138,15 +138,6 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
       return now.dev === databaseIdentity.dev && now.ino === databaseIdentity.ino;
     } catch { return false; }
   };
-  const extraInputs = Object.keys(readIndexState(root).state?.configs ?? {});
-  const initial = await captureIndexInputs(root, extraInputs);
-  if (initial.value === undefined) return failure(initial.diagnostics);
-  const stable = async (): Promise<boolean> => {
-    const current = await captureIndexInputs(root, extraInputs);
-    return sameDatabase() && current.value !== undefined && current.value.signature === initial.value?.signature
-      && JSON.stringify(loadProjectTruth(root).value?.truth) === truthSignature;
-  };
-  const moved = () => failure<IndexResult>([createDiagnostic("GRAPH_WRITE_REFUSED", "Index inputs changed during indexing; run again on a stable repository")]);
   let phaseStart = performance.now();
   const phase = (name: string): void => { const now = performance.now(); options.onPhase?.(name, now - phaseStart); phaseStart = now; };
   const rootDir = path.resolve(root);
@@ -160,6 +151,18 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
   if (loaded.value === undefined) return failure(diagnostics);
   const { truth, trace } = loaded.value;
   const truthSignature = JSON.stringify(truth);
+  // The stability guard observes the same scope the scan below indexes (T180); a scope change in
+  // project.yaml is a Truth change and is caught by the Truth comparison.
+  const scope = { include: truth.config.index.include, exclude: truth.config.index.exclude };
+  const extraInputs = Object.keys(readIndexState(root).state?.configs ?? {});
+  const initial = await captureIndexInputs(root, extraInputs, scope);
+  if (initial.value === undefined) return failure([...diagnostics, ...initial.diagnostics]);
+  const stable = async (): Promise<boolean> => {
+    const current = await captureIndexInputs(root, extraInputs, scope);
+    return sameDatabase() && current.value !== undefined && current.value.signature === initial.value?.signature
+      && JSON.stringify(loadProjectTruth(root).value?.truth) === truthSignature;
+  };
+  const moved = () => failure<IndexResult>([createDiagnostic("GRAPH_WRITE_REFUSED", "Index inputs changed during indexing; run again on a stable repository")]);
   phase("truth");
   // One work-tree prefix query for this run, shared by the scan and the Git provider (T25.1).
   const workTree = probeWorkTree(rootDir);
