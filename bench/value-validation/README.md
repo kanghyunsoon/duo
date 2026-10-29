@@ -14,6 +14,8 @@ Protocol and results: [docs/validation/value-validation-01](../../docs/validatio
 | `aggregate.mjs` | Turns results into the protocol's tables; unmeasured values stay NOT MEASURED | no |
 | `measure.mjs` | Pure measurement helpers used by `agent.mjs` and `aggregate.mjs`: Codex event parsing (usage `null` unless every `turn.completed` event has complete usage; cached `null` unless every event reports it), totals and medians that become `null` when any run value is missing, measured-run counts | no |
 | `measure.test.mjs` | Regression tests for the NOT MEASURED rule, run by `pnpm test` and CI (`vitest.config.ts` includes `bench/value-validation/**/*.test.mjs`) | no |
+| `claude-measure.mjs` | Pure parser for the final `result` of `claude -p --output-format json` or `stream-json`: tokens (cache creation and cache read kept apart), `duration_ms`, `duration_api_ms`, `total_cost_usd` as an estimate; `null` when the result is missing or repeated, usage and cost `null` on a crash, budget stop or API error. Not wired into a harness | no |
+| `claude-measure.test.mjs` | Regression tests for that parser against `fixtures/claude/` (official-doc shapes plus a real failed and a real successful CLI 2.1.263 run, reduced to structure and numbers) | no |
 | `results/detection-01.json` | Part 1 raw result (2026-10-15) | |
 
 ```bash
