@@ -437,8 +437,9 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
     // After the commit. If this fails the token no longer matches and the next run rebuilds.
     const savedState = writeIndexState(rootDir, state);
     const savedFingerprint = writeFingerprintFile(rootDir, current);
-    diagnostics.push(...savedState.diagnostics, ...savedFingerprint.diagnostics);
-    if (savedState.value === undefined || savedFingerprint.value === undefined) return failure(diagnostics);
+    const sidecarDiagnostics = [...savedState.diagnostics, ...savedFingerprint.diagnostics];
+    diagnostics.push(...(options.expectedToken === undefined ? sidecarDiagnostics.map((d) => ({ ...d, severity: "warning" as const })) : sidecarDiagnostics));
+    if (options.expectedToken !== undefined && (savedState.value === undefined || savedFingerprint.value === undefined)) return failure(diagnostics);
     pruneAnalysisCache(rootDir, cacheKeys);
   }
   phase("write");
