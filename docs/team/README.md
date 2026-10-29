@@ -55,8 +55,10 @@ DUO는 coding agent가 일하는 저장소에 사람이 확정한 설계 결정(
 | Graph / Indexing | `packages/graph/` | kang987654, kanghyunsoon |
 | MCP / Integration, CLI | `packages/integration/`, `apps/cli/` | Alexjung0115, strdeok(integration), kanghyunsoon(CLI) |
 | UI / UX | `packages/ui/`, `tests/ui/` | strdeok, Alexjung0115 |
-| CI / Test | `tests/`, `bench/`, `.github/workflows/` | ghkim1632, s2vn9wxx |
-| Docs / Community | `docs/`, `docs/community/`, `CONTRIBUTING.md` | s2vn9wxx, ghkim1632 |
+| CI / Test | `tests/`, `bench/`, `fixtures/`, `vitest*.config.ts`, `.github/workflows/` | ghkim1632, s2vn9wxx |
+| Docs / Community | `docs/`, `docs/community/`, `CONTRIBUTING.md`, `README*.md`, Issue·PR template | s2vn9wxx, ghkim1632 |
+
+위 표에 없는 경로(`tsconfig*`, `eslint.config.js`, `scripts/` 등 저장소 설정)는 기본값으로 maintainer에게 요청된다.
 
 규칙:
 

@@ -27,12 +27,19 @@
 # CI, tests and benchmarks
 /tests/                             @ghkim1632 @s2vn9wxx
 /bench/                             @ghkim1632 @s2vn9wxx
+/fixtures/                          @ghkim1632 @s2vn9wxx
+/vitest.config.ts                   @ghkim1632 @s2vn9wxx
+/vitest.*.config.ts                 @ghkim1632 @s2vn9wxx
 /.github/workflows/                 @kanghyunsoon @ghkim1632 @s2vn9wxx
 
 # Docs and community
 /docs/                              @s2vn9wxx @ghkim1632
 /docs/community/                    @s2vn9wxx @ghkim1632
 /CONTRIBUTING.md                    @s2vn9wxx @ghkim1632
+/README.md                          @s2vn9wxx @ghkim1632
+/README.ko.md                       @s2vn9wxx @ghkim1632
+/.github/ISSUE_TEMPLATE/            @s2vn9wxx @ghkim1632
+/.github/pull_request_template.md   @s2vn9wxx @ghkim1632
 /docs/team/                         @kanghyunsoon @s2vn9wxx
 
 # Maintainer decisions: Decision records, architecture, security, release and supply chain
