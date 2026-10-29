@@ -12,7 +12,7 @@
 import { performance } from "node:perf_hooks";
 import { openGitProvider, type AnalyzerRegistry } from "@duo-director/analyzer";
 import {
-  canonicalDiagnostics, canonicalSourceText, compareUtf8, fileRef, loadProjectTruth, readSourceFile, requireCompleteTruth, sha256Text, stableJson, STATE_DIR_NAME, success,
+  canonicalDiagnostics, canonicalSourceText, compareUtf8, fileRef, loadProjectTruth, nodeId, parseNodeId, readSourceFile, requireCompleteTruth, sha256Text, stableJson, STATE_DIR_NAME, success,
   type Diagnostic, type EvidenceBasis, type ParseResult, type ProjectTruth,
 } from "@duo-director/core";
 import type { GitDiffEnd, GitProvider } from "@duo-director/analyzer";
@@ -55,8 +55,19 @@ export interface ReviewOptions {
   readonly tokenCounts?: TokenCountMemo;
 }
 
+/**
+ * H-91 (#58 Fix B): the file that owns a Symbol or Test the task seeds select directly is in scope too, so
+ * another edit in that file is in the task's context. Only the seeds: the owner files of nodes reached through
+ * CALLS/IMPORTS neighbours or listed in omittedCandidates are not added, and the packet itself is unchanged.
+ */
+const seedOwnerFiles = (p: ContextPacket): string[] =>
+  p.seeds.flatMap((s) => {
+    const ref = parseNodeId(s.id);
+    return ref?.type === "symbol" || ref?.type === "test" ? [nodeId(fileRef(ref.path))] : [];
+  });
+
 const packetScopeIds = (p: ContextPacket | undefined): ReadonlySet<string> =>
-  new Set(p === undefined ? [] : [...p.intent.requirements, ...p.intent.constraints, ...p.decisions.active, ...p.code, ...p.tests, ...p.issues].map((i) => i.id).concat(p.omittedCandidates.map((o) => o.id)));
+  new Set(p === undefined ? [] : [...p.intent.requirements, ...p.intent.constraints, ...p.decisions.active, ...p.code, ...p.tests, ...p.issues].map((i) => i.id).concat(p.omittedCandidates.map((o) => o.id), seedOwnerFiles(p)));
 
 /** Documentation and data files: no structural analysis is expected, so they are no limitation. */
 const DATA_FILE = /\.(?:md|markdown|mdx|txt|rst|adoc|json|jsonc|json5|ya?ml|toml|lock|ini|cfg|conf|properties|xml|csv|tsv|svg|env\.example)$|(?:^|\/)(?:\.gitignore|\.gitattributes|\.editorconfig|\.npmrc|LICENSE|NOTICE)$/iu;
