@@ -1,13 +1,20 @@
 /**
- * Issue #49 Stage 1 (Maintainer Decision L1-C, Jira S15P31A106-346): a changed import that can reach a file in
- * forbids.imported_paths only through re-exports gets the `imports-through-reexport` limitation with the chain.
- * PASS/WARN/BLOCK/ASK do not change: binding origins are not verified (that is Stage 2, S15P31A106-347).
+ * Issue #49 forbidden imports through re-exports (Maintainer Decision L1-C).
  *
- * - Only the names the import takes are followed through `export ... from`, so an unrelated name from the same
- *   barrel is not reported. `export *` forwards every name but "default", so a named import through it can
- *   reach every module it re-exports. Side-effect, namespace and dynamic imports take every name.
- * - At most MAX_REEXPORT_DEPTH (4) re-export hops; cycles stop. Import-then-export and local declarations are
- *   not followed.
+ * Stage 2 (H-98, Jira S15P31A106-347): when every name a changed import takes is traced to exactly one origin
+ * binding and an origin file is in forbids.imported_paths, the import is a `forbidden-import` claim on the
+ * source → origin pair (the same key as a direct import of that file, H-72 (10)), with the re-export chain
+ * as evidence. With an Adoption Baseline that evaluated re-export origins (marker
+ * `decision-forbids-import-origin`) a new pair is `introduced` (BLOCK); with an older baseline it is
+ * `unverified-at-adoption` (WARN) with the `imports-reexport-origin-not-baselined` limitation.
+ *
+ * Stage 1 (#124, Jira S15P31A106-346): anything ambiguous keeps the `imports-through-reexport` limitation with
+ * the chain and no claim: namespace and side-effect imports of a barrel (every name), `export * as ns`, a name
+ * that more than one `export *` module provides, cycles and chains longer than MAX_REEXPORT_DEPTH (4).
+ * Import-then-export is not followed in either stage.
+ *
+ * - Only the names the import takes are traced, so an unrelated name from the same barrel is not reported.
+ *   `export *` forwards every name but "default".
  * - A direct import of a forbidden file is still the H-72 claim, with no extra limitation.
  * - With forbids.importer_paths (#47, H-96 (2)), an importer outside the filter gets neither the claim nor
  *   the limitation for that Decision.
@@ -16,13 +23,16 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { AnalyzerRegistry } from "@duo-director/analyzer";
-import { createDecisionService } from "@duo-director/core";
+import { createDecisionService, fileRef, nodeId, type RepoPath } from "@duo-director/core";
 import { openProjectGraphStore, type GraphStore } from "@duo-director/graph";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { captureAdoptionBaseline } from "../adoption/baseline.js";
+import { captureAdoptionBaseline, loadAdoptionBaseline } from "../adoption/baseline.js";
+import { violationKey } from "../adoption/key.js";
+import type { AdoptionBaselineRecord } from "../adoption/types.js";
 import { contextRegistry, HISTORY, makeContextRepo, type ContextRepo } from "../context/testing.js";
+import { historyRecordId, REVIEWS_DIR } from "./record.js";
 import { reviewChanges } from "./review.js";
-import type { ReviewResult } from "./types.js";
+import type { ReviewClaim, ReviewResult } from "./types.js";
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 300_000 });
 
@@ -32,6 +42,9 @@ let fixture: string;
 const human = { kind: "human" as const, name: "Ada" };
 const at = (iso: string) => () => new Date(iso);
 const W = { from: "HEAD" as const, to: "WORKTREE" as const };
+const LEGACY = "src/db/legacy-db.ts";
+const pairKey = (source: string, target = LEGACY) =>
+  violationKey("decision-forbids-import", "D-001", `import:${nodeId(fileRef(source as RepoPath))}->${nodeId(fileRef(target as RepoPath))}`);
 
 const D001 = (importerPaths?: string) =>
   [
@@ -55,11 +68,16 @@ const FILES: Record<string, string> = {
   ".duo-project/project.yaml": "schema_version: 1\nname: issue49-reexport-fixture\n",
   ".duo-project/decisions/D-001.yaml": D001(),
   "src/db/legacy-db.ts": "export type LegacyRow = string;\n\nexport function legacyQuery(sql: string): string {\n  return sql;\n}\n",
+  "src/db/legacy-copy.ts": "export function legacyQuery(sql: string): string {\n  return sql.trim();\n}\n",
   "src/db/date.ts": "export function formatDate(d: Date): string {\n  return d.toISOString();\n}\n",
   "src/db/index.ts": reexport("./legacy-db.js") + reexport("./date.js", "formatDate"),
   "src/db/all.ts": 'export * from "./legacy-db.js";\nexport * from "./date.js";\n',
+  // Two `export *` modules provide legacyQuery: ambiguous.
+  "src/db/both.ts": 'export * from "./legacy-db.js";\nexport * from "./legacy-copy.js";\n',
   "src/db/alias.ts": reexport("./legacy-db.js", "legacyQuery as query"),
   "src/db/ns.ts": 'export * as legacy from "./legacy-db.js";\n',
+  // Import-then-export: not followed.
+  "src/db/relay.ts": 'import { legacyQuery } from "./legacy-db.js";\n\nexport { legacyQuery };\n',
   // 4 hops: hop1 -> hop2 -> hop3 -> hop4 -> legacy-db; 5 hops: far1 -> … -> far5 -> legacy-db.
   "src/db/hop1.ts": reexport("./hop2.js"),
   "src/db/hop2.ts": reexport("./hop3.js"),
@@ -72,6 +90,8 @@ const FILES: Record<string, string> = {
   "src/db/far5.ts": reexport("./legacy-db.js"),
   "src/db/cycle-a.ts": reexport("./cycle-b.js"),
   "src/db/cycle-b.ts": reexport("./cycle-a.js"),
+  // Already imports legacy-db through the barrel when the baseline is captured.
+  "src/ui/old-page.ts": 'import { legacyQuery } from "../db/index.js";\n\nexport const oldPage = (): string => legacyQuery("old");\n',
 };
 
 beforeAll(async () => {
@@ -112,7 +132,7 @@ const forbiddenImports = (res: ReviewResult) => res.claims.filter((c) => c.rule 
 const importLimits = (res: ReviewResult) => res.limitations.filter((l) => l.code.startsWith("imports-"));
 const throughReexport = (res: ReviewResult) => res.limitations.filter((l) => l.code === "imports-through-reexport");
 
-async function adoptedRepo(from: string, ids: readonly string[] = ["D-001"]): Promise<ContextRepo> {
+async function adoptedRepo(from: string, ids: readonly string[] = ["D-001"]): Promise<{ repo: ContextRepo; baseline: AdoptionBaselineRecord }> {
   const repo = makeContextRepo(temps, registry, from);
   for (const id of ids) {
     const c = await createDecisionService({ root: repo.root, clock: at("2026-09-01T00:00:00.000Z") }).confirm(human, id);
@@ -127,7 +147,9 @@ async function adoptedRepo(from: string, ids: readonly string[] = ["D-001"]): Pr
   if (b.value === undefined || b.value.status === "aborted") throw new Error(JSON.stringify(b));
   repo.git("add", "-A");
   repo.git("commit", "-q", "-m", "capture adoption baseline");
-  return repo;
+  const baseline = loadAdoptionBaseline(repo.root).baseline;
+  if (baseline === undefined) throw new Error("no baseline");
+  return { repo, baseline };
 }
 
 async function write(repo: ContextRepo, file: string, text: string): Promise<ReviewResult> {
@@ -137,21 +159,36 @@ async function write(repo: ContextRepo, file: string, text: string): Promise<Rev
   return review(repo);
 }
 
-describe("Issue #49 Stage 1: imports-through-reexport limitation (no verdict change)", () => {
+/** One forbidden-import claim on `source` → legacy-db, the verdict, and no imports-* limitation. */
+function expectClaim(res: ReviewResult, source: string, provenance: ReviewClaim["provenance"], verdict: ReviewResult["verdict"]): ReviewClaim {
+  expect(res.verdict).toBe(verdict);
+  const claims = forbiddenImports(res);
+  expect(claims).toHaveLength(1);
+  expect(claims[0]).toMatchObject({ alignment: "CONFLICT", reason: "forbidden-import", provenance, violationKey: pairKey(source) });
+  return claims[0] as ReviewClaim;
+}
+
+describe("Issue #49 Stage 2 (H-98): exact re-export origins with an origin-evaluated baseline", () => {
   let repo: ContextRepo;
+  let baseline: AdoptionBaselineRecord;
 
   beforeAll(async () => {
-    repo = await adoptedRepo(fixture);
+    ({ repo, baseline } = await adoptedRepo(fixture));
   });
 
   const page = (text: string): Promise<ReviewResult> => write(repo, "src/ui/page.ts", text);
-  /** The limitation is the only imports-* entry, the verdict stays PASS and nothing is claimed. */
+  const expectBlock = (res: ReviewResult) => {
+    const c = expectClaim(res, "src/ui/page.ts", "introduced", "BLOCK");
+    expect(c.blockEligible).toBe(true);
+    expect(importLimits(res)).toEqual([]);
+    return c;
+  };
+  /** Stage 1: the limitation is the only imports-* entry, the verdict stays PASS and nothing is claimed. */
   const expectLimitation = (res: ReviewResult, chain: string) => {
     expect(res.verdict).toBe("PASS");
     expect(forbiddenImports(res)).toEqual([]);
     expect(importLimits(res).map((l) => l.code)).toEqual(["imports-through-reexport"]);
     expect(throughReexport(res)[0]?.message).toContain(`${chain} (D-001)`);
-    expect(throughReexport(res)[0]?.message).toContain("not checked binding by binding");
   };
   const expectNothing = (res: ReviewResult) => {
     expect(res.verdict).toBe("PASS");
@@ -159,53 +196,118 @@ describe("Issue #49 Stage 1: imports-through-reexport limitation (no verdict cha
     expect(importLimits(res)).toEqual([]);
   };
 
-  it("a named import whose name the barrel re-exports from legacy-db: limitation with the chain", async () => {
-    expectLimitation(await page('import { legacyQuery } from "../db/index.js";\n'), "src/ui/page.ts:1 → src/db/index.ts → src/db/legacy-db.ts");
+  it("the baseline records the origin marker and the pair src/ui/old-page.ts already had through the barrel", () => {
+    expect(baseline.evaluatedRules).toContain("decision-forbids-import-origin");
+    expect(baseline.findings.map((f) => f.key)).toContain(pairKey("src/ui/old-page.ts"));
+  });
+
+  it("a named import whose origin is legacy-db: forbidden-import on the source → origin pair, introduced, BLOCK, with the chain", async () => {
+    const res = await page('import { legacyQuery } from "../db/index.js";\n');
+    const c = expectBlock(res);
+    expect(c.observed).toContain('src/ui/page.ts:1 import "../db/index.js" re-exports legacyQuery from src/db/legacy-db.ts via src/db/index.ts');
+    // Evidence: the changed import and the export-from statement in the barrel.
+    const refs = c.evidenceIds.map((id) => res.evidence.find((e) => e.id === id)).filter((e) => e?.metadata?.moduleReference !== undefined);
+    expect(refs.map((e) => e?.pointer.path).sort()).toEqual(["src/db/index.ts", "src/ui/page.ts"]);
   });
 
   it("an unrelated name from the same barrel is not reported", async () => {
     expectNothing(await page('import { formatDate } from "../db/index.js";\n'));
   });
 
-  it("side-effect and namespace imports of the barrel take every name: limitation", async () => {
+  it("side-effect and namespace imports of the barrel take every name: Stage 1 limitation, no claim", async () => {
     expectLimitation(await page('import "../db/index.js";\n'), "src/ui/page.ts:1 → src/db/index.ts → src/db/legacy-db.ts");
     expectLimitation(await page('import * as db from "../db/index.js";\n\nexport const q = db.legacyQuery;\n'), "src/ui/page.ts:1 → src/db/index.ts → src/db/legacy-db.ts");
   });
 
-  it("export * forwards every name but default: a named import through it can reach legacy-db, default cannot", async () => {
-    expectLimitation(await page('import { formatDate } from "../db/all.js";\n'), "src/ui/page.ts:1 → src/db/all.ts → src/db/legacy-db.ts");
+  it("export *: one provider is exact (legacyQuery BLOCK, formatDate from date.ts nothing, default nothing); two providers stay the limitation", async () => {
+    expectBlock(await page('import { legacyQuery } from "../db/all.js";\n'));
+    expectNothing(await page('import { formatDate } from "../db/all.js";\n'));
     expectNothing(await page('import all from "../db/all.js";\n\nexport const x = all;\n'));
+    expectLimitation(await page('import { legacyQuery } from "../db/both.js";\n'), "src/ui/page.ts:1 → src/db/both.ts → src/db/legacy-db.ts");
   });
 
-  it("type-only imports are included (H-72 (3))", async () => {
-    expectLimitation(await page('import type { LegacyRow } from "../db/all.js";\n\nexport type Row = LegacyRow;\n'), "src/ui/page.ts:1 → src/db/all.ts → src/db/legacy-db.ts");
+  it("type-only imports are included (H-72 (3)): import type through export * is BLOCK", async () => {
+    expectBlock(await page('import type { LegacyRow } from "../db/all.js";\n\nexport type Row = LegacyRow;\n'));
   });
 
-  it("follows the original name of an aliased re-export and export * as ns", async () => {
-    expectLimitation(await page('import { query } from "../db/alias.js";\n'), "src/ui/page.ts:1 → src/db/alias.ts → src/db/legacy-db.ts");
+  it("an aliased re-export is traced by its original name; export * as ns stays the limitation", async () => {
+    expectBlock(await page('import { query } from "../db/alias.js";\n'));
     expectNothing(await page('import { legacyQuery } from "../db/alias.js";\n'));
     expectLimitation(await page('import { legacy } from "../db/ns.js";\n'), "src/ui/page.ts:1 → src/db/ns.ts → src/db/legacy-db.ts");
   });
 
-  it("a changed export-from in the reviewed file is followed like an import", async () => {
-    expectLimitation(await page('export { legacyQuery } from "../db/index.js";\n'), "src/ui/page.ts:1 → src/db/index.ts → src/db/legacy-db.ts");
+  it("a changed export-from in the reviewed file is traced like an import", async () => {
+    expectBlock(await page('export { legacyQuery } from "../db/index.js";\n'));
   });
 
-  it("follows at most MAX_REEXPORT_DEPTH (4) hops and stops at cycles", async () => {
-    expectLimitation(await page('import { legacyQuery } from "../db/hop1.js";\n'), "src/ui/page.ts:1 → src/db/hop1.ts → src/db/hop2.ts → src/db/hop3.ts → src/db/hop4.ts → src/db/legacy-db.ts");
+  it("at most MAX_REEXPORT_DEPTH (4) hops: 4 hops BLOCK, 5 hops and a cycle report nothing", async () => {
+    const c = expectBlock(await page('import { legacyQuery } from "../db/hop1.js";\n'));
+    expect(c.observed).toContain("via src/db/hop1.ts → src/db/hop2.ts → src/db/hop3.ts → src/db/hop4.ts");
     expectNothing(await page('import { legacyQuery } from "../db/far1.js";\n'));
     expectNothing(await page('import { legacyQuery } from "../db/cycle-a.js";\n'));
   });
 
-  it("a direct import of legacy-db is still the H-72 claim (BLOCK) with no re-export limitation", async () => {
-    const res = await page('import { legacyQuery } from "../db/legacy-db.js";\n');
-    expect(res.verdict).toBe("BLOCK");
-    expect(forbiddenImports(res)).toHaveLength(1);
+  it("import-then-export is not followed: no claim, no limitation", async () => {
+    expectNothing(await page('import { legacyQuery } from "../db/relay.js";\n'));
+  });
+
+  it("a direct import of legacy-db is still the H-72 claim (BLOCK) with no extra limitation", async () => {
+    const c = expectBlock(await page('import { legacyQuery } from "../db/legacy-db.js";\n'));
+    expect(c.observed).toContain("resolves to src/db/legacy-db.ts");
+  });
+
+  it("an edit to the import that was in the baseline through the barrel is pre-existing-touched, WARN", async () => {
+    repo.git("reset", "-q", "--hard");
+    repo.git("clean", "-fdq");
+    repo.edit("src/ui/old-page.ts", "import { legacyQuery }", "import { legacyQuery, formatDate }");
+    const c = expectClaim(await review(repo), "src/ui/old-page.ts", "pre-existing-touched", "WARN");
+    expect(c.blockEligible).toBe(false);
+  });
+});
+
+describe("Issue #49 Stage 2 (H-98 (5)): a baseline recorded before re-export origins were evaluated", () => {
+  let repo: ContextRepo;
+
+  beforeAll(async () => {
+    ({ repo } = await adoptedRepo(fixture));
+    // The same baseline as a capture before Stage 2 would have written it: no origin marker and no pairs
+    // found only through re-exports; the record id is recomputed.
+    const loaded = loadAdoptionBaseline(repo.root);
+    const file = path.join(repo.root, loaded.path ?? "");
+    const record = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown> & { evaluatedRules: string[]; findings: { key: string }[] };
+    const rest: Record<string, unknown> = { ...record };
+    const recorded = rest.recorded;
+    delete rest.id;
+    delete rest.recorded;
+    const body = {
+      ...rest,
+      evaluatedRules: record.evaluatedRules.filter((r) => r !== "decision-forbids-import-origin"),
+      findings: record.findings.filter((f) => f.key !== pairKey("src/ui/old-page.ts")),
+    };
+    const id = historyRecordId("adoption", body);
+    fs.rmSync(file);
+    fs.writeFileSync(path.join(repo.root, REVIEWS_DIR, `${id}.json`), `${JSON.stringify({ id, recorded, ...body }, null, 2)}\n`);
+    repo.git("add", "-A");
+    repo.git("commit", "-q", "-m", "baseline from before #49 Stage 2");
+    expect(loadAdoptionBaseline(repo.root)).toMatchObject({ status: "present", baseline: { id } });
+  });
+
+  it("a new pair through the barrel is unverified-at-adoption, not BLOCK-eligible, WARN, with the limitation", async () => {
+    const res = await write(repo, "src/ui/page.ts", 'import { legacyQuery } from "../db/index.js";\n');
+    const c = expectClaim(res, "src/ui/page.ts", "unverified-at-adoption", "WARN");
+    expect(c.blockEligible).toBe(false);
+    expect(importLimits(res).map((l) => l.code)).toEqual(["imports-reexport-origin-not-baselined"]);
+    expect(importLimits(res)[0]?.message).toContain("src/ui/page.ts → src/db/legacy-db.ts (D-001)");
+  });
+
+  it("a direct import is still judged by the decision-forbids-import coverage: introduced, BLOCK", async () => {
+    const res = await write(repo, "src/ui/page.ts", 'import { legacyQuery } from "../db/legacy-db.js";\n');
+    expectClaim(res, "src/ui/page.ts", "introduced", "BLOCK");
     expect(importLimits(res)).toEqual([]);
   });
 });
 
-describe("Issue #49 Stage 1 with forbids.importer_paths (#47, H-96 (2))", () => {
+describe("Issue #49 with forbids.importer_paths (#47, H-96 (2), H-98 (3))", () => {
   let repo: ContextRepo;
 
   beforeAll(async () => {
@@ -214,28 +316,30 @@ describe("Issue #49 Stage 1 with forbids.importer_paths (#47, H-96 (2))", () => 
     fs.cpSync(fixture, scoped, { recursive: true });
     fs.writeFileSync(path.join(scoped, ".duo-project/decisions/D-001.yaml"), D001("src/ui/**"));
     // D-002 has no importer filter, so every changed file is still checked: the services file below is
-    // reviewed for D-002 and must not get D-001's limitation.
+    // reviewed for D-002 and must get neither D-001's claim nor its limitation.
     fs.writeFileSync(
       path.join(scoped, ".duo-project/decisions/D-002.yaml"),
       D001().replace("D-001", "D-002").replace("legacy_db_import", "date_import").replace("src/db/legacy-db.ts]", "src/db/date.ts]"),
     );
-    repo = await adoptedRepo(scoped, ["D-001", "D-002"]);
+    ({ repo } = await adoptedRepo(scoped, ["D-001", "D-002"]));
   });
 
-  const barrelImport = 'import { legacyQuery } from "../db/index.js";\n';
-
-  it("an importer outside importer_paths gets no re-export limitation for that Decision", async () => {
-    const res = await write(repo, "src/services/report.ts", barrelImport);
+  it("an importer outside importer_paths gets no claim and no limitation for that Decision", async () => {
+    const res = await write(repo, "src/services/report.ts", 'import { legacyQuery } from "../db/index.js";\n');
     expect(res.verdict).toBe("PASS");
     expect(forbiddenImports(res)).toEqual([]);
     expect(importLimits(res)).toEqual([]);
+    // A namespace import takes every name: only D-002's limitation (the barrel re-exports date.ts), none for D-001.
+    const ns = await write(repo, "src/services/report.ts", 'import * as db from "../db/index.js";\n\nexport const q = db.legacyQuery;\n');
+    expect(importLimits(ns).map((l) => l.code)).toEqual(["imports-through-reexport"]);
+    expect(throughReexport(ns)[0]?.message).toContain("src/services/report.ts:1 → src/db/index.ts → src/db/date.ts (D-002)");
+    expect(throughReexport(ns)[0]?.message).not.toContain("D-001");
   });
 
-  it("the same import in a file matching importer_paths gets the limitation", async () => {
-    const res = await write(repo, "src/ui/report.ts", barrelImport);
-    expect(res.verdict).toBe("PASS");
-    expect(forbiddenImports(res)).toEqual([]);
-    expect(importLimits(res).map((l) => l.code)).toEqual(["imports-through-reexport"]);
-    expect(throughReexport(res)[0]?.message).toContain("src/ui/report.ts:1 → src/db/index.ts → src/db/legacy-db.ts (D-001)");
+  it("the same import in a file matching importer_paths is the claim (BLOCK); a namespace import is the limitation", async () => {
+    expectClaim(await write(repo, "src/ui/report.ts", 'import { legacyQuery } from "../db/index.js";\n'), "src/ui/report.ts", "introduced", "BLOCK");
+    const ns = await write(repo, "src/ui/report.ts", 'import * as db from "../db/index.js";\n\nexport const q = db.legacyQuery;\n');
+    expect(importLimits(ns).map((l) => l.code)).toEqual(["imports-through-reexport"]);
+    expect(throughReexport(ns)[0]?.message).toContain("src/ui/report.ts:1 → src/db/index.ts → src/db/legacy-db.ts (D-001)");
   });
 });

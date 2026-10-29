@@ -17,9 +17,10 @@ import {
   canonicalSourceText, compareSourceHash, compareUtf8, compileRepoPattern, externalSourceSlice, fileRef, isRemoteSourcePath, nodeId,
   normalizeRepoPath, parseNodeId, readSourceFile, STATE_DIR_NAME, type Diagnostic, type ProjectTruth, type RepoPath, type SourceRef,
 } from "@duo-director/core";
-import type { GraphReader } from "@duo-director/graph";
+import { readIndexedModuleReferences, type GraphReader } from "@duo-director/graph";
 import { wildcard } from "../relevance/policy.js";
 import { isActive } from "../review/claims.js";
+import { importedNames, ReexportOrigins } from "../review/reexport-origin.js";
 import { dependencyNames, importerFilter } from "../review/rules.js";
 import { declaredReferenceParts, dependencyOffending, sourceOffending, violationKey } from "./key.js";
 import type { BaselineFinding, BaselineRule } from "./types.js";
@@ -116,6 +117,32 @@ export async function headBaselineFindings(input: HeadFindingsInput): Promise<{ 
         if (to?.type !== "file" || !inHead.has(to.path)) continue;
         for (const { d, match, importer } of importing) {
           if (importer(f) && match.some((m) => m(to.path))) add("decision-forbids-import", d.id, `import:${nodeId(fileRef(f))}->${nodeId(fileRef(to.path))}`, { path: f, enforced: d.enforcement === "block" });
+        }
+      }
+    }
+    // H-98 (6): re-export origins, traced as review does (#49 Stage 2), from the indexed references of HEAD
+    // files that equal HEAD. A pair found here has the same key as a direct import of the origin. The caller
+    // records decision-forbids-import-origin as evaluated only for a clean tree.
+    const files = headFiles.filter((p) => !input.divergent.has(p));
+    const indexed = await readIndexedModuleReferences(input.root, files);
+    const starts = files.flatMap((f, i) => {
+      const r = indexed[i];
+      if (r?.status !== "ok") return [];
+      return r.references.flatMap((ref) => {
+        const target = ref.target;
+        if (target === undefined) return [];
+        const decisions = importing.filter(({ match, importer }) => importer(f) && !match.some((m) => m(target)));
+        return decisions.length === 0 ? [] : [{ f, ref, target, decisions }];
+      });
+    });
+    const origins = new ReexportOrigins(input.root, input.divergent);
+    await origins.load(starts.map((s) => s.target));
+    for (const s of starts) {
+      const traced = origins.trace(s.target, importedNames(s.ref));
+      if (traced.status !== "exact") continue;
+      for (const o of traced.origins) {
+        for (const { d, match } of s.decisions) {
+          if (inHead.has(o.file) && match.some((m) => m(o.file))) add("decision-forbids-import", d.id, `import:${nodeId(fileRef(s.f))}->${nodeId(fileRef(o.file))}`, { path: s.f, enforced: d.enforcement === "block" });
         }
       }
     }

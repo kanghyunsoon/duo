@@ -147,7 +147,8 @@ export async function captureAdoptionBaseline(root: string, options: CaptureBase
   const bootstrapTruth = await bootstrapTruthOf(root, git.value);
   // H-72: decision-forbids-import is evaluated (and recorded so) only when HEAD's import relations are the
   // indexed ones, i.e. the working tree outside .duo-project is clean. Other rules keep their T15.1 meaning.
-  const evaluatedRules: BaselineRule[] = (["decision-forbids", "declared-reference", "external-source-drift", ...(wt.dirty ? [] : ["decision-forbids-import" as const])] as BaselineRule[]).sort(compareUtf8);
+  // H-98 (6): re-export origins (#49 Stage 2) are evaluated under the same condition.
+  const evaluatedRules: BaselineRule[] = (["decision-forbids", "declared-reference", "external-source-drift", ...(wt.dirty ? [] : ["decision-forbids-import" as const, "decision-forbids-import-origin" as const])] as BaselineRule[]).sort(compareUtf8);
   const limitations = [
     ...evaluated.limitations, ...(wt.truncated ? ["working-tree-list-truncated"] : []), ...(wt.dirty ? ["import-relations-not-evaluated-dirty-working-tree"] : []),
   ].sort(compareUtf8);

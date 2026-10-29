@@ -112,6 +112,9 @@
 | Additive Truth | Decision·proposal `forbids.importer_paths`(#47): `imported_paths`만 import하는 파일의 path pattern으로 좁힌다. `schema_version: 1` 그대로. 이 field가 없는 Decision의 lock digest와 review 결과는 같다. 빈 목록과 `imported_paths` 없는 사용은 잘못된 입력이다(H-96) |
 | Additive public | MCP `duo_propose_decision`의 `forbids.importer_paths`(tool 9개 그대로), CLI confirm preview·UI의 Forbids scope 문구(importer_paths가 있을 때) |
 | Downgrade | `importer_paths`를 쓰는 저장소를 0.2.2+·0.3.x·0.4.0-rc.1로 열면 `SCHEMA_UNKNOWN_PROPERTY`로 `PROJECT_TRUTH_INVALID`(fail-closed, H-75). Decision이 조용히 빠지지 않는다 |
+| Verdict | Re-export를 거친 금지 import(#49 Stage 2, H-98): 가져오는 모든 이름의 origin이 하나로 정해지고 금지 대상이면 source → origin 쌍의 `forbidden-import`(PASS → BLOCK). 모호한 경우는 그대로 `imports-through-reexport`. 새 limitation code `imports-reexport-origin-not-baselined` |
+| Additive baseline | Adoption Baseline `evaluatedRules`의 marker `decision-forbids-import-origin`(깨끗한 working tree에서 캡처할 때)과 re-export로 찾은 `decision-forbids-import` finding. `duo.adoption-baseline/2` 그대로. marker 없는 이전 baseline에서 re-export로만 찾은 새 pair는 WARN(`unverified-at-adoption`) |
+| Downgrade(baseline) | marker가 있는 baseline을 0.3.x·0.4.0-rc.1이 읽으면 marker를 무시한다(fail-closed 아님): 기록 검증은 내용 hash만 보고 review는 `decision-forbids-import`만 확인한다(rc.1과 현재의 `verifyReviewRecord`·`loadAdoptionBaseline` 코드 동일). re-export로 기록된 finding은 같은 key의 직접 import를 `pre-existing`으로 보게 한다(관계가 이미 있었으므로) |
 
 ## 0.3.3 변경 분류 (T78, H-87)
 

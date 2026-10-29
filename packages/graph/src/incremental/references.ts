@@ -8,7 +8,7 @@
  *
  * Valid only while the index is current (inspectIndex). The caller decides that; this never indexes.
  */
-import type { ImportBinding, ModuleReferenceKind, ReExportBinding } from "@duo-director/analyzer";
+import type { ImportBinding, LocalExport, ModuleReferenceKind, ReExportBinding } from "@duo-director/analyzer";
 import type { RepoPath, SourceLocation } from "@duo-director/core";
 import type { ModuleResolution } from "../build/resolve/module-resolver.js";
 import { readCachedAnalyses, type AnalysisCacheKey } from "./analysis-cache.js";
@@ -37,7 +37,11 @@ export interface IndexedModuleReference {
  * unavailable: the index state or the cached analysis cannot be read, or they do not match.
  */
 export type IndexedModuleReferences =
-  | { readonly status: "ok"; readonly path: RepoPath; readonly language: string; readonly references: readonly IndexedModuleReference[] }
+  | {
+    readonly status: "ok"; readonly path: RepoPath; readonly language: string; readonly references: readonly IndexedModuleReference[];
+    /** Names the file exports from its own declarations (re-exports are references), as cached. */
+    readonly exports: readonly LocalExport[];
+  }
   | { readonly status: "not-indexed" | "not-analyzed" | "unavailable"; readonly path: RepoPath; readonly reason?: string };
 
 /** The indexed module references of each path, in path order of the input. Read-only. */
@@ -63,7 +67,7 @@ export async function readIndexedModuleReferences(root: string, paths: readonly 
     const refs = entry.analysis.moduleReferences;
     if (refs.length !== modules.length) return { status: "unavailable", path, reason: "analysis and resolution do not match" };
     return {
-      status: "ok", path, language: entry.analysis.language,
+      status: "ok", path, language: entry.analysis.language, exports: entry.analysis.exports,
       references: refs.map((r, j) => {
         const resolution = modules[j] as ModuleResolution;
         const target = resolution.status === "resolved" && resolution.path !== path && files.has(resolution.path) ? resolution.path : undefined;
