@@ -102,16 +102,16 @@ describe("safe index recovery and shared writer lock", () => {
     expect(entered).toBe(false);
     expect(outer.value?.diagnostics[0]?.message).toContain("Index lock timeout");
   });
-  it("observes ignored Truth independently of Git membership", async () => {
+  it("observes a change to ignored Truth content independently of Git membership", async () => {
     const r = repo();
     r.write(".git/info/exclude", ".duo-project/intent/\n");
-    r.write(".duo-project/intent/constraints.yaml", "constraints: []\n");
+    r.write(".duo-project/intent/vision.md", "---\nstatus: draft\n---\n\n# Vision\n\nOne.\n");
     expect((await index(r)).value).toBeDefined();
     r.write("src/a.ts", "export const a = 2;\n");
     const store = openProjectGraphStore(r.root).value!;
     try {
       const result = await indexRepository(r.root, { store, registry, onPhase: (phase) => {
-        if (phase === "analysis") r.write(".duo-project/intent/constraints.yaml", "# changed while ignored\nconstraints: []\n");
+        if (phase === "analysis") r.write(".duo-project/intent/vision.md", "---\nstatus: draft\n---\n\n# Vision\n\nTwo.\n");
       } });
       expect(result.value).toBeUndefined();
       expect(result.diagnostics[0]?.message).toContain("inputs changed");
