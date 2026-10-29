@@ -53,7 +53,7 @@ DUO가 어디에 쓸 수 있는지는 core의 순수 정책 함수 `checkWriteBo
 | `project-truth` | `project.yaml`, `.gitignore`(init, AC-014-05), `intent/`, `specs/`, `decisions/`, `milestones/`, `integrations/` |
 | `human-history` | `reviews/` |
 | `regenerable` | `generated/`, `cache/`, `runtime/` |
-| `agent-integration` | `.duo-project/` 밖의 정확히 네 파일(`AGENT_INTEGRATION_FILES`, T17): 저장소 root의 `.codex/config.toml`, `.mcp.json`, `AGENTS.md`, `CLAUDE.md`. `duoctl install`만 쓴다 |
+| `agent-integration` | `.duo-project/` 밖의 정해진 파일(`AGENT_INTEGRATION_FILES`, T17): 저장소 root의 `.codex/config.toml`, `.mcp.json`, `AGENTS.md`, `CLAUDE.md`, 그리고 `--with-skill`일 때만 `.agents/skills/duo/SKILL.md`, `.claude/skills/duo/SKILL.md`(S15P31A106-358). `duoctl install`만 쓴다 |
 
 - Repository 밖 경로는 항상 `WRITE_OUTSIDE_REPOSITORY`로 거부한다(`..` 경로, 다른 저장소의 절대경로 포함).
 - `.duo-project/` 밖(프로젝트 Source Code), 영역에 없는 경로(`.duo-project/unknown.txt`), 영역과 writeKind가 다른 쓰기는 `WRITE_NOT_ALLOWED`다.

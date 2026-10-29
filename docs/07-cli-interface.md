@@ -23,7 +23,7 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 | `duoctl decision list\|confirm <id>\|reject <id>\|review-pending` | proposal 목록, 확정, 거절, pending 전부를 한 session에서 검토하고 고른 것만 확정 | `--reason <text>`(reject) | core DecisionService, listDecisionProposals | decisions/ |
 | `duoctl stats` | runtime/metrics.jsonl 요약 | `--last <n>` | director readRuntimeMetrics | 없음 |
 | `duoctl mcp` | duo-director MCP 서버를 stdio로 실행(한 저장소, [06](06-mcp-interface.md)) | `--root <path>` 또는 `--root-from git-cwd\|env:<NAME>`(결과는 Git top level이어야 함), `--agent <label>` | integration `resolveMcpRoot`, `serveDuoMcp` | Tool이 쓰는 것만(metrics, proposals) |
-| `duoctl install <codex\|claude-code>` | Agent 연결: plan → 확인 → apply → verify([06 Agent integration](06-mcp-interface.md#agent-integration-duoctl-install)) | `--launcher path\|npx`, `--yes`, `--non-interactive`, `--json` | integration `planAgentIntegration`, `applyAgentIntegration`, `verifyAgentIntegration` | `.codex/config.toml`+`AGENTS.md` 또는 `.mcp.json`+`CLAUDE.md`, 백업(runtime/backup) |
+| `duoctl install <codex\|claude-code>` | Agent 연결: plan → 확인 → apply → verify([06 Agent integration](06-mcp-interface.md#agent-integration-duoctl-install)) | `--launcher path\|npx`, `--with-skill`, `--yes`, `--non-interactive`, `--json` | integration `planAgentIntegration`, `applyAgentIntegration`, `verifyAgentIntegration` | `.codex/config.toml`+`AGENTS.md` 또는 `.mcp.json`+`CLAUDE.md`(`--with-skill`이면 `.agents/skills/duo/SKILL.md` 또는 `.claude/skills/duo/SKILL.md`도), 백업(runtime/backup) |
 | `duoctl install status [agent]` | Agent별 not-configured / configured / drifted / conflict | | integration `inspectAgentIntegration` | 없음 |
 | `duoctl install remove <agent>` | DUO MCP 항목과 DUO bridge 블록만 제거 | `--yes` | integration `planAgentRemoval`, `applyAgentIntegration` | 같은 파일들 |
 | `duoctl ui [--port N] [--open]` | TASK-018 | | | 127.0.0.1에서 번들 UI와 versioned API 실행, 실제 URL 출력. `--open`은 선택 사항 |
@@ -70,6 +70,7 @@ Existing project → duoctl 설치(PATH) → duoctl init → duoctl install code
 - `--yes`는 계획한 파일 변경만 승인한다. 같은 이름의 다른 MCP 서버, 읽을 수 없는 설정, 깨진 bridge marker, launcher 가로채기 파일, Codex trust, Claude Code approval은 넘어가지 않는다.
 - apply 뒤 verify가 생성된 설정의 command로 DUO 서버를 직접 띄워 확인한다. index가 stale이면 install은 성공하고 다음 조치로 `duoctl index`를 보인다.
 - 두 번 실행하면 `unchanged`. install은 init, index, git add, commit을 하지 않는다. 바뀐 파일을 알려줄 뿐이다.
+- `--with-skill`(선택, S15P31A106-358, #8): DUO 도구에 닿는 방법(지연·중첩된 `duo-director` 도구를 이름으로 불러오기, 잠시 뒤 다시 확인, CLI fallback)만 담은 project skill을 함께 쓴다. Codex는 `.agents/skills/duo/SKILL.md`, Claude Code는 `.claude/skills/duo/SKILL.md`. 두 Agent가 이 skill을 목록에 올리는 것은 로그인 없이 확인했지만, 작업 중에 skill 본문을 불러와 따르는지는 아직 확인하지 않았다([#8](https://github.com/kanghyunsoon/duo/issues/8), 확인 기록은 #134). 기본 install은 skill을 쓰지 않으며 bridge 블록은 그대로다. 같은 경로에 DUO가 쓰지 않은 skill이 있으면 덮어쓰지 않고 `AGENT_INTEGRATION_CONFLICT`로 멈춘다. skill 파일도 H-94 소유권 기록을 따른다: `install remove`는 DUO가 만들고 그 뒤 바뀌지 않은 skill만 지우고, 설치 전부터 있던 것과 사용자가 고친 것은 이유를 경고하며 남긴다.
 - metrics: `{ command: "install", status, agent }`(경로와 설정 내용 없음).
 
 ## Existing Project Adoption

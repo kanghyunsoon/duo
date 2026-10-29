@@ -38,6 +38,9 @@ export type McpEntryStatus = "not-configured" | "already-configured" | "drifted"
 
 export type BridgeStatus = "absent" | "current" | "outdated" | "malformed";
 
+/** Project skill file: absent, DUO's current text, an older DUO text DUO created, or someone else's file. */
+export type SkillStatus = "absent" | "current" | "outdated" | "foreign";
+
 export type IntegrationStatus = "not-configured" | "configured" | "drifted" | "conflict";
 
 export type FileAction = "create" | "modify" | "delete" | "none" | "blocked";
@@ -79,6 +82,12 @@ export interface AgentIntegrationPlan {
     readonly target: string;
     readonly status: BridgeStatus;
     readonly plannedBlock?: string;
+    readonly action: FileAction;
+  };
+  /** Present only when --with-skill is requested or a DUO skill is involved (S15P31A106-358). */
+  readonly skill?: {
+    readonly target: string;
+    readonly status: SkillStatus;
     readonly action: FileAction;
   };
   readonly requirements: {
