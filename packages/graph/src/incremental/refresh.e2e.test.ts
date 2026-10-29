@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AnalyzerRegistry } from "@duo-director/analyzer";
 import { readFingerprintFile } from "@duo-director/analyzer";
 import { indexRepository, openProjectGraphReader, openProjectGraphStore } from "./indexer.js";
+import { inspectIndex } from "./inspect.js";
 import { refreshIndexIfSafe } from "./refresh.js";
 import { INDEX_WRITE_LOCK_PATH, withIndexWriteLock } from "./write-lock.js";
 import { INDEX_STATE_FILE_PATH, INDEX_STATE_TOKEN_KEY, readIndexState } from "./state.js";
@@ -20,6 +21,11 @@ async function index(r: TestRepo) {
   const opened = openProjectGraphStore(r.root);
   if (opened.value === undefined) throw new Error(JSON.stringify(opened.diagnostics));
   try { return await indexRepository(r.root, { store: opened.value, registry }); } finally { opened.value.close(); }
+}
+async function inspect(r: TestRepo) {
+  const opened = openProjectGraphReader(r.root);
+  if (opened.value === undefined) throw new Error(JSON.stringify(opened.diagnostics));
+  try { return (await inspectIndex(r.root, { graph: opened.value, registry })).value?.status; } finally { opened.value.close(); }
 }
 function assertConsistent(r: TestRepo) {
   const state = readIndexState(r.root).state;
@@ -225,4 +231,35 @@ describe("safe index recovery and shared writer lock", () => {
     expect(result.value).toBeUndefined();
     expect(result.diagnostics[0]?.message).toContain("inputs changed");
   }, 60_000);
+  // F3 (T182 maintainer decision): an explicit index keeps its pre-#143 scope. A run that writes nothing
+  // does not read its inputs a second time, and a change after the pre-commit check is not re-checked.
+  // Such a run may report success, but the database token, index-state.json and the fingerprint file
+  // must still agree, and the next run must see the change as stale and index it.
+  for (const when of ["no-op run", "after the commit"] as const) {
+    it(`keeps DB token, index state and fingerprints consistent when a source changes ${when} of an explicit index (F3)`, async () => {
+      const r = repo();
+      expect((await index(r)).value).toBeDefined();
+      if (when === "after the commit") r.write("src/a.ts", "export const a = 2;\n");
+      const store = openProjectGraphStore(r.root).value!;
+      const token = store.readMeta(INDEX_STATE_TOKEN_KEY);
+      let result;
+      try {
+        result = await indexRepository(r.root, { store, registry, onPhase: (phase) => {
+          if (phase === (when === "no-op run" ? "analysis" : "write")) r.write("src/a.ts", "export const a = 9;\n");
+        } });
+      } finally { store.close(); }
+      expect(result.value).toBeDefined();
+      expect(result.value?.metrics.graph.written).toBe(when === "after the commit");
+      assertConsistent(r);
+      const state = readIndexState(r.root).state;
+      if (when === "no-op run") expect(state?.token).toBe(token);
+      else expect(state?.token).not.toBe(token);
+      expect(await inspect(r)).toBe("stale");
+      const next = await index(r);
+      expect(next.value?.metrics.files.changed).toBe(1);
+      assertConsistent(r);
+      expect(await inspect(r)).toBe("current");
+      expect(r.read("src/a.ts")).toBe("export const a = 9;\n");
+    }, 60_000);
+  }
 });
