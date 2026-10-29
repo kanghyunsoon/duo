@@ -14,6 +14,8 @@ Protocol and results: [docs/validation/value-validation-01](../../docs/validatio
 | `aggregate.mjs` | Turns results into the protocol's tables; unmeasured values stay NOT MEASURED | no |
 | `measure.mjs` | Pure measurement helpers used by `agent.mjs` and `aggregate.mjs`: Codex event parsing (usage `null` unless every `turn.completed` event has complete usage; cached `null` unless every event reports it), totals and medians that become `null` when any run value is missing, measured-run counts | no |
 | `measure.test.mjs` | Regression tests for the NOT MEASURED rule, run by `pnpm test` and CI (`vitest.config.ts` includes `bench/value-validation/**/*.test.mjs`) | no |
+| `process.mjs` | Process control shared by `agent.mjs` and `discovery.mjs` (#66). Starts the agent without a shell-joined command line: an npm `.cmd` shim runs through `cmd.exe /d /s /c` with each argument quoted and escaped, an `.exe` runs directly. A timeout is the timer's own `timedOut` flag. It stops the whole process tree the harness started: on Windows `taskkill /PID <root> /T /F` on its own still-running root, on POSIX the child's process group (SIGTERM, then SIGKILL). The session ends only when the child's stdio has closed. If the tree has not ended within the deadline, the session records `terminated: false`, the run is recorded as `kill-failed`, and the harness stops before the next run | no |
+| `process.test.mjs` | Regression tests for `process.mjs` with harmless local Node parent and grandchild processes (on Windows through a copy of npm's `codex.cmd` shim in a path with spaces), run by `pnpm test` and CI | no |
 | `results/detection-01.json` | Part 1 raw result (2026-10-15) | |
 
 ```bash

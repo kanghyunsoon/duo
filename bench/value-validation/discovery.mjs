@@ -9,9 +9,10 @@
 // --i-understand-this-uses-codex; --dry-run prepares everything and measures startup only.
 //   node bench/value-validation/discovery.mjs --out <dir> [--versions 0.3.2,0.3.3] [--runs 10] [--timeout-min 10]
 //        (--dry-run | --model <model> --i-understand-this-uses-codex)
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { installSignalCleanup, startProcess } from "./process.mjs";
 
 const a = process.argv.slice(2);
 const arg = (n, d) => (a.includes(n) ? a[a.indexOf(n) + 1] : d);
@@ -74,13 +75,12 @@ function session(v, inst, root, i) {
     const args = ["exec", "--json", "--skip-git-repo-check", "-s", "read-only", "-C", root, "-m", model, "-o", base + ".final.txt", "-c", 'approval_policy="never"', "-c", 'projects."' + root.replaceAll("\\", "\\\\") + '".trust_level="trusted"', "-"];
     const env = { ...process.env, PATH: inst.bin + path.delimiter + process.env.PATH };
     const t = performance.now(); let firstDuoMs = null; let buf = "";
-    const p = spawn("codex", args, { cwd: root, env, shell: IS_WIN, windowsHide: true });
+    // Issue #66: no shell-joined command line, and a timeout stops the whole process tree (process.mjs).
+    const { child: p, result } = startProcess("codex", args, { cwd: root, env, input: PROMPT, timeoutMs: timeoutMin * 60_000 });
     const log = fs.createWriteStream(base + ".events.jsonl");
     p.stdout.on("data", (d) => { log.write(d); buf += d; if (firstDuoMs === null && /"server":"duo-director"|"tool":"duo_/u.test(buf)) firstDuoMs = Math.round(performance.now() - t); });
-    p.stdin.end(PROMPT);
-    const timer = setTimeout(() => p.kill(), timeoutMin * 60_000);
-    p.on("close", (code) => {
-      clearTimeout(timer); log.end();
+    result.then(({ exit: code, timedOut, terminated, killAttempts, pid, spawnError }) => {
+      log.end();
       const ev = { mcp: [], cli: 0, usage: { input: 0, cached: 0, output: 0 } };
       for (const line of buf.split(/\r?\n/u)) { let e; try { e = JSON.parse(line); } catch { continue; }
         if (e.type === "turn.completed" && e.usage) { ev.usage.input += e.usage.input_tokens ?? 0; ev.usage.cached += e.usage.cached_input_tokens ?? 0; ev.usage.output += e.usage.output_tokens ?? 0; }
@@ -88,7 +88,7 @@ function session(v, inst, root, i) {
         if (it.type === "mcp_tool_call" && (it.server === "duo-director" || /^duo_/u.test(it.tool ?? ""))) ev.mcp.push({ tool: it.tool, status: it.status, error: it.error ?? null });
         if (it.type === "command_execution" && /duoctl/u.test(it.command ?? "")) ev.cli++; }
       const first = ev.mcp[0];
-      resolve({ version: v, run: i, exit: code, wallSeconds: Math.round((performance.now() - t) / 100) / 10, found: ev.mcp.length > 0, firstCallOk: first === undefined ? null : first.status === "completed" && first.error === null, firstTool: first?.tool ?? null, duoMcpCalls: ev.mcp.length, cliFallback: ev.mcp.length === 0 && ev.cli > 0, firstDuoEventMs: firstDuoMs, usage: ev.usage });
+      resolve({ version: v, run: i, exit: code, timedOut, ...(timedOut ? { terminated, killAttempts, pid } : {}), ...(spawnError === undefined ? {} : { spawnError }), wallSeconds: Math.round((performance.now() - t) / 100) / 10, found: ev.mcp.length > 0, firstCallOk: first === undefined ? null : first.status === "completed" && first.error === null, firstTool: first?.tool ?? null, duoMcpCalls: ev.mcp.length, cliFallback: ev.mcp.length === 0 && ev.cli > 0, firstDuoEventMs: firstDuoMs, usage: ev.usage });
     });
   });
 }
@@ -100,12 +100,14 @@ const report = { format: "duo.value-validation-discovery/1", model: model ?? nul
 console.log(JSON.stringify(report.versions));
 if (!dryRun) {
   if (model === undefined || !a.includes("--i-understand-this-uses-codex")) throw new Error("real sessions need --model <model> and --i-understand-this-uses-codex (they use the runner's Codex quota)");
+  installSignalCleanup();
   for (let i = 1; i <= runs; i++) for (const v of i % 2 === 1 ? versions : [...versions].reverse()) {
     const s = await session(v, inst[v], roots[v], i); report.sessions.push(s);
     fs.writeFileSync(path.join(out, "discovery.json"), JSON.stringify(report, null, 2));
+    if (s.timedOut && s.terminated !== true) throw new Error(v + " run " + i + " did not stop after the " + timeoutMin + "-minute timeout (root PID " + s.pid + "); stopped before the next session. End that process tree, then rerun.");
     console.log(v, i, s.found ? "found " + s.firstTool + (s.firstCallOk ? " ok" : " FAILED") : s.cliFallback ? "cli fallback" : "none", s.wallSeconds + "s");
   }
-  report.summary = Object.fromEntries(versions.map((v) => { const s = report.sessions.filter((x) => x.version === v); return [v, { sessions: s.length, found: s.filter((x) => x.found).length, firstCallOk: s.filter((x) => x.firstCallOk === true).length, cliFallback: s.filter((x) => x.cliFallback).length, none: s.filter((x) => !x.found && !x.cliFallback).length }]; }));
+  report.summary = Object.fromEntries(versions.map((v) => { const s = report.sessions.filter((x) => x.version === v); return [v, { sessions: s.length, found: s.filter((x) => x.found).length, firstCallOk: s.filter((x) => x.firstCallOk === true).length, cliFallback: s.filter((x) => x.cliFallback).length, none: s.filter((x) => !x.found && !x.cliFallback).length, timedOut: s.filter((x) => x.timedOut).length }]; }));
 }
 fs.writeFileSync(path.join(out, "discovery.json"), JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report.summary ?? { dryRun: true }));
