@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createDiagnostic, failure, requireCompleteTruth, loadProjectTruth, success, type ParseResult } from "@duo-director/core";
-import { GRAPH_DB_FILE_PATH, indexRepository, openProjectGraphReader, openProjectGraphStore, type IndexOptions } from "./indexer.js";
+import { createDiagnostic, failure, requireCompleteTruth, loadProjectTruth, success, type ParseResult, type RepoPath } from "@duo-director/core";
+import { GRAPH_DB_FILE_PATH, indexRepository, openProjectGraphReader, openProjectGraphStore, sameScanAndGit, takeScanSnapshot, type IndexOptions } from "./indexer.js";
+import { hashOnDisk } from "./assess.js";
 import { inspectIndex } from "./inspect.js";
 import { withIndexWriteLock, type IndexWriteLockOptions } from "./write-lock.js";
 import { INDEX_STATE_TOKEN_KEY, readIndexState } from "./state.js";
@@ -25,10 +26,17 @@ async function refreshUnderGuard(root: string, options: RefreshIndexOptions): Pr
     const truth = requireCompleteTruth(loadProjectTruth(root));
     if (truth.value === undefined) return failure(truth.diagnostics);
     const truthSignature = JSON.stringify(truth.value.truth);
-    // Files, configs and Git state are verified by the indexer before its write and by the inspection
-    // after it (T180: no separate full-repository snapshot). Truth is compared here as well because the
-    // loader also reads Truth files the scan does not see; those are refused below anyway.
-    const stable = async () => JSON.stringify(loadProjectTruth(root).value?.truth) === truthSignature;
+    // Recovery reports success only if nothing it reads changed during the whole call (T181 review): the
+    // configured scan, its fingerprints and the Git state, the configuration files the last run resolved
+    // with, and the loaded Truth are taken at the start and compared before returning. The explicit CLI
+    // index does not pay for this (its own guard checks once before writing).
+    const scope = { include: truth.value.truth.config.index.include, exclude: truth.value.truth.config.index.exclude };
+    const configsAtStart = new Map(Object.keys(readIndexState(root).state?.configs ?? {}).map((c) => [c, hashOnDisk(root, c as RepoPath)] as const));
+    const snapshot = await takeScanSnapshot(root, scope);
+    if (snapshot === undefined) return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: the repository or its Git state could not be read")]);
+    const stable = async () => await sameScanAndGit(root, scope, snapshot)
+      && [...configsAtStart].every(([c, h]) => hashOnDisk(root, c as RepoPath) === h)
+      && JSON.stringify(loadProjectTruth(root).value?.truth) === truthSignature;
     const moved = () => failure<RefreshIndexResult>([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: repository inputs changed during recovery")]);
     const dbFile = path.join(path.resolve(root), GRAPH_DB_FILE_PATH);
     const identity = fs.existsSync(dbFile) ? fs.statSync(dbFile) : undefined;
