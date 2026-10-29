@@ -253,7 +253,7 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
       const r = p as unknown as ReviewResult;
       if (r.status === "index-required") return "INDEX_REQUIRED: the DUO index is not current. Run duoctl index, then review again.";
       // C241: a Decision claim carries its lifecycle (current authority, supersedes, superseded by) in the tag list.
-      const tags = (c: ReviewResult["claims"][number]) => [...(c.blockEligible ? ["blocking"] : []), ...(c.decisionAuthority === undefined ? [] : decisionAuthorityParts(c.decisionAuthority))];
+      const tags = (c: ReviewResult["claims"][number]) => [...(c.blockEligible ? ["blocking"] : []), ...(c.informational === true ? ["information"] : []), ...(c.decisionAuthority === undefined ? [] : decisionAuthorityParts(c.decisionAuthority))];
       const lines = r.claims.filter((c) => c.alignment !== "ALIGNED").map((c) => `- ${c.alignment} ${c.rule} ${c.subject.id}: ${c.reason}${c.provenance === undefined ? "" : ` (${provenanceLabel(c.provenance)})`}${tags(c).length === 0 ? "" : ` [${tags(c).join("; ")}]`}`);
       const a = r.semanticAssist;
       const semantic = a.status === "not-requested" ? [] : [

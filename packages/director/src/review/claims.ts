@@ -57,6 +57,8 @@ export interface ClaimInput {
   readonly enforced?: boolean;
   readonly drift?: boolean;
   readonly semantic?: boolean;
+  /** H-100: shown but never a WARN or BLOCK basis. */
+  readonly informational?: boolean;
   /**
    * Baseline rules: the stable violation key and whether this diff changed the offending or governing
    * entity. language: for a symbol violation, the language of the symbol's file (T18.0).
@@ -92,6 +94,7 @@ export function makeClaim(ctx: RuleContext, input: ClaimInput): ReviewClaim | un
     blockEligible: input.alignment === "CONFLICT" && enforced && blockEligible(basis) && !preExisting && provenance !== "unverified-at-adoption",
     drift: input.drift ?? false, semanticCandidate: input.semantic ?? false,
     ...(v === undefined ? {} : { violationKey: v.key }), ...(provenance === undefined ? {} : { provenance }),
+    ...(input.informational === true ? { informational: true as const } : {}),
   };
 }
 

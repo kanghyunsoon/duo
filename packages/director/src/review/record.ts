@@ -79,6 +79,7 @@ export function reviewRecordBody(result: ReviewResult): Record<string, unknown> 
       id: c.id, rule: c.rule, subject: c.subject, alignment: c.alignment, reason: c.reason, evidenceIds: c.evidenceIds, basis: c.basis,
       enforced: c.enforced, blockEligible: c.blockEligible, drift: c.drift, semanticCandidate: c.semanticCandidate,
       ...(c.violationKey === undefined ? {} : { violationKey: c.violationKey }), ...(c.provenance === undefined ? {} : { provenance: c.provenance }),
+      ...(c.informational === true ? { informational: true } : {}),
     })),
     evidence: result.evidence.map((e) => ({
       id: e.id, basis: e.basis, kind: e.kind, ...(e.contentHash === undefined ? {} : { contentHash: e.contentHash }), pointer: e.pointer,
