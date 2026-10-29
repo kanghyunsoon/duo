@@ -24,8 +24,11 @@
  *   Stage 1 (L1-C): no claim, an `imports-through-reexport` limitation that names the chain, PASS.
  *   Binding-level origin matching is #49 Stage 2.
  * - P8a: The `from` side did not resolve (the import pointed to a missing file) and the `to` side now
- *   resolves to `legacy-db`. Current `next` behavior: `introduced`, BLOCK, because the pair is not in
- *   the baseline.
+ *   resolves to `legacy-db`. Before H-99: `introduced`, BLOCK, because the pair is not in the baseline.
+ *   Since H-99 (#48 P8a): the claim stays, `unverified-at-adoption`, not BLOCK-eligible, with the
+ *   `imports-from-side-unresolved` limitation (`path:line`), WARN. Still BLOCK (H-99 (2)): a new import
+ *   statement, a from side that resolved to another file (`src/ui/modern-page.ts` → `modern-db`), a new
+ *   file, and a specifier change together with a new statement of the same pair.
  * - P8b: The `to` side no longer resolves. Current `next` behavior: no claim, `imports-unresolved`
  *   limitation, PASS.
  * - N1: A change inside the function body that does not touch the import line. Current `next`
@@ -102,6 +105,9 @@ const FILES: Record<string, string> = {
     'import type { LegacyRow } from "../db/legacy-db.js";\n\nexport function rowId(row: LegacyRow): string {\n  return row.id;\n}\n',
   "src/ui/archive-page.ts":
     'import { legacyQuery } from "../db/legacy-db-v0.js";\n\nexport function renderArchive(): string {\n  return legacyQuery("a");\n}\n',
+  "src/db/modern-db.ts": "export function legacyQuery(sql: string): string {\n  return sql.trim();\n}\n",
+  "src/ui/modern-page.ts":
+    'import { legacyQuery } from "../db/modern-db.js";\n\nexport function renderModern(): string {\n  return legacyQuery("m");\n}\n',
 };
 
 beforeAll(async () => {
@@ -266,24 +272,50 @@ describe("Issue #48: forbidden-import adoption provenance pinned fixtures (P1–
     expect(res.verdict).toBe("PASS");
   });
 
-  it("P8a: pins current next behavior (the from side did not resolve and the to side now resolves to legacy-db: introduced, BLOCK)", async () => {
+  it("P8a (H-99): the from side did not resolve and the to side now resolves to legacy-db: claim kept, not BLOCK-eligible, imports-from-side-unresolved, WARN", async () => {
     const res = await scenario((r) => r.edit("src/ui/archive-page.ts", '"../db/legacy-db-v0.js"', '"../db/legacy-db.js"'));
     const claims = forbiddenImports(res);
     expect(claims).toHaveLength(1);
     expect(claims[0]).toMatchObject({
       alignment: "CONFLICT",
       reason: "forbidden-import",
-      provenance: "introduced",
-      blockEligible: true,
+      provenance: "unverified-at-adoption",
+      blockEligible: false,
       violationKey: pairKey("src/ui/archive-page.ts"),
     });
-    expect(importLimits(res)).toEqual([]);
-    expect(res.verdict).toBe("BLOCK");
+    expect(importLimits(res)).toEqual(["imports-from-side-unresolved"]);
+    expect(res.limitations.find((l) => l.code === "imports-from-side-unresolved")?.message).toContain("src/ui/archive-page.ts:1");
+    expect(res.verdict).toBe("WARN");
   });
 
-  it.todo(
-    "P8a follow-up (#48 direction item 5): confirm whether a pair whose from side did not resolve at the baseline must become a limitation instead of BLOCK",
-  );
+  /** One introduced, BLOCK-eligible claim on `source` → legacy-db and no imports-* limitation (H-99 (2)). */
+  const expectIntroduced = (res: ReviewResult, source: string) => {
+    const claims = forbiddenImports(res);
+    expect(claims).toHaveLength(1);
+    expect(claims[0]).toMatchObject({ provenance: "introduced", blockEligible: true, violationKey: pairKey(source) });
+    expect(importLimits(res)).toEqual([]);
+    expect(res.verdict).toBe("BLOCK");
+  };
+
+  it("P8a control (H-99 (2)): a new import statement in the file with the unresolved import is still introduced, BLOCK", async () => {
+    expectIntroduced(await scenario((r) => r.edit("src/ui/archive-page.ts", '"../db/legacy-db-v0.js";\n', '"../db/legacy-db-v0.js";\nimport { legacyCount } from "../db/legacy-db.js";\n')), "src/ui/archive-page.ts");
+  });
+
+  it("P8a control (H-99 (2)): a from side that resolved to another file (modern-db) and now resolves to legacy-db is still introduced, BLOCK", async () => {
+    expectIntroduced(await scenario((r) => r.edit("src/ui/modern-page.ts", '"../db/modern-db.js"', '"../db/legacy-db.js"')), "src/ui/modern-page.ts");
+  });
+
+  it("P8a control (H-99 (2)): a new file importing legacy-db is still introduced, BLOCK", async () => {
+    expectIntroduced(await scenario((r) => r.write("src/ui/new-page.ts", 'import { legacyQuery } from "../db/legacy-db.js";\n\nexport const n = legacyQuery("n");\n')), "src/ui/new-page.ts");
+  });
+
+  it("P8a control (H-99 (2)): the unresolved specifier replaced together with a new statement of the same pair is still introduced, BLOCK", async () => {
+    expectIntroduced(await scenario((r) => r.edit(
+      "src/ui/archive-page.ts",
+      'import { legacyQuery } from "../db/legacy-db-v0.js";\n',
+      'import { legacyQuery } from "../db/legacy-db.js";\n\nexport { legacyCount } from "../db/legacy-db.js";\n',
+    )), "src/ui/archive-page.ts");
+  });
 
   it("P8b: pins current next behavior (the to side no longer resolves: no claim, imports-unresolved limitation, PASS)", async () => {
     const res = await scenario((r) => r.edit("src/ui/orders-page.ts", '"../db/legacy-db.js"', '"../db/legacy-db-v0.js"'));

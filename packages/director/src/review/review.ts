@@ -223,7 +223,8 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
     ...(adoption.baseline === undefined ? {} : { baselineKeys: new Set(adoption.baseline.findings.map((f) => f.key)) }),
     ...(adoption.baseline === undefined ? {} : { baselineStructuralLanguages: new Set(adoption.baseline.analysis?.structuralLanguages ?? PRE_T18_STRUCTURAL_LANGUAGES) }),
     ...(adoption.baseline?.evaluatedRules === undefined ? {} : { baselineEvaluatedRules: new Set<string>(adoption.baseline.evaluatedRules) }),
-    ...(adoption.baseline === undefined ? {} : { baselineRecordedAt: adoption.baseline.recorded.at }),
+    ...(adoption.baseline === undefined ? {} : { baselineRecordedAt: adoption.baseline.recorded.at, baselineHeadOid: adoption.baseline.git.headOid }),
+    ...(options.registry === undefined ? {} : { registry: options.registry }),
   };
   const integrity = await decisionIntegrity(ctx);
   const forbids = await decisionForbids(ctx);
