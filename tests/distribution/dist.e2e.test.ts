@@ -102,6 +102,8 @@ describe("the packed artifact (npm pack is the oracle)", () => {
     expect(m.scripts).toBeUndefined();
     expect(m.devDependencies).toBeUndefined();
     expect(m.private).toBeUndefined();
+    // MCP Registry ownership check (T178): the published package.json carries the server.json name.
+    expect(m.mcpName).toBe(JSON.parse(fs.readFileSync(path.join(REPO, "server.json"), "utf8")).name);
     for (const [n, v] of Object.entries(m.dependencies as Record<string, string>)) {
       expect(v, n).toMatch(/^\d+\.\d+\.\d+$/u);
       expect(n).not.toMatch(/^@duo-director\/|^tree-sitter-/u);
