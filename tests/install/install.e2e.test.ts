@@ -260,6 +260,11 @@ describe("duoctl install remove on configuration DUO created (#6)", () => {
       const before = stable(p);
       expect(install(p, ["remove", agent, "--yes"]).json().result.plan.noop).toBe(true);
       expect(stable(p)).toEqual(before);
+      // #109: a no-op remove must not say "Already configured" — nothing is.
+      const secondHuman = duoctl(p.root, ["install", "remove", agent, "--yes"], "", env);
+      const out = secondHuman.stdout + secondHuman.stderr;
+      expect(out).toContain("DUO is not configured for");
+      expect(out).not.toContain("Already configured");
     }
   });
 });
