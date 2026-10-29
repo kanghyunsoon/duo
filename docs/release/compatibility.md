@@ -114,6 +114,7 @@
 | Verdict | TS·JS `import()`·`require()`의 치환 없는 template literal(`` import(`../db/x.js`) ``)이 같은 문자열 literal과 같은 module reference다(#50 L2b, H-90). 금지 대상이면 새로 생긴 쌍은 `forbidden-import` BLOCK, Adoption Baseline에 있는 쌍은 WARN. 치환이 있는 template·식은 그대로 `imports-unresolved`(#50 L2a) |
 | Index | TS/JS analyzer identity(`facts=template-imports-1`)가 바뀌어 기존 index는 stale이고 다음 `duoctl index` 한 번으로 current가 된다. index state 형식은 그대로 |
 | Downgrade | `importer_paths`를 쓰는 저장소를 0.2.2+·0.3.x·0.4.0-rc.1로 열면 `SCHEMA_UNKNOWN_PROPERTY`로 `PROJECT_TRUTH_INVALID`(fail-closed, H-75). Decision이 조용히 빠지지 않는다 |
+| Verdict | Review의 task scope(#58 C260 Fix B, H-91): task seed가 직접 고른 Symbol·Test의 소유 파일이 task scope에 들어가, 같은 파일의 다른 수정이 `outside-task-context` WARN 대신 `in-task-context`가 된다. CALLS·IMPORTS 이웃이나 `omittedCandidates`의 파일은 넣지 않는다. context packet·저장 데이터는 그대로이고 review 시점 계산만 바뀐다 |
 
 ## 0.3.3 변경 분류 (T78, H-87)
 
