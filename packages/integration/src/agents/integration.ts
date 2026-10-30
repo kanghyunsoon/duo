@@ -232,6 +232,11 @@ export function agentIntegrationStatus(root: string): AgentIntegrationState[] {
 export interface PlanOptions {
   readonly launcher?: DuoLauncher;
   readonly host?: HostEnvironment;
+  /**
+   * duoctl setup (Jira S15P31A106-319): plan as if Project Truth already existed, because the same confirmed setup
+   * creates it before this plan is applied. Only AGENT_NOT_INITIALIZED is skipped; conflicts and launcher problems still block.
+   */
+  readonly assumeInitialized?: boolean;
 }
 
 const fileAction = (before: string | undefined, next: string | null | undefined): FileAction =>
@@ -254,7 +259,7 @@ export function planAgentIntegration(root: string, agent: AgentId, options: Plan
   const conflicts: IntegrationConflict[] = [];
   const warnings: string[] = [];
   const ownership = readOwnership(root, adapter);
-  if (!initialized(root)) blockers.push(createDiagnostic("AGENT_NOT_INITIALIZED", `${root} is not a DUO project yet: run duoctl init first (install never initializes)`));
+  if (options.assumeInitialized !== true && !initialized(root)) blockers.push(createDiagnostic("AGENT_NOT_INITIALIZED", `${root} is not a DUO project yet: run duoctl init first (install never initializes)`));
   const launch = checkLauncher(root, launcher, effectiveLauncherHost(launcher, options.host ?? currentHost()));
   blockers.push(...launch.diagnostics);
   warnings.push(...launch.warnings);
