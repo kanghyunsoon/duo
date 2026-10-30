@@ -13,6 +13,16 @@ export interface IndexWriteLockOptions { readonly lockTimeoutMs?: number }
 export interface IndexWriteLease { readonly root: string }
 const leases = new WeakMap<IndexWriteLease, { active: boolean; indexing: boolean; pending: Set<Promise<unknown>> }>();
 
+/** A symlink, whether or not its target exists (existsSync follows links and misses dangling ones). */
+function isSymlink(entry: string): boolean {
+  try {
+    return fs.lstatSync(entry).isSymbolicLink();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
 export async function finishIndexWriteLease(lease: IndexWriteLease): Promise<void> {
   const state = leases.get(lease);
   if (state === undefined) return;
@@ -47,11 +57,11 @@ export async function withIndexWriteLock<T>(root: string, fn: (lease: IndexWrite
   const timeout = options.lockTimeoutMs ?? 5000;
   if (!Number.isFinite(timeout) || timeout < 0) return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Index lock timeout must be a finite non-negative number")]);
   const deadline = performance.now() + timeout;
-  // Reject symlinked write directories or lock file before creating anything outside this worktree.
+  // Reject symlinked write directories, lock file or journal path (also dangling ones) before SQLite
+  // could follow them and create a file outside this worktree (#148 review).
   try {
-    for (const relative of [STATE_DIR_NAME, `${STATE_DIR_NAME}/generated`, INDEX_WRITE_LOCK_PATH]) {
-      const entry = path.join(rootDir, relative);
-      if (fs.existsSync(entry) && fs.lstatSync(entry).isSymbolicLink()) {
+    for (const relative of [STATE_DIR_NAME, `${STATE_DIR_NAME}/generated`, INDEX_WRITE_LOCK_PATH, `${INDEX_WRITE_LOCK_PATH}-journal`]) {
+      if (isSymlink(path.join(rootDir, relative))) {
         return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Index lock refused: symlink ${relative}`)]);
       }
     }
