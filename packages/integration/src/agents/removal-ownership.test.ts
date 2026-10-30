@@ -38,43 +38,40 @@ describe("file ownership across install and remove (#104, H-94)", () => {
     const emptyConfig = adapter.id === "codex" ? "" : '{\n  "mcpServers": {}\n}\n';
     const record = `.duo-project/runtime/agent-integration/${adapter.id}.json`;
 
-    it(`${adapter.id}: preserves an existing empty config and bridge (tracked or untracked, LF or CRLF) through repeated install, update and remove`, async () => {
-      for (const tracked of [false, true]) {
-        const f = fixture();
-        const cfg = adapter.id === "codex" ? "" : "{\r\n  \"mcpServers\": {}\r\n}";
-        f.write(adapter.mcpTarget, cfg);
-        f.write(adapter.bridgeTarget, "");
-        if (tracked) {
-          execFileSync("git", ["init", "-q"], { cwd: f.root });
-          execFileSync("git", ["config", "user.name", "Test"], { cwd: f.root });
-          execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: f.root });
-          execFileSync("git", ["add", adapter.mcpTarget, adapter.bridgeTarget], { cwd: f.root });
-          execFileSync("git", ["commit", "-qm", "empty user files"], { cwd: f.root });
-        }
-        const install = () => planAgentIntegration(f.root, adapter.id, { host: f.host });
-        expect((await applyAgentIntegration(f.root, install())).diagnostics).toEqual([]);
-        expect(install().noop).toBe(true);
-        expect((await applyAgentIntegration(f.root, install())).value?.changed).toEqual([]);
-        // Updating the bridge must not reclassify an existing file as DUO-created (H-94 (11)).
-        f.write(adapter.bridgeTarget, f.read(adapter.bridgeTarget).replace("Before substantial work", "Before old work"));
-        expect((await applyAgentIntegration(f.root, install())).diagnostics).toEqual([]);
-
-        const stored = JSON.parse(f.read(record)) as { targets: Record<string, { existedBefore: boolean; preSha256: string | null; postSha256: string }> };
-        expect(stored.targets[adapter.mcpTarget]?.existedBefore).toBe(true);
-        expect(stored.targets[adapter.bridgeTarget]?.existedBefore).toBe(true);
-
-        const removal = planAgentRemoval(f.root, adapter.id);
-        expect(removal.willDelete).toEqual([]);
-        expect(removal.willModify).toEqual([adapter.mcpTarget, adapter.bridgeTarget]);
-        expect(removal.warnings.join(" ")).toContain(`keep ${adapter.mcpTarget} (it existed before DUO)`);
-        expect(removal.warnings.join(" ")).toContain(`keep ${adapter.bridgeTarget} (it existed before DUO)`);
-        expect((await applyAgentIntegration(f.root, removal)).diagnostics).toEqual([]);
-        expect(f.read(adapter.mcpTarget)).toBe(cfg);
-        expect(f.read(adapter.bridgeTarget)).toBe("");
-        expect(inspectAgentIntegration(f.root, adapter.id).status).toBe("not-configured");
-        expect(planAgentRemoval(f.root, adapter.id).noop).toBe(true);
-        expect(fs.existsSync(path.join(f.root, record))).toBe(false);
+    // One `it` per Git state, so each has its own time budget on a loaded Windows runner (#136).
+    it.each([false, true])(`${adapter.id}: preserves an existing empty config and bridge (Git-tracked: %s, LF or CRLF) through repeated install, update and remove`, async (tracked) => {
+      const f = fixture();
+      const cfg = adapter.id === "codex" ? "" : "{\r\n  \"mcpServers\": {}\r\n}";
+      f.write(adapter.mcpTarget, cfg);
+      f.write(adapter.bridgeTarget, "");
+      if (tracked) {
+        // Staged is enough to be tracked, and DUO never reads Git: two git processes instead of five (#136).
+        execFileSync("git", ["init", "-q"], { cwd: f.root });
+        execFileSync("git", ["add", adapter.mcpTarget, adapter.bridgeTarget], { cwd: f.root });
       }
+      const install = () => planAgentIntegration(f.root, adapter.id, { host: f.host });
+      expect((await applyAgentIntegration(f.root, install())).diagnostics).toEqual([]);
+      expect(install().noop).toBe(true);
+      expect((await applyAgentIntegration(f.root, install())).value?.changed).toEqual([]);
+      // Updating the bridge must not reclassify an existing file as DUO-created (H-94 (11)).
+      f.write(adapter.bridgeTarget, f.read(adapter.bridgeTarget).replace("Before substantial work", "Before old work"));
+      expect((await applyAgentIntegration(f.root, install())).diagnostics).toEqual([]);
+
+      const stored = JSON.parse(f.read(record)) as { targets: Record<string, { existedBefore: boolean; preSha256: string | null; postSha256: string }> };
+      expect(stored.targets[adapter.mcpTarget]?.existedBefore).toBe(true);
+      expect(stored.targets[adapter.bridgeTarget]?.existedBefore).toBe(true);
+
+      const removal = planAgentRemoval(f.root, adapter.id);
+      expect(removal.willDelete).toEqual([]);
+      expect(removal.willModify).toEqual([adapter.mcpTarget, adapter.bridgeTarget]);
+      expect(removal.warnings.join(" ")).toContain(`keep ${adapter.mcpTarget} (it existed before DUO)`);
+      expect(removal.warnings.join(" ")).toContain(`keep ${adapter.bridgeTarget} (it existed before DUO)`);
+      expect((await applyAgentIntegration(f.root, removal)).diagnostics).toEqual([]);
+      expect(f.read(adapter.mcpTarget)).toBe(cfg);
+      expect(f.read(adapter.bridgeTarget)).toBe("");
+      expect(inspectAgentIntegration(f.root, adapter.id).status).toBe("not-configured");
+      expect(planAgentRemoval(f.root, adapter.id).noop).toBe(true);
+      expect(fs.existsSync(path.join(f.root, record))).toBe(false);
     });
 
     it(`${adapter.id}: deletes files DUO created when their digest still matches postSha256, even after a bridge update`, async () => {

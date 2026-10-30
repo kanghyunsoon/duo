@@ -9,6 +9,7 @@
 - `v*` tag: maintainer만 만든다. 한 번 만든 tag는 누구도 옮기거나 지우지 못한다.
 - force push와 branch 삭제는 maintainer를 포함해 누구도 하지 못한다.
 - 기존 release 절차(`next` → `main` fast-forward, release 기록 commit, annotated tag push)는 maintainer의 admin bypass로 그대로 동작한다.
+- `.github/CODEOWNERS`(T178)는 리뷰 자동 요청용 권고 파일이다. `next-integration`의 `require_code_owner_review`는 `false`로 둔다. Code owner 승인을 필수로 바꾸는 것은 maintainer의 별도 결정이다.
 - merge 뒤 branch 자동 삭제는 끈 채로 둔다(`delete_branch_on_merge: false`). 저장소 merge 방식 설정은 바꾸지 않고, `next`의 ruleset이 squash만 허용한다.
 
 ## 2. 왜 다섯 개인가

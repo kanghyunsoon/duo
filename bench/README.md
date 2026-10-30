@@ -8,7 +8,9 @@ pnpm benchmark:mcp:smoke
 pnpm test:mcp-benchmark
 ```
 
-The full run uses 10 iterations and 8 concurrent servers. Override these with `--iterations N` and `--concurrency N` after invoking the script directly. Initialization, `tools/list`, and each tool call have a 30-second deadline; use `--timeout-ms N` to change it. Timeouts identify their stage in the JSON error list, close the server transport, and produce a non-zero exit code. JSON is written to stdout so callers can store it as an artifact. Diagnostic failures use stderr and a non-zero exit code.
+The full run uses 10 iterations and 8 concurrent servers. Override these with `--iterations N` and `--concurrency N` after invoking the script directly. Initialization, `tools/list`, and each tool call have a 30-second deadline; use `--timeout-ms N` to change it. Timeouts identify their stage in the JSON error list, close the server transport (and make sure the server process is gone), and produce a non-zero exit code. JSON is written to stdout so callers can store it as an artifact. `--scenario NAME` runs only one of the four scenarios; the timeout regression test (`tests/mcp-benchmark-timeout.test.ts`) uses `--scenario single-cold`.
+
+Exit codes: `0` every stage answered; `1` the JSON report lists stage errors (timeouts, tool or client errors); `2` the benchmark itself failed, such as an invalid argument, a setup error, or temporary fixture copies that could not be removed (usually because a server process is still running). With exit code 2, stdout is empty and the reason is on stderr.
 
 Four scenarios are reported:
 

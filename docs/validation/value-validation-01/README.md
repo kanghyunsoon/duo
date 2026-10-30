@@ -20,6 +20,7 @@ part4_human_steps: not-run  # 사람 단계의 시간 측정(설치, 승인, 검
 | [scenarios.md](scenarios.md) | 결정적 사례 17개의 정답과 검사 범위, 에이전트 작업 7개, 사람 단계 절차 |
 | [detection-results-01.md](detection-results-01.md) | Part 1 결과(실측) |
 | [report-template.md](report-template.md) | 최종 보고서 양식 |
+| [measurement-notes.md](measurement-notes.md) | Codex·Claude Code 토큰·시간의 출처, 정밀도, 가용성과 MEASURED·ESTIMATED·NOT MEASURED 기준 |
 | [bench/value-validation/](../../../bench/value-validation/README.md) | fixture, 사례, oracle, harness, 집계 도구 |
 
 ## 1. 질문

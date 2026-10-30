@@ -4,18 +4,21 @@ DUO 0.2.1을 독립 외부 maintainer가 자기 실제 repository에서 쓰는 �
 
 모집은 사람이 승인한 T33.1에서 시작했다(GitHub Discussion #1, 2026-10-04T09:37:54Z). 아래 상태 블록이 현재 값이다.
 
+> **Closed (H-95, 2026-10-26).** Maintainer가 사전 등록 일정과 평가를 마치기 전에 이 round를 중단했다. 이유: 참가자 확보 실패(공개 aggregate 전부 0, participant 없음), 장기 관찰의 운영 부담, 현재 단계에서 낮은 실행 가능성. 관찰이 없었으므로 §16·§17의 CONTINUE·KILL·INCONCLUSIVE 판정을 내리지 않았고, 기준에 따른 공식 실패 판정이 아니라 Maintainer 중단이다. 독립 참가자 실사용 성과는 확인되지 않았으며 제품 가치 검증 성공이 아니다. 아래 `recruitment_deadline`은 효력을 잃었다. 이 문서의 기준과 모집 이력은 기록으로 남긴다.
+
 ```yaml
 round: external-validation-01
 protocol_version: 1
 decision: H-67            # H-66 아래의 operational protocol
-status: recruiting        # not-started | recruiting | observing | paused | evaluating | closed
+status: closed            # not-started | recruiting | observing | paused | evaluating | closed
+closed_at: 2026-10-26     # H-95: maintainer cancelled before any participant; not a §16·§17 result
 duo_version: 0.2.1        # 모든 participant가 같은 공개 version을 쓴다
 recruitment_opened_at: 2026-10-04T09:37:54Z   # 첫 외부 message: GitHub Discussion #1 게시(server 시각, T33.1)
-recruitment_deadline: 2026-11-01T09:37:54Z    # recruitment_opened_at + 28 calendar days
+recruitment_deadline: 2026-11-01T09:37:54Z    # recruitment_opened_at + 28 calendar days (no longer in effect, H-95)
 recruitment_page: https://github.com/kanghyunsoon/duo/discussions/1
 outreach_window_ends: 2026-10-11T09:37:54Z    # 첫 7 days, Day 7 checkpoint(H-68)
 participants: []          # P1, P2, P3: day0, observation_start, observation_end, outcome
-result:                   # CONTINUE | KILL | INCONCLUSIVE
+result:                   # CONTINUE | KILL | INCONCLUSIVE; none recorded: no observation (H-95)
 ```
 
 자료:

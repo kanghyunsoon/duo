@@ -39,6 +39,12 @@ describe("Value Validation 01 measurement (NOT MEASURED rule)", () => {
     expect(parseEvents([usage(10, 2, 4), "", "garbage"].join("\n")).turns).toBe(1);
   });
 
+  it("parses the documented Codex turn usage fields without estimating missing cache usage", () => {
+    // https://developers.openai.com/blog/eval-skills: token usage is reported by turn.completed usage.
+    const documented = JSON.stringify({ type: "turn.completed", usage: { input_tokens: 5000, output_tokens: 900 } });
+    expect(parseEvents(documented).usage).toEqual({ input: 5000, cached: null, output: 900 });
+  });
+
   it("agentSummary marks a condition NOT MEASURED when one run lacks usage, and counts the measured runs", () => {
     const runs = [
       { condition: "A", status: "completed", wallSeconds: 10, usage: { input: 100, cached: 0, output: 10 }, events: { checkRuns: 1, reworkCycles: 0, proposals: 0 }, duo: { contextTokens: null } },
@@ -53,5 +59,21 @@ describe("Value Validation 01 measurement (NOT MEASURED rule)", () => {
     expect(s.B.inputTokens).toBe(50);
     expect(s.B.cachedInputTokens).toBeNull();
     expect(s.B.contextPacketTokens).toBeNull();
+  });
+
+  it("keeps stoppedToAsk NOT MEASURED until every run is classified", () => {
+    const s = agentSummary([
+      { condition: "A", oracle: { askedHuman: true } },
+      { condition: "A", oracle: { askedHuman: null } },
+      { condition: "B", oracle: { askedHuman: false } },
+      { condition: "C", oracle: { askedHuman: true } },
+      { condition: "C", oracle: { askedHuman: false } },
+    ]);
+    expect(s.A.stoppedToAsk).toBeNull();
+    expect(s.A.measuredRuns.stoppedToAsk).toBe(1);
+    expect(s.B.stoppedToAsk).toBe(0);
+    expect(s.B.measuredRuns.stoppedToAsk).toBe(1);
+    expect(s.C.stoppedToAsk).toBe(1);
+    expect(s.C.measuredRuns.stoppedToAsk).toBe(2);
   });
 });
