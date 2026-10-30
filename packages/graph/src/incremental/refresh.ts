@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createDiagnostic, failure, requireCompleteTruth, loadProjectTruth, success, type ParseResult } from "@duo-director/core";
-import { GRAPH_DB_FILE_PATH, indexRepository, openProjectGraphReader, openProjectGraphStore, type IndexOptions } from "./indexer.js";
+import { createDiagnostic, failure, requireCompleteTruth, loadProjectTruth, success, type ParseResult, type RepoPath } from "@duo-director/core";
+import { GRAPH_DB_FILE_PATH, indexRepository, openProjectGraphReader, openProjectGraphStore, sameScanAndGit, takeScanSnapshot, type IndexOptions } from "./indexer.js";
+import { hashOnDisk } from "./assess.js";
 import { inspectIndex } from "./inspect.js";
 import { withIndexWriteLock, type IndexWriteLockOptions } from "./write-lock.js";
-import { captureIndexInputs } from "./inputs.js";
 import { INDEX_STATE_TOKEN_KEY, readIndexState } from "./state.js";
 
 export interface RefreshIndexResult { readonly refreshed: boolean }
@@ -25,15 +25,18 @@ async function refreshUnderGuard(root: string, options: RefreshIndexOptions): Pr
   const locked = await withIndexWriteLock(root, async (lease): Promise<ParseResult<RefreshIndexResult>> => {
     const truth = requireCompleteTruth(loadProjectTruth(root));
     if (truth.value === undefined) return failure(truth.diagnostics);
-    const scope = { include: truth.value.truth.config.index.include, exclude: truth.value.truth.config.index.exclude };
     const truthSignature = JSON.stringify(truth.value.truth);
-    const extra = Object.keys(readIndexState(root).state?.configs ?? {});
-    const before = await captureIndexInputs(root, extra, scope);
-    if (before.value === undefined) return failure(before.diagnostics);
-    const stable = async () => {
-      const after = await captureIndexInputs(root, extra, scope);
-      return after.value?.signature === before.value?.signature && JSON.stringify(loadProjectTruth(root).value?.truth) === truthSignature;
-    };
+    // Recovery reports success only if nothing it reads changed during the whole call (T181 review): the
+    // configured scan, its fingerprints and the Git state, the configuration files the last run resolved
+    // with, and the loaded Truth are taken at the start and compared before returning. The explicit CLI
+    // index does not pay for this (its own guard checks once before writing).
+    const scope = { include: truth.value.truth.config.index.include, exclude: truth.value.truth.config.index.exclude };
+    const configsAtStart = new Map(Object.keys(readIndexState(root).state?.configs ?? {}).map((c) => [c, hashOnDisk(root, c as RepoPath)] as const));
+    const snapshot = await takeScanSnapshot(root, scope);
+    if (snapshot === undefined) return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: the repository or its Git state could not be read")]);
+    const stable = async () => await sameScanAndGit(root, scope, snapshot)
+      && [...configsAtStart].every(([c, h]) => hashOnDisk(root, c as RepoPath) === h)
+      && JSON.stringify(loadProjectTruth(root).value?.truth) === truthSignature;
     const moved = () => failure<RefreshIndexResult>([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: repository inputs changed during recovery")]);
     const dbFile = path.join(path.resolve(root), GRAPH_DB_FILE_PATH);
     const identity = fs.existsSync(dbFile) ? fs.statSync(dbFile) : undefined;
@@ -63,14 +66,22 @@ async function refreshUnderGuard(root: string, options: RefreshIndexOptions): Pr
     const writer = openProjectGraphStore(root, { existingOnly: true });
     if (writer.value === undefined) return failure(writer.diagnostics);
     try {
-      const indexed = await indexRepository(root, { ...options, store: writer.value, writeLease: lease, expectedToken });
+      // The resolver inputs this run read, including lookups of files that did not exist (an ignored
+      // tsconfig.json created after the commit is in neither the scan nor the recorded configurations).
+      let resolverInputsUnchanged = (): boolean => true;
+      const indexed = await indexRepository(root, {
+        ...options, store: writer.value, writeLease: lease, expectedToken,
+        onResolverInputs: (unchanged) => { resolverInputsUnchanged = unchanged; },
+      });
       if (indexed.value === undefined) return failure(indexed.diagnostics);
       if (indexed.diagnostics.some((d) => d.severity === "error")) return failure(indexed.diagnostics);
       const checked = await inspectIndex(root, { ...options, graph: writer.value });
+      // A file, config or Git change after the indexer's pre-write check shows up as stale here.
+      if (checked.value?.status === "stale") return moved();
       if (checked.value?.status !== "current" || checked.diagnostics.some((d) => d.severity === "error")) {
         return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh could not verify a current index after writing"), ...checked.diagnostics]);
       }
-      if (!await stable() || !sameIndex(readIndexState(root).state?.token)) return moved();
+      if (!await stable() || !resolverInputsUnchanged() || !sameIndex(readIndexState(root).state?.token)) return moved();
       return success({ refreshed: true }, indexed.diagnostics);
     } finally { writer.value.close(); }
   }, options);

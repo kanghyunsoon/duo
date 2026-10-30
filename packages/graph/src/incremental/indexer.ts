@@ -16,7 +16,6 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { createHash } from "node:crypto";
 import {
   compareFingerprints, computeContentHash, createDefaultAnalyzerRegistry, fingerprintRepositoryFiles, openGitProvider, probeWorkTree, scanRepository, writeFingerprintFile,
   type AnalyzerRegistry, type FileFingerprint, type GitRepositoryState,
@@ -44,7 +43,6 @@ import {
   type IndexedFileState, type IndexState,
 } from "./state.js";
 import type { AnalysisFreshness, FileFreshnessRecord, IndexMetrics, IndexResult, ModuleResolutionFreshness } from "./types.js";
-import { captureIndexInputs } from "./inputs.js";
 import { finishIndexWriteLease, useIndexWriteLease, withIndexWriteLock, type IndexWriteLease, type IndexWriteLockOptions } from "./write-lock.js";
 import { readIndexState } from "./state.js";
 
@@ -94,6 +92,12 @@ export interface IndexOptions extends IndexWriteLockOptions {
   readonly historyWindow?: number;
   /** Optional observation only; never enters persisted state or the deterministic result. */
   readonly onPhase?: (name: string, milliseconds: number) => void;
+  /**
+   * Recovery only (refreshIndexIfSafe): receives a check that every resolver input this run read, including
+   * configuration lookups that found no file, still reads the same. Recovery calls it again before it
+   * reports success; the explicit index does not (F3 scope, T182).
+   */
+  readonly onResolverInputs?: (unchanged: () => boolean) => void;
 }
 
 /** Digest of a scope without rows (the Project Truth scope always has the Project node, so this is a fallback). */
@@ -151,21 +155,20 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
   if (loaded.value === undefined) return failure(diagnostics);
   const { truth, trace } = loaded.value;
   const truthSignature = JSON.stringify(truth);
-  // The stability guard observes the same scope the scan below indexes (T180); a scope change in
-  // project.yaml is a Truth change and is caught by the Truth comparison.
+  // Stability guard (T180): the run's own facts (Truth, scan fingerprints, Git state, the configuration
+  // files the resolver read) are the snapshot. Before a write they are read again once; a scope change in
+  // project.yaml is a Truth change. A run that writes nothing needs no check.
   const scope = { include: truth.config.index.include, exclude: truth.config.index.exclude };
-  const extraInputs = Object.keys(readIndexState(root).state?.configs ?? {});
-  const initial = await captureIndexInputs(root, extraInputs, scope);
-  if (initial.value === undefined) return failure([...diagnostics, ...initial.diagnostics]);
-  const stable = async (): Promise<boolean> => {
-    const current = await captureIndexInputs(root, extraInputs, scope);
-    return sameDatabase() && current.value !== undefined && current.value.signature === initial.value?.signature
-      && JSON.stringify(loadProjectTruth(root).value?.truth) === truthSignature;
-  };
+  // Configuration files the previous run resolved with, as they are now (T180 guard input).
+  const recordedConfigs = new Map(Object.keys(readIndexState(root).state?.configs ?? {}).map((c) => [c, hashOnDisk(rootDir, c as RepoPath)] as const));
   const moved = () => failure<IndexResult>([createDiagnostic("GRAPH_WRITE_REFUSED", "Index inputs changed during indexing; run again on a stable repository")]);
   phase("truth");
   // One work-tree prefix query for this run, shared by the scan and the Git provider (T25.1).
   const workTree = probeWorkTree(rootDir);
+  // Git state is read once, before the scan (T180), and used for the whole run; a write first checks
+  // that it, the scan and the fingerprints are still the same (sameScanAndGit).
+  const git = await openGitProvider(rootDir, { workTree });
+  const repoState = git.value === undefined ? undefined : await git.value.repositoryState();
   const scan = await scanRepository(rootDir, { include: truth.config.index.include, exclude: truth.config.index.exclude, workTree });
   diagnostics.push(...scan.diagnostics);
   if (scan.diagnostics.some((d) => d.severity === "error")) return failure(diagnostics);
@@ -174,7 +177,6 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
   diagnostics.push(...fingerprinted.diagnostics);
   const current: readonly FileFingerprint[] = fingerprinted.fingerprints;
   if (fingerprinted.diagnostics.some((d) => d.severity === "error")) return failure(diagnostics);
-  if (current.some((f) => initial.value?.hashes.get(f.path) !== f.contentHash)) return moved();
   phase("fingerprint");
 
   // ---- previous state: any doubt means a full rebuild ----
@@ -254,8 +256,7 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
       }
       changedFiles.add(f.path);
       const content = fs.readFileSync(path.join(rootDir, f.path));
-      if (createHash("sha256").update(content).digest("hex") !== initial.value.rawHashes.get(f.path)
-        || computeContentHash(content, f.fingerprintMode).contentHash !== f.contentHash) return moved();
+      if (computeContentHash(content, f.fingerprintMode).contentHash !== f.contentHash) return moved();
       analyzed++;
       const started = performance.now();
       const r = analyzer.analyze({ path: f.path, content });
@@ -280,12 +281,9 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
   phase("analysis");
 
   // ---- Git: the history window is recomputed whole when HEAD moves ----
-  const git = await openGitProvider(rootDir, { workTree });
   diagnostics.push(...git.diagnostics);
-  const repoState = git.value === undefined ? undefined : await git.value.repositoryState();
   diagnostics.push(...(repoState?.diagnostics ?? []));
   const gitState: GitRepositoryState | undefined = repoState?.value;
-  if (JSON.stringify(gitState) !== JSON.stringify(initial.value.git)) return moved();
   let history: HistorySummary | undefined;
   let historyRecomputed = false;
   if (git.value !== undefined && gitState?.headOid !== undefined) {
@@ -311,6 +309,7 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
     else consumed.set(file, { value, read });
     return value;
   } });
+  options.onResolverInputs?.(() => !consumedChanged && [...consumed.values()].every((input) => input.read() === input.value));
   const signals = resolutionSignals(rootDir, changes, previous);
   const moduleFreshness = new Map<RepoPath, ModuleResolutionFreshness>();
   const previousResolution = new Map<RepoPath, FileResolution>();
@@ -332,6 +331,7 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
 
   // ---- plan (the full builder) ----
   let sourceTextChanged = false;
+  const fingerprintOf = new Map(current.map((f) => [f.path as string, f] as const));
   const plan = buildGraphPlan({
     truth, trace, files: current, analyses, failedAnalyses,
     sourceText: (p) => {
@@ -339,7 +339,8 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
       if (known !== undefined) return known;
       try {
         const content = fs.readFileSync(path.join(rootDir, p));
-        if (createHash("sha256").update(content).digest("hex") !== initial.value?.rawHashes.get(p)) sourceTextChanged = true;
+        const f = fingerprintOf.get(p);
+        if (f === undefined || computeContentHash(content, f.fingerprintMode).contentHash !== f.contentHash) sourceTextChanged = true;
         return content.toString("utf8");
       } catch {
         sourceTextChanged = true;
@@ -406,15 +407,23 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
   const changedScopes = new Set([...new Set([...before.keys(), ...after.keys()])].filter((s) => before.get(s) !== after.get(s)));
 
   // ---- write: graph + token in one transaction, then the state file ----
-  const consumedStable = () => !consumedChanged && [...consumed.values()].every((input) => input.read() === input.value);
-  if (sourceTextChanged || !await stable() || !consumedStable()) return moved();
+  const unchanged = previous !== undefined && changedScopes.size === 0 && previous.token === state.token;
+  if (!unchanged) {
+    // The asynchronous rescan comes first; everything after it, up to the commit, is synchronous, so no
+    // check can be overtaken by a change the rescan was waiting through (T181 review).
+    const stable = await sameScanAndGit(rootDir, scope, { fingerprints: current, typeChanges: scan.typeChanges, git: gitState })
+      && sameDatabase() && !sourceTextChanged && !consumedChanged
+      && [...consumed.values()].every((input) => input.read() === input.value)
+      && [...recordedConfigs].every(([c, h]) => hashOnDisk(rootDir, c as RepoPath) === h)
+      && JSON.stringify(loadProjectTruth(rootDir).value?.truth) === truthSignature;
+    if (!stable) return moved();
+  }
   if (options.expectedToken !== undefined && (readIndexState(rootDir).state?.token !== options.expectedToken || store.readMeta(INDEX_STATE_TOKEN_KEY) !== options.expectedToken)) {
     return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: index state changed before commit")]);
   }
   let revision = Number(store.readMeta(GRAPH_REVISION_KEY) ?? "0");
   if (!Number.isSafeInteger(revision)) revision = 0;
   const counts = store.counts();
-  const unchanged = previous !== undefined && changedScopes.size === 0 && previous.token === state.token;
   let diff: GraphDiff | undefined;
   if (!unchanged) {
     try {
@@ -446,7 +455,6 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
     pruneAnalysisCache(rootDir, cacheKeys);
   }
   phase("write");
-  if (!await stable() || !consumedStable()) return moved();
 
   // ---- report ----
   const count = (status: string) => changes.filter((c) => c.status === status).length;
@@ -487,6 +495,41 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
   });
   phase("report");
   return success({ mode, ...(fullRebuildReason === undefined ? {} : { fullRebuildReason }), metrics, freshness, stats: plan.stats, graphRevision: revision }, canonicalDiagnostics(diagnostics));
+}
+
+/** What a scan of the configured scope saw: fingerprints, type changes and the Git state. */
+export interface ScanSnapshot {
+  readonly fingerprints: readonly FileFingerprint[];
+  readonly typeChanges: unknown;
+  readonly git: GitRepositoryState | undefined;
+}
+
+export interface IndexScope { readonly include: readonly string[]; readonly exclude: readonly string[] }
+
+/** Scans the configured scope and reads the Git state; undefined when either cannot be read. */
+export async function takeScanSnapshot(rootDir: string, scope: IndexScope): Promise<ScanSnapshot | undefined> {
+  const workTree = probeWorkTree(rootDir);
+  const scan = await scanRepository(rootDir, { include: scope.include, exclude: scope.exclude, workTree });
+  if (scan.diagnostics.some((d) => d.severity === "error")) return undefined;
+  const fingerprinted = await fingerprintRepositoryFiles(rootDir, scan.files);
+  if (fingerprinted.diagnostics.some((d) => d.severity === "error")) return undefined;
+  const git = await openGitProvider(rootDir, { workTree });
+  const state = git.value === undefined ? undefined : await git.value.repositoryState();
+  if (state?.value === undefined || state.diagnostics.some((d) => d.severity === "error")) return undefined;
+  return { fingerprints: fingerprinted.fingerprints, typeChanges: scan.typeChanges, git: state.value };
+}
+
+/**
+ * The scope scanned again, its fingerprints and the Git state equal `expected` (T180 guard, one pass).
+ * A Git state that cannot be read, now or in `expected`, never counts as unchanged (T181 review).
+ */
+export async function sameScanAndGit(rootDir: string, scope: IndexScope, expected: ScanSnapshot): Promise<boolean> {
+  if (expected.git === undefined) return false;
+  const now = await takeScanSnapshot(rootDir, scope);
+  if (now === undefined || JSON.stringify(now.typeChanges) !== JSON.stringify(expected.typeChanges)) return false;
+  const key = (f: FileFingerprint) => JSON.stringify([f.path, f.state, f.fingerprintMode, f.contentHash, f.size, f.gitBlobOid ?? null]);
+  if (now.fingerprints.length !== expected.fingerprints.length || now.fingerprints.some((f, i) => key(f) !== key(expected.fingerprints[i] as FileFingerprint))) return false;
+  return JSON.stringify(now.git) === JSON.stringify(expected.git);
 }
 
 function graphChanged(diff: GraphDiff | undefined): boolean {
