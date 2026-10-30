@@ -239,7 +239,7 @@ const EN = {
   "setup.blocked": "Nothing written. Resolve the problems above, then run duoctl setup again.",
   "setup.resume": "Setup stopped at {step}. What was already written is kept; Project Truth is never deleted. Fix the problem above, then run {command}: it continues from the first unfinished step.",
   "setup.done": "DUO setup finished.",
-  "setup.unchanged": "DUO is already set up; nothing needed to change.",
+  "setup.unchanged": "DUO is already set up: Truth, baseline and agent files were not changed.",
   "setup.commit": "DUO does not commit. Review and commit the files it created when you are ready; the commit moves HEAD, so run duoctl index afterwards.",
   "setup.remaining": "Left for you outside DUO:",
 } as const;
@@ -480,7 +480,7 @@ const KO: Record<MessageKey, string> = {
   "setup.blocked": "아무것도 쓰지 않았습니다. 위 문제를 해결한 뒤 duoctl setup을 다시 실행하세요.",
   "setup.resume": "Setup이 {step} 단계에서 멈췄습니다. 이미 쓴 내용은 유지하며 Project Truth는 지우지 않습니다. 위 문제를 해결한 뒤 {command}를 실행하면 끝나지 않은 첫 단계부터 이어서 진행합니다.",
   "setup.done": "DUO 설정을 마쳤습니다.",
-  "setup.unchanged": "DUO가 이미 설정되어 있어 바꿀 것이 없습니다.",
+  "setup.unchanged": "DUO가 이미 설정되어 있습니다. Truth, baseline, agent 파일은 바꾸지 않았습니다.",
   "setup.commit": "DUO는 commit하지 않습니다. 준비되면 만들어진 파일을 검토하고 commit하세요. commit하면 HEAD가 바뀌므로 그 뒤 duoctl index를 실행하세요.",
   "setup.remaining": "DUO 밖에서 남은 일:",
 };
