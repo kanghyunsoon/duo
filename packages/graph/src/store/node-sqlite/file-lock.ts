@@ -21,6 +21,9 @@ export function tryAcquireFileLock(path: string): HeldFileLock | undefined {
   const db = new DatabaseSync(path);
   try {
     db.exec("PRAGMA busy_timeout = 0");
+    // No journal file next to the lock: the lock writes nothing, and a -journal path is one more entry
+    // a symlink could redirect outside the worktree (#148 review). Busy here also means "held".
+    db.exec("PRAGMA journal_mode = MEMORY");
     db.exec("BEGIN EXCLUSIVE");
   } catch (error) {
     db.close();
