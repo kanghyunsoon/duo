@@ -92,6 +92,12 @@ export interface IndexOptions extends IndexWriteLockOptions {
   readonly historyWindow?: number;
   /** Optional observation only; never enters persisted state or the deterministic result. */
   readonly onPhase?: (name: string, milliseconds: number) => void;
+  /**
+   * Recovery only (refreshIndexIfSafe): receives a check that every resolver input this run read, including
+   * configuration lookups that found no file, still reads the same. Recovery calls it again before it
+   * reports success; the explicit index does not (F3 scope, T182).
+   */
+  readonly onResolverInputs?: (unchanged: () => boolean) => void;
 }
 
 /** Digest of a scope without rows (the Project Truth scope always has the Project node, so this is a fallback). */
@@ -303,6 +309,7 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
     else consumed.set(file, { value, read });
     return value;
   } });
+  options.onResolverInputs?.(() => !consumedChanged && [...consumed.values()].every((input) => input.read() === input.value));
   const signals = resolutionSignals(rootDir, changes, previous);
   const moduleFreshness = new Map<RepoPath, ModuleResolutionFreshness>();
   const previousResolution = new Map<RepoPath, FileResolution>();

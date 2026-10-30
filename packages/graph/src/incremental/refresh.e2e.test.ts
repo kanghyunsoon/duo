@@ -231,6 +231,21 @@ describe("safe index recovery and shared writer lock", () => {
     expect(result.value).toBeUndefined();
     expect(result.diagnostics[0]?.message).toContain("inputs changed");
   }, 60_000);
+  it("does not report successful recovery when an ignored config that did not exist appears after the commit (#149 review)", async () => {
+    const r = makeRepo(temps, {
+      ".duo-project/project.yaml": "schema_version: 1\nname: refresh\n",
+      ".gitignore": "tsconfig.json\n",
+      "src/a.ts": "import { b } from \"@lib/b\";\n\nexport const a = b;\n",
+      "src/b.ts": "export const b = 1;\n",
+    });
+    expect((await index(r)).value).toBeDefined();
+    r.write("src/a.ts", "import { b } from \"@lib/b\";\n\nexport const a = b + 1;\n");
+    const result = await refreshIndexIfSafe(r.root, { registry, onPhase: (phase) => {
+      if (phase === "write") r.write("tsconfig.json", '{"compilerOptions":{"baseUrl":".","paths":{"@lib/*":["src/*"]}}}\n');
+    } });
+    expect(result.value).toBeUndefined();
+    expect(result.diagnostics[0]?.message).toContain("inputs changed");
+  }, 60_000);
   // F3 (T182 maintainer decision): an explicit index keeps its pre-#143 scope. A run that writes nothing
   // does not read its inputs a second time, and a change after the pre-commit check is not re-checked.
   // Such a run may report success, but the database token, index-state.json and the fingerprint file
