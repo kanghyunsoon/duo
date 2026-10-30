@@ -66,7 +66,13 @@ async function refreshUnderGuard(root: string, options: RefreshIndexOptions): Pr
     const writer = openProjectGraphStore(root, { existingOnly: true });
     if (writer.value === undefined) return failure(writer.diagnostics);
     try {
-      const indexed = await indexRepository(root, { ...options, store: writer.value, writeLease: lease, expectedToken });
+      // The resolver inputs this run read, including lookups of files that did not exist (an ignored
+      // tsconfig.json created after the commit is in neither the scan nor the recorded configurations).
+      let resolverInputsUnchanged = (): boolean => true;
+      const indexed = await indexRepository(root, {
+        ...options, store: writer.value, writeLease: lease, expectedToken,
+        onResolverInputs: (unchanged) => { resolverInputsUnchanged = unchanged; },
+      });
       if (indexed.value === undefined) return failure(indexed.diagnostics);
       if (indexed.diagnostics.some((d) => d.severity === "error")) return failure(indexed.diagnostics);
       const checked = await inspectIndex(root, { ...options, graph: writer.value });
@@ -75,7 +81,7 @@ async function refreshUnderGuard(root: string, options: RefreshIndexOptions): Pr
       if (checked.value?.status !== "current" || checked.diagnostics.some((d) => d.severity === "error")) {
         return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh could not verify a current index after writing"), ...checked.diagnostics]);
       }
-      if (!await stable() || !sameIndex(readIndexState(root).state?.token)) return moved();
+      if (!await stable() || !resolverInputsUnchanged() || !sameIndex(readIndexState(root).state?.token)) return moved();
       return success({ refreshed: true }, indexed.diagnostics);
     } finally { writer.value.close(); }
   }, options);
