@@ -87,12 +87,17 @@ function columns(s: string): number {
   return n;
 }
 
-export async function doctorCommand(env: Env): Promise<Outcome> {
-  const payload = await projectDoctor(env.root, {
+/** The shared doctor operation for this CLI environment (also the closing check of duoctl setup, T183). */
+export async function doctorPayload(env: Env): Promise<DoctorPayload> {
+  return projectDoctor(env.root, {
     runtime: { duoctl: VERSION, node: process.version, engine: NODE_ENGINE, supported: nodeVersionProblem(process.version, NODE_ENGINE) === undefined },
     host: { env: env.io.env, platform: process.platform },
     llm: new LLMProviderPool(env.io.env),
   });
+}
+
+export async function doctorCommand(env: Env): Promise<Outcome> {
+  const payload = await doctorPayload(env);
   return {
     command: "doctor", exitCode: payload.overall === "action-required" ? EXIT.ACTION_REQUIRED : EXIT.OK,
     result: payload, diagnostics: [], human: renderDoctor(env.locale, payload),
