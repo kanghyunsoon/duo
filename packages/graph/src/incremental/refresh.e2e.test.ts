@@ -58,15 +58,42 @@ describe("safe index recovery and shared writer lock", () => {
   }, 120_000);
   it("uses GRAPH_WRITE_REFUSED with a distinct timeout reason and releases after exceptions", async () => {
     const r = repo();
-    const lock = path.join(r.root, INDEX_WRITE_LOCK_PATH);
-    fs.mkdirSync(lock, { recursive: true });
+    let releaseHolder = (): void => {};
+    const holding = new Promise<void>((resolve) => { releaseHolder = resolve; });
+    let holderStarted = (): void => {};
+    const started = new Promise<void>((resolve) => { holderStarted = resolve; });
+    const holder = withIndexWriteLock(r.root, async () => { holderStarted(); await holding; });
+    await started;
     const result = await withIndexWriteLock(r.root, async () => "unreachable", { lockTimeoutMs: 0 });
     expect(result.value).toBeUndefined();
     expect(result.diagnostics[0]).toMatchObject({ code: "GRAPH_WRITE_REFUSED", message: expect.stringContaining("Index lock timeout") });
-    fs.rmdirSync(lock);
+    releaseHolder();
+    await holder;
     await expect(withIndexWriteLock(r.root, async () => { throw new Error("intentional"); })).rejects.toThrow("intentional");
-    expect(fs.existsSync(lock)).toBe(false);
-    expect((await withIndexWriteLock(r.root, async () => "released")).value).toBe("released");
+    expect((await withIndexWriteLock(r.root, async () => "released", { lockTimeoutMs: 0 })).value).toBe("released");
+    expect(fs.statSync(path.join(r.root, INDEX_WRITE_LOCK_PATH)).isFile()).toBe(true);
+  });
+  it("guards only the configured index scope: an edit outside index.include does not fail an explicit index", async () => {
+    const r = makeRepo(temps, {
+      ".duo-project/project.yaml": "schema_version: 1\nname: scoped\nindex:\n  include:\n    - \"src/**\"\n",
+      "src/a.ts": "export const a = 1;\n",
+      "other/b.ts": "export const b = 1;\n",
+    });
+    expect((await index(r)).value).toBeDefined();
+    r.write("src/a.ts", "export const a = 2;\n");
+    const store = openProjectGraphStore(r.root).value!;
+    try {
+      const outside = await indexRepository(r.root, { store, registry, onPhase: (phase) => {
+        if (phase === "analysis") r.write("other/b.ts", "export const b = 2;\n");
+      } });
+      expect(outside.value?.mode).toBe("incremental");
+      r.write("src/a.ts", "export const a = 3;\n");
+      const inside = await indexRepository(r.root, { store, registry, onPhase: (phase) => {
+        if (phase === "analysis") r.write("src/a.ts", "export const a = 4;\n");
+      } });
+      expect(inside.value).toBeUndefined();
+      expect(inside.diagnostics[0]?.message).toContain("inputs changed");
+    } finally { store.close(); }
   });
   it("never treats an inherited async context as lock ownership", async () => {
     const r = repo();
