@@ -112,7 +112,8 @@ DUO does not commit. Review and commit the files it created when you are ready; 
 - 확인 뒤 한 단계가 실패하면 그 앞에서 쓴 것(특히 Project Truth)을 지우지 않고 `resume`(`duoctl setup`, dirty tree면 `--baseline-policy head` 포함)을 알린다. 다시 실행하면 첫 미완료 단계부터 잇는다. init이 baseline에서 멈춘 저장소(C214)도 첫 commit 뒤 setup으로 잇는다.
 - 다시 실행하면 Truth, baseline, 사용자 파일을 바꾸지 않고 묻지도 않는다(`status: "unchanged"`). 이미 초기화된 project의 stale index는 `duoctl index`처럼 확인 없이 갱신한다.
 - Agent 연결은 아직 setup에 없다: Jira -319가 setup의 agent 단계 인터페이스로 Codex·Claude Code를 연결한다. 그 전까지는 doctor 요약의 다음 행동이 `duoctl install codex` 또는 `duoctl install claude-code`다. Codex trust와 Claude Code approval은 DUO가 대신하지 않는다.
-- `--json` result: `{ status, steps: { repository, truth, index, baseline, agents }, plan?, apply?, index?, baseline?, agents?, resume?, remaining, doctor? }`. metrics: `{ command: "setup", status }`.
+- `--json` result: `{ status, applied, steps: { repository, truth, index, baseline, agents }, plan?, apply?, index?, baseline?, agents?, resume?, remaining, doctor? }`. `applied`는 이 실행이 쓰기를 시작했는지다. 적용 뒤 doctor에 error check가 있으면 종료 코드 6이지만 `applied: true`, `status` `set-up`·`unchanged`, `doctor.overall: "action-required"`로 쓰기 전 거부(`applied: false`)와 구분된다.
+- metrics: `{ command: "setup", status }`. `runtime/metrics.jsonl`도 쓰기이므로 적용을 시작한 실행만 남긴다. 거부, 취소, 확인 누락, 확인 전 오류는 초기화된 project에서도 metric을 남기지 않는다(다른 명령은 초기화된 project에서 매 실행 metric을 남긴다).
 
 ## duoctl init
 

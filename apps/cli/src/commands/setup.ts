@@ -80,7 +80,28 @@ const yes = (v: string | undefined) => { const a = v?.trim().toLowerCase(); retu
 /** A writer that could not open (lock timeout, unreadable graph) after the confirmation: report it and offer the resume. */
 const thrown = (error: unknown): readonly Diagnostic[] => (error instanceof CliFailure ? error.diagnostics : [createDiagnostic("GRAPH_WRITE_REFUSED", error instanceof Error ? error.message : String(error))]);
 
+/**
+ * Metrics (runtime/metrics.jsonl) are a write too: an outcome carries a metric only once setup has started
+ * applying (after the confirmation, or when nothing needed one). Refusals, a cancellation and a missing
+ * confirmation write nothing, also in an initialized project where metrics would otherwise be appended.
+ */
 export async function setupCommand(env: Env, options: SetupOptions, agentSteps: readonly SetupAgentStep[] = []): Promise<Outcome> {
+  const state = { applied: false };
+  try {
+    return await runSetup(env, options, agentSteps, state);
+  } catch (error) {
+    const diagnostics = error instanceof CliFailure ? error.diagnostics : [createDiagnostic("CLI_USAGE_INVALID", error instanceof Error ? error.message : String(error))];
+    const human = diagLines(diagnostics);
+    if (state.applied) human.push(t(env.locale, "setup.resume", { step: "setup", command: "duoctl setup" }));
+    return {
+      command: "setup", exitCode: EXIT.ERROR, diagnostics, human,
+      result: { status: "failed", applied: state.applied, ...(state.applied ? { resume: "duoctl setup" } : {}) },
+      ...(state.applied ? { metric: { status: "failed" } } : {}),
+    };
+  }
+}
+
+async function runSetup(env: Env, options: SetupOptions, agentSteps: readonly SetupAgentStep[], state: { applied: boolean }): Promise<Outcome> {
   const L = env.locale;
   const steps: Record<"repository" | "truth" | "index" | "baseline", Step> = {
     repository: { status: "skipped" }, truth: { status: "skipped" }, index: { status: "skipped" }, baseline: { status: "skipped" },
@@ -106,7 +127,9 @@ export async function setupCommand(env: Env, options: SetupOptions, agentSteps: 
   const finish = (exitCode: number, status: SetupStatus): Outcome => ({
     command: "setup", exitCode, diagnostics, human,
     result: {
-      status, steps: { ...steps, agents },
+      // applied: this run started writing. Exit 6 with applied true means the closing doctor needs an action;
+      // with applied false it is a refusal before any write.
+      status, applied: state.applied, steps: { ...steps, agents },
       ...(plan === undefined ? {} : {
         plan: {
           state: plan.state, observed: plan.observed, questions: plan.questions, willCreate: plan.willCreate, conflicts: plan.conflicts,
@@ -122,7 +145,7 @@ export async function setupCommand(env: Env, options: SetupOptions, agentSteps: 
       remaining,
       ...(doctor === undefined ? {} : { doctor }),
     },
-    metric: { status, ...(indexed === undefined ? {} : { indexMode: indexed.mode, ...(indexed.fullRebuildReason === undefined ? {} : { fullRebuildReason: indexed.fullRebuildReason }) }) },
+    ...(state.applied ? { metric: { status, ...(indexed === undefined ? {} : { indexMode: indexed.mode, ...(indexed.fullRebuildReason === undefined ? {} : { fullRebuildReason: indexed.fullRebuildReason }) }) } } : {}),
   });
   /** After the confirmation: keep what was written and say how to continue. */
   const stopped = (step: string): Outcome => {
@@ -264,6 +287,7 @@ export async function setupCommand(env: Env, options: SetupOptions, agentSteps: 
   }
 
   // ---- 4. Apply: Truth → index → baseline → agent steps ----
+  state.applied = true;
   if (truthPlanned) {
     const applied = await applyInitPlan(env.root, plan, answers, { repair: options.repair });
     diagnostics.push(...applied.diagnostics);
@@ -358,6 +382,7 @@ export async function setupCommand(env: Env, options: SetupOptions, agentSteps: 
     // ---- 5. Summary: the read-only doctor and what is left outside DUO ----
     doctor = await doctorPayload(env);
     human.push(t(L, writes ? "setup.done" : "setup.unchanged"), ...renderDoctor(L, doctor));
+    if (doctor.overall === "action-required") human.push("", t(L, "setup.doctor-action"));
     if (writes) human.push("", t(L, "setup.commit"));
     if (remaining.length > 0) human.push("", t(L, "setup.remaining"), ...remaining.map((line) => "  " + line));
     return finish(doctor.overall === "action-required" ? EXIT.ACTION_REQUIRED : EXIT.OK, writes ? "set-up" : "unchanged");

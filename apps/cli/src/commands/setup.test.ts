@@ -278,3 +278,67 @@ describe("duoctl setup: the agent step interface (for Jira -319)", () => {
     expect(t3.prompts).toEqual([]);
   });
 });
+
+describe("duoctl setup: metrics follow the confirmation (T183 follow-up)", () => {
+  const envOf = (root: string, t: ReturnType<typeof terminal>, overrides: Partial<Env> = {}): Env => ({ root, json: false, locale: "en", nonInteractive: false, yes: false, verbose: false, io: t.io, ...overrides });
+  const options = { repair: false, answersFromStdin: false };
+  const metricsOf = (root: string) => fs.readFileSync(path.join(root, ".duo-project/runtime/metrics.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { command: string; status: string; exitCode: number });
+
+  it("in an initialized project, refusals, a missing confirmation, a cancel and a blocker append no metric", async () => {
+    const r = repo({ commit: false });
+    // init writes Truth and the index, then stops at the baseline (C214); metrics.jsonl exists from here on.
+    expect(await run(["init", "--non-interactive", "--baseline-policy", "head"], terminal(r.root).io)).toBe(1);
+    expect(metricsOf(r.root).map((m) => m.command)).toEqual(["init"]);
+    let before = snapshot(r.root);
+    const unborn = await setup(r.root, ["--yes", "--json"]);
+    expect(unborn.code).toBe(6);
+    expect(unborn.json().result).toMatchObject({ status: "action-required", applied: false });
+    expect(snapshot(r.root)).toEqual(before);
+
+    r.git("add", "-A");
+    r.git("commit", "-qm", "initial");
+    before = snapshot(r.root);
+    const unconfirmed = await setup(r.root, ["--json"]);
+    expect(unconfirmed.code).toBe(6);
+    expect(unconfirmed.json().result).toMatchObject({ status: "confirmation-required", applied: false });
+    const cancelled = await setup(r.root, [], { tty: true, answers: ["n"] });
+    expect(cancelled.code).toBe(1);
+    expect(cancelled.prompts.map(isConfirm)).toEqual([true]);
+    const blocker: SetupAgentStep = {
+      id: "fake",
+      plan: () => Promise.resolve({ willCreate: [], willModify: [], noop: false, lines: [], blockers: [createDiagnostic("AGENT_INTEGRATION_CONFLICT", "taken")] }),
+      apply: () => Promise.reject(new Error("never applied")),
+    };
+    const blocked = await setupCommand(envOf(r.root, terminal(r.root), { yes: true }), options, [blocker]);
+    expect(blocked.exitCode).toBe(6);
+    expect(blocked.metric).toBeUndefined();
+    const planThrows: SetupAgentStep = { id: "fake", plan: () => Promise.reject(new Error("plan crashed")), apply: () => Promise.reject(new Error("never applied")) };
+    const crashed = await setupCommand(envOf(r.root, terminal(r.root), { yes: true }), options, [planThrows]);
+    expect(crashed).toMatchObject({ exitCode: 1, result: { status: "failed", applied: false } });
+    expect(crashed.metric).toBeUndefined();
+    expect(snapshot(r.root)).toEqual(before);
+
+    const applied = await setup(r.root, ["--yes", "--json"]);
+    expect(applied.code).toBe(0);
+    expect(applied.json().result).toMatchObject({ status: "set-up", applied: true, steps: { truth: { status: "existing" }, baseline: { status: "ok" } } });
+    expect(metricsOf(r.root).filter((m) => m.command === "setup")).toEqual([expect.objectContaining({ status: "set-up", exitCode: 0 })]);
+  });
+
+  it("exit 6 after applying comes from the closing doctor and says so; it is not a refusal", async () => {
+    const r = repo();
+    // An agent step that leaves a duo-director server DUO does not own: doctor reports a conflict (error).
+    const conflicting: SetupAgentStep = {
+      id: "fake",
+      plan: () => Promise.resolve({ willCreate: [".mcp.json"], willModify: [], noop: false, lines: [], blockers: [] }),
+      apply: (context) => {
+        fs.writeFileSync(path.join(context.env.root, ".mcp.json"), JSON.stringify({ mcpServers: { "duo-director": { command: "someone-else" } } }) + "\n");
+        return Promise.resolve({ ok: true, diagnostics: [], lines: [], remaining: [] });
+      },
+    };
+    const o = await setupCommand(envOf(r.root, terminal(r.root), { yes: true }), options, [conflicting]);
+    expect(o.exitCode).toBe(6);
+    expect(o.result).toMatchObject({ status: "set-up", applied: true, doctor: { overall: "action-required" } });
+    expect(o.metric).toMatchObject({ status: "set-up" });
+    expect(o.human.join("\n")).toContain("Setup applied its plan, but the check above found a problem");
+  });
+});

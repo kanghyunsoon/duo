@@ -242,6 +242,7 @@ const EN = {
   "setup.unchanged": "DUO is already set up: Truth, baseline and agent files were not changed.",
   "setup.commit": "DUO does not commit. Review and commit the files it created when you are ready; the commit moves HEAD, so run duoctl index afterwards.",
   "setup.remaining": "Left for you outside DUO:",
+  "setup.doctor-action": "Setup applied its plan, but the check above found a problem that needs your action (exit 6).",
 } as const;
 
 export type MessageKey = keyof typeof EN;
@@ -483,6 +484,7 @@ const KO: Record<MessageKey, string> = {
   "setup.unchanged": "DUO가 이미 설정되어 있습니다. Truth, baseline, agent 파일은 바꾸지 않았습니다.",
   "setup.commit": "DUO는 commit하지 않습니다. 준비되면 만들어진 파일을 검토하고 commit하세요. commit하면 HEAD가 바뀌므로 그 뒤 duoctl index를 실행하세요.",
   "setup.remaining": "DUO 밖에서 남은 일:",
+  "setup.doctor-action": "Setup은 계획을 적용했지만 위 점검에서 조치가 필요한 문제가 있습니다(종료 코드 6).",
 };
 
 const TABLES: Record<Locale, Record<MessageKey, string>> = { en: EN, ko: KO };
