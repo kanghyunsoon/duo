@@ -212,7 +212,7 @@ describe("duoctl setup: one confirmation, then apply", () => {
 
 describe("duoctl setup: the agent step interface (for Jira -319)", () => {
   const env = (root: string, t: ReturnType<typeof terminal>, overrides: Partial<Env> = {}): Env => ({ root, json: false, locale: "en", nonInteractive: false, yes: false, verbose: false, io: t.io, ...overrides });
-  function fakeStep(behaviour: { blocker?: boolean; fail?: boolean; seen?: SetupStepContext[] } = {}): SetupAgentStep & { applied: number } {
+  function fakeStep(behaviour: { blocker?: boolean; fail?: boolean | "throw"; seen?: SetupStepContext[] } = {}): SetupAgentStep & { applied: number } {
     const step = {
       id: "fake", applied: 0,
       plan: (context: SetupStepContext) => {
@@ -226,6 +226,7 @@ describe("duoctl setup: the agent step interface (for Jira -319)", () => {
       },
       apply: (context: SetupStepContext) => {
         step.applied++;
+        if (behaviour.fail === "throw") return Promise.reject(new Error("fake crashed"));
         if (behaviour.fail === true) return Promise.resolve({ ok: false, diagnostics: [createDiagnostic("AGENT_VERIFY_FAILED", "fake server did not start")], lines: [], remaining: [] });
         fs.writeFileSync(path.join(context.env.root, "FAKE.md"), "fake\n");
         return Promise.resolve({ ok: true, diagnostics: [], lines: ["fake connected"], remaining: ["Approve fake in the fake agent"] });
@@ -258,6 +259,10 @@ describe("duoctl setup: the agent step interface (for Jira -319)", () => {
     expect(fs.existsSync(path.join(r.root, ".duo-project/project.yaml"))).toBe(true);
     expect(seen.map((c) => c.truthPlanned)).toEqual([true]);
     const truth = snapshot(r.root, truthFiles);
+
+    const crashing = await setupCommand(env(r.root, terminal(r.root, { tty: true, answers: ["y"] })), { repair: false, answersFromStdin: false }, [fakeStep({ fail: "throw" })]);
+    expect(crashing.result).toMatchObject({ status: "failed", resume: "duoctl setup", steps: { truth: { status: "existing" }, agents: { fake: { status: "failed" } } } });
+    expect(crashing.diagnostics.map((d) => d.message).join("\n")).toContain("fake crashed");
 
     const t2 = terminal(r.root, { tty: true, answers: ["y"] });
     const finished = await setupCommand(env(r.root, t2), { repair: false, answersFromStdin: false }, [fakeStep({ seen })]);

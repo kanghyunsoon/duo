@@ -336,7 +336,13 @@ export async function setupCommand(env: Env, options: SetupOptions, agentSteps: 
 
     for (const { step, plan: p } of agentPlans) {
       if (p.noop) { agents[step.id] = { status: "existing" }; report(step.id, agents[step.id] as Step); continue; }
-      const result = await step.apply(context, p);
+      let result: SetupStepResult;
+      try {
+        result = await step.apply(context, p);
+      } catch (error) {
+        // A step that throws still gets the resume path; what it wrote is its own to undo (H-94).
+        result = { ok: false, diagnostics: [createDiagnostic("AGENT_VERIFY_FAILED", step.id + " setup step failed: " + (error instanceof Error ? error.message : String(error)))], lines: [], remaining: [] };
+      }
       diagnostics.push(...result.diagnostics);
       if (result.detail !== undefined) agentResults[step.id] = result.detail;
       agents[step.id] = { status: result.ok ? "ok" : "failed" };
