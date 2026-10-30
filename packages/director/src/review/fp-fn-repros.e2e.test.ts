@@ -13,8 +13,8 @@
  *    import edge under H-72 pair-level adoption provenance.
  * 3. L1 (S15P31A106-266 / Follow-up #49): Out of current analyzer scope (`scope.duo: "out"` in #24)
  *    on 1-hop barrel re-exports (`src/db/index.ts` re-exports `./legacy-db.js`, UI imports `../db/index.js`).
- *    #49 Stage 1 (Maintainer Decision L1-C) now reports `imports-through-reexport` with the chain; the verdict
- *    stays PASS. Binding-level origin matching (PASS → BLOCK) is Stage 2 and stays a todo.
+ *    #49 Stage 1 (Maintainer Decision L1-C) reported `imports-through-reexport` with the chain; #49 Stage 2
+ *    (H-98) traces `legacyQuery` to its one origin `legacy-db`: `forbidden-import`, introduced, BLOCK.
  * 4. L2 (S15P31A106-267 / Follow-up #50): Out of current analyzer scope (`scope.duo: "out"` in #24)
  *    and missing `imports-unresolved` limitation on computed dynamic imports (`import(\`../db/${name}.js\`)`),
  *    plus newly found L2b static no-substitution template literal (`import(\`../db/legacy-db.js\`)`).
@@ -249,11 +249,11 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
   });
 
   describe("Case L1 (S15P31A106-266 / #49): out of current analyzer scope (scope.duo: out in #24) on 1-hop barrel re-export", () => {
-    it("L1 (#49 Stage 1, Maintainer Decision L1-C): importing legacyQuery via barrel src/db/index.ts reports an imports-through-reexport limitation with the chain; the verdict stays PASS", async () => {
-      // `decisionForbidsImport` (`packages/director/src/review/rules.ts`) still matches only the resolved file
-      // (`src/db/index.ts`) against `d.forbids.importedPaths`. When that file re-exports, through indexed
-      // export-from chains of at most `MAX_REEXPORT_DEPTH = 4` hops, a name the import takes from a forbidden
-      // file, the review states that the chain was not checked binding by binding. No claim is made.
+    it("L1 (#49 Stage 2, H-98): importing legacyQuery via barrel src/db/index.ts is traced to its origin legacy-db: forbidden-import, introduced, BLOCK", async () => {
+      // `decisionForbidsImport` (`packages/director/src/review/rules.ts`) traces each name the import takes
+      // through the barrel's indexed export-from references (`ReexportOrigins`, `reexport-origin.ts`). One exact
+      // origin in `d.forbids.importedPaths` is the claim on the source → origin pair (H-72 (10)); the baseline
+      // records re-export origins (`decision-forbids-import-origin`), so the new pair is introduced.
       const res = await scenario((r) =>
         r.write(
           "src/ui/report-page.ts",
@@ -261,17 +261,19 @@ describe("Issue #30 (VAL-03): pinned 0.3.3 behavior for L4, D3, L1 barrel re-exp
         ),
       );
 
-      expect(res.verdict).toBe("PASS");
-      expect(forbiddenImports(res)).toEqual([]);
-      expect(importLimits(res)).toEqual(["imports-through-reexport"]);
-      expect(res.limitations.find((l) => l.code === "imports-through-reexport")?.message).toContain(
-        "src/ui/report-page.ts:1 → src/db/index.ts → src/db/legacy-db.ts (D-001)",
-      );
+      expect(res.verdict).toBe("BLOCK");
+      const claims = forbiddenImports(res);
+      expect(claims).toHaveLength(1);
+      expect(claims[0]).toMatchObject({
+        alignment: "CONFLICT",
+        reason: "forbidden-import",
+        provenance: "introduced",
+        blockEligible: true,
+        violationKey: violationKey("decision-forbids-import", "D-001", `import:${fileNode("src/ui/report-page.ts")}->${fileNode("src/db/legacy-db.ts")}`),
+      });
+      expect(claims[0]?.observed).toContain('src/ui/report-page.ts:1 import "../db/index.js" re-exports legacyQuery from src/db/legacy-db.ts via src/db/index.ts');
+      expect(importLimits(res)).toEqual([]);
     });
-
-    it.todo(
-      "0.4 candidate (#49 Stage 2, needs a Human Decision row before merge): report forbidden-import when an exactly resolved named binding comes from a forbidden origin (PASS → BLOCK)",
-    );
   });
 
   describe("Case L2 (S15P31A106-267 / #50): out of current analyzer scope (scope.duo: out in #24) and missing limitation on dynamic import", () => {
