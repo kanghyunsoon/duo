@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { createDiagnostic } from "@duo-director/core";
 import { run, type Io } from "../cli.js";
@@ -55,7 +56,7 @@ const userFiles = (f: string) => !f.startsWith(".duo-project");
 /** Project Truth and history: everything in .duo-project but regenerable state. */
 const truthFiles = (f: string) => f.startsWith(".duo-project/") && !/^\.duo-project\/(?:generated|cache|runtime)(?:\/|$)/u.test(f);
 
-function terminal(root: string, options: { tty?: boolean; answers?: string[] } = {}) {
+function terminal(root: string, options: { tty?: boolean; answers?: string[]; env?: NodeJS.ProcessEnv } = {}) {
   const prompts: string[] = [];
   const out: string[] = [];
   const err: string[] = [];
@@ -63,12 +64,12 @@ function terminal(root: string, options: { tty?: boolean; answers?: string[] } =
   const io: Io = {
     out: (l) => out.push(l), err: (l) => err.push(l), isTTY: options.tty ?? false,
     prompt: (q) => { prompts.push(q); return Promise.resolve(answers.shift()); },
-    readStdin: () => Promise.resolve(""), cwd: () => root, now: () => new Date("2026-10-30T00:00:00Z"), env: { ...process.env, DUO_LOCALE: "" },
+    readStdin: () => Promise.resolve(""), cwd: () => root, now: () => new Date("2026-10-30T00:00:00Z"), env: { ...(options.env ?? process.env), DUO_LOCALE: "" },
   };
   return { io, prompts, out, err, unanswered: answers };
 }
 
-async function setup(root: string, args: string[], options: { tty?: boolean; answers?: string[] } = {}) {
+async function setup(root: string, args: string[], options: { tty?: boolean; answers?: string[]; env?: NodeJS.ProcessEnv } = {}) {
   const t = terminal(root, options);
   const code = await run(["setup", ...args], t.io);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- parsed CLI JSON; the tests assert its shape
@@ -149,6 +150,18 @@ describe("duoctl setup: refusals write nothing", () => {
     expect(s.err.join("\n")).toContain("Rerun with --yes");
     const json = await setup(r.root, ["--json"]);
     expect(json.json().result).toMatchObject({ status: "confirmation-required", plan: { state: "not-initialized" } });
+    expect(snapshot(r.root)).toEqual(before);
+  });
+
+  it("without --agent no agent is connected, also when its configuration exists; --agent takes codex or claude-code", async () => {
+    const r = repo();
+    const before = snapshot(r.root);
+    const s = await setup(r.root, []);
+    expect(s.code).toBe(6);
+    expect(s.out.join("\n")).toContain("Agents     none selected; add --agent codex or --agent claude-code");
+    const unknown = await setup(r.root, ["--agent", "cursor", "--yes"]);
+    expect(unknown.code).toBe(1);
+    expect(unknown.err.join("\n")).toContain("unknown agent 'cursor'");
     expect(snapshot(r.root)).toEqual(before);
   });
 });
@@ -340,5 +353,86 @@ describe("duoctl setup: metrics follow the confirmation (T183 follow-up)", () =>
     expect(o.result).toMatchObject({ status: "set-up", applied: true, doctor: { overall: "action-required" } });
     expect(o.metric).toMatchObject({ status: "set-up" });
     expect(o.human.join("\n")).toContain("Setup applied its plan, but the check above found a problem");
+  });
+});
+
+describe("duoctl setup: connecting Codex and Claude Code (Jira -319)", () => {
+  const CLI_MAIN = fileURLToPath(new URL("../../dist/main.js", import.meta.url));
+  /**
+   * An installed-looking duoctl on PATH (as tests/install/support.ts): a bin directory whose duoctl starts the built CLI,
+   * or runs `broken` instead. Verification starts the configured MCP launch, so build first (pnpm build).
+   */
+  function onPath(broken?: { win: string; sh: string }) {
+    if (!fs.existsSync(CLI_MAIN)) throw new Error(`${CLI_MAIN} is missing: run pnpm build first`);
+    const bin = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-setup-bin-")));
+    temps.push(bin);
+    if (process.platform === "win32") fs.writeFileSync(path.join(bin, "duoctl.cmd"), broken?.win ?? `@echo off\r\n"${process.execPath}" "${CLI_MAIN}" %*\r\n`);
+    else fs.writeFileSync(path.join(bin, "duoctl"), broken?.sh ?? `#!/bin/sh\nexec "${process.execPath}" "${CLI_MAIN}" "$@"\n`, { mode: 0o755 });
+    const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toUpperCase() !== "PATH"));
+    env.PATH = [bin, process.env.PATH ?? ""].join(path.delimiter);
+    return env;
+  }
+  const both = ["--agent", "codex", "--agent", "claude-code"];
+  const read = (root: string, f: string) => fs.readFileSync(path.join(root, f), "utf8");
+
+  it("a conflicting duo-director entry blocks before any question, also while Truth is only planned; nothing is written", async () => {
+    const r = repo();
+    r.write(".codex/config.toml", "# mine\n[mcp_servers.duo-director]\ncommand = \"someone-else\"\n");
+    r.write(".mcp.json", JSON.stringify({ mcpServers: { "duo-director": { command: "someone-else" } } }) + "\n");
+    r.git("add", "-A");
+    r.git("commit", "-qm", "agent configuration");
+    const env = onPath();
+    const before = snapshot(r.root);
+    const tty = await setup(r.root, both, { tty: true, answers: ["y", "y", "y", "y"], env });
+    expect(tty.code).toBe(6);
+    expect(tty.prompts).toEqual([]);
+    const s = await setup(r.root, [...both, "--yes", "--json"], { env });
+    expect(s.json().result).toMatchObject({ status: "blocked", applied: false, steps: { agents: { codex: { status: "action-required" }, "claude-code": { status: "action-required" } } } });
+    const codes = s.json().diagnostics.map((d) => d.code);
+    expect(codes).toContain("AGENT_INTEGRATION_CONFLICT");
+    expect(codes).not.toContain("AGENT_NOT_INITIALIZED");
+    expect(snapshot(r.root)).toEqual(before);
+  });
+
+  it("connects both after the one confirmation, verifies the MCP launch, leaves trust and approval to the person; a rerun changes nothing", async () => {
+    const r = repo();
+    r.write("CLAUDE.md", "# Notes for Claude\n\nPrefer small commits.\n");
+    r.git("add", "-A");
+    r.git("commit", "-qm", "claude notes");
+    const env = onPath();
+    const s = await setup(r.root, both, { tty: true, answers: ["y", "MVP", "No cloud sync", "y"], env });
+    const out = s.out.join("\n");
+    expect(s.unanswered).toEqual([]);
+    expect(s.prompts.filter(isConfirm)).toHaveLength(1);
+    expect(s.code, out + s.err.join("\n")).toBe(0);
+    expect(out.match(/^Verify: ok$/gmu)).toHaveLength(2);
+    expect(out).toContain("Left for you outside DUO:");
+    expect(out).toContain("Codex: trust this project");
+    expect(out).toContain("Claude Code: run claude in this project");
+    // The person's own text stays first and intact; DUO adds only its entry and its bridge block.
+    expect(read(r.root, ".codex/config.toml").startsWith("# mine\nmodel = \"x\"\n")).toBe(true);
+    expect(read(r.root, ".codex/config.toml")).toContain("[mcp_servers.duo-director]");
+    expect(read(r.root, "AGENTS.md").startsWith("# House rules\n\nBe kind.\n")).toBe(true);
+    expect(read(r.root, "CLAUDE.md").startsWith("# Notes for Claude\n\nPrefer small commits.\n")).toBe(true);
+    expect(JSON.parse(read(r.root, ".mcp.json")).mcpServers["duo-director"]).toBeDefined();
+    // Trust and approval stay with the person: no trust level written, no Claude Code project settings created.
+    expect(read(r.root, ".codex/config.toml")).not.toContain("trust_level");
+    expect(fs.existsSync(path.join(r.root, ".claude"))).toBe(false);
+
+    const files = snapshot(r.root, userFiles);
+    const again = await setup(r.root, [...both, "--json"], { env });
+    expect(again.json().result).toMatchObject({ status: "unchanged", steps: { agents: { codex: { status: "existing" }, "claude-code": { status: "existing" } } } });
+    expect(snapshot(r.root, userFiles)).toEqual(files);
+  });
+
+  it("a failed MCP verification after the confirmation keeps Truth and the agent files and names the resume", async () => {
+    const r = repo();
+    const env = onPath({ win: "@echo off\r\nexit /b 3\r\n", sh: "#!/bin/sh\nexit 3\n" });
+    const s = await setup(r.root, ["--agent", "codex", "--yes", "--json"], { env });
+    expect(s.code).toBe(1);
+    expect(s.json().result).toMatchObject({ status: "failed", applied: true, resume: "duoctl setup", steps: { truth: { status: "ok" }, agents: { codex: { status: "failed" } } } });
+    expect(s.json().diagnostics.map((d) => d.code)).toContain("AGENT_VERIFY_FAILED");
+    expect(fs.existsSync(path.join(r.root, ".duo-project/project.yaml"))).toBe(true);
+    expect(read(r.root, ".codex/config.toml")).toContain("[mcp_servers.duo-director]");
   });
 });

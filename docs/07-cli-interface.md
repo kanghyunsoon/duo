@@ -12,7 +12,7 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 
 | 명령 | 설명 | 주요 옵션 | 서비스 | 쓰기 |
 |---|---|---|---|---|
-| `duoctl setup` | 처음 설정을 한 명령으로(T183, H-102): 질문 → 계획 → 한 번 확인 → Truth → Index → Baseline → (agent 단계) → doctor 요약 | `--yes`, `--non-interactive`, `--answers -`, `--baseline-policy head\|abort`, `--repair` | init·doctor와 같은 service(planInit, applyInitPlan, indexRepository, captureAdoptionBaseline, projectDoctor) | 확인 뒤에만 init과 같음 |
+| `duoctl setup` | 처음 설정을 한 명령으로(T183, H-102): 질문 → 계획 → 한 번 확인 → Truth → Index → Baseline → (agent 단계) → doctor 요약 | `--yes`, `--non-interactive`, `--answers -`, `--baseline-policy head\|abort`, `--repair`, `--agent codex\|claude-code`(반복), `--launcher path\|npx` | init·install·doctor와 같은 service(planInit, applyInitPlan, indexRepository, captureAdoptionBaseline, planAgentIntegration, applyAgentIntegration, verifyAgentIntegration, projectDoctor) | 확인 뒤에만 init·install과 같음 |
 | `duoctl init` | 기존 저장소 adoption: plan → Truth → Index → Baseline | `--yes`, `--non-interactive`, `--answers -`, `--baseline-policy head\|abort`, `--repair` | director InitService, graph Indexer, director Adoption | Truth, generated, reviews/adoption-* |
 | `duoctl status` | 초기화 여부, Truth 개수, index freshness(변경 파일, 분석 stale, module resolution, call 재계산 후보, full rebuild 이유), adoption baseline, pending decision, LLM 상태 | | core loader, graph inspectIndex, director baseline status, core listDecisionProposals | 없음 |
 | `duoctl doctor` | 설정 전체 진단(T26.1): runtime, Git(저장소, 최상위, 첫 commit, 작업 트리), Project Truth, adoption baseline, index freshness, 분석 수준, Agent 연결(설정, launcher, MCP launch, tool 목록), 선택 LLM. 다음 행동 1~3개 | | integration `projectDoctor`(openGitProvider, loadProjectTruth, inspectStateDirectory, getAdoptionBaselineStatus, inspectIndex, inspectAgentIntegration, verifyAgentIntegration, LLMProviderPool) | 없음 |
@@ -97,7 +97,7 @@ Setup plan (nothing is written before you confirm):
   Truth      create 5 files in .duo-project: ...
   Index      build the index in .duo-project/generated (regenerable)
   Baseline   capture the adoption baseline at HEAD 2f3355d5f46b
-  Agents     not connected by this setup; afterwards run duoctl install codex or duoctl install claude-code
+  Agents     none selected; add --agent codex or --agent claude-code to connect one in this setup (or run duoctl install later)
 Apply this setup? [y/N] y
 Truth      ok · 5 files
 Index      ok · full (no-state) · 41 files
@@ -111,7 +111,7 @@ DUO does not commit. Review and commit the files it created when you are ready; 
 - 쓰기 전 거부: Git 저장소 아님(1), baseline이 필요한데 첫 commit 없음(6, `ADOPTION_HEAD_REQUIRED`, 질문 전), partial `.duo-project`(6, `--repair`), 충돌하는 `.duo-project`(1), 읽을 수 없는 baseline(1), agent 단계 blocker(6), 정책 없는 dirty tree(6), 취소(1).
 - 확인 뒤 한 단계가 실패하면 그 앞에서 쓴 것(특히 Project Truth)을 지우지 않고 `resume`(`duoctl setup`, dirty tree면 `--baseline-policy head` 포함)을 알린다. 다시 실행하면 첫 미완료 단계부터 잇는다. init이 baseline에서 멈춘 저장소(C214)도 첫 commit 뒤 setup으로 잇는다.
 - 다시 실행하면 Truth, baseline, 사용자 파일을 바꾸지 않고 묻지도 않는다(`status: "unchanged"`). 이미 초기화된 project의 stale index는 `duoctl index`처럼 확인 없이 갱신한다.
-- Agent 연결은 아직 setup에 없다: Jira -319가 setup의 agent 단계 인터페이스로 Codex·Claude Code를 연결한다. 그 전까지는 doctor 요약의 다음 행동이 `duoctl install codex` 또는 `duoctl install claude-code`다. Codex trust와 Claude Code approval은 DUO가 대신하지 않는다.
+- Agent 연결(Jira -319): `--agent codex`·`--agent claude-code`로 고른 agent만 연결한다(함께 지정 가능, `--launcher`는 install과 같다). 고르지 않으면 기존 agent 설정 파일이 있어도 연결하지 않는다. 계획은 install과 같은 `planAgentIntegration`이며 Truth를 이 setup이 만들 예정이어도 충돌·launcher 문제를 확인 전에 blocker로 보인다(6, 쓰기 0). 확인 뒤 `applyAgentIntegration`(실패하면 자기가 쓴 파일을 되돌린다, H-94)과 MCP launch 검증을 하고, 검증이 실패하면 Truth와 agent 파일을 남긴 채 `resume`을 알린다. Codex trust와 Claude Code approval은 "Left for you outside DUO"에만 적고 DUO가 대신하지 않는다.
 - `--json` result: `{ status, applied, steps: { repository, truth, index, baseline, agents }, plan?, apply?, index?, baseline?, agents?, resume?, remaining, doctor? }`. `applied`는 이 실행이 쓰기를 시작했는지다. 적용 뒤 doctor에 error check가 있으면 종료 코드 6이지만 `applied: true`, `status` `set-up`·`unchanged`, `doctor.overall: "action-required"`로 쓰기 전 거부(`applied: false`)와 구분된다.
 - metrics: `{ command: "setup", status }`. `runtime/metrics.jsonl`도 쓰기이므로 적용을 시작한 실행만 남긴다. 거부, 취소, 확인 누락, 확인 전 오류는 초기화된 project에서도 metric을 남기지 않는다(다른 명령은 초기화된 project에서 매 실행 metric을 남긴다).
 

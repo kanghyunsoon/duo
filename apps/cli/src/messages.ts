@@ -227,7 +227,7 @@ const EN = {
   "setup.plan.baseline.capture": "  Baseline   capture the adoption baseline at HEAD {head}",
   "setup.plan.baseline.capture-dirty": "  Baseline   capture the adoption baseline at HEAD {head}; current changes stay changes to review (HEAD_BASELINE)",
   "setup.plan.baseline.existing": "  Baseline   already captured; not changed",
-  "setup.plan.agents.none": "  Agents     not connected by this setup; afterwards run duoctl install codex or duoctl install claude-code",
+  "setup.plan.agents.none": "  Agents     none selected; add --agent codex or --agent claude-code to connect one in this setup (or run duoctl install later)",
   "setup.confirm": "Apply this setup? [y/N]",
   "setup.confirm-required": "Nothing written. Rerun with --yes to apply the plan above. --yes never answers a Truth question, chooses the dirty-tree policy, overrides a conflict, or trusts or approves an agent.",
   "setup.cancelled": "Cancelled; nothing written.",
@@ -243,6 +243,9 @@ const EN = {
   "setup.commit": "DUO does not commit. Review and commit the files it created when you are ready; the commit moves HEAD, so run duoctl index afterwards.",
   "setup.remaining": "Left for you outside DUO:",
   "setup.doctor-action": "Setup applied its plan, but the check above found a problem that needs your action (exit 6).",
+  "setup.agent.applied": "{agent}: {list}",
+  "setup.remaining.codex": "Codex: trust this project so Codex loads .codex/config.toml (the prompt on first launch, or trust_level = \"trusted\" for it in ~/.codex/config.toml). DUO does not change trust.",
+  "setup.remaining.claude-code": "Claude Code: run claude in this project, accept the workspace trust dialog and approve the duo-director server. DUO does not approve it.",
 } as const;
 
 export type MessageKey = keyof typeof EN;
@@ -469,7 +472,7 @@ const KO: Record<MessageKey, string> = {
   "setup.plan.baseline.capture": "  Baseline   HEAD {head}에서 adoption baseline 기록",
   "setup.plan.baseline.capture-dirty": "  Baseline   HEAD {head}에서 adoption baseline 기록, 현재 변경은 review할 변경으로 남음(HEAD_BASELINE)",
   "setup.plan.baseline.existing": "  Baseline   이미 기록됨, 바꾸지 않음",
-  "setup.plan.agents.none": "  Agents     이 setup은 연결하지 않음. 끝난 뒤 duoctl install codex 또는 duoctl install claude-code를 실행",
+  "setup.plan.agents.none": "  Agents     선택 안 함. 이 setup에서 연결하려면 --agent codex 또는 --agent claude-code를 추가(나중에 duoctl install로도 가능)",
   "setup.confirm": "이 설정을 적용할까요? [y/N]",
   "setup.confirm-required": "아무것도 쓰지 않았습니다. 위 계획을 적용하려면 --yes로 다시 실행하세요. --yes는 Truth 질문에 답하거나, dirty tree 정책을 고르거나, 충돌을 넘기거나, Agent를 trust·승인하지 않습니다.",
   "setup.cancelled": "취소했습니다. 아무것도 쓰지 않았습니다.",
@@ -485,6 +488,9 @@ const KO: Record<MessageKey, string> = {
   "setup.commit": "DUO는 commit하지 않습니다. 준비되면 만들어진 파일을 검토하고 commit하세요. commit하면 HEAD가 바뀌므로 그 뒤 duoctl index를 실행하세요.",
   "setup.remaining": "DUO 밖에서 남은 일:",
   "setup.doctor-action": "Setup은 계획을 적용했지만 위 점검에서 조치가 필요한 문제가 있습니다(종료 코드 6).",
+  "setup.agent.applied": "{agent}: {list}",
+  "setup.remaining.codex": "Codex: Codex가 .codex/config.toml을 읽도록 이 project를 trust하세요(처음 실행할 때 묻는 창, 또는 ~/.codex/config.toml의 trust_level = \"trusted\"). DUO는 trust를 바꾸지 않습니다.",
+  "setup.remaining.claude-code": "Claude Code: 이 project에서 claude를 실행해 workspace trust를 수락하고 duo-director server를 승인하세요. DUO는 승인하지 않습니다.",
 };
 
 const TABLES: Record<Locale, Record<MessageKey, string>> = { en: EN, ko: KO };

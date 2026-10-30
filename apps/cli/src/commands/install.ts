@@ -24,9 +24,9 @@ export interface InstallOptions {
   readonly launcher?: string;
 }
 
-const host = (env: Env) => ({ env: env.io.env, platform: process.platform });
+export const host = (env: Env) => ({ env: env.io.env, platform: process.platform });
 
-function renderPlan(env: Env, plan: AgentIntegrationPlan): string[] {
+export function renderPlan(env: Env, plan: AgentIntegrationPlan): string[] {
   const L = env.locale;
   const out = [
     t(L, "install.plan", { operation: plan.operation, agent: plan.agent, create: plan.willCreate.length, modify: plan.willModify.length, delete: plan.willDelete.length, unchanged: plan.unchanged.length }),
@@ -43,7 +43,7 @@ function renderPlan(env: Env, plan: AgentIntegrationPlan): string[] {
   return out;
 }
 
-function renderVerify(env: Env, v: AgentIntegrationVerification): string[] {
+export function renderVerify(env: Env, v: AgentIntegrationVerification): string[] {
   const L = env.locale;
   return [
     t(L, "install.verify", { result: v.ok ? "ok" : "failed" }),
