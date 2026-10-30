@@ -11,7 +11,7 @@ import { packageInfo as analyzer } from "@duo-director/analyzer";
 import { CLI_NAME, createDiagnostic, packageInfo as core, PRODUCT_NAME, SUPPORTED_SCHEMA_VERSIONS, type Diagnostic, type PackageInfo } from "@duo-director/core";
 import { appendRuntimeMetric, packageInfo as director } from "@duo-director/director";
 import { GRAPH_SCHEMA_VERSION, packageInfo as graph } from "@duo-director/graph";
-import { packageInfo as integration } from "@duo-director/integration";
+import { AGENT_IDS, isAgentId, NPX_LAUNCHER, packageInfo as integration, PATH_LAUNCHER } from "@duo-director/integration";
 import { contextCommand } from "./commands/context.js";
 import { decisionCommand } from "./commands/decision.js";
 import { doctorCommand } from "./commands/doctor.js";
@@ -22,6 +22,7 @@ import { installCommand } from "./commands/install.js";
 import { mcpCommand } from "./commands/mcp.js";
 import { reviewCommand } from "./commands/review.js";
 import { setupCommand } from "./commands/setup.js";
+import { agentSetupSteps } from "./commands/setup-agents.js";
 import { uiCommand } from "./commands/ui.js";
 import { CliFailure, usage, type Env } from "./commands/shared.js";
 import { statsCommand } from "./commands/stats.js";
@@ -46,7 +47,10 @@ const GLOBAL: Options = {
   verbose: { type: "boolean" }, "no-color": { type: "boolean" }, help: { type: "boolean", short: "h" }, version: { type: "boolean", short: "v" },
 };
 const COMMAND_OPTIONS: Readonly<Record<string, Options>> = {
-  setup: { yes: { type: "boolean", short: "y" }, repair: { type: "boolean" }, answers: { type: "string" }, "baseline-policy": { type: "string" } },
+  setup: {
+    yes: { type: "boolean", short: "y" }, repair: { type: "boolean" }, answers: { type: "string" }, "baseline-policy": { type: "string" },
+    agent: { type: "string", multiple: true }, launcher: { type: "string" },
+  },
   init: { yes: { type: "boolean", short: "y" }, repair: { type: "boolean" }, answers: { type: "string" }, "baseline-policy": { type: "string" } },
   status: {},
   doctor: {},
@@ -72,7 +76,7 @@ const HELP = [
   `Usage: ${CLI_NAME} <command> [options]`,
   "",
   "Commands:",
-  "  setup       first-time setup in one command: plan, one confirmation, then Truth, index, adoption baseline and a final check",
+  "  setup       first-time setup in one command: plan, one confirmation, then Truth, index, adoption baseline, the agents you name and a final check",
   "  init        adopt this Git repository: plan, Truth, index, adoption baseline",
   "  status      Truth, index freshness, adoption baseline, pending decisions (read-only)",
   "  doctor      check the whole setup (Git, Truth, index, analysis, agents, optional LLM) and print the next steps (read-only)",
@@ -89,7 +93,7 @@ const HELP = [
   "",
   "Options: --root <path>  --json  --locale en|ko  --non-interactive  --verbose  --no-color  --version  --help",
   "init: --yes (operational confirmations only; never Truth or the adoption policy)  --answers -  --baseline-policy head|abort  --repair",
-  "setup: the same options as init; non-interactive runs need --yes to apply the plan",
+  "setup: the same options as init, plus --agent codex|claude-code (repeatable) and --launcher path|npx; non-interactive runs need --yes to apply the plan",
 ].join("\n");
 
 function parse(argv: readonly string[]) {
@@ -112,7 +116,13 @@ async function dispatch(env: Env, command: string, positionals: readonly string[
       const policy = str(v["baseline-policy"]);
       if (policy !== undefined && policy !== "head" && policy !== "abort") return usage(command, "--baseline-policy must be head or abort");
       const options = { repair: bool(v.repair), answersFromStdin: answers === "-", ...(policy === undefined ? {} : { baselinePolicy: policy as "head" | "abort" }) };
-      return command === "setup" ? setupCommand(env, options) : initCommand(env, options);
+      if (command === "init") return initCommand(env, options);
+      const named = (v.agent as string[] | undefined) ?? [];
+      const unknown = named.find((a) => !isAgentId(a));
+      if (unknown !== undefined) return usage("setup", `unknown agent '${unknown}' (--agent ${AGENT_IDS.join("|")})`);
+      const launcher = str(v.launcher);
+      if (launcher !== undefined && launcher !== "path" && launcher !== "npx") return usage("setup", "--launcher must be path (duoctl on PATH) or npx (project-local)");
+      return setupCommand(env, options, agentSetupSteps(AGENT_IDS.filter((a) => named.includes(a)), launcher === "npx" ? NPX_LAUNCHER : PATH_LAUNCHER));
     }
     case "status": return statusCommand(env);
     case "doctor": return doctorCommand(env);
