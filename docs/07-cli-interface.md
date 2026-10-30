@@ -12,6 +12,7 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 
 | 명령 | 설명 | 주요 옵션 | 서비스 | 쓰기 |
 |---|---|---|---|---|
+| `duoctl setup` | 처음 설정을 한 명령으로(T183, H-102): 질문 → 계획 → 한 번 확인 → Truth → Index → Baseline → (agent 단계) → doctor 요약 | `--yes`, `--non-interactive`, `--answers -`, `--baseline-policy head\|abort`, `--repair` | init·doctor와 같은 service(planInit, applyInitPlan, indexRepository, captureAdoptionBaseline, projectDoctor) | 확인 뒤에만 init과 같음 |
 | `duoctl init` | 기존 저장소 adoption: plan → Truth → Index → Baseline | `--yes`, `--non-interactive`, `--answers -`, `--baseline-policy head\|abort`, `--repair` | director InitService, graph Indexer, director Adoption | Truth, generated, reviews/adoption-* |
 | `duoctl status` | 초기화 여부, Truth 개수, index freshness(변경 파일, 분석 stale, module resolution, call 재계산 후보, full rebuild 이유), adoption baseline, pending decision, LLM 상태 | | core loader, graph inspectIndex, director baseline status, core listDecisionProposals | 없음 |
 | `duoctl doctor` | 설정 전체 진단(T26.1): runtime, Git(저장소, 최상위, 첫 commit, 작업 트리), Project Truth, adoption baseline, index freshness, 분석 수준, Agent 연결(설정, launcher, MCP launch, tool 목록), 선택 LLM. 다음 행동 1~3개 | | integration `projectDoctor`(openGitProvider, loadProjectTruth, inspectStateDirectory, getAdoptionBaselineStatus, inspectIndex, inspectAgentIntegration, verifyAgentIntegration, LLMProviderPool) | 없음 |
@@ -54,7 +55,7 @@ Operational failure와 Review verdict를 섞지 않는다. Verdict는 `--fail-on
 | 3 | review ASK 이상이고 `--fail-on ask\|warn` |
 | 4 | review BLOCK이고 `--fail-on block\|ask\|warn` |
 | 5 | .duo-project 없음(NOT_INITIALIZED) |
-| 6 | 조치 필요: index-required(context, review), adoption policy 필요, ABORT_AND_CLEAN, partial의 repair, install의 conflict·launcher 없음·확인 필요(비대화형에서 `--yes` 없음), doctor의 error check(초기화 전 포함: doctor는 5를 쓰지 않는다) |
+| 6 | 조치 필요: index-required(context, review), adoption policy 필요, ABORT_AND_CLEAN, partial의 repair, install의 conflict·launcher 없음·확인 필요(비대화형에서 `--yes` 없음), setup의 첫 commit 없음·agent 단계 blocker·확인 필요, doctor의 error check(초기화 전 포함: doctor는 5를 쓰지 않는다) |
 
 install은 init 전이면 5(`AGENT_NOT_INITIALIZED`), verify 실패면 1이다.
 
@@ -83,6 +84,35 @@ Existing Repository → Install DUO → Observe Repository → Bootstrap Minimal
 
 - Truth는 sparse여도 정상이다: Requirement·Decision·Constraint 0개, Milestone 없음이 init 실패가 아니다(Code Graph는 풍부, Intent Graph는 희소). Human Truth는 사용하면서 쌓이고, 부족한 intent는 Knowledge Gap과 Review가 필요한 때 surface/ask한다. 가짜 Requirement·Decision·Milestone을 만들지 않는다.
 - Adoption Baseline은 "DUO 도입 전부터 있던 상태 vs 도입 뒤 변화"를 가르는 provenance다. 기존 코드가 옳다거나 기술 부채를 승인한다는 뜻이 아니다([03 Adoption Baseline](03-data-model.md#adoption-baseline-t141)).
+
+## duoctl setup
+
+`duoctl setup`(T183, [H-102](conflicts.md))은 처음 설정을 한 흐름으로 묶는다. 설계와 실패 표는 [0.4.0-t183-one-command-setup.md](roadmap/0.4.0-t183-one-command-setup.md)에 있다.
+
+```text
+$ duoctl setup
+Repository ok · orbit-tasks · typescript · 36 files · branch main
+Use the suggestion? [y/N] y        (Truth 질문: init과 같다)
+Setup plan (nothing is written before you confirm):
+  Truth      create 5 files in .duo-project: ...
+  Index      build the index in .duo-project/generated (regenerable)
+  Baseline   capture the adoption baseline at HEAD 2f3355d5f46b
+  Agents     not connected by this setup; afterwards run duoctl install codex or duoctl install claude-code
+Apply this setup? [y/N] y
+Truth      ok · 5 files
+Index      ok · full (no-state) · 41 files
+Baseline   ok · 2f3355d5f46b · 0 pre-existing findings
+DUO setup finished.
+(doctor 요약)
+DUO does not commit. Review and commit the files it created when you are ready; the commit moves HEAD, so run duoctl index afterwards.
+```
+
+- 확인 전에는 저장소에 아무것도 쓰지 않는다. 질문(Truth 질문, dirty tree 정책)을 먼저 받고, 만들 파일·index·baseline·agent 단계 전체를 보인 뒤 한 번 묻는다. 비대화형은 `--yes`가 있어야 적용한다(없으면 6, `status: "confirmation-required"`). `--yes`의 의미는 init과 같다: Truth 질문에 답하거나 dirty 정책을 고르거나 충돌·trust·approval을 넘기지 않는다.
+- 쓰기 전 거부: Git 저장소 아님(1), baseline이 필요한데 첫 commit 없음(6, `ADOPTION_HEAD_REQUIRED`, 질문 전), partial `.duo-project`(6, `--repair`), 충돌하는 `.duo-project`(1), 읽을 수 없는 baseline(1), agent 단계 blocker(6), 정책 없는 dirty tree(6), 취소(1).
+- 확인 뒤 한 단계가 실패하면 그 앞에서 쓴 것(특히 Project Truth)을 지우지 않고 `resume`(`duoctl setup`, dirty tree면 `--baseline-policy head` 포함)을 알린다. 다시 실행하면 첫 미완료 단계부터 잇는다. init이 baseline에서 멈춘 저장소(C214)도 첫 commit 뒤 setup으로 잇는다.
+- 다시 실행하면 Truth, baseline, 사용자 파일을 바꾸지 않고 묻지도 않는다(`status: "unchanged"`). 이미 초기화된 project의 stale index는 `duoctl index`처럼 확인 없이 갱신한다.
+- Agent 연결은 아직 setup에 없다: Jira -319가 setup의 agent 단계 인터페이스로 Codex·Claude Code를 연결한다. 그 전까지는 doctor 요약의 다음 행동이 `duoctl install codex` 또는 `duoctl install claude-code`다. Codex trust와 Claude Code approval은 DUO가 대신하지 않는다.
+- `--json` result: `{ status, steps: { repository, truth, index, baseline, agents }, plan?, apply?, index?, baseline?, agents?, resume?, remaining, doctor? }`. metrics: `{ command: "setup", status }`.
 
 ## duoctl init
 
