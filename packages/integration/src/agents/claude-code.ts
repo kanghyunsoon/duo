@@ -51,6 +51,7 @@ export const claudeCodeAdapter: AgentIntegrationAdapter = {
   id: "claude-code",
   mcpTarget: ".mcp.json",
   bridgeTarget: "CLAUDE.md",
+  skillTarget: ".claude/skills/duo/SKILL.md",
   projectTrustRequired: false,
   approvalRequired: true,
   plannedEntry: (launcher) => ({ type: "stdio", command: launcher.command, args: [...launcher.argsPrefix, "mcp", "--root-from", "env:CLAUDE_PROJECT_DIR", "--agent", "claude-code"] }),

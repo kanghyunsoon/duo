@@ -59,7 +59,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, Options>> = {
   decision: { reason: { type: "string" } },
   stats: { last: { type: "string" } },
   mcp: { agent: { type: "string" }, "root-from": { type: "string" } },
-  install: { yes: { type: "boolean", short: "y" }, launcher: { type: "string" } },
+  install: { yes: { type: "boolean", short: "y" }, launcher: { type: "string" }, "with-skill": { type: "boolean" } },
   ui: { port: { type: "string" }, open: { type: "boolean" } },
 };
 const DISCOVERY_OPTIONS: Options = Object.assign({}, GLOBAL, ...Object.values(COMMAND_OPTIONS));
@@ -81,7 +81,7 @@ const HELP = [
   "  decision    list | confirm <id> | reject <id> [--reason <text>] | review-pending (terminal only, a human: review-pending previews every pending proposal, then confirms the ones you choose)",
   "  stats       runtime metrics summary (--last n)",
   "  mcp         serve the duo-director MCP server over stdio (--root <path> | --root-from git-cwd|env:<NAME>, --agent <label>)",
-  "  install     connect an agent: install codex|claude-code [--launcher path|npx] [--yes] · install status [agent] · install remove <agent>",
+  "  install     connect an agent: install codex|claude-code [--launcher path|npx] [--with-skill] [--yes] · install status [agent] · install remove <agent>",
   "  ui          local Project Direction Console on 127.0.0.1 (--port <n>, --open); Ctrl+C stops it",
   "",
   "Options: --root <path>  --json  --locale en|ko  --non-interactive  --verbose  --no-color  --version  --help",
@@ -136,7 +136,7 @@ async function dispatch(env: Env, command: string, positionals: readonly string[
       return graphCommand(env, command, arg, str(v.depth));
     case "decision": return decisionCommand(env, arg, positionals[2], str(v.reason));
     case "stats": return statsCommand(env, str(v.last));
-    case "install": return installCommand(env, arg, positionals[2], { ...(str(v.launcher) === undefined ? {} : { launcher: str(v.launcher) as string }) });
+    case "install": return installCommand(env, arg, positionals[2], { ...(str(v.launcher) === undefined ? {} : { launcher: str(v.launcher) as string }), ...(v["with-skill"] === true ? { withSkill: true } : {}) });
     case "ui":
       if (env.json) return usage("ui", "ui serves a local web console; --json does not apply");
       return uiCommand(env, { open: bool(v.open), ...(str(v.port) === undefined ? {} : { port: str(v.port) as string }) });

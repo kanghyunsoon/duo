@@ -1,7 +1,7 @@
 /**
  * duoctl install (TASK-017): connects a coding agent to this DUO project.
  *
- *   duoctl install <codex|claude-code> [--launcher path|npx]   plan → confirm → apply → verify
+ *   duoctl install <codex|claude-code> [--launcher path|npx] [--with-skill]   plan → confirm → apply → verify
  *   duoctl install status [agent]                              read-only
  *   duoctl install remove <agent>                              plan → confirm → apply
  *
@@ -22,6 +22,8 @@ import { diagLines, interactive, usage, type Env } from "./shared.js";
 
 export interface InstallOptions {
   readonly launcher?: string;
+  /** Opt-in project skill (S15P31A106-358): listed by both agents; loading during a task is not verified yet. */
+  readonly withSkill?: boolean;
 }
 
 const host = (env: Env) => ({ env: env.io.env, platform: process.platform });
@@ -33,6 +35,7 @@ function renderPlan(env: Env, plan: AgentIntegrationPlan): string[] {
     t(L, "install.mcp", { target: plan.mcp.target, status: plan.mcp.status, action: plan.mcp.action }),
     t(L, "install.bridge", { target: plan.bridge.target, status: plan.bridge.status, action: plan.bridge.action }),
   ];
+  if (plan.skill !== undefined) out.push(t(L, "install.skill", { target: plan.skill.target, status: plan.skill.status, action: plan.skill.action }));
   if (plan.operation === "install") out.push(t(L, "install.launcher", { command: launcherDisplay(plan.launcher), state: plan.requirements.duoctlAvailable ? "found" : "not found" }));
   for (const p of plan.willCreate) out.push(t(L, "install.file", { action: "create", path: p }));
   for (const p of plan.willModify) out.push(t(L, "install.file", { action: "modify", path: p }));
@@ -102,7 +105,7 @@ export async function installCommand(env: Env, sub: string | undefined, arg: str
   const agent: AgentId = sub;
   if (options.launcher !== undefined && options.launcher !== "path" && options.launcher !== "npx") return usage("install", "--launcher must be path (duoctl on PATH) or npx (project-local)");
   const launcher = options.launcher === "npx" ? NPX_LAUNCHER : PATH_LAUNCHER;
-  const plan = planAgentIntegration(env.root, agent, { launcher, host: host(env) });
+  const plan = planAgentIntegration(env.root, agent, { launcher, host: host(env), ...(options.withSkill === true ? { withSkill: true } : {}) });
   const human = renderPlan(env, plan);
   const step = await confirmAndApply(env, "install", plan, human);
   if (step.outcome !== undefined) return step.outcome;
