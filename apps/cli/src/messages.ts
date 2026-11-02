@@ -219,7 +219,7 @@ const EN = {
   "context.ambiguous.definition-id": "Several Requirements match equally: add one Requirement ID, as listed above, to the task.",
   "context.ambiguous.none": "\"{term}\": no single file path or name tells these targets apart; say which one you mean.",
   "context.ambiguous.id-also": "If the task is about a specific Requirement or Decision, its ID is also an exact starting point.",
-  "setup.plan.title": "Setup plan (nothing is written before you confirm):",
+  "setup.plan.title": "Setup plan (nothing is written before you confirm when confirmation is required):",
   "setup.plan.truth.create": "  Truth      create {n} files in .duo-project: {list}",
   "setup.plan.truth.existing": "  Truth      already set up; not changed",
   "setup.plan.index.build": "  Index      build the index in .duo-project/generated (regenerable)",
@@ -237,12 +237,13 @@ const EN = {
   "setup.dirty.aborted": "Nothing written. Commit or stash your changes, then run duoctl setup again.",
   "setup.baseline-unreadable": "The existing adoption baseline cannot be read ({reason}). Nothing was written; setup never replaces it. Run duoctl doctor for details.",
   "setup.blocked": "Nothing written. Resolve the problems above, then run duoctl setup again.",
-  "setup.resume": "Setup stopped at {step}. What was already written is kept; Project Truth is never deleted. Fix the problem above, then run {command}: it continues from the first unfinished step.",
+  "setup.resume": "Setup stopped at {step}. Changes from completed steps are preserved. Partial changes from the failed step may have been rolled back. Resolve the problem above, then run: {command}",
   "setup.done": "DUO setup finished.",
   "setup.unchanged": "DUO is already set up: Truth, baseline and agent files were not changed.",
   "setup.commit": "DUO does not commit. Review and commit the files it created when you are ready; the commit moves HEAD, so run duoctl index afterwards.",
   "setup.remaining": "Left for you outside DUO:",
   "setup.doctor-action": "Setup applied its plan, but the check above found a problem that needs your action (exit 6).",
+  "setup.doctor-action-unchanged": "Setup made no configuration changes; the check above found a problem that needs your action (exit 6).",
 } as const;
 
 export type MessageKey = keyof typeof EN;
@@ -461,7 +462,7 @@ const KO: Record<MessageKey, string> = {
   "context.ambiguous.definition-id": "여러 Requirement가 똑같이 일치합니다: 위 목록의 Requirement ID 하나를 과제에 넣으세요.",
   "context.ambiguous.none": "\"{term}\": 하나의 파일 경로나 이름으로는 이 대상들을 구분할 수 없습니다. 어느 대상인지 직접 정해 주세요.",
   "context.ambiguous.id-also": "과제가 특정 Requirement나 Decision에 관한 것이면 그 ID도 정확한 시작점입니다.",
-  "setup.plan.title": "설정 계획(확인하기 전에는 아무것도 쓰지 않습니다):",
+  "setup.plan.title": "설정 계획(확인이 필요한 경우, 확인 전에는 아무것도 쓰지 않습니다):",
   "setup.plan.truth.create": "  Truth      .duo-project에 파일 {n}개 생성: {list}",
   "setup.plan.truth.existing": "  Truth      이미 설정됨, 바꾸지 않음",
   "setup.plan.index.build": "  Index      .duo-project/generated에 index 생성(다시 만들 수 있는 상태)",
@@ -479,12 +480,13 @@ const KO: Record<MessageKey, string> = {
   "setup.dirty.aborted": "아무것도 쓰지 않았습니다. 변경을 commit 또는 stash한 뒤 duoctl setup을 다시 실행하세요.",
   "setup.baseline-unreadable": "기존 adoption baseline을 읽을 수 없습니다({reason}). 아무것도 쓰지 않았고, setup은 baseline을 대체하지 않습니다. 자세한 내용은 duoctl doctor로 확인하세요.",
   "setup.blocked": "아무것도 쓰지 않았습니다. 위 문제를 해결한 뒤 duoctl setup을 다시 실행하세요.",
-  "setup.resume": "Setup이 {step} 단계에서 멈췄습니다. 이미 쓴 내용은 유지하며 Project Truth는 지우지 않습니다. 위 문제를 해결한 뒤 {command}를 실행하면 끝나지 않은 첫 단계부터 이어서 진행합니다.",
+  "setup.resume": "Setup이 {step} 단계에서 중단됐습니다. 완료된 단계의 변경 사항은 유지됩니다. 실패한 단계의 일부 변경 사항은 복구됐을 수 있습니다. 위 문제를 해결한 뒤 다음 명령을 실행하세요: {command}",
   "setup.done": "DUO 설정을 마쳤습니다.",
   "setup.unchanged": "DUO가 이미 설정되어 있습니다. Truth, baseline, agent 파일은 바꾸지 않았습니다.",
   "setup.commit": "DUO는 commit하지 않습니다. 준비되면 만들어진 파일을 검토하고 commit하세요. commit하면 HEAD가 바뀌므로 그 뒤 duoctl index를 실행하세요.",
   "setup.remaining": "DUO 밖에서 남은 일:",
   "setup.doctor-action": "Setup은 계획을 적용했지만 위 점검에서 조치가 필요한 문제가 있습니다(종료 코드 6).",
+  "setup.doctor-action-unchanged": "추가 설정 변경 없이 점검을 마쳤으며, 위 결과에 따라 조치가 필요합니다(종료 코드 6).",
 };
 
 const TABLES: Record<Locale, Record<MessageKey, string>> = { en: EN, ko: KO };

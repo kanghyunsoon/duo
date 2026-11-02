@@ -21,6 +21,7 @@ import { createDiagnostic, type Diagnostic } from "@duo-director/core";
 import { indexRepository, inspectIndex, type IndexResult } from "@duo-director/graph";
 import type { DoctorPayload } from "@duo-director/integration";
 import { t, type MessageKey } from "../messages.js";
+import { padColumns } from "../terminal-width.js";
 import { EXIT, type Outcome } from "../output.js";
 import { doctorPayload, renderDoctor } from "./doctor.js";
 import { askQuestions, parseAnswers } from "./init.js";
@@ -86,22 +87,22 @@ const thrown = (error: unknown): readonly Diagnostic[] => (error instanceof CliF
  * confirmation write nothing, also in an initialized project where metrics would otherwise be appended.
  */
 export async function setupCommand(env: Env, options: SetupOptions, agentSteps: readonly SetupAgentStep[] = []): Promise<Outcome> {
-  const state = { applied: false };
+  const state: { applied: boolean; resume?: string } = { applied: false };
   try {
     return await runSetup(env, options, agentSteps, state);
   } catch (error) {
     const diagnostics = error instanceof CliFailure ? error.diagnostics : [createDiagnostic("CLI_USAGE_INVALID", error instanceof Error ? error.message : String(error))];
     const human = diagLines(diagnostics);
-    if (state.applied) human.push(t(env.locale, "setup.resume", { step: "setup", command: "duoctl setup" }));
+    if (state.applied) human.push(t(env.locale, "setup.resume", { step: "setup", command: state.resume ?? "duoctl setup" }));
     return {
       command: "setup", exitCode: EXIT.ERROR, diagnostics, human,
-      result: { status: "failed", applied: state.applied, ...(state.applied ? { resume: "duoctl setup" } : {}) },
+      result: { status: "failed", applied: state.applied, ...(state.applied ? { resume: state.resume ?? "duoctl setup" } : {}) },
       ...(state.applied ? { metric: { status: "failed" } } : {}),
     };
   }
 }
 
-async function runSetup(env: Env, options: SetupOptions, agentSteps: readonly SetupAgentStep[], state: { applied: boolean }): Promise<Outcome> {
+async function runSetup(env: Env, options: SetupOptions, agentSteps: readonly SetupAgentStep[], state: { applied: boolean; resume?: string }): Promise<Outcome> {
   const L = env.locale;
   const steps: Record<"repository" | "truth" | "index" | "baseline", Step> = {
     repository: { status: "skipped" }, truth: { status: "skipped" }, index: { status: "skipped" }, baseline: { status: "skipped" },
@@ -122,7 +123,7 @@ async function runSetup(env: Env, options: SetupOptions, agentSteps: readonly Se
   let policy = options.baselinePolicy;
   let needsBaseline = false;
 
-  const report = (name: string, s: Step) => progress(env, name.padEnd(10) + " " + t(L, ("step." + s.status) as MessageKey) + (s.detail === undefined ? "" : " · " + s.detail));
+  const report = (name: string, s: Step) => progress(env, padColumns(name, 11) + t(L, ("step." + s.status) as MessageKey) + (s.detail === undefined ? "" : " · " + s.detail));
   const label = (k: keyof typeof steps) => t(L, ("init." + k) as MessageKey);
   const finish = (exitCode: number, status: SetupStatus): Outcome => ({
     command: "setup", exitCode, diagnostics, human,
@@ -150,6 +151,7 @@ async function runSetup(env: Env, options: SetupOptions, agentSteps: readonly Se
   /** After the confirmation: keep what was written and say how to continue. */
   const stopped = (step: string): Outcome => {
     resume = "duoctl setup" + (needsBaseline && plan?.observed.workingTree.dirty === true && steps.baseline.status !== "ok" ? " --baseline-policy head" : "");
+    state.resume = resume;
     human.push(t(L, "setup.resume", { step, command: resume }));
     return finish(EXIT.ERROR, "failed");
   };
@@ -382,7 +384,7 @@ async function runSetup(env: Env, options: SetupOptions, agentSteps: readonly Se
     // ---- 5. Summary: the read-only doctor and what is left outside DUO ----
     doctor = await doctorPayload(env);
     human.push(t(L, writes ? "setup.done" : "setup.unchanged"), ...renderDoctor(L, doctor));
-    if (doctor.overall === "action-required") human.push("", t(L, "setup.doctor-action"));
+    if (doctor.overall === "action-required") human.push("", t(L, writes ? "setup.doctor-action" : "setup.doctor-action-unchanged"));
     if (writes) human.push("", t(L, "setup.commit"));
     if (remaining.length > 0) human.push("", t(L, "setup.remaining"), ...remaining.map((line) => "  " + line));
     return finish(doctor.overall === "action-required" ? EXIT.ACTION_REQUIRED : EXIT.OK, writes ? "set-up" : "unchanged");

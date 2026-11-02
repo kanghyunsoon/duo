@@ -195,6 +195,21 @@ describe("duoctl setup: one confirmation, then apply", () => {
     expect(snapshot(r.root, userFiles)).toEqual(before);
   });
 
+  it("refreshes a stale index without adding a confirmation for an initialized project", async () => {
+    const r = repo();
+    const initialized = await setup(r.root, ["--yes", "--json"]);
+    expect(initialized.code).toBe(0);
+    r.write("src/after-index.ts", "export const addedAfterIndex = true;\n");
+
+    const t = terminal(r.root, { tty: true });
+    const result = await run(["setup", "--json"], t.io);
+    const output = JSON.parse(t.out.join("\n")) as { result: { status: string; applied: boolean; index?: { mode: string } } };
+
+    expect(result).toBe(0);
+    expect(t.prompts.filter(isConfirm)).toHaveLength(0);
+    expect(output.result).toMatchObject({ status: "unchanged", applied: true, index: { mode: "incremental" } });
+  });
+
   it("continues an init that stopped at the baseline (C214) after the first commit", async () => {
     const r = repo({ commit: false });
     const initRun = await run(["init", "--non-interactive", "--baseline-policy", "head"], terminal(r.root).io);
@@ -255,7 +270,8 @@ describe("duoctl setup: the agent step interface (for Jira -319)", () => {
     const failing = await setupCommand(env(r.root, t), { repair: false, answersFromStdin: false }, [fakeStep({ fail: true, seen })]);
     expect(failing.exitCode).toBe(1);
     expect(failing.result).toMatchObject({ status: "failed", resume: "duoctl setup", steps: { truth: { status: "ok" }, baseline: { status: "ok" }, agents: { fake: { status: "failed" } } } });
-    expect(failing.human.join("\n")).toContain("Project Truth is never deleted");
+    expect(failing.human.join("\n")).toContain("Partial changes from the failed step may have been rolled back");
+    expect(failing.human.join("\n")).toContain("run: duoctl setup");
     expect(fs.existsSync(path.join(r.root, ".duo-project/project.yaml"))).toBe(true);
     expect(seen.map((c) => c.truthPlanned)).toEqual([true]);
     const truth = snapshot(r.root, truthFiles);
@@ -263,6 +279,7 @@ describe("duoctl setup: the agent step interface (for Jira -319)", () => {
     const crashing = await setupCommand(env(r.root, terminal(r.root, { tty: true, answers: ["y"] })), { repair: false, answersFromStdin: false }, [fakeStep({ fail: "throw" })]);
     expect(crashing.result).toMatchObject({ status: "failed", resume: "duoctl setup", steps: { truth: { status: "existing" }, agents: { fake: { status: "failed" } } } });
     expect(crashing.diagnostics.map((d) => d.message).join("\n")).toContain("fake crashed");
+    expect(crashing.human.join("\n")).toContain("run: duoctl setup");
 
     const t2 = terminal(r.root, { tty: true, answers: ["y"] });
     const finished = await setupCommand(env(r.root, t2), { repair: false, answersFromStdin: false }, [fakeStep({ seen })]);
@@ -340,5 +357,19 @@ describe("duoctl setup: metrics follow the confirmation (T183 follow-up)", () =>
     expect(o.result).toMatchObject({ status: "set-up", applied: true, doctor: { overall: "action-required" } });
     expect(o.metric).toMatchObject({ status: "set-up" });
     expect(o.human.join("\n")).toContain("Setup applied its plan, but the check above found a problem");
+  });
+
+  it("describes a Doctor action after setup makes no configuration changes", async () => {
+    const r = repo();
+    const initialized = await setup(r.root, ["--yes", "--json"]);
+    expect(initialized.code).toBe(0);
+    fs.writeFileSync(path.join(r.root, ".mcp.json"), JSON.stringify({ mcpServers: { "duo-director": { command: "someone-else" } } }) + "\n");
+
+    const t = terminal(r.root);
+    const outcome = await setupCommand(envOf(r.root, t), options);
+
+    expect(outcome.exitCode).toBe(6);
+    expect(outcome.result).toMatchObject({ status: "unchanged", doctor: { overall: "action-required" } });
+    expect(outcome.human.join("\n")).toContain("Setup made no configuration changes");
   });
 });
