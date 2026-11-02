@@ -1,6 +1,6 @@
 # Issue #107 MCP benchmark timeout verification plan
 
-Status: Local Verification Partial, CI Pending. Date: 2026-10-29. Last verified: 2026-11-02. Owner: 김가현. Jira: [S15P31A106-268](https://ssafy.atlassian.net/browse/S15P31A106-268).
+Status: PR CI Passed, Merge Pending. Date: 2026-10-29. Last verified: 2026-11-02. Owner: 김가현. Jira: [S15P31A106-268](https://ssafy.atlassian.net/browse/S15P31A106-268).
 
 GitHub [#107](https://github.com/kanghyunsoon/duo/issues/107)은 응답하지 않는 MCP server 또는 tool 때문에 reliability benchmark가 끝나지 않는 문제다. [PR #95](https://github.com/kanghyunsoon/duo/pull/95)가 `87fe174`로 `next`에 병합되면서 단계별 timeout과 회귀 테스트가 들어왔다. `main`에는 아직 반영되지 않았다. 이 작업은 새 기능을 추가하지 않고, 최종 검증에서 드러난 실패를 고친 뒤 수용 기준을 다시 검증한다.
 
@@ -33,10 +33,10 @@ GitHub [#107](https://github.com/kanghyunsoon/duo/issues/107)은 응답하지 �
 같은 `bb7167a`에서 다음을 추가로 확인했다.
 
 - `bench/mcp-contract.mjs`에 `importer_paths`만 메모리에서 추가하면 smoke는 exit 0이고 네 scenario 모두 `errorCount: 0`이다. 다른 contract 불일치는 없다.
-- timeout test의 실패는 재현되지 않았다. 순차 6회와 4개 병렬 2회, 총 14회 실행에서 7개 case가 모두 통과했다.
-- SDK cold import는 idle 상태에서 117–201 ms, 8개 병렬에서 166–231 ms로 500 ms에 못 미쳤다.
+- 이미 test를 실행한 worktree에서는 timeout test의 실패가 재현되지 않았다. 순차 6회와 4개 병렬 2회, 총 14회 실행에서 7개 case가 모두 통과했다.
+- 같은 조건의 SDK import는 idle 상태에서 117–201 ms, 8개 병렬에서 166–231 ms로 500 ms에 못 미쳤다.
 
-따라서 flake의 원인은 아직 확인되지 않았다. SDK cold import 지연은 가설이고, 4회 중 2회 실패했던 run의 실행 조건은 기록되어 있지 않다.
+원인은 이후 새 worktree 첫 실행 비교로 확인했다. 결과는 `2026-11-02 로컬 구현 결과`에 있다. 4회 중 2회 실패했던 원래 run의 실행 조건은 기록되어 있지 않다.
 
 ## 수정 작업 계획
 
@@ -52,7 +52,7 @@ GitHub [#107](https://github.com/kanghyunsoon/duo/issues/107)은 응답하지 �
 
 ### 2. timeout stage 선점 flake 대응
 
-`tests/bench/fixtures/unresponsive-mcp.mjs`는 `tools/list`와 `tools/call` mode에서 MCP SDK를 dynamic import한 뒤 initialize에 응답한다. 이 지연이 500 ms를 넘으면 target stage 전에 `initialize` timeout이 날 수 있다는 것이 현재 가설이다.
+`tests/bench/fixtures/unresponsive-mcp.mjs`는 `tools/list`와 `tools/call` mode에서 MCP SDK를 dynamic import한 뒤 initialize에 응답한다. 새 worktree 첫 실행에서는 이 지연이 500 ms를 넘어 target stage 전에 `initialize` timeout이 난다. 이 원인은 수정 전후 비교로 확인했다.
 
 수정 전 commit에서 먼저 실패를 재현한다. 방금 만든 worktree의 첫 실행처럼 원래 실패 run과 비슷한 조건으로 반복하고, 실행 조건과 stage별 결과를 기록한다. 재현되지 않으면 그 사실을 기록하고, 수정 후 통과를 flake 해결의 증거로 쓰지 않는다.
 
@@ -132,18 +132,31 @@ Windows에서는 signal 처리 방식이 POSIX와 다르므로 어떤 signal 분
 | `pnpm test:mcp-benchmark` | 통과 |
 | `pnpm benchmark:mcp:smoke` | 네 scenario 모두 `errorCount: 0`, exit 0 |
 | `pnpm typecheck` | 통과 |
-| `pnpm verify` | **미통과**. boundaries, lint, typecheck, build는 통과했다. 기본 test는 157 files 중 156 files 통과했고, `tests/ui/ui.browser.e2e.test.ts` live-update case 1건이 node 표시 30초 timeout으로 실패했다. test 실패로 chain이 멈춰 `docs:validate`는 `verify` 안에서 실행되지 않았다 |
-| 실패한 UI case 단독 재실행 | 통과. 변경 파일이 bench와 test뿐이라 #107 변경과의 관련 가능성은 낮지만, 전체 test 재통과로 확인하지는 않았다 |
-| `node scripts/validate-docs.mjs` | 통과. `pnpm verify`와 별도로 실행 |
+| `pnpm verify` 첫 실행 | **미통과**. boundaries, lint, typecheck, build는 통과했다. 기본 test는 157 files 중 156 files 통과했고, `tests/ui/ui.browser.e2e.test.ts` live-update case 1건이 node 표시 30초 timeout으로 실패했다. test 실패로 chain이 멈춰 `docs:validate`는 `verify` 안에서 실행되지 않았다 |
+| 실패한 UI case 단독 재실행 | 통과 |
+| `verify` 단계별 재실행 | boundaries, lint, typecheck, build, docs 통과. 기본 test 157/157 files, 1596 passed, 7 skipped, 9 todo. 한 번의 `pnpm verify` chain이 아니라 단계별로 실행했다. UI 실패는 재현되지 않았고 원인은 확인하지 못했다 |
 
-timeout test 반복 통과는 fixture 교체 뒤 동작이 안정적이라는 뜻일 뿐, flake가 해결됐다는 근거는 아니다. 수정 전 코드에서도 실패가 재현되지 않았고, 원래 실패 run의 실행 조건을 알 수 없으며, 2단계의 새 worktree 첫 실행 조건으로 재현을 시도한 기록도 없다. SDK cold import 원인은 여전히 가설이다.
+### 새 worktree 첫 실행 비교
+
+수정 전 `a6d1e84`와 수정 후 `d43ecda`를 번갈아 새 worktree로 만들고 `pnpm install --frozen-lockfile` 직후 timeout test를 한 번씩 실행했다. Windows 로컬 결과다.
+
+| 대상 | 결과 |
+|---|---|
+| 수정 전, 새 worktree 첫 실행 | 4회 중 4회 실패. 모두 `tools/list` case가 `initialize` timeout으로 실패 |
+| 수정 전, 같은 worktree 2–6회차 | 5회 모두 7/7 통과 |
+| 수정 후, 새 worktree 첫 실행 | 3회 모두 7/7 통과 |
+| 수정 전 fixture의 SDK import, 새 worktree 첫 실행 | 2351 ms, 2593 ms |
+
+원인은 새 worktree에서 처음 읽는 SDK import가 2초 넘게 걸려 500 ms stage timeout을 먼저 소진하는 것이다. 첫 case가 파일을 읽고 나면 다음 case는 빨라지므로 `tools/list`만 실패한다. 이미 실행한 worktree에서 재현되지 않던 이유도 같다. fixture 교체로 이 원인이 제거됐다. 새 worktree의 import가 느린 이유 자체는 조사하지 않았다.
+
+### PR CI
+
+[PR #156](https://github.com/kanghyunsoon/duo/pull/156)의 [run 41391611033](https://github.com/kanghyunsoon/duo/actions/runs/41391611033)은 `d43ecda` 기준 attempt 1에서 Windows, Ubuntu, macOS 전체 job이 성공했다. 세 job 모두 `pnpm test`, benchmark smoke, 문서 검증, built CLI smoke, distribution E2E, release conformance를 통과했다. 이 결과는 PR 근거이고, 최종 근거는 병합 commit CI에서 모은다.
 
 남은 작업은 다음과 같다. 세 운영체제 근거가 모이기 전에는 #107과 Jira를 종료하지 않는다.
 
-- 수정 전 commit에서 새 worktree 첫 실행 조건의 재현을 시도하고 결과를 기록한다.
-- 변경을 commit하고 최신 `origin/next`에 맞춰 PR을 연다. 이 문서 작성 시점에 변경은 commit되지 않았고 `origin/next`는 `a6d1e84`까지 진행했다.
-- PR CI 전체 test로 UI 실패의 재발 여부를 확인한다.
-- 병합 commit CI 최초 실행과 전체 재실행의 3 OS 결과를 모은다.
+- PR 병합 뒤 병합 commit CI 최초 실행과 전체 재실행의 3 OS 결과를 모은다.
+- 근거를 GitHub #107과 Jira에 기록한다.
 
 ## 검증 기준 commit
 
@@ -207,8 +220,9 @@ timeout test 반복 통과는 fixture 교체 뒤 동작이 안정적이라는 �
 - [x] 회귀 테스트가 local fake server만 사용하고 LLM·유료 호출을 하지 않는다.
 - [x] `pnpm test:mcp-benchmark`와 `pnpm benchmark:mcp:smoke`가 로컬 Windows에서 정상 MCP schema contract로 통과한다.
 - [ ] 실제 MCP schema와 `bench/mcp-contract.mjs`를 비교하는 test가 기본 `pnpm test`에서 3 OS 모두 통과한다.
-- [x] timeout test의 수정 후 Windows 10회 연속 통과 결과를 문서에 기록했다. 이 결과는 flake 해결의 근거가 아니다.
-- [ ] 수정 전 코드에서 새 worktree 첫 실행 조건의 재현 시도 결과가 기록되고, 원인을 확인하지 못했다면 그 사실이 GitHub #107과 Jira에 남는다.
+- [x] timeout test의 수정 후 Windows 10회 연속 통과 결과를 문서에 기록했다.
+- [x] 수정 전 코드의 새 worktree 첫 실행 재현과 수정 후 비교 결과를 문서에 기록했다.
+- [ ] 재현과 수정 후 비교 결과가 GitHub #107과 Jira에 남는다.
 - [ ] 수정 PR 병합 commit의 `ci.yml` 최초 실행과 전체 job 재실행이 Windows, Ubuntu, macOS에서 연속 통과하고, 그 근거가 GitHub #107과 Jira에 기록된다.
 - [ ] runner 제한 실패가 #107 product 결과와 분리되어 기록된다.
 
@@ -223,7 +237,7 @@ timeout test 반복 통과는 fixture 교체 뒤 동작이 안정적이라는 �
 | MCP SDK timeout 오류 형태가 버전에 따라 달라짐 | `SdkErrorCode.RequestTimeout` 분류와 실제 JSON을 함께 확인한다. |
 | test가 외부 제한을 초과함 | 회귀 테스트는 `--scenario single-cold`로 server 하나만 띄운다. 그래도 초과하면 runner 문제로 분리하고 #107 assertion은 유지한다. |
 | CI 한 번만 통과해 flake를 놓침 | 수정 PR 병합 commit에서 최초 실행과 전체 job 재실행을 모두 통과시키고, 실패 이력도 함께 기록한다. |
-| flake 원인이 SDK cold import가 아닐 수 있음 | 수정 전에 재현을 시도해 기록하고, fixture 교체 뒤 통과만으로 해결을 단정하지 않는다. CI 최초 실행과 재실행에서 다시 실패하면 #107을 열어 두고 실패 조건을 조사한다. product timeout은 늘리지 않는다. |
+| fixture 교체 뒤에도 다른 원인으로 stage flake가 남음 | 새 worktree 첫 실행 비교로 SDK import 원인은 확인했다. CI 최초 실행과 재실행에서 다시 실패하면 #107을 열어 두고 실패 조건을 조사한다. product timeout은 늘리지 않는다. |
 | 최소 fake server가 stdin 종료로 스스로 끝나 cleanup 검증이 약해짐 | 모든 mode에서 stdin 종료를 무시하고 살아 있게 해 harness의 정리로만 끝나게 한다. |
 | MCP tool schema가 바뀌고 benchmark mirror가 갱신되지 않음 | 실제 schema와 `bench/mcp-contract.mjs`를 기본 test에서 비교해 required CI가 drift를 차단한다. |
 
