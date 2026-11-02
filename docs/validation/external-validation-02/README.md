@@ -2,10 +2,13 @@
 
 공개 stable DUO 0.3.3을 외부 개발자가 자기 저장소에서 쓰는 사전 등록 protocol이다(T81). 질문은 "DUO를 기존 작업 흐름에 더했을 때 개발자에게 실제 이득이 있는가"이며, 없으면 없다고 보고한다. [External Validation 01](../external-validation-01/README.md)(0.2.1)의 protocol, 마감일, 결과, 판정 기준은 바꾸지 않는다. 결과를 본 뒤에는 이 문서의 기준을 바꾸지 않는다. 바꿔야 하면 이유를 공개하고 새 Human Decision을 기록한다.
 
+> **Cancelled (H-95, 2026-10-26).** 시작 전에 취소했다. 모집, Stage 1·Stage 2 관찰, interview를 하지 않으며 새 일정을 만들지 않는다. 이 문서는 취소된 계획으로 남긴다.
+
 ```yaml
 round: external-validation-02
 protocol_version: 1
-status: not-started        # not-started | recruiting | stage-1 | stage-2 | evaluating | closed
+status: closed             # not-started | recruiting | stage-1 | stage-2 | evaluating | closed
+closed_at: 2026-10-26      # H-95: cancelled before start; never recruited
 duo_version: 0.3.3         # 모든 참가자가 같은 공개 stable version
 recruitment_opened_at:     # 사용자 승인 뒤 첫 외부 게시 시각
 recruitment_deadline:      # recruitment_opened_at + 28 days

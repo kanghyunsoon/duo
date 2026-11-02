@@ -37,7 +37,8 @@ export type ModuleResolution =
       readonly configPath?: RepoPath;
     }
   | { readonly status: "external"; readonly reason: "package" | "builtin" | "outside-repository" | "system-include" | "include-path" }
-  | { readonly status: "unresolved"; readonly reason: "not-found" | "not-indexed" }
+  /** computed-specifier: a TS/JS import() with no static specifier (#50 L2a); no file is guessed. */
+  | { readonly status: "unresolved"; readonly reason: "not-found" | "not-indexed" | "computed-specifier" }
   | { readonly status: "ambiguous"; readonly candidates: readonly RepoPath[] }
   | { readonly status: "unsupported"; readonly reason: string };
 

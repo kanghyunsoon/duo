@@ -8,7 +8,7 @@
  *
  * Valid only while the index is current (inspectIndex). The caller decides that; this never indexes.
  */
-import type { ModuleReferenceKind } from "@duo-director/analyzer";
+import type { ImportBinding, ModuleReferenceKind, ReExportBinding } from "@duo-director/analyzer";
 import type { RepoPath, SourceLocation } from "@duo-director/core";
 import type { ModuleResolution } from "../build/resolve/module-resolver.js";
 import { readCachedAnalyses, type AnalysisCacheKey } from "./analysis-cache.js";
@@ -19,6 +19,10 @@ export interface IndexedModuleReference {
   /** As written. */
   readonly specifier: string;
   readonly typeOnly: boolean;
+  /** Local bindings (import, require); empty for side-effect imports, dynamic imports and export-from. */
+  readonly bindings: readonly ImportBinding[];
+  /** Re-exported names (export-from only). */
+  readonly reexports: readonly ReExportBinding[];
   /** The statement (import/export-from/using/include) or the import()/require() call. */
   readonly location: SourceLocation;
   /** The Indexer's result. resolved + an indexed path is the only exact repository-file target. */
@@ -63,7 +67,7 @@ export async function readIndexedModuleReferences(root: string, paths: readonly 
       references: refs.map((r, j) => {
         const resolution = modules[j] as ModuleResolution;
         const target = resolution.status === "resolved" && resolution.path !== path && files.has(resolution.path) ? resolution.path : undefined;
-        return { kind: r.kind, specifier: r.specifier, typeOnly: r.typeOnly, location: r.location, resolution, ...(target === undefined ? {} : { target }) };
+        return { kind: r.kind, specifier: r.specifier, typeOnly: r.typeOnly, bindings: r.bindings, reexports: r.reexports, location: r.location, resolution, ...(target === undefined ? {} : { target }) };
       }),
     };
   });

@@ -188,6 +188,8 @@ function mapDecisionContent(d: DecisionData | ProposalData, ctx: MapContext, gov
       paths: ctx.patterns(["forbids", "paths"], d.forbids?.paths),
       // H-72: only when present and non-empty; absent stays absent (lock digest compatibility).
       ...((d.forbids?.imported_paths?.length ?? 0) > 0 ? { importedPaths: ctx.patterns(["forbids", "imported_paths"], d.forbids?.imported_paths) } : {}),
+      // #47: the same rule; the schema already rejects an empty list and importer_paths without imported_paths.
+      ...((d.forbids?.importer_paths?.length ?? 0) > 0 ? { importerPaths: ctx.patterns(["forbids", "importer_paths"], d.forbids?.importer_paths) } : {}),
     },
     supersedes: d.supersedes ?? null,
     evidence: ctx.evidence(["evidence"], d.evidence),
