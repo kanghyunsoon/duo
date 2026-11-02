@@ -21,6 +21,7 @@ import { initCommand } from "./commands/init.js";
 import { installCommand } from "./commands/install.js";
 import { mcpCommand } from "./commands/mcp.js";
 import { reviewCommand } from "./commands/review.js";
+import { setupCommand } from "./commands/setup.js";
 import { uiCommand } from "./commands/ui.js";
 import { CliFailure, usage, type Env } from "./commands/shared.js";
 import { statsCommand } from "./commands/stats.js";
@@ -32,10 +33,10 @@ import { VERSION } from "./version.js";
 
 export type { Io } from "./io.js";
 
-export const COMMANDS = ["init", "status", "doctor", "index", "context", "review", "trace", "impact", "decision", "stats", "ui", "install", "mcp"] as const;
+export const COMMANDS = ["setup", "init", "status", "doctor", "index", "context", "review", "trace", "impact", "decision", "stats", "ui", "install", "mcp"] as const;
 const LATER: Readonly<Record<string, string>> = {};
 /** Commands that append runtime/metrics.jsonl. Read-only commands (status, doctor, trace, impact, stats) write nothing. */
-const METERED = new Set(["init", "index", "context", "review", "decision", "install"]);
+const METERED = new Set(["setup", "init", "index", "context", "review", "decision", "install"]);
 
 const WORKSPACE: readonly PackageInfo[] = [core, analyzer, graph, director, integration];
 
@@ -45,6 +46,7 @@ const GLOBAL: Options = {
   verbose: { type: "boolean" }, "no-color": { type: "boolean" }, help: { type: "boolean", short: "h" }, version: { type: "boolean", short: "v" },
 };
 const COMMAND_OPTIONS: Readonly<Record<string, Options>> = {
+  setup: { yes: { type: "boolean", short: "y" }, repair: { type: "boolean" }, answers: { type: "string" }, "baseline-policy": { type: "string" } },
   init: { yes: { type: "boolean", short: "y" }, repair: { type: "boolean" }, answers: { type: "string" }, "baseline-policy": { type: "string" } },
   status: {},
   doctor: {},
@@ -70,6 +72,7 @@ const HELP = [
   `Usage: ${CLI_NAME} <command> [options]`,
   "",
   "Commands:",
+  "  setup       first-time setup in one command: plan, one confirmation, then Truth, index, adoption baseline and a final check",
   "  init        adopt this Git repository: plan, Truth, index, adoption baseline",
   "  status      Truth, index freshness, adoption baseline, pending decisions (read-only)",
   "  doctor      check the whole setup (Git, Truth, index, analysis, agents, optional LLM) and print the next steps (read-only)",
@@ -86,6 +89,7 @@ const HELP = [
   "",
   "Options: --root <path>  --json  --locale en|ko  --non-interactive  --verbose  --no-color  --version  --help",
   "init: --yes (operational confirmations only; never Truth or the adoption policy)  --answers -  --baseline-policy head|abort  --repair",
+  "setup: the same options as init; non-interactive runs need --yes to apply the plan",
 ].join("\n");
 
 function parse(argv: readonly string[]) {
@@ -101,12 +105,14 @@ const bool = (v: unknown) => v === true;
 async function dispatch(env: Env, command: string, positionals: readonly string[], v: Record<string, unknown>): Promise<Outcome> {
   const arg = positionals[1];
   switch (command) {
+    case "setup":
     case "init": {
       const answers = str(v.answers);
-      if (answers !== undefined && answers !== "-") return usage("init", "--answers takes '-' (a JSON array of answers on stdin)");
+      if (answers !== undefined && answers !== "-") return usage(command, "--answers takes '-' (a JSON array of answers on stdin)");
       const policy = str(v["baseline-policy"]);
-      if (policy !== undefined && policy !== "head" && policy !== "abort") return usage("init", "--baseline-policy must be head or abort");
-      return initCommand(env, { repair: bool(v.repair), answersFromStdin: answers === "-", ...(policy === undefined ? {} : { baselinePolicy: policy }) });
+      if (policy !== undefined && policy !== "head" && policy !== "abort") return usage(command, "--baseline-policy must be head or abort");
+      const options = { repair: bool(v.repair), answersFromStdin: answers === "-", ...(policy === undefined ? {} : { baselinePolicy: policy as "head" | "abort" }) };
+      return command === "setup" ? setupCommand(env, options) : initCommand(env, options);
     }
     case "status": return statusCommand(env);
     case "doctor": return doctorCommand(env);
