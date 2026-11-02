@@ -546,7 +546,8 @@ ReviewResult {
   gaps?: KnowledgeGapAssessment; context?: { review?, task?, profile: "review", seeds }
   limitations; semanticAssist; metrics; diagnostics
 }
-ReviewClaim { id, rule, subject, expected, observed, alignment, evidenceIds(≥1), basis[], reason, enforced, blockEligible, drift, semanticCandidate, violationKey?, provenance?, decisionAuthority? }   // T14.1: baseline 규칙(decision-forbids, declared-reference, external-source-drift, H-72 decision-forbids-import)
+ReviewClaim { id, rule, subject, expected, observed, alignment, evidenceIds(≥1), basis[], reason, enforced, blockEligible, drift, semanticCandidate, violationKey?, provenance?, informational?, decisionAuthority? }   // H-100(#59 C259): informational=true인 claim은 JSON·상세 출력에 남지만 reviewVerdict의 WARN·BLOCK 근거가 아니다(alignment와 무관, 없으면 생략). `requirement-implementation`의 `outside-current-milestone`이 이것이며 바뀐 파일마다 하나(subject file, 그 파일이 구현하는 다른 milestone Requirement ID와 근거를 모두 담음)
+   // T14.1: baseline 규칙(decision-forbids, declared-reference, external-source-drift, H-72 decision-forbids-import)
 DecisionAuthority { state, active, supersedes, supersededBy }   // C241(T49): subject가 Truth의 Decision인 claim만
 ```
 

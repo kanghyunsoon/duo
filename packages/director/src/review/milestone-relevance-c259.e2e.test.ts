@@ -7,22 +7,23 @@
  * validated by an annotated test (VALIDATED_BY), so `test-coverage` is ALIGNED in every case and the
  * only WARN basis left is `requirement-implementation` (`rules.ts` `requirementImplementation`).
  *
- * Pinned reproduction fixtures (F1â€“F4, N1â€“N2):
- * - F1: Ordinary edit to `src/a.ts` (implements REQ-001, milestone M1). Current `next` behavior:
- *       `outside-current-milestone`, PARTIAL, WARN (the C259 pattern from the T61/T69 audits).
- * - F2: Same edit, with a natural-language task whose context contains `src/a.ts`. Current `next`
- *       behavior: `in-task-context` (ALIGNED) and still WARN from `outside-current-milestone`; task
- *       scope does not affect the milestone rule.
- * - F3: Edit to `src/name.ts`, which implements two M1 Requirements (REQ-001, REQ-003). Current `next`
- *       behavior: one PARTIAL claim per Requirement (2 WARN bases for one changed function), the
- *       multiplier behind up to 17 claims in one commit in T61.
- * - F4: Edit to `src/a.ts` together with its validating test `test/a.test.ts`. Current `next` behavior:
- *       the same single `outside-current-milestone` WARN as F1 (#59 policy option 3 would tell F1 and
- *       F4 apart; today they are identical).
- * - N1: Ordinary edit to `src/b.ts` (implements REQ-002, milestone M2 = current). Current `next`
- *       behavior: `meaning-not-decidable` (plain UNKNOWN), PASS. Must stay non-WARN under any policy.
- * - N2: The F1 edit with no `current_milestone` in `project.yaml`. Current `next` behavior:
- *       `meaning-not-decidable`, PASS.
+ * Fixtures (F1â€“F4, N1â€“N2) and H-100 (Maintainer Decision on #59, option 2: information only):
+ * - F1: Ordinary edit to `src/a.ts` (implements REQ-001, milestone M1). Before H-100:
+ *       `outside-current-milestone`, PARTIAL, WARN (the C259 pattern from the T61/T69 audits). Since H-100:
+ *       one claim for the file, still `outside-current-milestone` with the fact in `observed`, but
+ *       `informational`, so it is not a WARN basis: PASS.
+ * - F2: Same edit, with a natural-language task whose context contains `src/a.ts`: `in-task-context`
+ *       (ALIGNED) and, since H-100, PASS.
+ * - F3: Edit to `src/name.ts`, which implements two M1 Requirements (REQ-001, REQ-003). Before H-100: one
+ *       PARTIAL claim per Requirement (the multiplier behind up to 17 claims in one commit in T61). Since
+ *       H-100: one informational claim for the file that names both Requirements, PASS.
+ * - F4: Edit to `src/a.ts` together with its validating test `test/a.test.ts`: the same as F1, PASS
+ *       (#59 policy option 3, "warn when tests change", is not adopted, H-100 (5)).
+ * - F1 + an unrelated file outside the task: the informational claim is no basis, the independent
+ *       `outside-task-context` drift of the other file still warns (H-100 (4)).
+ * - N1: Ordinary edit to `src/b.ts` (implements REQ-002, milestone M2 = current): `meaning-not-decidable`
+ *       (plain UNKNOWN), PASS.
+ * - N2: The F1 edit with no `current_milestone` in `project.yaml`: `meaning-not-decidable`, PASS.
  *
  * Maintenance rule for pinned tests:
  * - Passing tests in this file pin current `next` behavior without altering PASS/WARN/BLOCK/ASK
@@ -31,7 +32,8 @@
  *   update the corresponding pinned assertion to the new expected value and convert the matching
  *   `it.todo` in this file into an active test in the same PR.
  * - Whatever the policy, the fact that a change implements another milestone's Requirement must stay
- *   visible (#5 non-goal: no hidden facts); F1 pins that fact in the claim's `observed` text.
+ *   visible (#5 non-goal: no hidden facts); F1 pins that fact in the claim's `observed` text and F3 keeps
+ *   every Requirement ID and its evidence in one claim.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -156,7 +158,6 @@ async function runReview(r: ContextRepo, request: ReviewRequest): Promise<Review
 }
 
 const ruleClaims = (res: ReviewResult, rule: string): ReviewClaim[] => res.claims.filter((c) => c.rule === rule);
-const claimIds = (claims: readonly ReviewClaim[]): string[] => claims.map((c) => c.id).sort();
 
 const EDIT_A: readonly [string, string, string] = ["src/a.ts", 'r.join(",")', 'r.join(";")'];
 
@@ -180,7 +181,27 @@ describe("Issue #59 ([C259]): milestone relevance pinned fixtures (F1â€“F4, N1â€
     );
   }
 
-  it("F1: pins current next behavior (ordinary edit to a file implementing an M1 Requirement while M2 is current is outside-current-milestone, PARTIAL, WARN)", async () => {
+  /** The single informational claim for `file`, and no WARN basis from it. */
+  function expectInformation(res: ReviewResult, file: string, observed: string): ReviewClaim {
+    const claims = ruleClaims(res, "requirement-implementation");
+    expect(claims).toHaveLength(1);
+    expect(claims[0]).toMatchObject({
+      rule: "requirement-implementation",
+      subject: { kind: "file", id: file },
+      alignment: "PARTIAL",
+      reason: "outside-current-milestone",
+      informational: true,
+      drift: false,
+      blockEligible: false,
+      // The underlying fact stays visible (#5 non-goal: no hidden facts).
+      expected: "changes serve the current milestone M2",
+      observed,
+    });
+    expect(res.verdictBasis.warn).not.toContain(claims[0]?.id);
+    return claims[0] as ReviewClaim;
+  }
+
+  it("F1 (H-100): an ordinary edit to a file implementing an M1 Requirement while M2 is current is an informational outside-current-milestone claim, PASS", async () => {
     reset();
     repo.edit(...EDIT_A);
 
@@ -188,28 +209,12 @@ describe("Issue #59 ([C259]): milestone relevance pinned fixtures (F1â€“F4, N1â€
     expect(res.status).toBe("ready");
     expect(res.seeds.map((s) => `${s.ref} ${s.reason}`)).toEqual(["src/a.ts#exportCsv hunk-overlap"]);
     expectTestsCovered(res, ["REQ-001"]);
-    const claims = ruleClaims(res, "requirement-implementation");
-    expect(claims).toHaveLength(1);
-    expect(claims[0]).toMatchObject({
-      rule: "requirement-implementation",
-      subject: { kind: "requirement", id: "REQ-001" },
-      alignment: "PARTIAL",
-      reason: "outside-current-milestone",
-      drift: false,
-      blockEligible: false,
-      // The underlying fact that must stay visible under any #5 policy (#5 non-goal: no hidden facts).
-      expected: "changes serve the current milestone M2",
-      observed: "src/a.ts#exportCsv implement REQ-001 (milestone M1)",
-    });
-    expect(res.verdictBasis).toEqual({ blocking: [], ask: [], warn: claimIds(claims) });
-    expect(res.verdict).toBe("WARN");
+    expectInformation(res, "src/a.ts", "src/a.ts#exportCsv implement REQ-001 (milestone M1)");
+    expect(res.verdictBasis).toEqual({ blocking: [], ask: [], warn: [] });
+    expect(res.verdict).toBe("PASS");
   });
 
-  it.todo(
-    "F1 follow-up (#59, needs the #5 policy and a recorded Maintainer Decision): an ordinary edit to another milestone's Requirement file does not produce an attention-demanding WARN, while the outside-current-milestone fact stays visible in verbose/JSON output",
-  );
-
-  it("F2: pins current next behavior (task scope does not affect the milestone rule: in-task-context and still WARN from outside-current-milestone)", async () => {
+  it("F2 (H-100): with a task whose context contains src/a.ts the edit is in-task-context and PASS", async () => {
     reset();
     repo.edit(...EDIT_A);
 
@@ -224,15 +229,12 @@ describe("Issue #59 ([C259]): milestone relevance pinned fixtures (F1â€“F4, N1â€
       }),
     ]);
     expectTestsCovered(res, ["REQ-001"]);
-    const claims = ruleClaims(res, "requirement-implementation");
-    expect(claims.map((c) => `${c.subject.id} ${c.alignment} ${c.reason}`)).toEqual([
-      "REQ-001 PARTIAL outside-current-milestone",
-    ]);
-    expect(res.verdictBasis.warn).toEqual(claimIds(claims));
-    expect(res.verdict).toBe("WARN");
+    expectInformation(res, "src/a.ts", "src/a.ts#exportCsv implement REQ-001 (milestone M1)");
+    expect(res.verdictBasis.warn).toEqual([]);
+    expect(res.verdict).toBe("PASS");
   });
 
-  it("F3: pins current next behavior (one changed function implementing two M1 Requirements yields one outside-current-milestone claim per Requirement)", async () => {
+  it("F3 (H-100): one changed function implementing two M1 Requirements is one informational claim for the file that keeps both Requirements and their evidence, PASS", async () => {
     reset();
     repo.edit("src/name.ts", "  return `report-${date}.csv`;", "  return `report-${date.trim()}.csv`;");
 
@@ -240,16 +242,15 @@ describe("Issue #59 ([C259]): milestone relevance pinned fixtures (F1â€“F4, N1â€
     expect(res.status).toBe("ready");
     expect(res.seeds.map((s) => `${s.ref} ${s.reason}`)).toEqual(["src/name.ts#exportName hunk-overlap"]);
     expectTestsCovered(res, ["REQ-001", "REQ-003"]);
-    const claims = ruleClaims(res, "requirement-implementation");
-    expect(claims.map((c) => `${c.subject.id} ${c.alignment} ${c.reason} | ${c.observed}`).sort()).toEqual([
-      "REQ-001 PARTIAL outside-current-milestone | src/name.ts#exportName implement REQ-001 (milestone M1)",
-      "REQ-003 PARTIAL outside-current-milestone | src/name.ts#exportName implement REQ-003 (milestone M1)",
-    ]);
-    expect(res.verdictBasis.warn).toEqual(claimIds(claims));
-    expect(res.verdict).toBe("WARN");
+    const c = expectInformation(res, "src/name.ts", "src/name.ts#exportName implement REQ-001 (milestone M1), REQ-003 (milestone M1)");
+    // Both Requirements are cited as evidence.
+    const cited = c.evidenceIds.map((id) => res.evidence.find((e) => e.id === id)).filter((e) => e?.entity?.type === "requirement").map((e) => (e?.entity as { id: string }).id);
+    expect(cited.sort()).toEqual(["REQ-001", "REQ-003"]);
+    expect(res.verdictBasis.warn).toEqual([]);
+    expect(res.verdict).toBe("PASS");
   });
 
-  it("F4: pins current next behavior (editing the M1 code together with its validating test gives the same single outside-current-milestone WARN as F1)", async () => {
+  it("F4 (H-100): editing the M1 code together with its validating test is the same as F1 (option 3 not adopted), PASS", async () => {
     reset();
     repo.edit(...EDIT_A);
     repo.edit("test/a.test.ts", 'it("exports rows as CSV"', 'it("exports rows as CSV text"');
@@ -261,17 +262,25 @@ describe("Issue #59 ([C259]): milestone relevance pinned fixtures (F1â€“F4, N1â€
       "test/a.test.ts#exports rows as CSV text hunk-overlap",
     ]);
     expectTestsCovered(res, ["REQ-001"]);
-    const claims = ruleClaims(res, "requirement-implementation");
-    expect(claims.map((c) => `${c.subject.id} ${c.alignment} ${c.reason}`)).toEqual([
-      "REQ-001 PARTIAL outside-current-milestone",
-    ]);
-    expect(res.verdictBasis.warn).toEqual(claimIds(claims));
-    expect(res.verdict).toBe("WARN");
+    expectInformation(res, "src/a.ts", "src/a.ts#exportCsv implement REQ-001 (milestone M1)");
+    expect(res.verdictBasis.warn).toEqual([]);
+    expect(res.verdict).toBe("PASS");
   });
 
-  it.todo(
-    "F4 follow-up (#59 policy option 3, only if chosen in #5): an edit that also touches the Requirement's tests or acceptance criteria keeps an attention-demanding WARN while F1 does not",
-  );
+  it("H-100 (4): with F1 and an unrelated file outside the task, the independent outside-task-context drift still warns", async () => {
+    reset();
+    repo.edit(...EDIT_A);
+    repo.write("src/unrelated.ts", "export function unrelated(): number {\n  return 1;\n}\n");
+
+    const res = await runReview(repo, { task: TASK_F2, diff: W });
+    expect(res.status).toBe("ready");
+    const info = expectInformation(res, "src/a.ts", "src/a.ts#exportCsv implement REQ-001 (milestone M1)");
+    const drift = res.claims.filter((c) => c.drift && c.subject.id === "src/unrelated.ts");
+    expect(drift.map((c) => `${c.rule} ${c.reason}`)).toEqual([expect.stringMatching(/^(scope-relevance outside-task-context|unlinked-addition added-file-unlinked)$/u)]);
+    expect(res.verdictBasis.warn).toEqual(drift.map((c) => c.id));
+    expect(res.verdictBasis.warn).not.toContain(info.id);
+    expect(res.verdict).toBe("WARN");
+  });
 
   it("N1: pins current next behavior (edit to a file implementing a Requirement of the current milestone M2 is meaning-not-decidable, PASS; must stay non-WARN)", async () => {
     reset();

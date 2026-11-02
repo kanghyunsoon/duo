@@ -7,6 +7,7 @@
  *   missing-intent (H-80). Plain UNKNOWN (a semantic question, a known analysis limit) does not warn,
  *   and neither does a violation that already existed at adoption and this diff did not touch
  *   (provenance pre-existing, T14.1).
+ * - An informational claim (H-100, #59 C259: another milestone's Requirement) is never a basis.
  * - PASS: none of the above. PASS means DUO found no direction conflict in the evidence it had;
  *   it does not mean the code has no bugs. A PASS may still carry a surfaced missing-intent gap.
  *
@@ -28,7 +29,7 @@ export function reviewVerdict(claims: readonly ReviewClaim[], gaps: KnowledgeGap
   const blocking = claims.filter((c) => c.blockEligible).map((c) => c.id).sort(compareUtf8);
   const ask = gaps?.requiresHumanInput === true ? gaps.gaps.filter((g) => g.action === "ask").map((g) => g.id) : [];
   const warn = [
-    ...claims.filter((c) => !c.blockEligible && c.provenance !== "pre-existing" && (c.alignment === "PARTIAL" || c.alignment === "CONFLICT" || (c.alignment === "UNKNOWN" && c.drift))).map((c) => c.id).sort(compareUtf8),
+    ...claims.filter((c) => !c.blockEligible && c.informational !== true && c.provenance !== "pre-existing" && (c.alignment === "PARTIAL" || c.alignment === "CONFLICT" || (c.alignment === "UNKNOWN" && c.drift))).map((c) => c.id).sort(compareUtf8),
     ...(gaps?.gaps ?? []).filter((g) => g.action === "surface" && g.kind !== "missing-intent").map((g) => g.id),
   ];
   const verdict: Verdict = blocking.length > 0 ? "BLOCK" : ask.length > 0 ? "ASK" : warn.length > 0 ? "WARN" : "PASS";
