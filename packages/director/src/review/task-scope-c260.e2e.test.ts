@@ -4,10 +4,12 @@
  *
  * Pinned reproduction fixtures (F1, F1c, F2, N1–N3):
  * - F1: Task "Fix HTTPError message formatting", diff touches `isHTTPError` in the same file
- *       (`source/errors/HTTPError.ts`). Current `next` behavior: `outside-task-context`, WARN.
- *       (Evaluated at `max_depth: 1` for a sibling export, and also reproduced at the default
- *       `max_depth: 2` when the diff touches top-level lines outside `HTTPError` so `diffSeeds`
- *       produces `file:source/errors/HTTPError.ts` after `dedupeContainers` dropped the file node.)
+ *       (`source/errors/HTTPError.ts`). Before #58 Fix B: `outside-task-context`, WARN. Since Fix B
+ *       (H-91): the task seed `sym:source/errors/HTTPError.ts#HTTPError` puts its owner file in the
+ *       review scope, so the edit is `in-task-context`, PASS. (Evaluated at `max_depth: 1` for a sibling
+ *       export, and at the default `max_depth: 2` when the diff touches top-level lines outside
+ *       `HTTPError` so `diffSeeds` produces `file:source/errors/HTTPError.ts`.) The task packet itself
+ *       (code, `omittedCandidates`, budget) is unchanged.
  * - F1c: Same task, diff touches the `HTTPError` class body (`source/errors/HTTPError.ts`).
  *        Current `next` behavior: `in-task-context`, PASS.
  * - F2: Task "Update HTTPError.ts to add a status code", diff touches the `HTTPError` class body.
@@ -17,8 +19,8 @@
  * - N1: Same task as F1, diff touches unrelated `src/billing/invoice.ts`.
  *       Current `next` behavior: `outside-task-context`, WARN (must stay WARN under Fix B).
  * - N2: Same task as F1, diff touches an unrelated function in `src/client.ts`, which only imports
- *       `HTTPError`. Current `next` behavior: `outside-task-context` (must stay under Fix B; file
- *       ownership must not spread through imports).
+ *       `HTTPError`. `outside-task-context`, also under Fix B: `createError` is in the task packet as a
+ *       CALLS neighbour, but only the owner files of task seeds join the scope (H-91 (2)).
  * - N3: No task provided. Current `next` behavior: no `scope-relevance` claims (`no-task-scope`
  *       limitation).
  *
@@ -158,7 +160,7 @@ describe("Issue #58 ([C260]): task-scope relevance pinned fixtures (F1, F1c, F2,
     repo.git("clean", "-fdq");
   }
 
-  it("F1: pins current next behavior (outside-task-context, WARN when task names HTTPError and diff edits sibling export isHTTPError or file-level lines in the same file)", async () => {
+  it("F1 (#58 Fix B, H-91): the owner file of the task seed HTTPError is in task scope, so editing sibling export isHTTPError or file-level lines in the same file is in-task-context, PASS", async () => {
     reset();
     repo.edit(
       "source/errors/HTTPError.ts",
@@ -175,12 +177,16 @@ describe("Issue #58 ([C260]): task-scope relevance pinned fixtures (F1, F1c, F2,
         term: "HTTPError",
       }),
     );
-    // The task packet selected code owned by source/errors/HTTPError.ts (`HTTPError` and its
-    // constructor), while `dedupeContainers` removed `file:source/errors/HTTPError.ts` and
-    // sibling `sym:source/errors/HTTPError.ts#isHTTPError` is not in the packet's scope IDs.
-    expect(ctx.packet?.code.map((c) => c.id)).toContain("sym:source/errors/HTTPError.ts#HTTPError");
-    expect(ctx.packet?.code.map((c) => c.id)).not.toContain("file:source/errors/HTTPError.ts");
-    expect(ctx.packet?.code.map((c) => c.id)).not.toContain("sym:source/errors/HTTPError.ts#isHTTPError");
+    // The task packet is unchanged by Fix B (H-91 (3)): it selects `HTTPError`, its constructor and the
+    // CALLS neighbour `createError`; `dedupeContainers` still removes `file:source/errors/HTTPError.ts`,
+    // `isHTTPError` is not in it, nothing is omitted and the budget is the default.
+    expect(ctx.packet?.code.map((c) => c.id)).toEqual([
+      "sym:source/errors/HTTPError.ts#HTTPError",
+      "sym:src/client.ts#createError",
+      "sym:source/errors/HTTPError.ts#HTTPError.constructor",
+    ]);
+    expect(ctx.packet?.omittedCandidates).toEqual([]);
+    expect(ctx.packet?.metrics).toMatchObject({ budget: { total: 6000 }, candidates: 3, selected: 3, omitted: 0 });
 
     const res = await runReview(repo, { task: TASK_F1, diff: W });
     expect(res.status).toBe("ready");
@@ -192,16 +198,15 @@ describe("Issue #58 ([C260]): task-scope relevance pinned fixtures (F1, F1c, F2,
     expect(claims[0]).toMatchObject({
       rule: "scope-relevance",
       subject: { kind: "file", id: "source/errors/HTTPError.ts" },
-      alignment: "UNKNOWN",
-      reason: "outside-task-context",
-      drift: true,
+      alignment: "ALIGNED",
+      reason: "in-task-context",
+      drift: false,
     });
-    expect(res.verdict).toBe("WARN");
+    expect(res.verdict).toBe("PASS");
 
-    // Also verify at default `max_depth: 2` when the diff touches top-level lines outside any symbol
-    // range (such as imports or module-level comments) in `source/errors/HTTPError.ts`:
-    // `dedupeContainers` drops `file:source/errors/HTTPError.ts` because `sym:source/errors/HTTPError.ts#HTTPError`
-    // is in the packet, while `diffSeeds` produces `file:source/errors/HTTPError.ts` (`file-changed`).
+    // Also at default `max_depth: 2` when the diff touches top-level lines outside any symbol range
+    // (such as imports or module-level comments): `diffSeeds` produces `file:source/errors/HTTPError.ts`
+    // (`file-changed`), which is now the seed's owner file in scope.
     reset();
     repo.write(".duo-project/project.yaml", PROJECT_YAML_DEFAULT_DEPTH);
     repo.git("commit", "-qam", "use default max_depth: 2");
@@ -218,20 +223,16 @@ describe("Issue #58 ([C260]): task-scope relevance pinned fixtures (F1, F1c, F2,
         expect.objectContaining({
           rule: "scope-relevance",
           subject: { kind: "file", id: "source/errors/HTTPError.ts" },
-          alignment: "UNKNOWN",
-          reason: "outside-task-context",
-          drift: true,
+          alignment: "ALIGNED",
+          reason: "in-task-context",
+          drift: false,
         }),
       ]);
-      expect(resDefaultDepth.verdict).toBe("WARN");
+      expect(resDefaultDepth.verdict).toBe("PASS");
     } finally {
       repo.git("reset", "-q", "--hard", "HEAD~1");
     }
   });
-
-  it.todo(
-    "F1 follow-up (#58 Fix B, needs Maintainer Decision H-91): count source/errors/HTTPError.ts in task scope when the task packet selected code/tests owned by that file (in-task-context, PASS)",
-  );
 
   it("F1c: pins current next behavior (in-task-context, PASS when task names HTTPError and diff edits the HTTPError class body)", async () => {
     reset();
@@ -315,6 +316,8 @@ describe("Issue #58 ([C260]): task-scope relevance pinned fixtures (F1, F1c, F2,
     );
 
     const ctx = await runContext(repo, TASK_F1);
+    // `createError` (same file) is in the packet through CALLS; its owner file must not join the scope.
+    expect(ctx.packet?.code.map((c) => c.id)).toContain("sym:src/client.ts#createError");
     expect(ctx.packet?.code.map((c) => c.id)).not.toContain("sym:src/client.ts#parseRetryAfter");
 
     const res = await runReview(repo, { task: TASK_F1, diff: W });

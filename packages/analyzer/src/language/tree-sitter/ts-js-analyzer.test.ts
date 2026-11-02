@@ -139,9 +139,10 @@ describe("module references", () => {
       ["./legacy", "require", false],
       ["./lazy", "dynamic-import", false],
       ["./cjs", "require", false],
+      ["./t", "dynamic-import", false],
     ]);
     expect(sliceSourceLocation(source("modules.ts"), a.moduleReferences[0]?.location ?? { path: "" })).toBe('import { a, type B } from "./a";');
-    // require(name) is not literal: only a call site. import(`./t`) is neither.
+    // require(name) is not literal: only a call site. import(`./t`) is a module reference (#50 L2b), not a call site.
     expect(calls(a)).toEqual([["identifier", "require", null, 13]]);
   });
 
@@ -164,11 +165,36 @@ describe("module references", () => {
       ["", "dynamic-import", { computed: true }, 3],
       ["", "dynamic-import", { computed: true }, 4],
       ["./plain.js", "dynamic-import", null, 6],
+      ["./no-substitution.js", "dynamic-import", null, 7],
     ]);
     // The expression is not kept anywhere in the analysis.
     expect(JSON.stringify(a?.moduleReferences)).not.toContain("secret-token-123");
-    // Literal templates stay as they are (#50 L2b is not decided), with or without a leading comment.
-    expect(a?.moduleReferences.some((m) => m.location.startLine === 5 || m.location.startLine === 7)).toBe(false);
+    // A literal template is not computed. With a leading comment the call has two arguments and is not
+    // recorded, exactly like a string literal with a comment (unchanged by #50 L2b).
+    expect(a?.moduleReferences.some((m) => m.location.startLine === 5)).toBe(false);
+  });
+
+  it("records import() and require() with a template literal without substitutions like the string literal (#50 L2b)", () => {
+    const text = [
+      "const a = import(`../db/legacy-db.js`);",
+      "const b = import(\"../db/legacy-db.js\");",
+      "const { legacyQuery } = require(`../db/legacy-db.js`);",
+      "const db = require(\"../db/legacy-db.js\");",
+      "const c = import(`../db/${name}.js`);",
+      "const d = require(`../db/${name}.js`);",
+      "const e = require(name);",
+      "",
+    ].join("\n");
+    const a = analyzeText("templates.ts", text).value;
+    expect(a?.moduleReferences.map((m) => [m.specifier, m.kind, m.syntax ?? null, m.bindings.map((b) => b.imported), m.location.startLine])).toEqual([
+      ["../db/legacy-db.js", "dynamic-import", null, [], 1],
+      ["../db/legacy-db.js", "dynamic-import", null, [], 2],
+      ["../db/legacy-db.js", "require", null, ["legacyQuery"], 3],
+      ["../db/legacy-db.js", "require", null, ["*"], 4],
+      ["", "dynamic-import", { computed: true }, [], 5],
+    ]);
+    // require() with a computed argument stays out of scope: a call site, no module reference (lines 6 and 7).
+    expect(calls(a as NonNullable<typeof a>).filter(([, name]) => name === "require").map(([, , , line]) => line)).toEqual([6, 7]);
   });
 
   it("covers every extension", () => {

@@ -8,7 +8,7 @@
 import { createDefaultAnalyzerRegistry, type AnalyzerRegistry } from "@duo-director/analyzer";
 import { loadProjectTruth, type Diagnostic, type LoadedProject } from "@duo-director/core";
 import type { TokenCountMemo } from "@duo-director/director";
-import { openProjectGraphReader, openProjectGraphStore, type GraphStore } from "@duo-director/graph";
+import { openProjectGraphReader, withProjectGraphWriter, type GraphStore } from "@duo-director/graph";
 import { LLMProviderPool } from "../llm/factory.js";
 
 export type Failure = { readonly kind: "not-initialized" | "failed"; readonly diagnostics: readonly Diagnostic[] };
@@ -65,13 +65,9 @@ export async function withGraphReader<T>(root: string, fn: (graph: GraphStore) =
 }
 
 export async function withGraphWriter<T>(root: string, fn: (graph: GraphStore) => Promise<T>): Promise<T> {
-  const opened = openProjectGraphStore(root);
-  if (opened.value === undefined) throw new OperationFailure(opened.diagnostics);
-  try {
-    return await fn(opened.value);
-  } finally {
-    opened.value.close();
-  }
+  const locked = await withProjectGraphWriter(root, fn);
+  if (locked.value === undefined) throw new OperationFailure(locked.diagnostics);
+  return locked.value.result;
 }
 
 /** Project Truth, or the not-initialized / failed outcome. */
