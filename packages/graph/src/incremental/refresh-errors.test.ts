@@ -37,6 +37,9 @@ it("holds the lock without a journal file next to it (#148 review)", async () =>
   expect(seen.value).toContain("index-writer.lock");
   expect(seen.value).not.toContain("index-writer.lock-journal");
   expect(await released(repo.root)).toBe(true);
+  // The refusals below rely on this: a used lock file stays an empty file with one link.
+  const lock = fs.lstatSync(path.join(repo.root, INDEX_WRITE_LOCK_PATH));
+  expect({ size: lock.size, nlink: lock.nlink }).toEqual({ size: 0, nlink: 1 });
 });
 it("converts a source deletion during analysis to a recovery refusal and releases the lock", async () => {
   const repo = makeRepo(temps, { ".duo-project/project.yaml": "schema_version: 1\nname: error\n", "src/a.ts": "export const a = 1;\n" });

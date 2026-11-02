@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { checkWriteBoundary, createDiagnostic, failure, STATE_DIR_NAME, success, type ParseResult } from "@duo-director/core";
-import { tryAcquireFileLock, type HeldFileLock } from "../store/node-sqlite/file-lock.js";
+import { FileLockRefusedError, tryAcquireFileLock, type HeldFileLock } from "../store/node-sqlite/file-lock.js";
 
 /**
  * T180: an operating-system file lock (released when the holder exits, also on a crash or kill).
@@ -57,10 +57,11 @@ export async function withIndexWriteLock<T>(root: string, fn: (lease: IndexWrite
   const timeout = options.lockTimeoutMs ?? 5000;
   if (!Number.isFinite(timeout) || timeout < 0) return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Index lock timeout must be a finite non-negative number")]);
   const deadline = performance.now() + timeout;
-  // Reject symlinked write directories, lock file or journal path (also dangling ones) before SQLite
-  // could follow them and create a file outside this worktree (#148 review).
+  // Reject symlinked write directories, lock file or SQLite side-file paths (also dangling ones) before
+  // SQLite could follow them and create a file outside this worktree (#148 review). The lock file itself
+  // is checked again on every attempt (tryAcquireFileLock: symlink, hard link, non-empty).
   try {
-    for (const relative of [STATE_DIR_NAME, `${STATE_DIR_NAME}/generated`, INDEX_WRITE_LOCK_PATH, `${INDEX_WRITE_LOCK_PATH}-journal`]) {
+    for (const relative of [STATE_DIR_NAME, `${STATE_DIR_NAME}/generated`, INDEX_WRITE_LOCK_PATH, ...["-journal", "-wal", "-shm"].map((s) => INDEX_WRITE_LOCK_PATH + s)]) {
       if (isSymlink(path.join(rootDir, relative))) {
         return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Index lock refused: symlink ${relative}`)]);
       }
@@ -74,6 +75,9 @@ export async function withIndexWriteLock<T>(root: string, fn: (lease: IndexWrite
     try {
       held = tryAcquireFileLock(file);
     } catch (error) {
+      if (error instanceof FileLockRefusedError) {
+        return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Index lock refused: ${INDEX_WRITE_LOCK_PATH} must be an empty file only DUO uses, but ${error.message}. Nothing was opened or changed; delete that path and run again`)]);
+      }
       return failure([createDiagnostic("GRAPH_WRITE_REFUSED", `Index lock unavailable: ${(error as Error).message}`)]);
     }
     if (held !== undefined) break;
