@@ -117,3 +117,16 @@ At the same start time (attempt 3), Windows, which sets the wall time, took 24.6
 | Runner minutes per run | 56.0 | 61.5 | 68.5 |
 
 The slowest steps by p50 are Windows `pnpm test` 12.8, Windows dist E2E 9.2, Windows conformance 8.2, macOS `pnpm test` 5.9 and Ubuntu `pnpm test` 5.1. Of the last 300 `ci` runs, 255 succeeded, 7 failed, 37 were cancelled (superseded by `concurrency`) and 1 waits for approval. Only 3 of 288 commits ran both as `push` and `pull_request`.
+
+
+## T187 re-check (2026-11-02, after merging `next` `a6d1e84`)
+
+The PR now sits on `next` with #127, #143, #150 and #153. The merge had no conflicts.
+
+**File sets** (`vitest list --filesOnly`):
+
+- Counts: full 159, deferred 146, conformance 13.
+- The deferred and conformance sets are disjoint, and their union equals the full set.
+- The 13 conformance files are the same as before. Files added to `next` since the last check stay in `pnpm test`: `apps/cli/src/commands/setup.test.ts`, `tests/cli/index-lock.e2e.test.ts`, `packages/graph/src/incremental/*` and `tests/mcp-benchmark-timeout.test.ts`.
+
+**Stale-variable guard** (requested in the #83 review). `tests/workspace/ci-conformance.test.ts` reads `.github/workflows/ci.yml`. For every job that sets `DUO_TEST_DEFER_CONFORMANCE: "1"`, it requires a later step that runs `scripts/release/conformance.mjs` without `--skip-e2e`, with no `if` and no `continue-on-error`. That step must come after the `pnpm test:dist` step that packs the tarball. `pnpm test` runs the guard. Fault checks, with `ci.yml` edited locally and then restored: adding `--skip-e2e`, deleting the conformance step and adding `continue-on-error: true` each make the guard fail.
