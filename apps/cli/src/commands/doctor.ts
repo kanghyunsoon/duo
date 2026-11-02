@@ -6,6 +6,7 @@
  */
 import { LLMProviderPool, projectDoctor, type DoctorAction, type DoctorCheck, type DoctorPayload } from "@duo-director/integration";
 import { t, type Locale, type MessageKey } from "../messages.js";
+import { columns, padColumns } from "../terminal-width.js";
 import { nodeVersionProblem } from "../node-version.js";
 import { EXIT, type Outcome } from "../output.js";
 import { NODE_ENGINE, VERSION } from "../version.js";
@@ -54,7 +55,7 @@ function actionLine(L: Locale, a: DoctorAction): string {
 export function renderDoctor(L: Locale, d: DoctorPayload): string[] {
   const status = (c: DoctorCheck) => t(L, ("doctor.status." + c.status) as MessageKey);
   const width = Math.max(...(["ok", "info", "warning", "error"] as const).map((s) => columns(t(L, ("doctor.status." + s) as MessageKey)))) + 2;
-  const pad = (s: string) => s + " ".repeat(Math.max(1, width - columns(s)));
+  const pad = (s: string) => padColumns(s, width);
   const out = [t(L, "doctor.title", { overall: t(L, ("doctor.overall." + d.overall) as MessageKey) })];
   for (const g of GROUPS) {
     // Skipped checks are listed once at the end: they wait for an earlier step, they are not problems of their own.
@@ -78,13 +79,6 @@ export function renderDoctor(L: Locale, d: DoctorPayload): string[] {
   if (d.next.length === 0) out.push("  " + t(L, "doctor.next.none"));
   d.next.forEach((a, i) => out.push("  " + (i + 1) + ". " + actionLine(L, a)));
   return out;
-}
-
-/** Terminal columns of a label: Hangul and other wide characters take two. */
-function columns(s: string): number {
-  let n = 0;
-  for (const ch of s) n += /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/u.test(ch) ? 2 : 1;
-  return n;
 }
 
 /** The shared doctor operation for this CLI environment (also the closing check of duoctl setup, T183). */
