@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 import { Client, SdkError, SdkErrorCode } from "@modelcontextprotocol/client";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { expectedOutputProperties, expectedSchemas } from "./mcp-contract.mjs";
+import { expectedNames, verifyTools } from "./mcp-contract.mjs";
 
 const workspace = fileURLToPath(new URL("../", import.meta.url));
 const cli = path.join(workspace, "apps", "cli", "dist", "main.js");
@@ -62,8 +62,6 @@ const toolArguments = {
   duo_search_evidence: { query: "AUTH-03", limit: 5 },
   duo_propose_decision: { title: "MCP benchmark proposal", question: "benchmark-only", answer: "Discard with the temporary fixture.", agent: "mcp-benchmark" },
 };
-const expectedNames = Object.keys(toolArguments).sort();
-
 function command(command, args, cwd) {
   return execFileSync(command, args, { cwd, encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
 }
@@ -104,31 +102,6 @@ function summarize(samples) {
     p50Ms: percentile(times, 0.5),
     p95Ms: percentile(times, 0.95),
   }]));
-}
-
-function verifyTools(tools) {
-  const names = tools.map((tool) => tool.name).sort();
-  if (JSON.stringify(names) !== JSON.stringify(expectedNames)) throw new Error(`tool names differ: ${JSON.stringify(names)}`);
-  for (const tool of tools) {
-    const schema = tool.inputSchema;
-    const expected = expectedSchemas[tool.name];
-    const properties = Object.keys(schema.properties ?? {}).sort();
-    if (schema.type !== "object" || schema.additionalProperties !== false) throw new Error(`${tool.name} input schema is not a strict object`);
-    if (JSON.stringify(properties) !== JSON.stringify(Object.keys(expected.properties).sort())) throw new Error(`${tool.name} schema properties differ: ${JSON.stringify(properties)}`);
-    if (JSON.stringify([...(schema.required ?? [])].sort()) !== JSON.stringify([...expected.required].sort())) throw new Error(`${tool.name} required properties differ: ${JSON.stringify(schema.required ?? [])}`);
-    for (const [name, type] of Object.entries(expected.properties)) {
-      if (schema.properties[name]?.type !== type) throw new Error(`${tool.name}.${name} type differs: ${String(schema.properties[name]?.type)}`);
-    }
-    for (const [name, nested] of Object.entries(expected.nested ?? {})) {
-      const child = schema.properties[name];
-      if (child.additionalProperties !== false || JSON.stringify(Object.keys(child.properties ?? {}).sort()) !== JSON.stringify(Object.keys(nested).sort())) throw new Error(`${tool.name}.${name} nested schema differs`);
-      for (const [childName, type] of Object.entries(nested)) if (child.properties[childName]?.type !== type) throw new Error(`${tool.name}.${name}.${childName} type differs`);
-    }
-    const output = tool.outputSchema;
-    if (output?.type !== "object" || output.additionalProperties !== false) throw new Error(`${tool.name} output schema is not a strict object`);
-    if (JSON.stringify(Object.keys(output.properties ?? {}).sort()) !== JSON.stringify(expectedOutputProperties[tool.name])) throw new Error(`${tool.name} output schema properties differ`);
-    if (JSON.stringify([...(output.required ?? [])].sort()) !== JSON.stringify(["format"])) throw new Error(`${tool.name} output required properties differ`);
-  }
 }
 
 /**

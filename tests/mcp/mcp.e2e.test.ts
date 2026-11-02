@@ -10,6 +10,7 @@ import { completeWorkTask, touchWorkTask } from "../../packages/integration/src/
 import { CLI_MAIN, duoctl, existingProject, snapshot } from "../cli/support.js";
 import { contextRegistry, makeContextRepo, REVIEW_FIXTURE } from "../../packages/director/src/context/testing.js";
 import { startMcp, type McpSession } from "./support.js";
+import { verifyTools } from "../../bench/mcp-contract.mjs";
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 300_000 });
 const temps: string[] = [];
@@ -32,6 +33,7 @@ describe("duo-director MCP: protocol, tool list as the permission contract, argu
     const s = await open(p.root);
     expect(s.client.getServerVersion()).toMatchObject({ name: "duo-director" });
     const { tools } = await s.client.listTools();
+    verifyTools(tools);
     expect(tools.map((t) => t.name).sort()).toEqual(TOOL_NAMES);
     expect(tools.some((t) => /confirm|reject|record|index|write|baseline|capture/u.test(t.name))).toBe(false);
     for (const t of tools) {

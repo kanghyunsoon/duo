@@ -63,12 +63,15 @@ describe("MCP benchmark timeouts", () => {
       expect(result.signal, why).toBeNull();
       expect(result.status, why).toBe(1);
       expect(result.stdout.trim(), why).not.toBe("");
-      const report = JSON.parse(result.stdout) as { configuration: { scenario?: string; timeoutMs: number }; scenarios: Record<string, { errors: Array<{ stage: string; kind: string }> }> };
+      const report = JSON.parse(result.stdout) as { configuration: { scenario?: string; timeoutMs: number }; scenarios: Record<string, { errors: Array<{ stage: string; kind: string }>; latency: Record<string, unknown> }> };
       expect(report.configuration, why).toMatchObject({ scenario: "single-cold", timeoutMs: 500 });
       expect(Object.keys(report.scenarios), why).toEqual(["single-cold"]);
       expect(Object.values(report.scenarios).flatMap((scenario) => scenario.errors), why).toEqual(
         expect.arrayContaining([expect.objectContaining({ stage, kind: "timeout" })]),
       );
+      if (mode === "tools/call") {
+        expect(Object.keys(report.scenarios["single-cold"]?.latency ?? {}), why).toEqual(expect.arrayContaining(["duo_get_decision", "duo_trace"]));
+      }
       const pids = fs.readFileSync(pidFile, "utf8").trim().split(/\s+/).map(Number);
       expect(pids.length, why).toBeGreaterThan(0);
       // Each server is recorded twice: by the fake server itself and by the benchmark client. The client copy must be
