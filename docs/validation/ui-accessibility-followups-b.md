@@ -86,6 +86,22 @@ This is a viewport-emulation result. Physical mobile device and browser UI bound
 
 수동 확인은 #73의 브라우저 UI 경계 항목만 판정한다. 전체 접근성 감사는 별도 axe incomplete, 시각 검토, 스크린리더 항목이 남아 여전히 미완료다. 기존 실행의 전체 미검증 수 108개를 해결했다고 해석하지 않는다.
 
+## 2026-11-03: Unverified 108-case screenshot triage
+
+`108`은 서로 다른 결함 108개가 아니라, 전체 120개 감사 사례 중 자동 판정 후 검토 기록이 없어 `미검증`으로 남은 사례 행의 수다. 최신 원본에서 axe의 실제 `violations`는 0개다. axe `incomplete` 결과는 80개( `aria-prohibited-attr` 44개, `color-contrast` 36개)이며, axe가 결론을 내리지 못한 결과이지 위반으로 확정된 결과는 아니다.
+
+최신 실행이 참조한 캡처 124장을 화면 축소 이미지로 분류했고, 모바일 표 화면 세 곳은 원본 크기로 확인했다. 여섯 캡처에서 실제 가독성 문제가 보인다.
+
+| 사례 | 조건 | 관찰 |
+| --- | --- | --- |
+| `base-Analysis_coverage-light-mobile`, `base-Analysis_coverage-dark-mobile` | 320×800, 밝음·어두움 | 9열 표의 머리글과 셀 문자가 한두 글자 단위로 세로 줄바꿈되어 읽기 어렵다. |
+| `base-Review history-light-mobile`, `base-Review history-dark-mobile` | 320×800, 밝음·어두움 | 이력 표의 열 제목과 값이 매우 좁은 열로 압축되어 단어가 여러 줄로 쪼개진다. |
+| `base-Review detail-light-mobile`, `base-Review detail-dark-mobile` | 320×800, 밝음·어두움 | Claims 표가 같은 방식으로 압축되어 머리글과 값의 가독성이 떨어진다. |
+
+여섯 사례 모두 문서 너비는 320px로 측정되어 페이지 자체의 가로 넘침은 없지만, 그 측정만으로 표가 읽을 수 있는지는 보장되지 않는다. 현재 표는 가로 스크롤 컨테이너 안에 있으나 화면에서 표가 가로로 펼쳐지지 않는다. 원인은 후속 구현 조사 대상이다. 이 모바일 표 가독성 문제는 #73 브라우저 포커스 경계와 별개의 UI 후속 사항이므로 이 PR에서는 제품 코드를 변경하지 않는다.
+
+이번 분류는 캡처에서 눈에 띄는 레이아웃 문제를 찾는 사전 검토다. 실제 스크린리더의 표 헤더 연결·발화, 나머지 axe `incomplete` 항목의 최종 판정, 실제 모바일 기기 동작은 검증하지 않았다. 따라서 108개 상태를 통과로 바꾸거나 전체 접근성 검증을 완료했다고 주장하지 않는다. 남은 수동 검증은 108개를 각각 다시 실행하는 방식이 아니라, 공통 동작별 대표 사례와 식별된 예외를 대상으로 좁혀야 한다.
+
 ### 검증 결과와 다음 게이트
 
 - `pnpm verify` — 통과: 146개 파일, 1,428 passed, 7 skipped, 5 TODO. 문서 검증 125개 파일 통과 (52 requirements, 14 decisions, 22 issues, 5 milestones, 94 acceptance criteria, 226 links).
