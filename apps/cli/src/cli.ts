@@ -122,7 +122,8 @@ async function dispatch(env: Env, command: string, positionals: readonly string[
       if (unknown !== undefined) return usage("setup", `unknown agent '${unknown}' (--agent ${AGENT_IDS.join("|")})`);
       const launcher = str(v.launcher);
       if (launcher !== undefined && launcher !== "path" && launcher !== "npx") return usage("setup", "--launcher must be path (duoctl on PATH) or npx (project-local)");
-      return setupCommand(env, options, agentSetupSteps(AGENT_IDS.filter((a) => named.includes(a)), launcher === "npx" ? NPX_LAUNCHER : PATH_LAUNCHER));
+      const agents = named.filter(isAgentId);
+      return setupCommand(env, { ...options, agents, launcher: launcher === "npx" ? "npx" : "path" }, agentSetupSteps([...new Set(agents)], launcher === "npx" ? NPX_LAUNCHER : PATH_LAUNCHER));
     }
     case "status": return statusCommand(env);
     case "doctor": return doctorCommand(env);

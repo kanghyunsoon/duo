@@ -15,30 +15,42 @@ import { applyAgentIntegration, planAgentIntegration, verifyAgentIntegration, ty
 import { t } from "../messages.js";
 import { VERSION } from "../version.js";
 import { host, renderPlan, renderVerify } from "./install.js";
-import type { SetupAgentStep } from "./setup.js";
+import type { SetupAgentStep, SetupStepContext } from "./setup.js";
 
 const REMAINING = { codex: "setup.remaining.codex", "claude-code": "setup.remaining.claude-code" } as const;
 
 export function agentSetupSteps(agents: readonly AgentId[], launcher: DuoLauncher): SetupAgentStep[] {
-  return agents.map((agent) => ({
-    id: agent,
-    plan: ({ env, truthPlanned }) => {
-      const plan = planAgentIntegration(env.root, agent, { launcher, host: host(env), assumeInitialized: truthPlanned });
-      const lines = renderPlan(env, plan).map((line, i) => (i === 0 ? "  " + agent.padEnd(10) + " " : " ".repeat(13)) + line);
-      return Promise.resolve({ willCreate: plan.willCreate, willModify: plan.willModify, blockers: plan.blockers, noop: plan.noop, lines, detail: plan });
-    },
-    apply: async ({ env }, planned) => {
-      const applied = await applyAgentIntegration(env.root, planned.detail as AgentIntegrationPlan, { clock: () => env.io.now() });
-      if (applied.value === undefined) return { ok: false, diagnostics: applied.diagnostics, lines: [], remaining: [] };
-      const verify = await verifyAgentIntegration(env.root, agent, { host: host(env), cliVersion: VERSION });
+  return agents.map((agent): SetupAgentStep => {
+    const verify = async ({ env }: SetupStepContext) => {
+      const checked = await verifyAgentIntegration(env.root, agent, { host: host(env), cliVersion: VERSION });
       return {
-        ok: verify.ok,
-        diagnostics: verify.checks.filter((c) => !c.ok).map((c) => createDiagnostic("AGENT_VERIFY_FAILED", `${agent} ${c.name}: ${c.detail ?? "failed"}`)),
-        // The trust and approval steps are the remaining lines below, localized; the verifier's English next actions are left out.
-        lines: [t(env.locale, "setup.agent.applied", { agent, list: applied.value.changed.map((c) => `${c.action} ${c.path}`).join(", ") }), ...renderVerify(env, { ...verify, nextActions: [] })],
+        ok: checked.ok,
+        diagnostics: checked.checks.filter((c) => !c.ok).map((c) => createDiagnostic("AGENT_VERIFY_FAILED", `${agent} ${c.name}: ${c.detail ?? "failed"}`)),
+        // Trust and approval stay in the localized remaining lines.
+        lines: renderVerify(env, { ...checked, nextActions: [] }),
         remaining: [t(env.locale, REMAINING[agent])],
-        detail: { apply: applied.value, verify },
+        detail: { verify: checked },
       };
-    },
-  }));
+    };
+    return {
+      id: agent,
+      plan: ({ env, truthPlanned }) => {
+        const plan = planAgentIntegration(env.root, agent, { launcher, host: host(env), assumeInitialized: truthPlanned });
+        const lines = renderPlan(env, plan).map((line, i) => (i === 0 ? "  " + agent.padEnd(10) + " " : " ".repeat(13)) + line);
+        return Promise.resolve({ willCreate: plan.willCreate, willModify: plan.willModify, blockers: plan.blockers, noop: plan.noop, lines, detail: plan });
+      },
+      verify,
+      apply: async (context, planned) => {
+        const { env } = context;
+        const applied = await applyAgentIntegration(env.root, planned.detail as AgentIntegrationPlan, { clock: () => env.io.now() });
+        if (applied.value === undefined) return { ok: false, diagnostics: applied.diagnostics, lines: [], remaining: [] };
+        const checked = await verify(context);
+        return {
+          ...checked,
+          lines: [t(env.locale, "setup.agent.applied", { agent, list: applied.value.changed.map((c) => `${c.action} ${c.path}`).join(", ") }), ...checked.lines],
+          detail: { apply: applied.value, ...checked.detail },
+        };
+      },
+    };
+  });
 }
