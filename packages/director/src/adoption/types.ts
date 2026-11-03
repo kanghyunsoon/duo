@@ -31,8 +31,12 @@ export interface WorkingTreeObservation {
   readonly truncated: boolean;
 }
 
-/** decision-forbids-import (H-72): Decision forbids.imported_paths over File→File IMPORTS. */
-export type BaselineRule = "decision-forbids" | "declared-reference" | "external-source-drift" | "decision-forbids-import";
+/**
+ * decision-forbids-import (H-72): Decision forbids.imported_paths over File→File IMPORTS.
+ * decision-forbids-import-origin (H-98, #49 Stage 2): only an evaluated-rule marker, never a finding's rule:
+ * the capture also recorded the pairs found through re-export origins (under decision-forbids-import keys).
+ */
+export type BaselineRule = "decision-forbids" | "declared-reference" | "external-source-drift" | "decision-forbids-import" | "decision-forbids-import-origin";
 
 /** A deterministic finding that already held at adoption. */
 export interface BaselineFinding {
@@ -96,6 +100,8 @@ export interface AdoptionBaselineBody {
    * H-72 (additive): the provenance rules this capture actually evaluated. Absent in a record captured
    * before T37; such a baseline is never read as having evaluated decision-forbids-import. A dirty
    * HEAD_BASELINE does not list decision-forbids-import (HEAD import relations are not reconstructed).
+   * decision-forbids-import-origin (H-98): re-export origins were evaluated too (clean tree only); without
+   * it a pair found only through re-exports is not BLOCK-eligible.
    */
   readonly evaluatedRules?: readonly BaselineRule[];
 }

@@ -236,7 +236,7 @@ describe("T37 Adoption Baseline coverage and provenance (H-72)", () => {
   it("A/18 a clean baseline records the rule as evaluated and the existing relation; editing that import line does not block", async () => {
     const r = await repoWith("2026-09-01T00:00:00.000Z");
     const b = await capture(r, "2026-09-28T00:00:00.000Z");
-    expect(b.evaluatedRules).toEqual(["decision-forbids", "decision-forbids-import", "declared-reference", "external-source-drift"]);
+    expect(b.evaluatedRules).toEqual(["decision-forbids", "decision-forbids-import", "decision-forbids-import-origin", "declared-reference", "external-source-drift"]);
     const key = violationKey("decision-forbids-import", "D-001", `import:${fileNode("src/app/existing.ts")}->${fileNode("src/legacy/db.ts")}`);
     expect(b.findings.filter((f) => f.rule === "decision-forbids-import").map((f) => f.key)).toEqual([key]);
     commitBaseline(r);

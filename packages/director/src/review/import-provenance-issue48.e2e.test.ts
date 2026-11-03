@@ -21,8 +21,9 @@
  *   All of P1–P7a: current `next` behavior is one `pre-existing-touched` CONFLICT on the pair key,
  *   `blockEligible: false`, WARN.
  * - P7b: The specifier changes to the barrel `src/db/index.ts` that re-exports `legacy-db`. Since #49
- *   Stage 1 (L1-C): no claim, an `imports-through-reexport` limitation that names the chain, PASS.
- *   Binding-level origin matching is #49 Stage 2.
+ *   Stage 2 (H-98): `legacyQuery` is traced to its one origin `legacy-db`, so the source → origin pair is
+ *   the baseline pair: one `pre-existing-touched` CONFLICT, WARN, like P7a. (#49 Stage 1 gave only the
+ *   `imports-through-reexport` limitation.)
  * - P8a: The `from` side did not resolve (the import pointed to a missing file) and the `to` side now
  *   resolves to `legacy-db`. Current `next` behavior: `introduced`, BLOCK, because the pair is not in
  *   the baseline.
@@ -256,14 +257,10 @@ describe("Issue #48: forbidden-import adoption provenance pinned fixtures (P1–
     expect(forbiddenImports(res)[0]?.observed).toContain('import "@db/legacy-db.js" resolves to src/db/legacy-db.ts');
   });
 
-  it("P7b (#49 Stage 1, Maintainer Decision L1-C): switching the specifier to the re-exporting barrel gives no claim and an imports-through-reexport limitation with the chain, PASS", async () => {
+  it("P7b (#49 Stage 2, H-98): switching the specifier to the re-exporting barrel traces legacyQuery to legacy-db: the baseline pair, pre-existing-touched, WARN", async () => {
     const res = await scenario((r) => r.edit("src/ui/orders-page.ts", '"../db/legacy-db.js"', '"../db/index.js"'));
-    expect(forbiddenImports(res)).toEqual([]);
-    expect(importLimits(res)).toEqual(["imports-through-reexport"]);
-    expect(res.limitations.find((l) => l.code === "imports-through-reexport")?.message).toContain(
-      "src/ui/orders-page.ts:1 → src/db/index.ts → src/db/legacy-db.ts (D-001)",
-    );
-    expect(res.verdict).toBe("PASS");
+    expectPreExistingTouched(res, "src/ui/orders-page.ts", [1]);
+    expect(forbiddenImports(res)[0]?.observed).toContain("re-exports legacyQuery from src/db/legacy-db.ts via src/db/index.ts");
   });
 
   it("P8a: pins current next behavior (the from side did not resolve and the to side now resolves to legacy-db: introduced, BLOCK)", async () => {

@@ -116,6 +116,9 @@
 | Downgrade | `importer_paths`를 쓰는 저장소를 0.2.2+·0.3.x·0.4.0-rc.1로 열면 `SCHEMA_UNKNOWN_PROPERTY`로 `PROJECT_TRUTH_INVALID`(fail-closed, H-75). Decision이 조용히 빠지지 않는다 |
 | Verdict | Review의 task scope(#58 C260 Fix B, H-91): task seed가 직접 고른 Symbol·Test의 소유 파일이 task scope에 들어가, 같은 파일의 다른 수정이 `outside-task-context` WARN 대신 `in-task-context`가 된다. CALLS·IMPORTS 이웃이나 `omittedCandidates`의 파일은 넣지 않는다. context packet·저장 데이터는 그대로이고 review 시점 계산만 바뀐다 |
 | Verdict | 다른 milestone Requirement 구현(#59 C259, H-100): `outside-current-milestone`은 파일마다 claim 하나(subject file, Requirement ID 모두 유지)이고 `informational: true`라 WARN 근거가 아니다(WARN → PASS). 다른 WARN·BLOCK 근거는 그대로. `duo.review/1`에 claim field `informational` 추가(Review Record에도 기록). 구버전은 같은 변경을 WARN으로 본다 |
+| Verdict | Re-export를 거친 금지 import(#49 Stage 2, H-98): 가져오는 모든 이름의 origin이 하나로 정해지고 금지 대상이면 source → origin 쌍의 `forbidden-import`(PASS → BLOCK). 모호한 경우는 그대로 `imports-through-reexport`. 새 limitation code `imports-reexport-origin-not-baselined` |
+| Additive baseline | Adoption Baseline `evaluatedRules`의 marker `decision-forbids-import-origin`(깨끗한 working tree에서 캡처할 때)과 re-export로 찾은 `decision-forbids-import` finding. `duo.adoption-baseline/2` 그대로. marker 없는 이전 baseline에서 re-export로만 찾은 새 pair는 WARN(`unverified-at-adoption`) |
+| Downgrade(baseline) | marker가 있는 baseline을 0.3.x·0.4.0-rc.1이 읽으면 marker를 무시한다(fail-closed 아님): 기록 검증은 내용 hash만 보고 review는 `decision-forbids-import`만 확인한다(rc.1과 현재의 `verifyReviewRecord`·`loadAdoptionBaseline` 코드 동일). re-export로 기록된 finding은 같은 key의 직접 import를 `pre-existing`으로 보게 한다(관계가 이미 있었으므로) |
 
 ## 0.3.3 변경 분류 (T78, H-87)
 
