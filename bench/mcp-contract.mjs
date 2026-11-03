@@ -11,7 +11,7 @@ export const expectedSchemas = {
     required: ["answer", "question", "title"],
     properties: { agent: "string", answer: "string", enforcement: "string", forbids: "object", governs: "object", question: "string", rationale: "string", supersedes: "string", title: "string" },
     nested: {
-      forbids: { dependencies: "array", imported_paths: "array", paths: "array", symbols: "array" },
+      forbids: { dependencies: "array", imported_paths: "array", importer_paths: "array", paths: "array", symbols: "array" },
       governs: { paths: "array", requirements: "array", symbols: "array" },
     },
   },
@@ -28,3 +28,30 @@ export const expectedOutputProperties = {
   duo_search_evidence: ["candidates", "format", "message", "notice", "query", "status", "truncated"],
   duo_propose_decision: ["basedOn", "confirmed", "format", "indexRequired", "message", "notice", "path", "proposalId", "proposedBy", "state", "status"],
 };
+
+export const expectedNames = Object.keys(expectedSchemas).sort();
+
+export function verifyTools(tools) {
+  const names = tools.map((tool) => tool.name).sort();
+  if (JSON.stringify(names) !== JSON.stringify(expectedNames)) throw new Error(`tool names differ: ${JSON.stringify(names)}`);
+  for (const tool of tools) {
+    const schema = tool.inputSchema;
+    const expected = expectedSchemas[tool.name];
+    const properties = Object.keys(schema.properties ?? {}).sort();
+    if (schema.type !== "object" || schema.additionalProperties !== false) throw new Error(`${tool.name} input schema is not a strict object`);
+    if (JSON.stringify(properties) !== JSON.stringify(Object.keys(expected.properties).sort())) throw new Error(`${tool.name} schema properties differ: ${JSON.stringify(properties)}`);
+    if (JSON.stringify([...(schema.required ?? [])].sort()) !== JSON.stringify([...expected.required].sort())) throw new Error(`${tool.name} required properties differ: ${JSON.stringify(schema.required ?? [])}`);
+    for (const [name, type] of Object.entries(expected.properties)) {
+      if (schema.properties[name]?.type !== type) throw new Error(`${tool.name}.${name} type differs: ${String(schema.properties[name]?.type)}`);
+    }
+    for (const [name, nested] of Object.entries(expected.nested ?? {})) {
+      const child = schema.properties[name];
+      if (child.additionalProperties !== false || JSON.stringify(Object.keys(child.properties ?? {}).sort()) !== JSON.stringify(Object.keys(nested).sort())) throw new Error(`${tool.name}.${name} nested schema differs`);
+      for (const [childName, type] of Object.entries(nested)) if (child.properties[childName]?.type !== type) throw new Error(`${tool.name}.${name}.${childName} type differs`);
+    }
+    const output = tool.outputSchema;
+    if (output?.type !== "object" || output.additionalProperties !== false) throw new Error(`${tool.name} output schema is not a strict object`);
+    if (JSON.stringify(Object.keys(output.properties ?? {}).sort()) !== JSON.stringify(expectedOutputProperties[tool.name])) throw new Error(`${tool.name} output schema properties differ`);
+    if (JSON.stringify([...(output.required ?? [])].sort()) !== JSON.stringify(["format"])) throw new Error(`${tool.name} output required properties differ`);
+  }
+}
