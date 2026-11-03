@@ -23,16 +23,18 @@ export async function refreshIndexIfSafe(root: string, options: RefreshIndexOpti
 
 async function refreshUnderGuard(root: string, options: RefreshIndexOptions): Promise<ParseResult<RefreshIndexResult>> {
   const locked = await withIndexWriteLock(root, async (lease): Promise<ParseResult<RefreshIndexResult>> => {
-    const extra = Object.keys(readIndexState(root).state?.configs ?? {});
-    const before = await captureIndexInputs(root, extra);
-    if (before.value === undefined) return failure(before.diagnostics);
-    const stable = async () => {
-      const after = await captureIndexInputs(root, extra);
-      return after.value?.signature === before.value?.signature;
-    };
-    const moved = () => failure<RefreshIndexResult>([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: repository inputs changed during recovery")]);
     const truth = requireCompleteTruth(loadProjectTruth(root));
     if (truth.value === undefined) return failure(truth.diagnostics);
+    const scope = { include: truth.value.truth.config.index.include, exclude: truth.value.truth.config.index.exclude };
+    const truthSignature = JSON.stringify(truth.value.truth);
+    const extra = Object.keys(readIndexState(root).state?.configs ?? {});
+    const before = await captureIndexInputs(root, extra, scope);
+    if (before.value === undefined) return failure(before.diagnostics);
+    const stable = async () => {
+      const after = await captureIndexInputs(root, extra, scope);
+      return after.value?.signature === before.value?.signature && JSON.stringify(loadProjectTruth(root).value?.truth) === truthSignature;
+    };
+    const moved = () => failure<RefreshIndexResult>([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: repository inputs changed during recovery")]);
     const dbFile = path.join(path.resolve(root), GRAPH_DB_FILE_PATH);
     const identity = fs.existsSync(dbFile) ? fs.statSync(dbFile) : undefined;
     const opened = openProjectGraphReader(root);

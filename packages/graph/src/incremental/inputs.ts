@@ -5,10 +5,17 @@ import { computeContentHash, fingerprintModeOf, openGitProvider, scanRepository,
 import { compareUtf8, createDiagnostic, failure, normalizeRepoPath, STATE_DIR_NAME, success, type ParseResult } from "@duo-director/core";
 
 /** Content-based stability guard; deliberately independent of mtime and index freshness caches.
- * Scan without user include/exclude so Truth and resolution configs are also observed.
+ * Observes what an index run reads: the files of the configured scan (index.include/exclude), every
+ * Project Truth file (also when Git ignores it), the extra paths given (configs the resolver read
+ * last time) and the Git state. Files outside the index scope do not make a run unstable (T180).
  */
-export async function captureIndexInputs(root: string, extra: readonly string[] = []): Promise<ParseResult<{ signature: string; git: GitRepositoryState; hashes: ReadonlyMap<string, string>; rawHashes: ReadonlyMap<string, string> }>> {
-  const scan = await scanRepository(root);
+export interface IndexInputScope {
+  readonly include?: readonly string[];
+  readonly exclude?: readonly string[];
+}
+
+export async function captureIndexInputs(root: string, extra: readonly string[] = [], scope: IndexInputScope = {}): Promise<ParseResult<{ signature: string; git: GitRepositoryState; hashes: ReadonlyMap<string, string>; rawHashes: ReadonlyMap<string, string> }>> {
+  const scan = await scanRepository(root, { include: scope.include ?? [], exclude: scope.exclude ?? [] });
   const git = await openGitProvider(root);
   const state = await git.value?.repositoryState();
   const diagnostics = [...scan.diagnostics, ...git.diagnostics, ...(state?.diagnostics ?? [])];
