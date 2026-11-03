@@ -48,7 +48,7 @@ const FILES: Record<string, string> = {
   "src/ui/home.ts": "export const home = 1;\n",
 };
 
-type Outcome = { readonly result?: ReviewResult; readonly codes: readonly string[]; readonly messages: readonly string[] };
+type Outcome = { readonly result: ReviewResult | undefined; readonly codes: readonly string[]; readonly messages: readonly string[] };
 
 async function review(diff: { readonly from: GitDiffEnd; readonly to: GitDiffEnd }): Promise<Outcome> {
   await repo.index();
