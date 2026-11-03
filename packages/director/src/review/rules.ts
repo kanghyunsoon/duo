@@ -18,6 +18,7 @@ import {
 import { nonApplicationReason } from "./scope.js";
 import { declaredReferenceParts, dependencyOffending, violationKey } from "../adoption/key.js";
 import { replacedUnresolvedSpecifier } from "./from-side.js";
+import { importedNames, ReexportOrigins, type ImportedNames, type OriginHop } from "./reexport-origin.js";
 import { hunkRange } from "./seeds.js";
 import type { ChangedFile, ChangedHunk, DiffSeed, ReviewClaim, ReviewLimitation } from "./types.js";
 
@@ -38,6 +39,14 @@ export async function sideText(ctx: RuleContext, side: GitDiffEnd, file: RepoPat
   if (source === undefined) return undefined;
   const blob = await ctx.git.readBlob(source, file);
   return blob.value === undefined ? undefined : canonicalSourceText(decoder.decode(blob.value));
+}
+
+/** Whether the reviewed side of `file` has the indexed (working-tree) text; always true when the working tree is reviewed. */
+async function sameAsIndexed(ctx: RuleContext, file: RepoPath): Promise<boolean> {
+  if (ctx.to === "WORKTREE") return true;
+  const side = await sideText(ctx, ctx.to, file);
+  const current = readSourceFile(ctx.root, file).value;
+  return side !== undefined && current !== undefined && side === canonicalSourceText(current);
 }
 
 function decisionsOf(file: RepoPath, text: string): Decision[] {
@@ -234,16 +243,36 @@ export function decisionGovernance(ctx: RuleContext, conflicted: ReadonlySet<str
 export function requirementImplementation(ctx: RuleContext): ReviewClaim[] {
   const current = ctx.truth.config.currentMilestone;
   const out: ReviewClaim[] = [];
+  // H-100 (#59 C259): implementing another milestone's Requirement is a fact, not a WARN basis. One
+  // informational claim per changed file keeps every Requirement ID and its evidence.
+  const outsideByFile = new Map<RepoPath, { ids: string[]; seeds: DiffSeed[] }>();
   for (const [id, seeds] of [...implemented(ctx)].sort(([a], [b]) => compareUtf8(a, b))) {
     const r = ctx.truth.requirements.find((x) => x.id === id);
     if (r === undefined) continue;
-    const outside = current !== null && r.milestone !== null && r.milestone !== current;
+    if (current !== null && r.milestone !== null && r.milestone !== current) {
+      for (const s of seeds) {
+        const f = outsideByFile.get(s.path) ?? { ids: [], seeds: [] };
+        if (!f.ids.includes(id)) f.ids.push(id);
+        if (!f.seeds.includes(s)) f.seeds.push(s);
+        outsideByFile.set(s.path, f);
+      }
+      continue;
+    }
     const c = makeClaim(ctx, {
-      rule: "requirement-implementation", subject: { kind: "requirement", id }, alignment: outside ? "PARTIAL" : "UNKNOWN",
-      reason: outside ? "outside-current-milestone" : "meaning-not-decidable", semantic: !outside,
-      expected: outside ? `changes serve the current milestone ${current}` : `the changed code does what ${id} asks`,
-      observed: `${seeds.map((s) => s.ref).join(", ")} implement ${id}${outside ? ` (milestone ${r.milestone})` : " (declared or annotated link; meaning not checked)"}`,
+      rule: "requirement-implementation", subject: { kind: "requirement", id }, alignment: "UNKNOWN", reason: "meaning-not-decidable", semantic: true,
+      expected: `the changed code does what ${id} asks`,
+      observed: `${seeds.map((s) => s.ref).join(", ")} implement ${id} (declared or annotated link; meaning not checked)`,
       evidence: [requirementEvidence(ctx, id), ...seeds.flatMap((s) => seedEvidence(ctx, s))],
+    });
+    if (c !== undefined) out.push(c);
+  }
+  for (const [file, { ids, seeds }] of [...outsideByFile].sort(([a], [b]) => compareUtf8(a, b))) {
+    const milestones = ids.map((id) => `${id} (milestone ${ctx.truth.requirements.find((x) => x.id === id)?.milestone ?? "?"})`);
+    const c = makeClaim(ctx, {
+      rule: "requirement-implementation", subject: { kind: "file", id: file }, alignment: "PARTIAL", reason: "outside-current-milestone", informational: true,
+      expected: `changes serve the current milestone ${current}`,
+      observed: `${seeds.map((s) => s.ref).join(", ")} implement ${milestones.join(", ")}`,
+      evidence: [...ids.map((id) => requirementEvidence(ctx, id)), ...seeds.flatMap((s) => seedEvidence(ctx, s))],
     });
     if (c !== undefined) out.push(c);
   }
@@ -411,15 +440,6 @@ function confirmedAfterBaseline(confirmedAt: string | undefined, recordedAt: str
   return Number.isFinite(c) && Number.isFinite(r) && c > r;
 }
 
-/** Names an import takes from its target module: "all" for side-effect, dynamic, namespace and CommonJS-object imports. */
-type ImportedNames = "all" | ReadonlySet<string>;
-
-function importedNames(ref: IndexedModuleReference): ImportedNames {
-  if (ref.kind === "export-from") return ref.reexports.some((r) => r.imported === "*") ? "all" : new Set(ref.reexports.map((r) => r.imported));
-  const named = ref.bindings.filter((b) => b.imported !== "*");
-  return ref.bindings.length === 0 || named.length < ref.bindings.length ? "all" : new Set(named.map((b) => b.imported));
-}
-
 /** The names of its target that an export-from forwards when the re-exporting module is asked for names; undefined: none. */
 function forwardedNames(ref: IndexedModuleReference, names: ImportedNames): ImportedNames | undefined {
   const out = new Set<string>();
@@ -500,10 +520,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   const usable: ChangedFile[] = [];
   const otherSide: string[] = [];
   for (const f of changed) {
-    if (ctx.to === "WORKTREE") { usable.push(f); continue; }
-    const side = await sideText(ctx, ctx.to, f.path);
-    const current = readSourceFile(ctx.root, f.path).value;
-    if (side !== undefined && current !== undefined && side === canonicalSourceText(current)) usable.push(f);
+    if (await sameAsIndexed(ctx, f.path)) usable.push(f);
     else otherSide.push(f.path);
   }
   const indexed = await readIndexedModuleReferences(ctx.root, usable.map((f) => f.path));
@@ -512,8 +529,11 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   const unsupported: string[] = [];
   const notIndexedTarget: string[] = [];
   const unavailable: string[] = [];
-  const groups = new Map<string, { d: Decision; file: ChangedFile; source: RepoPath; target: RepoPath; sites: { ref: IndexedModuleReference; hunks: string[]; changed: ChangedHunk[] }[] }>();
-  const viaReexport: Parameters<typeof reexportChains>[1][number][] = [];
+  // One site shape for direct and re-export sites: the changed hunks (H-99 reads their removed lines) and, for a
+  // site reached through re-exports (#49 Stage 2), the names it takes and the re-export chain.
+  type Site = { ref: IndexedModuleReference; hunks: string[]; changed: ChangedHunk[]; via?: { names: string[]; chain: readonly OriginHop[] } };
+  const groups = new Map<string, { d: Decision; file: ChangedFile; source: RepoPath; target: RepoPath; sites: Site[] }>();
+  const viaReexport: (Parameters<typeof reexportChains>[1][number] & { file: ChangedFile; hunks: string[]; changed: ChangedHunk[] })[] = [];
   usable.forEach((f, i) => {
     const r = indexed[i];
     if (r === undefined || r.status === "unavailable") { unavailable.push(f.path); return; }
@@ -535,7 +555,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
       }
       // H-96 (2): an importer outside a Decision's importer_paths gets neither its claim nor its re-export limitation.
       const indirect = matchers.filter(({ match, importer }) => importer(f.path) && !match.some((m) => m(target)));
-      if (indirect.length > 0) viaReexport.push({ where, ref, target, decisions: indirect });
+      if (indirect.length > 0) viaReexport.push({ where, ref, target, decisions: indirect, file: f, hunks, changed });
       for (const { d, match, importer } of matchers) {
         if (!importer(f.path) || !match.some((m) => m(target))) continue;
         const key = `${d.id}\n${f.path}\n${target}`;
@@ -545,18 +565,48 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
       }
     }
   });
-  const throughReexport = await reexportChains(ctx.root, viaReexport);
+  // #49 Stage 2 (H-98): an import whose every name has one exact origin is checked against that origin file;
+  // anything ambiguous keeps the Stage 1 limitation and makes no claim. A barrel, hop or origin whose reviewed
+  // side differs from the indexed working tree is not analyzed for this review (as adoption/head.ts does).
+  const origins = new ReexportOrigins(ctx.root, async (file) => !(await sameAsIndexed(ctx, file)));
+  await origins.load(viaReexport.map((c) => c.target));
+  const unverifiedChains: typeof viaReexport = [];
+  for (const c of viaReexport) {
+    const traced = origins.trace(c.target, importedNames(c.ref));
+    if (traced.status === "ambiguous") { unverifiedChains.push(c); continue; }
+    for (const { d, match } of c.decisions) {
+      const byOrigin = new Map<RepoPath, { names: string[]; chain: readonly OriginHop[] }>();
+      for (const o of traced.origins.filter((x) => match.some((m) => m(x.file)))) {
+        const v = byOrigin.get(o.file) ?? { names: [], chain: o.chain };
+        v.names.push(o.name);
+        byOrigin.set(o.file, v);
+      }
+      for (const [origin, via] of byOrigin) {
+        const key = `${d.id}\n${c.file.path}\n${origin}`;
+        const g = groups.get(key) ?? { d, file: c.file, source: c.file.path, target: origin, sites: [] };
+        g.sites.push({ ref: c.ref, hunks: c.hunks, changed: c.changed, via });
+        groups.set(key, g);
+      }
+    }
+  }
+  const throughReexport = await reexportChains(ctx.root, unverifiedChains);
   const coverage = ctx.baselineEvaluatedRules?.has("decision-forbids-import") === true;
+  const originCoverage = ctx.baselineEvaluatedRules?.has("decision-forbids-import-origin") === true;
+  const originsNotBaselined: string[] = [];
   const claims: ReviewClaim[] = [];
   const fromSideUnresolved: string[] = [];
   const readFromSide = (p: RepoPath) => sideText(ctx, ctx.from, p);
   for (const g of [...groups.values()].sort((a, b) => compareUtf8(a.d.id, b.d.id) || compareUtf8(a.source, b.source) || compareUtf8(a.target, b.target))) {
-    const where = g.sites.map((s) => `${g.source}:${s.ref.location.startLine ?? "?"} ${s.ref.kind} "${s.ref.specifier}"${s.ref.typeOnly ? " (type-only)" : ""}`).join("; ");
+    const where = g.sites.map((s) => `${g.source}:${s.ref.location.startLine ?? "?"} ${s.ref.kind} "${s.ref.specifier}"${s.ref.typeOnly ? " (type-only)" : ""}${s.via === undefined ? "" : ` re-exports ${s.via.names.join(", ")} from ${g.target} via ${s.via.chain.map((h) => h.file).join(" → ")}`}`).join("; ");
     // A baseline that did not evaluate this rule cannot say whether the relation existed at adoption (H-72),
-    // unless the Decision itself was confirmed after the baseline was recorded.
-    const uncovered = ctx.baselineKeys !== undefined && !coverage && !confirmedAfterBaseline(g.d.confirmedAt, ctx.baselineRecordedAt);
+    // unless the Decision itself was confirmed after the baseline was recorded. A pair seen only through
+    // re-exports needs a baseline that evaluated re-export origins (H-98 (5)-(6)).
+    const throughOnly = g.sites.every((s) => s.via !== undefined);
+    const uncovered = ctx.baselineKeys !== undefined && (throughOnly ? !originCoverage : !coverage && !confirmedAfterBaseline(g.d.confirmedAt, ctx.baselineRecordedAt));
     // H-99 (#48 P8a): every changed statement of a pair the baseline lacks replaced a from-side specifier that
     // resolved to no file, so whether the importer already reached the target is unknown: not BLOCK-eligible.
+    // This holds for a pair found only through re-exports too: the from side says nothing either way about
+    // whether the old import reached the origin, directly or through a barrel.
     let replaced = false;
     if (ctx.baselineKeys !== undefined && !uncovered && !ctx.baselineKeys.has(violationKey("decision-forbids-import", g.d.id, `import:${nodeId(fileRef(g.source))}->${nodeId(fileRef(g.target))}`))) {
       replaced = true;
@@ -567,10 +617,12 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
       rule: "decision-forbids-import", subject: { kind: "decision", id: g.d.id }, key: `import:${g.source}->${g.target}`, alignment: "CONFLICT", reason: "forbidden-import",
       enforced: g.d.enforcement === "block",
       expected: `no changed import${g.d.forbids.importerPaths === undefined ? "" : ` in ${g.d.forbids.importerPaths.join(", ")}`} resolves to ${(g.d.forbids.importedPaths ?? []).join(", ")} (${g.d.id})`,
-      observed: `forbidden import on a changed line: ${where} resolves to ${g.target}`,
+      observed: throughOnly ? `forbidden import through re-exports on a changed line: ${where}` : `forbidden import on a changed line: ${where} resolves to ${g.target}`,
       evidence: [
         decisionEvidence(ctx, g.d.id),
-        ...g.sites.map((s) => moduleReferenceEvidence(ctx.store, ctx.reader, { path: g.source, location: s.ref.location, kind: s.ref.kind, specifier: s.ref.specifier, typeOnly: s.ref.typeOnly, target: g.target }, ctx.toLabel)),
+        ...g.sites.map((s) => moduleReferenceEvidence(ctx.store, ctx.reader, { path: g.source, location: s.ref.location, kind: s.ref.kind, specifier: s.ref.specifier, typeOnly: s.ref.typeOnly, target: s.ref.target ?? g.target }, ctx.toLabel)),
+        // The re-export chain (H-98): each export-from statement on the way to the origin.
+        ...g.sites.flatMap((s) => s.via?.chain ?? []).map((h) => moduleReferenceEvidence(ctx.store, ctx.reader, { path: h.file, location: h.ref.location, kind: h.ref.kind, specifier: h.ref.specifier, typeOnly: h.ref.typeOnly, target: h.ref.target as RepoPath }, ctx.toLabel)), // a hop is only followed through a resolved target
         ...g.sites.flatMap((s) => s.hunks),
         nodeEvidence(ctx, ctx.graph.getNode(fileRef(g.target))),
       ],
@@ -578,6 +630,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
     });
     if (c !== undefined) claims.push(c);
     if (replaced && c !== undefined) fromSideUnresolved.push(...g.sites.map((s) => `${g.source}:${s.ref.location.startLine ?? "?"}`));
+    else if (c?.provenance === "unverified-at-adoption" && throughOnly) originsNotBaselined.push(`${g.source} → ${g.target} (${g.d.id})`);
   }
   const limitations: ReviewLimitation[] = [];
   const not = "were not checked against forbids.imported_paths";
@@ -587,6 +640,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   if (notIndexedTarget.length > 0) limitations.push({ code: "imports-target-not-indexed", message: `${notIndexedTarget.length} changed import(s) resolve to a file outside the index and ${not}: ${preview(notIndexedTarget)}.` });
   if (unavailable.length > 0) limitations.push({ code: "imports-index-unavailable", message: `The indexed imports of ${unavailable.length} changed file(s) could not be read and ${not}: ${preview(unavailable)}.` });
   if (throughReexport.length > 0) limitations.push({ code: "imports-through-reexport", message: `${throughReexport.length} changed import(s) can reach a file in forbids.imported_paths through re-exports that were not checked binding by binding: ${preview(throughReexport)}.` });
+  if (originsNotBaselined.length > 0) limitations.push({ code: "imports-reexport-origin-not-baselined", message: `The Adoption Baseline was recorded before re-export origins were evaluated, so ${originsNotBaselined.length} forbidden import pair(s) found through re-exports are not BLOCK-eligible: ${preview(originsNotBaselined)}.` });
   if (fromSideUnresolved.length > 0) limitations.push({ code: "imports-from-side-unresolved", message: `${fromSideUnresolved.length} changed import(s) replaced a specifier that resolved to no file at the diff base or in the Adoption Baseline; whether the importer already reached the forbidden file is unknown, so they are not BLOCK-eligible: ${preview(fromSideUnresolved)}.` });
   if (otherSide.length > 0) limitations.push({ code: "imports-reviewed-side-not-indexed", message: `${otherSide.length} changed file(s) differ on the reviewed side from the indexed working tree; their imports ${not}: ${preview(otherSide)}.` });
   return { claims, limitations };

@@ -38,18 +38,22 @@ export function resolveCppInclude(request: ModuleResolutionRequest, files: Reado
 export interface LanguageResolverOptions {
   readonly root: string;
   readonly indexedFiles: ReadonlySet<RepoPath>;
+  readonly readInput?: (file: string, read: () => string | undefined) => string | undefined;
 }
 
 const TS_EXTENSION = /\.(?:[cm]?tsx?|[cm]?jsx?)$/iu;
 const PY_EXTENSION = /\.py$/u;
 
 export function createLanguageModuleResolver(options: LanguageResolverOptions): ModuleResolver {
-  const ts = createTypeScriptModuleResolver({ root: options.root, indexedFiles: options.indexedFiles });
+  const ts = createTypeScriptModuleResolver(options);
   const files = options.indexedFiles as ReadonlySet<string>;
   const isTs = (r: { readonly language?: string }) => r.language === undefined || TS_LANGUAGES.has(r.language);
   // Python source roots: discovered once, on the first Python request, from the indexed files and in-repository metadata.
   let python: PythonRoots | undefined;
-  const pythonRoots = () => (python ??= discoverPythonRoots(files, (p) => readSourceFile(options.root, p).value));
+  const pythonRoots = () => (python ??= discoverPythonRoots(files, (p) => {
+    const read = () => readSourceFile(options.root, p).value;
+    return options.readInput === undefined ? read() : options.readInput(nodePath.join(options.root, p), read);
+  }));
   return {
     version: MODULE_RESOLUTION_VERSION,
     get diagnostics() { return ts.diagnostics; },

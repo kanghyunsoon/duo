@@ -15,6 +15,8 @@ export interface TypeScriptModuleResolverOptions {
   readonly root: string;
   /** Indexed repository files (File Nodes). Anything else inside the repository is "not-indexed". */
   readonly indexedFiles: ReadonlySet<RepoPath>;
+  /** Optional input observer for a bounded index operation (including absent config lookups). */
+  readonly readInput?: (file: string, read: () => string | undefined) => string | undefined;
 }
 
 interface Config {
@@ -62,9 +64,12 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
   const configs = new Map<string, Config>();
   const nearest = new Map<string, Config | undefined>();
   const results = new Map<string, ModuleResolution>();
+  const readFile = (f: string): string | undefined => options.readInput === undefined ? api.sys.readFile(f) : options.readInput(f, () => api.sys.readFile(f));
+  const fileExists = (f: string): boolean => { if (options.readInput !== undefined) readFile(f); return api.sys.fileExists(f); };
+  const configHost = { ...api.sys, readFile, fileExists };
   const host: ts.ModuleResolutionHost = {
-    fileExists: (f) => api.sys.fileExists(f),
-    readFile: (f) => api.sys.readFile(f),
+    fileExists,
+    readFile,
     directoryExists: (d) => api.sys.directoryExists(d),
     realpath: (p) => (api.sys.realpath === undefined ? p : api.sys.realpath(p)),
     getCurrentDirectory: () => root,
@@ -83,7 +88,7 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     const cached = configs.get(file);
     if (cached !== undefined) return cached;
     // readConfigFile reports syntax errors; readJsonConfigFile + parse also records the extends chain.
-    const read = api.readConfigFile(file, (f) => api.sys.readFile(f));
+    const read = api.readConfigFile(file, readFile);
     const repoPath = toRepoPath(file);
     const own: Diagnostic[] = [];
     if (repoPath !== undefined) diagnosticsByConfig.set(repoPath, own);
@@ -94,9 +99,9 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
       own.push(diagnostic);
     };
     if (read.error !== undefined) report(read.error);
-    const source = api.readJsonConfigFile(posix(file), (f) => api.sys.readFile(f));
+    const source = api.readJsonConfigFile(posix(file), readFile);
     const parsed = api.parseJsonSourceFileConfigFileContent(
-      source, api.sys, nodePath.dirname(file), isJs ? { allowJs: true } : undefined, posix(file),
+      source, configHost, nodePath.dirname(file), isJs ? { allowJs: true } : undefined, posix(file),
     );
     // "No inputs were found" (18003) only concerns compilation, not resolution.
     parsed.errors.filter((d) => d.code !== 18003).forEach(report);
@@ -118,8 +123,8 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     let found: Config | undefined;
     const ts1 = nodePath.join(dir, "tsconfig.json");
     const js1 = nodePath.join(dir, "jsconfig.json");
-    if (api.sys.fileExists(ts1)) found = loadConfig(ts1, false);
-    else if (api.sys.fileExists(js1)) found = loadConfig(js1, true);
+    if (fileExists(ts1)) found = loadConfig(ts1, false);
+    else if (fileExists(js1)) found = loadConfig(js1, true);
     else if (nodePath.resolve(dir) !== root) {
       const parent = nodePath.dirname(dir);
       found = parent === dir ? undefined : configFor(parent);

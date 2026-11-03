@@ -80,6 +80,8 @@ export interface Claim {
   readonly id: string; readonly rule: string; readonly subject: { readonly kind: string; readonly id: string }; readonly alignment: string;
   readonly reason: string; readonly expected?: string; readonly observed?: string; readonly evidenceIds: readonly string[]; readonly basis: readonly string[];
   readonly blockEligible: boolean; readonly drift: boolean; readonly provenance?: string;
+  /** H-100: shown, never a WARN or BLOCK basis. */
+  readonly informational?: true;
   /** C241: present for a live Review claim about a Decision (never in a Review Record). */
   readonly decisionAuthority?: DecisionAuthority;
 }

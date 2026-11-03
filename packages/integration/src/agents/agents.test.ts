@@ -165,6 +165,16 @@ describe("launcher and plan", () => {
     expect(plan).toMatchObject({ willCreate: [".codex/config.toml"], willModify: ["AGENTS.md"] });
     expect(fs.readdirSync(root, { recursive: true })).toEqual(before);
   });
+
+  it("duoctl setup plans before Truth exists (assumeInitialized): only the not-initialized blocker is skipped (Jira -319)", () => {
+    const root = tmp();
+    fs.mkdirSync(path.join(root, ".codex"));
+    fs.writeFileSync(path.join(root, ".codex/config.toml"), "[mcp_servers.duo-director]\ncommand = \"someone-else\"\n");
+    const plan = planAgentIntegration(root, "codex", { host: { env: { PATH: "" }, platform: process.platform }, assumeInitialized: true });
+    const codes = plan.blockers.map((d) => d.code);
+    expect(codes).not.toContain("AGENT_NOT_INITIALIZED");
+    expect(codes).toEqual(expect.arrayContaining(["AGENT_INTEGRATION_CONFLICT", "AGENT_LAUNCHER_UNAVAILABLE"]));
+  });
 });
 
 describe("remove applies what it plans (#6)", () => {

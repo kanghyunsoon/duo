@@ -92,7 +92,7 @@ interface Claim {
 | decision-forbids-import | R-DECISION(H-72, `next`) | 활성 Decision의 `forbids.imported_paths`: diff의 바뀐 new-side 줄에 있는 import·module-reference가 현재 index에서 정확히 한 repository 파일로 해석되고 그 경로가 일치(type-only 포함). "새 import"라고 주장하지 않는다. unresolved·ambiguous·module resolution 없는 언어는 limitation이며 claim이 아니다 | CONFLICT(`forbidden-import`) | `enforcement: block`이면 예(provenance 정책 적용) |
 | decision-governance | R-DECISION | 변경 코드가 활성 Decision의 governs 대상(직접 또는 구현한 Requirement)이고 forbids 충돌 없음 | ALIGNED | - |
 | declared-reference | (새) | Indexer의 `DECLARED_SYMBOL_UNRESOLVED`(index state에서 읽음)가 Review 맥락의 정의나 변경된 Truth 파일에 있음 | PARTIAL | - |
-| requirement-implementation | R-REQ, R-INTENT | 변경 코드가 IMPLEMENTS로 Requirement와 이어짐. 의미 충족은 판단하지 않음 | UNKNOWN(의미 후보), 현재 Milestone 밖이면 PARTIAL | - |
+| requirement-implementation | R-REQ, R-INTENT | 변경 코드가 IMPLEMENTS로 Requirement와 이어짐. 의미 충족은 판단하지 않음 | UNKNOWN(의미 후보). 현재 Milestone 밖이면 파일마다 PARTIAL `outside-current-milestone` 하나, `informational`이라 WARN 근거 아님(H-100, #59) | - |
 | test-coverage | R-TEST | Requirement와 이어진 변경 코드에 VALIDATED_BY Test가 없음 | PARTIAL(있으면 ALIGNED) | - |
 | test-result | R-TEST | 호출자가 준 결과에서 관련 Test 실패(통과는 ALIGNED, skip은 UNKNOWN) | CONFLICT | 그 Test가 검증하는 Requirement를 block Decision이 governs할 때만 |
 | constraint-compliance | R-CONSTRAINT | 공통 `matchConstraint`로 변경 코드와 관련된 confirmed Constraint | UNKNOWN(의미 후보) | - |
