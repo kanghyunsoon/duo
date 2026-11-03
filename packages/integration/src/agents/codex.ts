@@ -83,10 +83,10 @@ export const codexAdapter: AgentIntegrationAdapter = {
     const check = parse(next);
     return check.ok && exactly(entryOf(check.value), planned) ? next : undefined;
   },
-  remove(text) {
+  remove(text, keepFile = false) {
     const next = removeBlock(text, CODEX_MARKERS);
     if (next === undefined) return undefined;
-    return next.trim() === "" ? null : next;
+    return !keepFile && next.trim() === "" ? null : next;
   },
   readEntry(text) {
     const parsed = parse(text);

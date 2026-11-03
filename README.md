@@ -116,9 +116,9 @@ duoctl doctor
 - `duoctl init` adopts an existing Git repository (it needs a first commit). It observes the repository, asks only what it cannot infer, writes a minimal Project Truth under `.duo-project/`, builds the first index and records the adoption baseline. With uncommitted changes, choose `--baseline-policy head` or `--baseline-policy abort`.
 - `duoctl install codex` or `duoctl install claude-code` shows the files it will change, then adds the MCP configuration (`.codex/config.toml` or `.mcp.json`) and a short instruction block (`AGENTS.md` or `CLAUDE.md`), and checks that the DUO server starts. You commit the changes yourself. One step stays with you, in the agent, and DUO never does it for you:
   - Codex loads `.codex/config.toml` only in a trusted project. Trust the folder when Codex asks on first launch, or add it to your `~/.codex/config.toml` with `[projects."/path/to/project"]` and `trust_level = "trusted"`. In Codex, `/mcp` then lists `duo-director`.
-  - Claude Code asks before it uses a server from `.mcp.json`. Run `claude` in the project, accept the workspace trust dialog and approve `duo-director`. Until then `claude mcp get duo-director` shows `Pending approval`; `claude mcp reset-project-choices` asks again.
+  - Claude Code asks before it uses a server from `.mcp.json`. Run `claude` in the project, accept the workspace trust dialog and approve `duo-director`. Until then `claude mcp get duo-director` shows `Pending approval`; `claude mcp reset-project-choices` asks again. This approval prompt applies to interactive sessions; in the [Windows check with Claude Code 2.1.308](docs/validation/claude-code-mcp-e2e.md#findings), headless `claude -p` connected without waiting while `claude mcp get duo-director` still showed `Pending approval`.
 - `duoctl doctor` checks Git, Project Truth, the index, the analysis level per language, connected agents and the optional LLM settings, and lists the next one to three steps. It only reads.
-- The agent configuration starts whichever `duoctl` is on your PATH. If you also have an older global install, run `duoctl --version` in a normal terminal in the project. Install verification does not warn about a different version yet ([#40](https://github.com/kanghyunsoon/duo/issues/40)).
+- In [0.4.0-rc.1](docs/release/notes-0.4.0-rc.1.md#agent-launcher-checks-40-75-81), `duoctl install` warns (`launcher-version-mismatch`) when the CLI and the MCP server launched from the agent's PATH have different versions, and `duoctl doctor` reports `version-mismatch` with both versions and the resolved path; install stops with exit 6 without writing files if that PATH has no `duoctl`. Check `duoctl --version` in a normal terminal in the project, then update an older global install or reinstall the agent configuration with `--launcher npx`.
 
 The local UI (`duoctl ui`) and LLM assistance are optional.
 
@@ -275,6 +275,14 @@ npm install -g .dist/duo-director-cli-<version>.tgz
 Bug reports, UX friction reports and small fixes are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [open issues](https://github.com/kanghyunsoon/duo/issues); issues labeled `good first issue` are a good first step. Current work on making DUO need less attention during everyday agent use is tracked in [#2](https://github.com/kanghyunsoon/duo/issues/2).
 
 New to the project? [START_HERE](docs/community/START_HERE.md) walks through forking, branching from `next`, the checks to run and opening the pull request.
+
+## Community recognition
+
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/kanghyunsoon/badge.svg)](https://hub.xerj.org/contributors/kanghyunsoon)
+
+A DUO Decision compliance implementation was selected as a reference example for the [XERJ Corpus Hub](https://hub.xerj.org/contributors/kanghyunsoon) on 2026-10-14. The hub is an external, open collection of implementations that coding agents can look up as worked examples. The selected work is commit [`dd36d54`](https://github.com/kanghyunsoon/duo/commit/dd36d5424c091f512c70a856af683fe2b3195e98), the reviewed-snapshot contract and fail-closed review for incomplete analysis. On 2026-10-21 the hub listed the DUO corpus as in licence review and not yet installable.
+
+This is an external listing. It is not a contribution to the XERJ repository, a partnership, a certification or evidence of production use.
 
 ## License and security
 

@@ -165,6 +165,16 @@ describe("launcher and plan", () => {
     expect(plan).toMatchObject({ willCreate: [".codex/config.toml"], willModify: ["AGENTS.md"] });
     expect(fs.readdirSync(root, { recursive: true })).toEqual(before);
   });
+
+  it("duoctl setup plans before Truth exists (assumeInitialized): only the not-initialized blocker is skipped (Jira -319)", () => {
+    const root = tmp();
+    fs.mkdirSync(path.join(root, ".codex"));
+    fs.writeFileSync(path.join(root, ".codex/config.toml"), "[mcp_servers.duo-director]\ncommand = \"someone-else\"\n");
+    const plan = planAgentIntegration(root, "codex", { host: { env: { PATH: "" }, platform: process.platform }, assumeInitialized: true });
+    const codes = plan.blockers.map((d) => d.code);
+    expect(codes).not.toContain("AGENT_NOT_INITIALIZED");
+    expect(codes).toEqual(expect.arrayContaining(["AGENT_INTEGRATION_CONFLICT", "AGENT_LAUNCHER_UNAVAILABLE"]));
+  });
 });
 
 describe("remove applies what it plans (#6)", () => {
@@ -184,14 +194,19 @@ describe("remove applies what it plans (#6)", () => {
   for (const a of agents) {
     it(`${a.id}: a configuration file DUO created is deleted; plan, result and status agree; a second remove is a no-op`, async () => {
       const root = tmp();
-      installed(root, a);
+      fs.mkdirSync(path.join(root, ".duo-project"));
+      fs.writeFileSync(path.join(root, ".duo-project/project.yaml"), "");
+      const bin = tmp();
+      fs.writeFileSync(path.join(bin, process.platform === "win32" ? "duoctl.cmd" : "duoctl"), "fixture", { mode: 0o755 });
+      const host = { env: { PATH: bin, PATHEXT: ".CMD;.EXE" }, platform: process.platform };
+      expect((await applyAgentIntegration(root, planAgentIntegration(root, a.id, { host }))).diagnostics).toEqual([]);
       expect(inspectAgentIntegration(root, a.id).status).toBe("configured");
       const plan = planAgentRemoval(root, a.id);
       expect(plan).toMatchObject({ mcp: { action: "delete" }, bridge: { action: "delete" }, willDelete: [a.mcp, a.bridge] });
       const applied = await applyAgentIntegration(root, plan);
       expect(applied.diagnostics).toEqual([]);
       expect(applied.value?.changed).toEqual([{ path: a.mcp, action: "delete" }, { path: a.bridge, action: "delete" }]);
-      expect(fs.readdirSync(root)).toEqual([]); // the files are gone, and .codex/ with them when it is empty
+      for (const rel of [a.mcp, a.bridge, ".codex"]) expect(fs.existsSync(path.join(root, rel))).toBe(false);
       expect(inspectAgentIntegration(root, a.id).status).toBe("not-configured");
       expect(planAgentRemoval(root, a.id).noop).toBe(true);
     });

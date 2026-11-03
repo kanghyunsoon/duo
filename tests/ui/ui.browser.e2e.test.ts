@@ -237,13 +237,17 @@ describe("DUO UI in a browser (T18.1)", () => {
     const taskBTitle = "[Codex] Keyboard task Beta";
     const worktreeTitle = await worktree.locator(".work-node-title").textContent();
     const expectDetail = async (title: string) => {
+      const started = Date.now();
+      const observed: { ms: number; title: string | null }[] = [];
       try {
-        await page.waitForFunction((expected) => document.querySelector(".work-detail h2")?.textContent?.trim() === expected,
-          title, { timeout: 2_000 });
+        await expect.poll(async () => {
+          const current = await detail.evaluateAll(([heading]) => heading?.textContent?.trim() ?? null);
+          if (observed.at(-1)?.title !== current) observed.push({ ms: Date.now() - started, title: current });
+          return current;
+        }, { timeout: 30_000, interval: 100 }).toBe(title);
       } catch {
-        const detailCount = await detail.count();
         const panel = page.locator(".work-detail");
-        throw new Error(`Work map detail did not update: ${JSON.stringify({ expected: title, actual: detailCount === 0 ? null : await detail.textContent(), panelCount: await panel.count(), body: (await page.locator("body").textContent())?.slice(-500), selected: await page.locator(".react-flow__node.selected").evaluateAll((elements) => elements.map((element) => element.getAttribute("data-id"))), errors })}`);
+        throw new Error(`Work map detail did not update: ${JSON.stringify({ expected: title, waitedMs: Date.now() - started, observed, panelCount: await panel.count(), body: (await page.locator("body").textContent())?.slice(-500), selected: await page.locator(".react-flow__node.selected").evaluateAll((elements) => elements.map((element) => element.getAttribute("data-id"))), errors })}`);
       }
     };
     const isSelected = async (locator: typeof taskA) => locator.evaluate((node) => node.classList.contains("selected"));

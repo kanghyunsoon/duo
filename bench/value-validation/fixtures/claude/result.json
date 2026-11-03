@@ -1,0 +1,24 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "uuid": "00000000-0000-0000-0000-000000000001",
+  "session_id": "session-redacted",
+  "duration_ms": 41250,
+  "duration_api_ms": 30310,
+  "is_error": false,
+  "num_turns": 3,
+  "result": "<redacted response>",
+  "stop_reason": "end_turn",
+  "total_cost_usd": 0.0815,
+  "usage": {
+    "input_tokens": 12,
+    "cache_creation_input_tokens": 9876,
+    "cache_read_input_tokens": 45210,
+    "output_tokens": 734,
+    "service_tier": "standard"
+  },
+  "modelUsage": {
+    "<model>": { "inputTokens": 12, "outputTokens": 734, "cacheReadInputTokens": 45210, "cacheCreationInputTokens": 9876, "costUSD": 0.0815 }
+  },
+  "permission_denials": []
+}

@@ -88,6 +88,38 @@
 | Downgrade | floor는 0.2.2. 0.3 전용 Truth를 쓰는 저장소를 0.2.2는 `PROJECT_TRUTH_INVALID`로 거부한다. 0.2.1 이하는 지원하지 않는다(C244) |
 | Known limitation | `outside-current-milestone` PARTIAL WARN noise(C259, 0.2.x와 같은 동작) |
 
+## 0.4.0-rc.1 변경 분류 (T134, branch `next`, dist-tag `next`)
+
+0.3.4 → 0.4.0-rc.1. prerelease이며 stable `latest`는 0.3.4다. 0.3.4의 보안 dependency update(#88·#89: MCP SDK 2.3.1, zod 4.6.7)를 같은 version으로 포함한다. 포함: #52·#79·#85·#86 Work map, #53·#54·#76·#78 UI local API, #61 MCP annotation, #75·#81 launcher 검사(#40). review·context·Decision 확정의 결과는 같은 입력에서 0.3.4와 같다.
+
+| 분류 | 내용 |
+|---|---|
+| Additive public | UI local API `duo.ui.decisions/1`·`duo.ui.decision-detail/1`·`duo.ui.preview/1`과 Work map route(`work-map`·`work-revision`·`work-expand`·`work-tasks`·`work-task-complete`·`work-events`). install verify JSON의 선택 필드 `verify.warnings`(`launcher-version-mismatch`), doctor warning `version-mismatch`(facts `cliVersion`·`serverVersion`·`resolved`, action `align-launcher`) |
+| MCP annotation | `duo_get_context`·`duo_review_changes`가 `readOnlyHint: false`·`idempotentHint: false`·`destructiveHint: true`(0.3.4까지 read-only). metrics와 Work map 활동 파일을 쓰기 때문이다. tool 이름·input schema·결과는 같다. 실제 Codex·Claude Code 승인 UX는 측정하지 않았다 |
+| Behavior correction | install plan은 agent의 실효 PATH에서 launcher를 찾지 못하면 exit 6으로 멈추고 쓰지 않는다(0.3.4까지 `Verify: ok`). `/api/decisions/{id}`·`/api/proposals/{id}/preview`의 query, `/api/decisions`의 반복 query 이름은 400 `UI_REQUEST_INVALID`(#77). Work map task 이름·agent label은 저장·표시 전에 secret redaction(#84) |
+| Internal-only | `runtime/work-tasks.json`(`duo.work-tasks/2`, 128 KiB), `cache/work-map.json`. 재생성 가능한 local 파일이며 init의 `.gitignore`에 이미 있다 |
+| Unchanged | Truth schema(`schema_version: 1`), Decision Lock 형식과 digest, `duo.review/1`·`duo.context/1`·`duo.context-packet/1`·`duo.gap-assessment/1`·`duo.review-record/1`·`duo.adoption-baseline/2`, `CONTEXT_POLICY_VERSION`, Graph 형식, MCP tool 9개, install plan 외 CLI 종료 코드, runtime dependency 트리(0.3.4 대비 shrinkwrap diff는 version 두 곳, 67 packages) |
+| Migration | 없음. Truth·lock·Record·agent 설정을 다시 쓰지 않는다. launcher 검사를 쓰려면 사람이 `duoctl install <agent>`를 다시 실행한다 |
+| Downgrade | 0.3.4는 같은 Truth를 읽고 Work map 파일을 무시한다. 0.3 Truth의 floor는 그대로 0.2.2 |
+| Known limitation | launcher PATH는 Windows에서만 측정(pnpm dlx 식별 불가, npm test/start·run-script·pnpm run 미측정, Yarn Classic 부분), redaction은 알려진 credential 형식만, 접근성 수동 검증 미완료(#73), C259·C260·#7·#4 그대로 |
+
+## 0.4.0-rc.1 이후 `next` 변경 (미출시)
+
+다음 release에 들어갈 `next`의 변경. release 때 그 version 절로 옮긴다.
+
+| 분류 | 내용 |
+|---|---|
+| Additive Truth | Decision·proposal `forbids.importer_paths`(#47): `imported_paths`만 import하는 파일의 path pattern으로 좁힌다. `schema_version: 1` 그대로. 이 field가 없는 Decision의 lock digest와 review 결과는 같다. 빈 목록과 `imported_paths` 없는 사용은 잘못된 입력이다(H-96) |
+| Additive public | MCP `duo_propose_decision`의 `forbids.importer_paths`(tool 9개 그대로), CLI confirm preview·UI의 Forbids scope 문구(importer_paths가 있을 때) |
+| Verdict | TS·JS `import()`·`require()`의 치환 없는 template literal(`` import(`../db/x.js`) ``)이 같은 문자열 literal과 같은 module reference다(#50 L2b, H-90). 금지 대상이면 새로 생긴 쌍은 `forbidden-import` BLOCK, Adoption Baseline에 있는 쌍은 WARN. 치환이 있는 template·식은 그대로 `imports-unresolved`(#50 L2a) |
+| Index | TS/JS analyzer identity(`facts=template-imports-1`)가 바뀌어 기존 index는 stale이고 다음 `duoctl index` 한 번으로 current가 된다. index state 형식은 그대로 |
+| Downgrade | `importer_paths`를 쓰는 저장소를 0.2.2+·0.3.x·0.4.0-rc.1로 열면 `SCHEMA_UNKNOWN_PROPERTY`로 `PROJECT_TRUTH_INVALID`(fail-closed, H-75). Decision이 조용히 빠지지 않는다 |
+| Verdict | Review의 task scope(#58 C260 Fix B, H-91): task seed가 직접 고른 Symbol·Test의 소유 파일이 task scope에 들어가, 같은 파일의 다른 수정이 `outside-task-context` WARN 대신 `in-task-context`가 된다. CALLS·IMPORTS 이웃이나 `omittedCandidates`의 파일은 넣지 않는다. context packet·저장 데이터는 그대로이고 review 시점 계산만 바뀐다 |
+| Verdict | 다른 milestone Requirement 구현(#59 C259, H-100): `outside-current-milestone`은 파일마다 claim 하나(subject file, Requirement ID 모두 유지)이고 `informational: true`라 WARN 근거가 아니다(WARN → PASS). 다른 WARN·BLOCK 근거는 그대로. `duo.review/1`에 claim field `informational` 추가(Review Record에도 기록). 구버전은 같은 변경을 WARN으로 본다 |
+| Verdict | Re-export를 거친 금지 import(#49 Stage 2, H-98): 가져오는 모든 이름의 origin이 하나로 정해지고 금지 대상이면 source → origin 쌍의 `forbidden-import`(PASS → BLOCK). 모호한 경우는 그대로 `imports-through-reexport`. 새 limitation code `imports-reexport-origin-not-baselined` |
+| Additive baseline | Adoption Baseline `evaluatedRules`의 marker `decision-forbids-import-origin`(깨끗한 working tree에서 캡처할 때)과 re-export로 찾은 `decision-forbids-import` finding. `duo.adoption-baseline/2` 그대로. marker 없는 이전 baseline에서 re-export로만 찾은 새 pair는 WARN(`unverified-at-adoption`) |
+| Downgrade(baseline) | marker가 있는 baseline을 0.3.x·0.4.0-rc.1이 읽으면 marker를 무시한다(fail-closed 아님): 기록 검증은 내용 hash만 보고 review는 `decision-forbids-import`만 확인한다(rc.1과 현재의 `verifyReviewRecord`·`loadAdoptionBaseline` 코드 동일). re-export로 기록된 finding은 같은 key의 직접 import를 `pre-existing`으로 보게 한다(관계가 이미 있었으므로) |
+
 ## 0.3.3 변경 분류 (T78, H-87)
 
 0.3.2 → 0.3.3. UX·안정성 patch(H-87). 새 규칙과 새 검사 종류, dependency 변경, 형식 major 변경은 없다. review의 verdict·claim·evidence·gap, context, Decision 결과는 0.3.2와 같다(T77에서 같은 저장소·같은 변경으로 나란히 확인).

@@ -6,7 +6,7 @@ const packages = ["core", "analyzer", "graph", "director", "integration", "ui"];
 
 // Distribution E2E (packed artifact, npm installs) runs separately: pnpm test:dist.
 // The real OpenAI smoke test is opt-in only: pnpm test:openai-smoke (never in CI).
-const exclude = ["**/node_modules/**", "tests/distribution/**", "tests/openai-smoke/**", "tests/compatible-smoke/**", "tests/ui/ui.accessibility.e2e.test.ts"];
+const exclude = ["**/node_modules/**", "tests/distribution/**", "tests/openai-smoke/**", "tests/compatible-smoke/**", "tests/ui/ui.accessibility.e2e.test.ts", "tests/bench/**"];
 
 /**
  * C254 (T52): tests whose duoctl install / doctor launch the product's MCP probe (30 s for spawn, initialize,
