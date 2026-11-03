@@ -26,7 +26,8 @@ export interface InitOptions {
 type StepStatus = "ok" | "existing" | "failed" | "action-required" | "skipped" | "aborted";
 interface Step { status: StepStatus; detail?: string }
 
-function parseAnswers(text: string): InitAnswer[] | string {
+/** Also used by duoctl setup (T183). */
+export function parseAnswers(text: string): InitAnswer[] | string {
   try {
     const v = JSON.parse(text) as unknown;
     const list = Array.isArray(v) ? v : (v as { answers?: unknown } | null)?.answers;
@@ -36,7 +37,8 @@ function parseAnswers(text: string): InitAnswer[] | string {
   }
 }
 
-async function askQuestions(env: Env, questions: readonly InitQuestion[]): Promise<InitAnswer[]> {
+/** Also used by duoctl setup (T183). */
+export async function askQuestions(env: Env, questions: readonly InitQuestion[]): Promise<InitAnswer[]> {
   const answers: InitAnswer[] = [];
   for (const q of questions) {
     const label = t(env.locale, `init.question.${q.id}` as MessageKey);
