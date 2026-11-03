@@ -19,18 +19,20 @@
 import { applyInitPlan, captureAdoptionBaseline, getAdoptionBaselineStatus, planInit, type InitAnswer, type InitApplyResult, type InitPlan } from "@duo-director/director";
 import { createDiagnostic, type Diagnostic } from "@duo-director/core";
 import { indexRepository, inspectIndex, type IndexResult } from "@duo-director/graph";
-import type { DoctorPayload } from "@duo-director/integration";
+import type { AgentId, DoctorPayload } from "@duo-director/integration";
 import { t, type MessageKey } from "../messages.js";
 import { padColumns } from "../terminal-width.js";
 import { EXIT, type Outcome } from "../output.js";
 import { doctorPayload, renderDoctor } from "./doctor.js";
 import { askQuestions, parseAnswers } from "./init.js";
-import { CliFailure, diagLines, humanActor, interactive, progress, withRegistry, withWriter, type Env } from "./shared.js";
+import { CliFailure, diagLines, humanActor, interactive, progress, withReader, withRegistry, withWriter, type Env } from "./shared.js";
 
 export interface SetupOptions {
   readonly repair: boolean;
   readonly answersFromStdin: boolean;
   readonly baselinePolicy?: "head" | "abort";
+  readonly agents?: readonly AgentId[];
+  readonly launcher?: "path" | "npx";
 }
 
 /** What an agent step sees. truthPlanned: Project Truth does not exist yet; this setup creates it before any apply(). */
@@ -71,6 +73,8 @@ export interface SetupAgentStep {
   readonly id: string;
   plan(context: SetupStepContext): Promise<SetupStepPlan>;
   apply(context: SetupStepContext, plan: SetupStepPlan): Promise<SetupStepResult>;
+  /** Recheck an already connected agent without writing or asking for confirmation. */
+  verify?(context: SetupStepContext): Promise<SetupStepResult>;
 }
 
 type StepStatus = "ok" | "existing" | "failed" | "action-required" | "skipped" | "aborted";
@@ -83,11 +87,14 @@ const thrown = (error: unknown): readonly Diagnostic[] => (error instanceof CliF
 
 /**
  * Metrics (runtime/metrics.jsonl) are a write too: an outcome carries a metric only once setup has started
- * applying (after the confirmation, or when nothing needed one). Refusals, a cancellation and a missing
+ * applying (after the confirmation, or to refresh a stale index). Refusals, a cancellation and a missing
  * confirmation write nothing, also in an initialized project where metrics would otherwise be appended.
  */
 export async function setupCommand(env: Env, options: SetupOptions, agentSteps: readonly SetupAgentStep[] = []): Promise<Outcome> {
-  const state: { applied: boolean; resume?: string } = { applied: false };
+  const state: { applied: boolean; resume?: string } = {
+    applied: false,
+    resume: "duoctl setup" + (options.agents ?? []).map((a) => " --agent " + a).join("") + (options.launcher === "npx" ? " --launcher npx" : ""),
+  };
   try {
     return await runSetup(env, options, agentSteps, state);
   } catch (error) {
@@ -150,7 +157,7 @@ async function runSetup(env: Env, options: SetupOptions, agentSteps: readonly Se
   });
   /** After the confirmation: keep what was written and say how to continue. */
   const stopped = (step: string): Outcome => {
-    resume = "duoctl setup" + (needsBaseline && plan?.observed.workingTree.dirty === true && steps.baseline.status !== "ok" ? " --baseline-policy head" : "");
+    resume = state.resume + (needsBaseline && plan?.observed.workingTree.dirty === true && steps.baseline.status !== "ok" ? " --baseline-policy head" : "");
     state.resume = resume;
     human.push(t(L, "setup.resume", { step, command: resume }));
     return finish(EXIT.ERROR, "failed");
@@ -289,7 +296,7 @@ async function runSetup(env: Env, options: SetupOptions, agentSteps: readonly Se
   }
 
   // ---- 4. Apply: Truth → index → baseline → agent steps ----
-  state.applied = true;
+  state.applied = writes;
   if (truthPlanned) {
     const applied = await applyInitPlan(env.root, plan, answers, { repair: options.repair });
     diagnostics.push(...applied.diagnostics);
@@ -313,11 +320,17 @@ async function runSetup(env: Env, options: SetupOptions, agentSteps: readonly Se
   return withRegistry(async (registry) => {
     let indexResult;
     try {
-      indexResult = await withWriter(env.root, async (store) => {
-        const inspected = await inspectIndex(env.root, { graph: store, registry });
-        if (inspected.value?.status === "current") return "current" as const;
-        return indexRepository(env.root, { store, registry });
-      });
+      // A current index needs no writer or metric during a read-only agent re-verification.
+      const current = !truthPlanned && await withReader(env.root, async (graph) => (await inspectIndex(env.root, { graph, registry })).value?.status === "current").catch(() => false);
+      if (current) indexResult = "current" as const;
+      else {
+        state.applied = true;
+        indexResult = await withWriter(env.root, async (store) => {
+          const inspected = await inspectIndex(env.root, { graph: store, registry });
+          if (inspected.value?.status === "current") return "current" as const;
+          return indexRepository(env.root, { store, registry });
+        });
+      }
     } catch (error) {
       indexResult = { value: undefined, diagnostics: thrown(error) };
     }
@@ -361,10 +374,10 @@ async function runSetup(env: Env, options: SetupOptions, agentSteps: readonly Se
     report(label("baseline"), steps.baseline);
 
     for (const { step, plan: p } of agentPlans) {
-      if (p.noop) { agents[step.id] = { status: "existing" }; report(step.id, agents[step.id] as Step); continue; }
+      if (p.noop && step.verify === undefined) { agents[step.id] = { status: "existing" }; report(step.id, agents[step.id] as Step); continue; }
       let result: SetupStepResult;
       try {
-        result = await step.apply(context, p);
+        result = p.noop ? await step.verify!(context) : await step.apply(context, p);
       } catch (error) {
         // A step that throws still gets the resume path; what it wrote is its own to undo (H-94).
         result = { ok: false, diagnostics: [createDiagnostic("AGENT_VERIFY_FAILED", step.id + " setup step failed: " + (error instanceof Error ? error.message : String(error)))], lines: [], remaining: [] };
