@@ -632,7 +632,7 @@ describe("DUO UI accessibility audit 297", () => {
       </main></body></html>`;
       const expectedControlForward = [...expectedOverviewSequence, "BODY"];
       const expectedControlReverse = [...expectedOverviewSequence].reverse();
-      const viewportResults: { viewport: string; first: string; skipLinkPass: boolean; focusPass: boolean; mainFocused: boolean;
+      const viewportResults: { scheme: string; viewport: string; first: string; skipLinkPass: boolean; focusPass: boolean; mainFocused: boolean;
         forward: readonly string[]; reverse: readonly string[]; forwardComparison: ReturnType<typeof compareFocusSequence>;
         reverseComparison: ReturnType<typeof compareFocusSequence>; pageBoundary: string;
         controlForward: readonly string[]; controlReverse: readonly string[]; controlForwardComparison: ReturnType<typeof compareFocusSequence>;
@@ -640,7 +640,8 @@ describe("DUO UI accessibility audit 297", () => {
         sequencePass: boolean; focusScreenshots: string[] }[] = [];
       const focusScreenshots: string[] = [];
 
-      for (const viewport of VIEWPORTS) {
+      for (const scheme of SCHEMES) for (const viewport of VIEWPORTS) {
+        await page.emulateMedia({ colorScheme: scheme });
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await page.goto(new URL("/overview", server.origin).href);
         if (!await waitForLoadedScreen(page)) throw new AuditToolError(`Overview did not load at ${viewport.name}`);
@@ -648,7 +649,7 @@ describe("DUO UI accessibility audit 297", () => {
         const first = await focusSnapshot(page);
         const firstHref = await page.evaluate(() => (document.activeElement as HTMLAnchorElement | null)?.getAttribute("href"));
         const focusPass = first.focusVisible && first.indicatorVisible && first.unobscured && first.inViewport;
-        const focusScreenshot = path.join(outputDir, "keyboard-navigation", `attempt-${activeAttemptIndex}`, `step-2-${viewport.name}.png`);
+        const focusScreenshot = path.join(outputDir, "keyboard-navigation", `attempt-${activeAttemptIndex}`, `step-2-${scheme}-${viewport.name}.png`);
         fs.mkdirSync(path.dirname(focusScreenshot), { recursive: true });
         await page.screenshot({ path: focusScreenshot, fullPage: true, animations: "disabled" });
         focusScreenshots.push(path.relative(ROOT, focusScreenshot).replaceAll("\\", "/"));
@@ -682,6 +683,7 @@ describe("DUO UI accessibility audit 297", () => {
           entry.focusVisible && entry.indicatorVisible && entry.unobscured && entry.inViewport) && reverseSequence.every((entry) =>
           entry.focusVisible && entry.indicatorVisible && entry.unobscured && entry.inViewport);
 
+        await navPage.emulateMedia({ colorScheme: scheme });
         await navPage.setViewportSize({ width: viewport.width, height: viewport.height });
         await navPage.setContent(controlHtml);
         await navPage.evaluate(() => document.getElementById("main")?.focus());
@@ -698,7 +700,7 @@ describe("DUO UI accessibility audit 297", () => {
         }
         const controlReverseComparison = compareFocusSequence(expectedControlReverse, controlReverse);
         const boundaryMatchesControl = pageBoundary === controlForward.at(-1) && pageBoundary === "BODY";
-        viewportResults.push({ viewport: viewport.name, first: first.target, skipLinkPass: firstHref === "#main", focusPass, mainFocused,
+        viewportResults.push({ scheme, viewport: viewport.name, first: first.target, skipLinkPass: firstHref === "#main", focusPass, mainFocused,
           forward: actualForward, reverse: actualReverse, forwardComparison, reverseComparison, pageBoundary,
           controlForward, controlReverse, controlForwardComparison, controlReverseComparison, boundaryMatchesControl,
           summarySpaceChanged, summaryRestored, sequencePass, focusScreenshots: [focusScreenshots.at(-1) ?? ""] });
@@ -716,12 +718,12 @@ describe("DUO UI accessibility audit 297", () => {
       return { ...result, steps: [...(result.steps ?? []), { stepIndex: 2, expected: expectedNavigation,
         actual: { navFirst, actualNavigation, navigatedUrl: navPage.url() }, url: navPage.url(), activeElementId: "a:/search", dialogState: "closed",
         judgment: navigationPass ? "통과" : "제품 문제" }, { stepIndex: 3, expected: { forward: expectedOverviewSequence, reverse: [...expectedOverviewSequence].reverse() },
-        actual: { viewports: viewportResults.map(({ viewport, forward, reverse, forwardComparison, reverseComparison, sequencePass }) =>
-          ({ viewport, forward, reverse, forwardComparison, reverseComparison, sequencePass })) }, url: page.url(), activeElementId: "button:Refresh", dialogState: "closed",
+        actual: { viewports: viewportResults.map(({ scheme, viewport, forward, reverse, forwardComparison, reverseComparison, sequencePass }) =>
+          ({ scheme, viewport, forward, reverse, forwardComparison, reverseComparison, sequencePass })) }, url: page.url(), activeElementId: "button:Refresh", dialogState: "closed",
         judgment: internalPass ? "통과" : "제품 문제", ...(result.screenshot === undefined ? {} : { screenshot: result.screenshot }) },
       { stepIndex: 4, expected: { controlForward: expectedControlForward, controlReverse: expectedControlReverse, browserUiBoundary: "manual evidence required" },
-        actual: { viewports: viewportResults.map(({ viewport, pageBoundary, controlForward, controlReverse, controlForwardComparison, controlReverseComparison, boundaryMatchesControl }) =>
-          ({ viewport, pageBoundary, controlForward, controlReverse, controlForwardComparison, controlReverseComparison, boundaryMatchesControl })), browserUiBoundaryObserved: false },
+        actual: { viewports: viewportResults.map(({ scheme, viewport, pageBoundary, controlForward, controlReverse, controlForwardComparison, controlReverseComparison, boundaryMatchesControl }) =>
+          ({ scheme, viewport, pageBoundary, controlForward, controlReverse, controlForwardComparison, controlReverseComparison, boundaryMatchesControl })), browserUiBoundaryObserved: false },
         url: page.url(), activeElementId: viewportResults.at(-1)?.pageBoundary ?? "none", dialogState: "closed", judgment: "미검증" } ] };
     });
 
