@@ -51,6 +51,7 @@ dialog p, dialog dd, dialog code { overflow-wrap: anywhere; }
 dialog label { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
 dialog label input, dialog label textarea { width: 100%; min-width: 0; }
 .table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.table-scroll > table { min-width: max-content; }
 .table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 pre.truth, pre.slice { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); padding: 8px; border-radius: 4px; max-height: 360px; overflow: auto; }
 .packet-items { padding-left: 18px; }
