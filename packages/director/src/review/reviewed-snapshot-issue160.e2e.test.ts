@@ -2,10 +2,11 @@
  * #160 (P1): review --staged / --to must not decide from a working-tree file that a rule read when that file differs
  * from the reviewed snapshot. Regression cases 1-8 from the issue, plus an unrelated working-tree edit.
  *
- * Cases 1-5 fail on next 1306dba: a false PASS (1, 3, 5), a PASS for a snapshot whose verdict input differs (2) and a
- * false BLOCK (4). Stage 1 (H-103, pending a Maintainer decision) expects the existing REVIEW_SNAPSHOT_MISMATCH,
- * naming the differing input, with no verdict. Cases 6-9 pin what must not change: WORKTREE reviews, clean controls,
- * the H-82 changed-path check and an unrelated working-tree edit (verdict plus reviewed-side-context-from-working-tree).
+ * Cases 1-5, 11 and 12 fail on next 1306dba: a false PASS (1, 3, 5), a PASS for a snapshot whose verdict input differs
+ * (2, 11) and a false BLOCK (4, 12). Stage 1 (H-103) expects the existing REVIEW_SNAPSHOT_MISMATCH, naming the
+ * differing input, with no verdict. Cases 6-10 pin what must not change: WORKTREE reviews, clean controls, the H-82
+ * changed-path check, and working-tree edits the verdict does not read (verdict plus
+ * reviewed-side-context-from-working-tree).
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -45,6 +46,10 @@ const FILES: Record<string, string> = {
   "src/db/mid.ts": reexport("./legacy-db.js"),
   "src/db/index.ts": reexport("./mid.js"),
   "src/db/back.ts": reexport("./safe.js"),
+  // star: two export * providers of legacyQuery in HEAD (ambiguous); plain provides it locally.
+  "src/db/plain.ts": "export function legacyQuery(sql: string): string {\n  return sql.trim();\n}\n\nexport const plain = 1;\n",
+  "src/db/star.ts": 'export * from "./legacy-db.js";\nexport * from "./plain.js";\n',
+  "src/ui/util.ts": "export const util = 1;\n",
   "src/ui/home.ts": "export const home = 1;\n",
 };
 
@@ -205,6 +210,40 @@ describe("#160: a verdict input outside the diff that differs from the reviewed 
     const o = await review(STAGED);
     expectBlock(o);
     expect((o.result?.limitations ?? []).map((l) => l.code)).toContain("reviewed-side-context-from-working-tree");
+  });
+
+  it("10 an imported module that re-exports nothing on either side: a content edit keeps the verdict", async () => {
+    reset();
+    repo.write(PAGE, 'import { legacyQuery } from "../db/index.js";\nimport { util } from "./util.js";\n\nexport const page = (): string => legacyQuery(String(util));\n');
+    repo.git("add", PAGE);
+    repo.write("src/ui/util.ts", "export const util = 2;\n");
+    const o = await review(STAGED);
+    expectBlock(o);
+    expect((o.result?.limitations ?? []).map((l) => l.code)).toContain("reviewed-side-context-from-working-tree");
+  });
+
+  it("11 --staged: resolver configuration changed only in the working tree is an input of a non-relative import", async () => {
+    reset();
+    repo.write("tsconfig.json", '{ "compilerOptions": { "module": "ESNext", "moduleResolution": "Bundler", "strict": true, "baseUrl": ".", "paths": { "@db/*": ["src/db/*"] } } }\n');
+    repo.git("add", "-A");
+    repo.git("commit", "-q", "-m", "path alias");
+    try {
+      repo.write(PAGE, importFrom("@db/legacy-db.js"));
+      repo.git("add", PAGE);
+      expectBlock(await review(STAGED));
+      repo.write("tsconfig.json", '{ "compilerOptions": { "module": "ESNext", "moduleResolution": "Bundler", "strict": true, "baseUrl": ".", "paths": { "@db/*": ["src/ui/*"] } } }\n');
+      expectMismatch(await review(STAGED), "tsconfig.json");
+    } finally {
+      reset();
+      repo.git("reset", "-q", "--hard", "HEAD~1");
+    }
+  });
+
+  it("12 --staged: the own exports of an export * target decide the provider", async () => {
+    // Staged: star provides legacyQuery from legacy-db and from plain (ambiguous, no claim). Working tree only: plain
+    // drops it, so the working tree has one exact origin (legacy-db) and would BLOCK.
+    staged("../db/star.js", () => repo.write("src/db/plain.ts", "export const plain = 1;\n"));
+    expectMismatch(await review(STAGED), "src/db/plain.ts");
   });
 });
 
