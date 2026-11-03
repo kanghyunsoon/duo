@@ -86,31 +86,53 @@ This is a viewport-emulation result. Physical mobile device and browser UI bound
 
 수동 확인은 #73의 브라우저 UI 경계 항목만 판정한다. 전체 접근성 감사는 별도 axe incomplete, 시각 검토, 스크린리더 항목이 남아 여전히 미완료다. 기존 실행의 전체 미검증 수 108개를 해결했다고 해석하지 않는다.
 
-## 2026-11-03: Unverified 108-case screenshot triage
+## 2026-11-03: Full review of all 108 unverified cases
 
-`108`은 서로 다른 결함 108개가 아니라, 전체 120개 감사 사례 중 자동 판정 후 검토 기록이 없어 `미검증`으로 남은 사례 행의 수다. 최신 원본에서 axe의 실제 `violations`는 0개다. axe `incomplete` 결과는 80개( `aria-prohibited-attr` 44개, `color-contrast` 36개)이며, axe가 결론을 내리지 못한 결과이지 위반으로 확정된 결과는 아니다.
+`108`은 자동 감사의 120개 사례 중 검토 전부가 끝나지 않았다고 표시된 사례 행이다. 아래 표처럼 108개 행을 모두 상태별로 다시 확인했다. 캡처 검토와 기존 자동 상호작용 assertions를 대조해 각 행의 판정을 기록했다. 이 숫자는 108개의 독립된 버그를 뜻하지 않는다.
 
-최신 실행이 참조한 캡처 124장을 화면 축소 이미지로 분류했고, 모바일 표 화면 세 곳은 원본 크기로 확인했다. 여섯 캡처에서 실제 가독성 문제가 보인다.
+| 범위 | 사례 수 | 검토 결과 |
+| --- | ---: | --- |
+| 기본 화면: 12개 화면 × 2개 테마 × 2개 뷰포트 | 48 | Overview, Direction, Pending decisions, Work map, Graph, Analysis coverage, Context, Review, Review history, Search, Entity detail, Review detail 캡처 확인. 아래 표 문제와 Work map 대비 문제를 수정했고, 나머지 캡처에서 추가 겹침·잘림은 찾지 못했다. |
+| 초기 로딩 및 API 오류: Overview, Direction, Pending decisions, Work map, Graph, Analysis coverage, Review history, Search, Entity detail, Review detail × 각 2상태 | 20 | 10개 로딩 사례 모두 `role=status`, 10개 API 오류 사례 모두 `role=alert` 표시 assertions 통과. 캡처에서 표시 실패나 레이아웃 겹침 없음. |
+| 빈 상태: Pending decisions, Work map, Graph, Review history, Search, Entity detail, Review detail | 7 | 빈 상태 화면이 끝까지 렌더링되고 해당 안내가 표시됨. 추가 시각 문제 없음. |
+| 확인·거절 대화상자: 열기 8, Escape 후 복귀 8, 전체 키보드 순환 1 | 17 | 초기 포커스, Tab 순환, Cancel/Escape 닫기와 트리거 복귀 assertions 모두 통과. 열린 대화상자 캡처에서 대화상자 내용 잘림·겹침 없음. axe의 배경막 미판정은 아래에 따로 분류. |
+| 폼 및 Work map: 정상 제출 5, POST 로딩·오류 4, 검증/no-op 5, 노드 키보드 선택 1 | 15 | 결과 표시, `status`/`alert`, 빈 입력 차단, 공백 검색 no-op, 노드 선택·상세 갱신 assertions 통과. 추가 제품 finding 없음. |
+| 전체 페이지 키보드 순서 | 1 | 내부 7개 대상의 정·역방향 순서 및 Skip link assertions 통과. Chrome UI 경계는 사용자가 직접 확인해 Tab/Shift+Tab 및 Ctrl+L 후 복귀 위치가 정상임을 확인했다. |
+| **합계** | **108** | **모든 행의 자동 assertions와 연결된 캡처를 유형별로 검토했다.** |
 
-| 사례 | 조건 | 관찰 |
+### 확인된 제품 문제와 수정 결과
+
+시각 검토에서 모바일 표와 Work map 대비 결함을 발견해 PR 코드에서 수정했다.
+
+| 사례·요소 | 발견 | 수정 및 재확인 |
 | --- | --- | --- |
-| `base-Analysis_coverage-light-mobile`, `base-Analysis_coverage-dark-mobile` | 320×800, 밝음·어두움 | 9열 표의 머리글과 셀 문자가 한두 글자 단위로 세로 줄바꿈되어 읽기 어렵다. |
-| `base-Review history-light-mobile`, `base-Review history-dark-mobile` | 320×800, 밝음·어두움 | 이력 표의 열 제목과 값이 매우 좁은 열로 압축되어 단어가 여러 줄로 쪼개진다. |
-| `base-Review detail-light-mobile`, `base-Review detail-dark-mobile` | 320×800, 밝음·어두움 | Claims 표가 같은 방식으로 압축되어 머리글과 값의 가독성이 떨어진다. |
+| `base-Analysis coverage-{light,dark}-mobile`, `base-Review history-{light,dark}-mobile`, `base-Review detail-{light,dark}-mobile` | 320×800에서 표가 컨테이너 폭에 눌려 글자가 한 자씩 세로로 쪼개졌다. | 표에 `min-width: max-content`를 적용했다. Analysis coverage/Review history/Review detail 표 폭은 각각 1000/1095/1197px, 컨테이너 폭은 288/288/262px다. 밝고 어두운 6개 조건 모두 가로 `scrollLeft` 이동을 확인했고 문서 너비는 320px로 유지됐다. 수정 후 캡처에서 표 글자가 정상 단어 단위로 보인다. |
+| Work map 선택 노드, 비선택 노드, React Flow 출처 링크 | 선택 노드의 흰 글자가 그라데이션 배경에서 최소 3.86:1, 비선택 노드의 `.44` 불투명도 때문에 본문 대비가 낮았고 출처 링크 기본 회색도 흐렸다. | 선택 배경을 어둡게 하고 글자를 흰색으로 고정했다(양 끝점 대비 6.37:1, 8.02:1). 비선택 노드의 불투명도 저하를 제거했다(일반 본문 대비 6.26:1 light, 6.74:1 dark). 출처 링크를 테마별 `--muted`로 지정했다(6.21:1 light, 4.76:1 dark). 수정 후 Work map 캡처를 다시 확인했다. |
+| 페이지 처리 시간 레이블 | 일반 `span`의 `aria-label="server time"`은 기본 generic role에서 지원되지 않는 ARIA 이름이었다. | 화면에 이미 보이는 처리 시간 텍스트를 유지하고 중복 `aria-label`을 제거했다. 이에 해당하던 37개 반복 `aria-prohibited-attr` 결과가 최신 실행에서 사라졌다. |
 
-여섯 사례 모두 문서 너비는 320px로 측정되어 페이지 자체의 가로 넘침은 없지만, 그 측정만으로 표가 읽을 수 있는지는 보장되지 않았다. 원인은 표가 기본 `width: 100%`로 스크롤 컨테이너 폭에 맞춰 축소되는 것이었다. `.table-scroll > table { min-width: max-content; }`를 적용해 표의 콘텐츠 너비를 유지하고, 좁은 화면에서는 기존 스크롤 컨테이너가 가로 탐색을 맡도록 수정했다.
+### 최신 axe 미판정의 사례별 판정
 
-수정 후 실제 Chrome에서 여섯 조합(세 화면 × 밝음·어두움)을 다시 확인했다. 320×800에서 Analysis coverage 표는 1000px, Review history는 1095px, Review detail은 1197px가 되었고, 각 스크롤 컨테이너의 너비는 288px, 288px, 262px였다. 여섯 경우 모두 `scrollWidth > clientWidth`였으며 컨테이너를 끝까지 움직일 수 있었다(최대 `scrollLeft`: 각각 712px, 807px, 935px). 문서 `scrollWidth`는 계속 320px로 유지됐다. 새 전체 감사 캡처에서도 세 표의 머리글과 값이 더는 글자 단위로 쪼개지지 않고, 나머지 열은 표 안에서 가로 스크롤해 볼 수 있다.
+수정 코드 `f0f196865df5209c52c8c5cba593516008a26b3d`에서 최신 실행은 120개 행 전체를 완료했다. axe `violations`는 0개다. `incomplete`는 49개 rule-result(색 대비 42, ARIA 속성 7)와 331개 대상 노드 참조다. 이는 49개 확정 위반이 아니다.
 
-수정 코드 SHA는 `1db86c655eff3cee7c0464e64e0d3d91eb24314f`, 전체 재검증 실행 ID는 `2026-11-03T06-28-23-736Z-8248`이다. Node `v24.18.0`, pnpm `11.25.0`, Playwright `1.63.0`, axe-core `4.14.0`, Chrome `156.0.8078.80` 환경에서 120개 사례 전체 실행이 완료됐고 2개 파일/14개 테스트가 통과했다. 최신 실행 결과는 제품 문제 0, 도구 오류 0, 미검증 108이며 `accessibilityVerificationComplete: false`다. 캡처 경로와 원 결과는 로컬 `.duo-a11y-runs/<runId>/cases.jsonl`에 보존했다.
+| axe 메시지 | 노드 참조 수 | 검토 판정 |
+| --- | ---: | --- |
+| `elmPartiallyObscured` | 182 | 표 스크롤 영역 바깥에 있는 셀 또는 모달 배경막 아래의 원 페이지 요소다. 스크롤 영역의 실제 이동을 확인했고 모달 내부 텍스트는 캡처에서 가려지지 않았다. |
+| `bgOverlap` | 96 | Work map 노드의 배경색을 React Flow 캔버스 합성 때문에 axe가 계산하지 못했다. 선택·비선택 노드의 실제 CSS 색과 대비를 위에서 별도로 계산했고 수정 후 AA 기준을 만족한다. |
+| `elmPartiallyObscuring` | 22 | 열린 native dialog가 뒤쪽 페이지를 덮는 상태다. 의도된 modal 배경막이며 dialog 내부 콘텐츠의 겹침은 아니다. |
+| `nonBmp` | 15 | `aria-hidden="true"`인 체크 표시 장식 문양으로, 본문 텍스트 대비 검사 대상이 아니다. |
+| `imgNode` | 7 | React Flow 출처 링크 내부 SVG 때문에 자동 판정되지 않았다. 링크 텍스트는 존재하며 색은 테마별 muted 색으로 수정했고 대비를 별도 확인했다. |
+| `shortTextContent` | 2 | 짧은 숫자 셀이라 axe가 대비 판정을 보류했다. 일반 테이블 본문 색상/배경 조합을 별도로 확인했다. |
+| `noRoleSingular` | 7 | React Flow가 생성한 `.react-flow__controls` generic `div`에 `aria-label="Control Panel"`이 붙어 있다. 각 자식 버튼에는 개별 접근성 이름이 있어 조작은 가능하지만, 컨테이너 그룹 이름은 유효하게 전달되지 않는다. 라이브러리 마크업 한계로 미완료 항목에 남긴다. |
 
-이번 분류와 수정은 캡처에서 확인된 표 가독성 문제를 해결했지만, 실제 스크린리더의 표 헤더 연결·발화, 나머지 axe `incomplete` 항목의 최종 판정, 실제 모바일 기기 동작은 검증하지 않았다. 따라서 108개 상태를 통과로 바꾸거나 전체 접근성 검증을 완료했다고 주장하지 않는다. 남은 수동 검증은 108개를 각각 다시 실행하는 방식이 아니라, 공통 동작별 대표 사례와 식별된 예외를 대상으로 좁혀야 한다.
+Analysis coverage의 병합 셀 때문에 표 연결 검사가 복잡하다고 표시한 4개 기본 사례(테마 × 뷰포트)는 별도다. 캡처와 `scope`/`colSpan` 구조상 헤더가 시각적으로는 정상 연결됐지만, 실제 스크린리더의 행·열 헤더 발화는 이 환경에서 실행하지 않아 검증 완료로 처리하지 않았다. 물리 모바일 기기도 사용하지 않았다(320px Chrome 뷰포트 에뮬레이션만 사용).
+
+최신 전체 실행 ID는 `2026-11-03T06-43-21-361Z-29832`다. Node `v24.18.0`, pnpm `11.25.0`, Playwright `1.63.0`, axe-core `4.14.0`, Chrome `156.0.8078.80`에서 `pnpm test:ui:a11y` 2개 파일/14개 테스트가 통과했다. 사례 실행 결과는 제품 finding 0, 도구 오류 0, 120개 중 자동 상태 통과 12·미검증 108이고 `accessibilityVerificationComplete: false`다. 이 108개 상태는 감사기가 각 사례에 수동 판정 기록이 없어 붙인 상태이며, 위 표의 개별 검토 결과와 남은 항목을 구분해 읽어야 한다. 캡처 경로와 원 결과는 로컬 `.duo-a11y-runs/<runId>/cases.jsonl`에 보존했다.
 
 ### 검증 결과와 다음 게이트
 
 - `pnpm verify` — 통과: 146개 파일, 1,428 passed, 7 skipped, 5 TODO. 문서 검증 125개 파일 통과 (52 requirements, 14 decisions, 22 issues, 5 milestones, 94 acceptance criteria, 226 links).
-- `pnpm test:ui:a11y` — 검증 코드 SHA `15f65d4be8441e1c90d3be98cd01d4f778814120`에서 2개 파일, 14개 테스트 통과. 감사 결과는 120개 사례, 누락·중복·도구·정리 오류 0, 전체 접근성 검증 미완료.
+- `pnpm test:ui:a11y` — UI 코드 SHA `f0f196865df5209c52c8c5cba593516008a26b3d`에서 2개 파일, 14개 테스트 통과. 전체 실행 ID와 사례별 판정은 위 최신 기록 참조. 전체 접근성 검증은 미완료.
 - 최초 `pnpm verify` 중 AVD 첫 부팅과 겹친 UI E2E 두 항목은 실패했으나, 두 항목을 격리 재실행해 통과했고 AVD를 중단한 뒤 전체 `pnpm verify`도 통과했다. 제품 결함으로 판단할 근거는 없으며 자원 경합 정황으로 기록한다.
 - 문서 전용 커밋 SHA는 생성 후 PR 설명의 검증 링크와 함께 고정한다. 코드·감사 규칙·fixture는 검증 SHA와 동일하게 유지한다.
-- `pnpm docs:validate`와 `git diff --check`는 문서 커밋 직전 다시 실행한다. 문서 커밋 뒤 최종 HEAD의 Ubuntu·Windows·macOS CI를 확인하고 CI 링크를 PR 설명에만 기록한다.
+- `pnpm docs:validate`와 `git diff --check`는 이번 문서 변경에서 통과했다. 문서 커밋 뒤 최종 HEAD의 Ubuntu·Windows·macOS CI를 확인하고 CI 링크를 PR 설명에 기록한다.
 - PR #80 설명은 `Refs #73`을 유지하며 자동 종료 키워드를 넣지 않는다. #73은 열린 상태로 둔다. CI 및 모든 필수 수동 검증 결과가 확인되기 전에는 접근성 완료라고 표시하지 않는다.
