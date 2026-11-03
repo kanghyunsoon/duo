@@ -245,9 +245,10 @@ async function scenario(template, temp, name, count, warm) {
 }
 
 // Exit codes: 0 every stage answered, 1 the report lists stage errors (timeouts, tool or client errors),
-// 2 the benchmark itself failed before it could report (no JSON on stdout; the reason is on stderr).
-// The report is written only after the temporary fixture copies are removed: a removal failure usually means a server
-// process still holds its working directory, so it is a benchmark failure (exit 2), not a stage error (#126).
+// 2 the benchmark itself failed (the reason is on stderr). Exit 2 wins over 1.
+// stdout gets the JSON report whenever the measurement finished, also when only removing the temporary fixture copies
+// failed: that usually means a server process still holds its working directory, so it is a benchmark failure (exit 2),
+// not a stage error, but the measured results are kept (#126). A failure before the report is complete leaves stdout empty.
 const formatError = (error) => (error instanceof Error ? error.stack ?? error.message : String(error));
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), "duo-mcp-benchmark-"));
 let result;
@@ -277,10 +278,7 @@ try {
 } catch (error) {
   failures.push(`could not remove ${temp}: ${formatError(error)}`);
 }
-if (failures.length > 0) {
-  for (const failure of failures) process.stderr.write(`mcp-benchmark: ${failure}\n`);
-  process.exitCode = 2;
-} else {
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  if (Object.values(result.scenarios).some((scenario) => scenario.errorCount > 0)) process.exitCode = 1;
-}
+for (const failure of failures) process.stderr.write(`mcp-benchmark: ${failure}\n`);
+if (result) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+if (failures.length > 0) process.exitCode = 2;
+else if (Object.values(result.scenarios).some((scenario) => scenario.errorCount > 0)) process.exitCode = 1;
