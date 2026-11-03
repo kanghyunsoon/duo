@@ -39,7 +39,7 @@ DUO는 coding agent가 일하는 저장소에 사람이 확정한 설계 결정(
    ```
 4. PR template의 항목을 채운다(아래 §4).
 5. CI `verify` 3 OS(Windows·Ubuntu·macOS)를 기다린다. Ubuntu·macOS는 10~15분, Windows는 40~60분 걸린다. Windows에서 `project-local install (npx --no-install duoctl)` 테스트 하나만 시간 초과로 실패하면 알려진 문제 #37이다. 로그를 PR에 링크하고 maintainer에게 재실행을 요청한다. 다른 실패는 PR에서 고친다.
-6. 준비되면 Draft를 "Ready for review"로 바꾸고, 작성자가 아닌 팀원 1명 이상에게 review를 요청한다. 바뀐 경로의 영역 책임자에게는 CODEOWNERS가 자동으로 요청한다(§3a). Reviewer는 변경을 직접 실행해 보고 Approve 또는 Request changes를 남긴다.
+6. 준비되면 Draft를 "Ready for review"로 바꾸고, 작성자가 아닌 팀원 1명에게 review를 요청한다. 바뀐 경로의 영역 책임자에게는 CODEOWNERS가 자동으로 요청한다(§3a). Reviewer는 §3a "리뷰 기록"대로 확인하고 Approve 또는 Request changes를 남긴다.
 7. 일반 PR은 영역 책임자(작성자가 아닌 사람) 또는 maintainer가 squash merge한다. §5의 변경은 maintainer가 merge한다. 작성자는 자기 PR을 merge하지 않는다(§3a).
 
 막히면(blocked) Issue에 무엇을 시도했고 무엇이 막혔는지 적고 `help wanted`를 요청한다. 하루 넘게 혼자 붙잡지 않는다. 질문은 Issue 댓글이나 [Discussions](https://github.com/kanghyunsoon/duo/discussions)에 남긴다. 보안 취약점은 공개 Issue가 아니라 [SECURITY.md](../../SECURITY.md)의 비공개 신고를 쓴다.
@@ -66,8 +66,44 @@ DUO는 coding agent가 일하는 저장소에 사람이 확정한 설계 결정(
 2. 작성자는 자기 PR을 승인하거나 merge하지 않는다.
 3. 작성자가 아닌 사람의 승인과 CI `verify` 3 OS 통과가 있으면, §5에 해당하지 않는 일반 PR은 영역 책임자(작성자 아님) 또는 maintainer가 squash merge한다.
 4. §5의 변경(Decision 권한·형식·verdict 의미, release, 보안, 유료 실행, 외부 모집)과 `.github/workflows/`, 패키지 manifest·lockfile, `scripts/release/`, `docs/conflicts.md`의 변경은 maintainer가 최종 판단하고 merge한다.
-5. 리뷰 요청 뒤 이틀(48시간) 안에 응답이 없으면 PR 작성자가 같은 영역의 다른 책임자나 다른 팀원에게 리뷰를 다시 요청한다. 같은 사람에게 반복해서 멘션하지 않는다.
+5. 리뷰 요청 뒤 48시간 안에 응답이 없으면 작성자가 아래 "리뷰 지연 처리"대로 다른 적격 리뷰어 1명에게 다시 요청한다. 같은 사람에게 반복해서 멘션하지 않는다.
 6. Maintainer가 자리를 비우면 3의 일반 PR은 영역 책임자가 계속 merge한다. 4의 변경, release, npm publish, tag, ruleset, 관리자 권한은 maintainer가 돌아올 때까지 기다린다.
+7. 일반 PR은 독립 리뷰어 1명이면 충분하다. 리뷰가 끝났거나 다른 사람이 이미 승인해 필요 없어진 요청은 작성자가 Remove해서 다른 사람의 대기 목록에 남기지 않는다.
+
+### GitHub가 강제하는 것과 운영 규칙
+
+`next` ruleset(`next-integration`)이 실제로 막는 것과 사람이 지키는 규칙을 구분한다.
+
+| 항목 | ruleset이 강제 | 운영 규칙 |
+|---|---|---|
+| 승인 | 작성자가 아닌 사람의 승인 1개, 마지막 push를 하지 않은 사람의 승인 | 영역 책임자가 먼저 리뷰 |
+| 새 push | 기존 Approve는 자동으로 무효. Request changes는 남으므로 그 리뷰어가 다시 리뷰해야 merge된다 | 수정 commit과 근거를 답글로 남기고 그 리뷰어에게 한 번 다시 요청 |
+| CI | `verify` Windows·Ubuntu·macOS 통과 | 실패는 로그 근거 없이 flaky로 보지 않는다 |
+| 리뷰 스레드 | 모두 resolve | 스레드는 연 사람이 resolve한다 |
+| Merge | squash만, write 권한자는 조건을 채우면 누구나 | 작성자는 merge하지 않는다. 규칙 4의 경로는 maintainer 판단 |
+| Maintainer 전용 경로 | 강제하지 않는다(code owner 승인 요구 없음) | 규칙 4 |
+| Draft | 리뷰 요청 없음. Ready로 바꿀 때 CODEOWNERS가 요청 | Ready 전에 CI를 확인 |
+| 관리자 bypass | admin은 가능 | 쓰지 않는다 |
+
+### 리뷰 지연 처리(48시간)
+
+- **기준 시각:** PR timeline의 "requested a review" 시각이다. Ready 전환 때 CODEOWNERS가 보낸 요청도 포함하고, 새 push 뒤 다시 요청했다면 그 시각부터 센다. 그 리뷰어의 Approve, Request changes, Comment review나 PR 댓글이 응답이다.
+- **지연이 아닌 경우:** Draft PR, 해결하지 않은 Request changes(작성자 수정 대기), 다른 PR의 merge를 기다리는 PR(본문에 적는다), 리뷰어가 검토 중이라고 이미 답한 PR은 재배정하지 않는다.
+- **재배정:** 작성자가 48시간 넘은 요청을 Remove하고 1명에게 다시 요청한다. 같은 영역의 다른 책임자를 먼저 고르고, 없거나 바쁘면 대기 리뷰가 가장 적은 write 팀원을 고른다. 작성자 자신과 이 PR에서 이미 지연된 사람은 고르지 않는다. 바꾼 이유(이전 요청 시각, 새 리뷰어)를 PR에 한 줄 남긴다.
+- **작성자가 처리하지 못할 때:** 작성자가 48시간을 더 넘겨 처리하지 않으면 영역 책임자나 maintainer가 같은 방법으로 재배정한다.
+- **업무량:** 한 사람에게 열린 리뷰 요청은 3개 이하로 유지한다. 다른 사람의 대기 수는 `gh pr list --search "review-requested:<login> draft:false" --json number --jq length`로, 자기 목록은 `gh pr list --search "review-requested:@me draft:false"`로 본다.
+
+### 리뷰 기록
+
+리뷰어는 리뷰 본문에 다음을 남긴 뒤 Approve 또는 Request changes를 제출한다. Comment review는 승인으로 세지 않으므로, 승인하려면 Approve로 제출한다.
+
+- 검토한 HEAD SHA
+- 검토 범위: 본 파일, 수용 기준, 관련 회귀 테스트
+- 직접 실행한 테스트와 CI에서 확인한 결과를 나눠 적는다
+- 발견한 문제와 남은 항목(없으면 "없음")
+- 판단: Approve 또는 Request changes
+
+CI 3 OS가 통과한 PR에서 전체 CI나 `pnpm verify`를 다시 돌리지 않는다. 바뀐 부분의 테스트만 직접 실행한다. 보안, 동시성(lock, 여러 process), 파일 시스템 쓰기·삭제·경로, Decision·verdict 의미를 바꾸는 PR은 리뷰어가 실패 사례나 수정 전후 동작을 직접 재현하고 그 결과를 적는다. CI는 실패한 job만 다시 실행한다.
 
 이 규칙은 기존 write 권한 안에서 운영한다. 관리자 권한, npm publish, tag, release, ruleset은 바뀌지 않는다.
 
