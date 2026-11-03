@@ -135,7 +135,7 @@ export async function headBaselineFindings(input: HeadFindingsInput): Promise<{ 
         return decisions.length === 0 ? [] : [{ f, ref, target, decisions }];
       });
     });
-    const origins = new ReexportOrigins(input.root, input.divergent);
+    const origins = new ReexportOrigins(input.root, (p) => input.divergent.has(p));
     await origins.load(starts.map((s) => s.target));
     for (const s of starts) {
       const traced = origins.trace(s.target, importedNames(s.ref));

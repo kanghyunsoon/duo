@@ -6,8 +6,9 @@
  * A name has an exact origin only when every step is certain: one local export (not an imported binding
  * exported again) or one explicit re-export, or `export *` where exactly one module provides the name. An
  * `export * as ns`, a namespace, side-effect or dynamic import (every name), a module that is not analyzed,
- * an unresolved re-export, a cycle, more than MAX_REEXPORT_DEPTH hops, two providers or a name that is both
- * declared and re-exported is ambiguous: the caller keeps the Stage 1 limitation and makes no claim.
+ * an unresolved re-export, a cycle, more than MAX_REEXPORT_DEPTH hops, two providers, an `export *` of a module
+ * whose exports the analysis does not list, a name that is both declared and re-exported, or an imported name
+ * no module provides is ambiguous: the caller keeps the Stage 1 limitation and makes no claim.
  */
 import type { LocalExport } from "@duo-director/analyzer";
 import { compareUtf8, type RepoPath } from "@duo-director/core";
@@ -35,7 +36,7 @@ export interface NameOrigin {
   readonly chain: readonly OriginHop[];
 }
 
-/** exact: every name the import takes has one origin (a name no module provides has none and is left out). */
+/** exact: every name the import takes has one origin (H-98 (1)); a name with no origin makes the trace ambiguous. */
 export type OriginTrace = { readonly status: "exact"; readonly origins: readonly NameOrigin[] } | { readonly status: "ambiguous" };
 
 type Find = { readonly status: "exact"; readonly file: RepoPath; readonly chain: readonly OriginHop[] } | { readonly status: "none" | "ambiguous" };
@@ -51,7 +52,7 @@ export class ReexportOrigins {
   private readonly modules = new Map<RepoPath, Module | undefined>();
 
   /** excluded: files whose indexed analysis does not describe the side being evaluated (treated as not analyzed). */
-  constructor(private readonly root: string, private readonly excluded: ReadonlySet<string> = new Set()) {}
+  constructor(private readonly root: string, private readonly excluded: (file: RepoPath) => boolean | Promise<boolean> = () => false) {}
 
   /** Reads the given files and every module their re-exports reach within MAX_REEXPORT_DEPTH hops. */
   async load(files: readonly RepoPath[]): Promise<void> {
@@ -59,7 +60,9 @@ export class ReexportOrigins {
     for (let hop = 0; hop <= MAX_REEXPORT_DEPTH && frontier.length > 0; hop++) {
       const need = frontier.filter((p) => !this.modules.has(p)).sort(compareUtf8);
       const read = await readIndexedModuleReferences(this.root, need);
-      read.forEach((r, i) => this.modules.set(need[i] as RepoPath, r.status === "ok" && !this.excluded.has(r.path) ? { references: r.references, exports: r.exports } : undefined));
+      for (const [i, r] of read.entries()) {
+        this.modules.set(need[i] as RepoPath, r.status === "ok" && !(await this.excluded(r.path)) ? { references: r.references, exports: r.exports } : undefined);
+      }
       frontier = [...new Set(need.flatMap((p) => this.modules.get(p)?.references.filter((r) => r.kind === "export-from" && r.target !== undefined).map((r) => r.target as RepoPath) ?? []))];
     }
   }
@@ -70,8 +73,8 @@ export class ReexportOrigins {
     const origins: NameOrigin[] = [];
     for (const name of [...names].sort(compareUtf8)) {
       const r = this.find(target, name, 0, new Set());
-      if (r.status === "ambiguous") return { status: "ambiguous" };
-      if (r.status === "exact") origins.push({ name, file: r.file, chain: r.chain });
+      if (r.status !== "exact") return { status: "ambiguous" };
+      origins.push({ name, file: r.file, chain: r.chain });
     }
     return { status: "exact", origins };
   }
@@ -101,7 +104,7 @@ export class ReexportOrigins {
     const stars = m.references.filter((r) => r.kind === "export-from" && r.reexports.some((x) => x.exported === "*"));
     const found: { file: RepoPath; chain: readonly OriginHop[] }[] = [];
     for (const ref of stars) {
-      if (ref.target === undefined) return AMBIGUOUS;
+      if (ref.target === undefined || !this.enumerable(ref.target)) return AMBIGUOUS;
       const next = this.find(ref.target, name, hop + 1, seen);
       if (next.status === "ambiguous") return AMBIGUOUS;
       if (next.status === "exact") found.push({ file: next.file, chain: [{ file, ref }, ...next.chain] });
@@ -109,5 +112,15 @@ export class ReexportOrigins {
     if (new Set(found.map((f) => f.file)).size > 1) return AMBIGUOUS;
     const one = found[0];
     return one === undefined ? NONE : { status: "exact", ...one };
+  }
+
+  /**
+   * Whether the analysis lists the module's exports. A module with no ESM export at all (CommonJS
+   * `module.exports`/`exports.x`, TypeScript `export =`) may provide any name but "default" through
+   * `export *`, so it is never "provides nothing" (H-98 (4)).
+   */
+  private enumerable(file: RepoPath): boolean {
+    const m = this.modules.get(file);
+    return m !== undefined && (m.exports.length > 0 || m.references.some((r) => r.kind === "export-from"));
   }
 }

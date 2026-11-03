@@ -11,8 +11,10 @@
  *
  * Stage 1 (#124, Jira S15P31A106-346): anything ambiguous keeps the `imports-through-reexport` limitation with
  * the chain and no claim: namespace and side-effect imports of a barrel (every name), `export * as ns`, a name
- * that more than one `export *` module provides, cycles and chains longer than MAX_REEXPORT_DEPTH (4).
- * Import-then-export is not followed in either stage.
+ * that more than one `export *` module provides, `export *` of a module whose exports are not listed (CommonJS),
+ * an imported name no module provides, cycles and chains longer than MAX_REEXPORT_DEPTH (4). With --staged, a
+ * barrel whose reviewed side differs from the working tree is not traced. Import-then-export is not followed in
+ * either stage.
  *
  * - Only the names the import takes are traced, so an unrelated name from the same barrel is not reported.
  *   `export *` forwards every name but "default".
@@ -91,6 +93,15 @@ const FILES: Record<string, string> = {
   "src/db/far5.ts": reexport("./legacy-db.js"),
   "src/db/cycle-a.ts": reexport("./cycle-b.js"),
   "src/db/cycle-b.ts": reexport("./cycle-a.js"),
+  "src/db/safe.ts": "export function legacyQuery(sql: string): string {\n  return sql.toUpperCase();\n}\n",
+  // An explicit re-export or a local declaration shadows the same name from `export *`.
+  "src/db/explicit-shadow.ts": reexport("./safe.js") + 'export * from "./legacy-db.js";\n',
+  "src/db/local-shadow.ts": 'export function legacyQuery(sql: string): string {\n  return sql;\n}\n\nexport * from "./legacy-db.js";\n',
+  // A CommonJS module lists no ESM exports, so `export *` of it may provide any name but "default".
+  "src/db/helpers.cjs": "module.exports = { legacyQuery: (s) => s, helper: () => 1 };\n",
+  "src/db/mixed.ts": 'export * from "./legacy-db.js";\nexport * from "./helpers.cjs";\n',
+  // Re-exports the safe module in HEAD; an unstaged edit points it at legacy-db (review --staged).
+  "src/db/switch.ts": reexport("./safe.js"),
   // Already imports legacy-db through the barrel when the baseline is captured.
   "src/ui/old-page.ts": 'import { legacyQuery } from "../db/index.js";\n\nexport const oldPage = (): string => legacyQuery("old");\n',
 };
@@ -120,10 +131,10 @@ async function withGraph<T>(root: string, fn: (g: GraphStore) => Promise<T>): Pr
   }
 }
 
-async function review(r: ContextRepo): Promise<ReviewResult> {
+async function review(r: ContextRepo, diff: { readonly from: "HEAD"; readonly to: "WORKTREE" | "INDEX" } = W): Promise<ReviewResult> {
   await r.index();
   return withGraph(r.root, async (graph) => {
-    const out = await reviewChanges(r.root, { diff: W }, { graph, registry, historyWindow: HISTORY });
+    const out = await reviewChanges(r.root, { diff }, { graph, registry, historyWindow: HISTORY });
     if (out.value === undefined) throw new Error(JSON.stringify(out.diagnostics));
     return out.value.result;
   });
@@ -255,6 +266,40 @@ describe("Issue #49 Stage 2 (H-98): exact re-export origins with an origin-evalu
 
   it("import-then-export is not followed: no claim, no limitation", async () => {
     expectNothing(await page('import { legacyQuery } from "../db/relay.js";\n'));
+  });
+
+  it("an explicit re-export or a local declaration shadows export * of legacy-db: no claim, no limitation", async () => {
+    expectNothing(await page('import { legacyQuery } from "../db/explicit-shadow.js";\n'));
+    expectNothing(await page('import { legacyQuery } from "../db/local-shadow.js";\n'));
+  });
+
+  it("export * of a CommonJS module may provide any name: the other provider is not exact, Stage 1 limitation (H-98 (4))", async () => {
+    expectLimitation(await page('import { legacyQuery } from "../db/mixed.js";\n'), "src/ui/page.ts:1 → src/db/mixed.ts → src/db/legacy-db.ts");
+  });
+
+  it("every imported name needs an exact origin (H-98 (1)): a name no module provides makes the import the Stage 1 limitation", async () => {
+    expectLimitation(await page('import { legacyQuery, doesNotExist } from "../db/all.js";\n'), "src/ui/page.ts:1 → src/db/all.ts → src/db/legacy-db.ts");
+  });
+
+  it("review --staged: a barrel whose unstaged edit differs from the staged snapshot is not traced as an exact origin", async () => {
+    const staged = async (barrel?: string): Promise<ReviewResult> => {
+      repo.git("reset", "-q", "--hard");
+      repo.git("clean", "-fdq");
+      repo.write("src/ui/page.ts", 'import { legacyQuery } from "../db/switch.js";\n');
+      repo.git("add", "src/ui/page.ts");
+      if (barrel !== undefined) repo.write("src/db/switch.ts", barrel);
+      return review(repo, { from: "HEAD", to: "INDEX" });
+    };
+    // The staged snapshot imports safe.ts; the working tree's switch.ts re-exports legacy-db.
+    const changed = await staged(reexport("./legacy-db.js"));
+    expect(changed.verdict).toBe("PASS");
+    expect(forbiddenImports(changed)).toEqual([]);
+    expect(throughReexport(changed)[0]?.message).toContain("src/ui/page.ts:1 → src/db/switch.ts → src/db/legacy-db.ts (D-001)");
+    // Control: the barrel is the same in both, so the origin is safe.ts.
+    const clean = await staged();
+    expect(clean.verdict).toBe("PASS");
+    expect(forbiddenImports(clean)).toEqual([]);
+    expect(importLimits(clean)).toEqual([]);
   });
 
   it("a direct import of legacy-db is still the H-72 claim (BLOCK) with no extra limitation", async () => {

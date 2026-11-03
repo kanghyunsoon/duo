@@ -40,6 +40,14 @@ export async function sideText(ctx: RuleContext, side: GitDiffEnd, file: RepoPat
   return blob.value === undefined ? undefined : canonicalSourceText(decoder.decode(blob.value));
 }
 
+/** Whether the reviewed side of `file` has the indexed (working-tree) text; always true when the working tree is reviewed. */
+async function sameAsIndexed(ctx: RuleContext, file: RepoPath): Promise<boolean> {
+  if (ctx.to === "WORKTREE") return true;
+  const side = await sideText(ctx, ctx.to, file);
+  const current = readSourceFile(ctx.root, file).value;
+  return side !== undefined && current !== undefined && side === canonicalSourceText(current);
+}
+
 function decisionsOf(file: RepoPath, text: string): Decision[] {
   if (file.endsWith(".md")) return [...(parseDefinitionMarkdown(file, text).value?.decisions ?? [])];
   const d = parseDecisionFile(file, text).value;
@@ -491,10 +499,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   const usable: ChangedFile[] = [];
   const otherSide: string[] = [];
   for (const f of changed) {
-    if (ctx.to === "WORKTREE") { usable.push(f); continue; }
-    const side = await sideText(ctx, ctx.to, f.path);
-    const current = readSourceFile(ctx.root, f.path).value;
-    if (side !== undefined && current !== undefined && side === canonicalSourceText(current)) usable.push(f);
+    if (await sameAsIndexed(ctx, f.path)) usable.push(f);
     else otherSide.push(f.path);
   }
   const indexed = await readIndexedModuleReferences(ctx.root, usable.map((f) => f.path));
@@ -537,8 +542,9 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
     }
   });
   // #49 Stage 2 (H-98): an import whose every name has one exact origin is checked against that origin file;
-  // anything ambiguous keeps the Stage 1 limitation and makes no claim.
-  const origins = new ReexportOrigins(ctx.root);
+  // anything ambiguous keeps the Stage 1 limitation and makes no claim. A barrel, hop or origin whose reviewed
+  // side differs from the indexed working tree is not analyzed for this review (as adoption/head.ts does).
+  const origins = new ReexportOrigins(ctx.root, async (file) => !(await sameAsIndexed(ctx, file)));
   await origins.load(viaReexport.map((c) => c.target));
   const unverifiedChains: typeof viaReexport = [];
   for (const c of viaReexport) {
