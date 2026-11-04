@@ -309,5 +309,43 @@ describe("#160: a verdict input outside the diff that differs from the reviewed 
       repo.git("reset", "-q", "--hard", "HEAD~1");
     }
   });
+
+  // The specifier's last segment ("legacy") is not the target's name ("legacy-db"): only the resolver knows the path.
+  const EXACT_ALIAS = [
+    ["19 a tsconfig paths entry for one file", "tsconfig.json", '{ "compilerOptions": { "module": "ESNext", "moduleResolution": "Bundler", "strict": true, "baseUrl": ".", "paths": { "@legacy": ["src/db/legacy-db.ts"] } } }\n', "@legacy"],
+    ["20 a package.json imports entry for one file", "package.json", '{ "name": "issue160-fixture", "type": "module", "imports": { "#legacy": "./src/db/legacy-db.js" } }\n', "#legacy"],
+  ] as const;
+  async function withAlias(config: string, text: string, specifier: string, run: () => Promise<void>): Promise<void> {
+    reset();
+    repo.write(config, text);
+    repo.git("add", "-A");
+    repo.git("commit", "-q", "-m", "alias for one file");
+    try {
+      repo.write(PAGE, importFrom(specifier));
+      repo.git("add", PAGE);
+      await run();
+    } finally {
+      reset();
+      repo.git("reset", "-q", "--hard", "HEAD~1");
+    }
+  }
+
+  it.each(EXACT_ALIAS)("%s: a target whose name differs from the specifier, deleted only in the working tree, is not a PASS", async (_label, config, text, specifier) => {
+    await withAlias(config, text, specifier, async () => {
+      expectBlock(await review(STAGED));
+      fs.rmSync(path.join(repo.root, "src/db/legacy-db.ts"));
+      expectMismatch(await review(STAGED), "src/db/legacy-db.ts");
+    });
+  });
+
+  it.each(EXACT_ALIAS)("21 %s: files the resolver does not look up, deleted only in the working tree, keep the verdict", async (_label, config, text, specifier) => {
+    await withAlias(config, text, specifier, async () => {
+      fs.rmSync(path.join(repo.root, "src/db/safe.ts"));
+      fs.rmSync(path.join(repo.root, "src/ui/home.ts"));
+      const o = await review(STAGED);
+      expectBlock(o);
+      expect((o.result?.limitations ?? []).map((l) => l.code)).toContain("reviewed-side-context-from-working-tree");
+    });
+  });
 });
 

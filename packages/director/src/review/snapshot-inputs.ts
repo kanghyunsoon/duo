@@ -7,8 +7,10 @@
  *
  * - as the resolution of a changed import: whether a candidate of a relative TS/JS specifier (the path, its extension
  *   and index variants, a package.json in the directory) or the resolved target exists on each side. A non-relative
- *   specifier (tsconfig paths/baseUrl, package imports, a package) is mapped by the resolver, so every file whose
- *   existence differs and whose name matches the specifier's last segment counts (conservative: no false PASS);
+ *   specifier (tsconfig paths/baseUrl/rootDirs, package imports, a package) is resolved once more with the indexer's
+ *   TypeScript resolver on the working tree, recording every file it looks up; a looked-up file whose existence
+ *   differs counts. With the same configuration on both sides (otherwise the config itself counts), those lookups
+ *   include every candidate the reviewed side's resolution would try before it stops;
  * - as the resolver configuration of a TS/JS importer, as the TypeScript resolver reads it (graph
  *   typescript-module-resolver.ts): the nearest tsconfig.json or jsconfig.json up to the repository root with its
  *   extends chain, and the nearest package.json. A config whose existence differs on the way up changes which one
@@ -25,7 +27,7 @@
 import { builtinModules } from "node:module";
 import path from "node:path";
 import { compareUtf8, type RepoPath } from "@duo-director/core";
-import type { IndexedModuleReference } from "@duo-director/graph";
+import { createTypeScriptModuleResolver, type IndexedModuleReference, type ModuleResolver } from "@duo-director/graph";
 
 /** How a path outside the diff differs: it exists on one side only, or exists on both with other content. */
 export type Divergence = "existence" | "content";
@@ -137,9 +139,14 @@ export class VerdictInputs {
   private readonly found = new Set<string>();
   private readonly existence: readonly string[];
   private readonly configMemo = new Map<string, Promise<readonly string[]>>();
+  /** Every repository file the TypeScript resolver looked up for a non-relative specifier (#163 review). */
+  private readonly lookedUp = new Set<string>();
+  private resolver: ModuleResolver | undefined;
 
   /** reviewedText / worktreeText: a file's text on the reviewed side and in the working tree (undefined when absent). */
-  constructor(private readonly divergent: ReadonlyMap<string, Divergence>, private readonly reviewedText: Text, private readonly worktreeText: Text) {
+  constructor(
+    private readonly root: string, private readonly divergent: ReadonlyMap<string, Divergence>, private readonly reviewedText: Text, private readonly worktreeText: Text,
+  ) {
     this.existence = [...divergent.keys()].filter((p) => divergent.get(p) === "existence");
   }
 
@@ -151,14 +158,19 @@ export class VerdictInputs {
     if (specifier.startsWith("node:") || BUILTINS.has(specifier) || BUILTINS.has(specifier.split("/")[0] ?? "") || URL_SPECIFIER.test(specifier)) return;
     for (const p of await this.configsOf(path.posix.dirname(importer))) this.found.add(p);
     if (!(specifier.startsWith(".") || specifier.startsWith("/"))) {
-      // The resolver maps it through paths, baseUrl, rootDirs or package imports: a deleted or added file of that name
-      // may be the target on one side only (#163 review).
-      const last = stem(specifier.split("/").pop() ?? specifier);
-      for (const p of this.existence) {
-        const name = path.posix.basename(p);
-        const parent = path.posix.basename(path.posix.dirname(p));
-        if (stem(name) === last || ((stem(name) === "index" || name === "package.json") && parent === last)) this.found.add(p);
-      }
+      // Only the resolver knows which files paths, baseUrl, rootDirs or package imports map it to (#163 review).
+      if (this.existence.length === 0) return;
+      this.resolver ??= createTypeScriptModuleResolver({
+        root: this.root,
+        indexedFiles: new Set(),
+        readInput: (file, read) => {
+          const relative = path.relative(this.root, file).split(path.sep).join("/");
+          if (relative !== "" && !relative.startsWith("../") && !path.isAbsolute(relative)) this.lookedUp.add(relative);
+          return read();
+        },
+      });
+      this.resolver.resolve({ fromPath: importer, specifier, kind: ref.kind });
+      for (const p of this.existence) if (this.lookedUp.has(p)) this.found.add(p);
       return;
     }
     const base = path.posix.normalize(specifier.startsWith("/") ? specifier.slice(1) : path.posix.join(path.posix.dirname(importer), specifier));
