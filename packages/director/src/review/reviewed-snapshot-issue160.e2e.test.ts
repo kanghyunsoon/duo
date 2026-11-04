@@ -289,5 +289,25 @@ describe("#160: a verdict input outside the diff that differs from the reviewed 
     staged("../db/index.js", () => repo.write("package.json", '{ "name": "issue160-fixture", "type": "commonjs" }\n'));
     expectMismatch(await review(STAGED), "package.json");
   });
+
+  it.each([
+    ["17 a tsconfig paths alias", "tsconfig.json", ALIAS_TSCONFIG(true), "@db/legacy-db.js"],
+    ["18 a package.json imports subpath", "package.json", '{ "name": "issue160-fixture", "type": "module", "imports": { "#db/*": "./src/db/*" } }\n', "#db/legacy-db.js"],
+  ] as const)("%s: the target deleted only in the working tree is not a PASS (case 3, non-relative)", async (_label, config, text, specifier) => {
+    reset();
+    repo.write(config, text);
+    repo.git("add", "-A");
+    repo.git("commit", "-q", "-m", "non-relative specifier");
+    try {
+      repo.write(PAGE, importFrom(specifier));
+      repo.git("add", PAGE);
+      expectBlock(await review(STAGED));
+      fs.rmSync(path.join(repo.root, "src/db/legacy-db.ts"));
+      expectMismatch(await review(STAGED), "src/db/legacy-db.ts");
+    } finally {
+      reset();
+      repo.git("reset", "-q", "--hard", "HEAD~1");
+    }
+  });
 });
 

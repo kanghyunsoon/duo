@@ -6,7 +6,9 @@
  * decide. A rule uses such a file in these ways, collected here:
  *
  * - as the resolution of a changed import: whether a candidate of a relative TS/JS specifier (the path, its extension
- *   and index variants, a package.json in the directory) or the resolved target exists on each side;
+ *   and index variants, a package.json in the directory) or the resolved target exists on each side. A non-relative
+ *   specifier (tsconfig paths/baseUrl, package imports, a package) is mapped by the resolver, so every file whose
+ *   existence differs and whose name matches the specifier's last segment counts (conservative: no false PASS);
  * - as the resolver configuration of a TS/JS importer, as the TypeScript resolver reads it (graph
  *   typescript-module-resolver.ts): the nearest tsconfig.json or jsconfig.json up to the repository root with its
  *   extends chain, and the nearest package.json. A config whose existence differs on the way up changes which one
@@ -148,7 +150,17 @@ export class VerdictInputs {
     const specifier = ref.specifier;
     if (specifier.startsWith("node:") || BUILTINS.has(specifier) || BUILTINS.has(specifier.split("/")[0] ?? "") || URL_SPECIFIER.test(specifier)) return;
     for (const p of await this.configsOf(path.posix.dirname(importer))) this.found.add(p);
-    if (!(specifier.startsWith(".") || specifier.startsWith("/"))) return;
+    if (!(specifier.startsWith(".") || specifier.startsWith("/"))) {
+      // The resolver maps it through paths, baseUrl, rootDirs or package imports: a deleted or added file of that name
+      // may be the target on one side only (#163 review).
+      const last = stem(specifier.split("/").pop() ?? specifier);
+      for (const p of this.existence) {
+        const name = path.posix.basename(p);
+        const parent = path.posix.basename(path.posix.dirname(p));
+        if (stem(name) === last || ((stem(name) === "index" || name === "package.json") && parent === last)) this.found.add(p);
+      }
+      return;
+    }
     const base = path.posix.normalize(specifier.startsWith("/") ? specifier.slice(1) : path.posix.join(path.posix.dirname(importer), specifier));
     if (base.startsWith("../")) return;
     const s = stem(base);
