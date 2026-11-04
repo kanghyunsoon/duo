@@ -19,8 +19,8 @@ export const expectedSchemas = {
 
 export const expectedOutputProperties = {
   duo_get_status: ["analysis", "baseline", "format", "index", "initialized", "llm", "llmProvider", "message", "pendingDecisions", "project", "status", "truth"],
-  duo_get_context: ["context", "format", "gaps", "message", "status"],
-  duo_review_changes: ["baseline", "claims", "context", "diagnostics", "diff", "evidence", "format", "freshness", "gaps", "limitations", "message", "metrics", "request", "seeds", "semanticAssist", "status", "verdict", "verdictBasis"],
+  duo_get_context: ["context", "format", "gaps", "indexRefresh", "message", "status"],
+  duo_review_changes: ["baseline", "claims", "context", "diagnostics", "diff", "evidence", "format", "freshness", "gaps", "indexRefresh", "limitations", "message", "metrics", "request", "seeds", "semanticAssist", "status", "verdict", "verdictBasis"],
   duo_get_requirement: ["format", "id", "message", "requirement", "status", "text"],
   duo_get_decision: ["decision", "format", "id", "message", "note", "status", "text"],
   duo_trace: ["depth", "edges", "format", "index", "message", "node", "nodes", "status", "truncated"],
