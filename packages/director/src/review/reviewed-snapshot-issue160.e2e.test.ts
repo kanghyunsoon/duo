@@ -49,9 +49,14 @@ const FILES: Record<string, string> = {
   // star: two export * providers of legacyQuery in HEAD (ambiguous); plain provides it locally.
   "src/db/plain.ts": "export function legacyQuery(sql: string): string {\n  return sql.trim();\n}\n\nexport const plain = 1;\n",
   "src/db/star.ts": 'export * from "./legacy-db.js";\nexport * from "./plain.js";\n',
-  "src/ui/util.ts": "export const util = 1;\n",
+  // Mentions an export-from only in a comment and a string: it re-exports nothing.
+  "src/ui/util.ts": '// Moved: export * from "../db/legacy-db.js";\nconst note = "export { legacyQuery } from \'./legacy\'";\n\nexport const util = note.length;\n',
+  // A config of another directory: never applies to src/.
+  "tools/tsconfig.json": '{ "compilerOptions": { "strict": true } }\n',
   "src/ui/home.ts": "export const home = 1;\n",
 };
+const ALIAS_TSCONFIG = (strict: boolean) =>
+  '{ "compilerOptions": { "module": "ESNext", "moduleResolution": "Bundler", "strict": ' + String(strict) + ', "baseUrl": ".", "paths": { "@db/*": ["src/db/*"] } } }\n';
 
 type Outcome = { readonly result: ReviewResult | undefined; readonly codes: readonly string[]; readonly messages: readonly string[] };
 
@@ -244,6 +249,45 @@ describe("#160: a verdict input outside the diff that differs from the reviewed 
     // drops it, so the working tree has one exact origin (legacy-db) and would BLOCK.
     staged("../db/star.js", () => repo.write("src/db/plain.ts", "export const plain = 1;\n"));
     expectMismatch(await review(STAGED), "src/db/plain.ts");
+  });
+
+  it("13 --staged: a tsconfig change that does not affect resolution, or another directory's tsconfig, keeps the verdict", async () => {
+    reset();
+    repo.write("tsconfig.json", ALIAS_TSCONFIG(true));
+    repo.git("add", "-A");
+    repo.git("commit", "-q", "-m", "path alias");
+    try {
+      repo.write(PAGE, importFrom("@db/legacy-db.js"));
+      repo.git("add", PAGE);
+      repo.write("tsconfig.json", ALIAS_TSCONFIG(false).replace("{ \"compilerOptions\"", "// no longer strict\n{ \"compilerOptions\""));
+      repo.write("tools/tsconfig.json", '{ "compilerOptions": { "strict": false } }\n');
+      expectBlock(await review(STAGED));
+    } finally {
+      reset();
+      repo.git("reset", "-q", "--hard", "HEAD~1");
+    }
+  });
+
+  it("14 --staged: a differing module that mentions export-from only in a comment or a string keeps the verdict", async () => {
+    reset();
+    repo.write(PAGE, 'import { legacyQuery } from "../db/index.js";\nimport { util } from "./util.js";\n\nexport const page = (): string => legacyQuery(String(util));\n');
+    repo.git("add", PAGE);
+    repo.write("src/ui/util.ts", "export const util = 3;\n");
+    const o = await review(STAGED);
+    expectBlock(o);
+    expect((o.result?.limitations ?? []).map((l) => l.code)).toContain("reviewed-side-context-from-working-tree");
+  });
+
+  it("15 --staged: a resolution option of the importer's tsconfig is an input of a relative import too", async () => {
+    staged("../db/index.js", () => repo.write("tsconfig.json", '{ "compilerOptions": { "module": "CommonJS", "moduleResolution": "Node10", "strict": true } }\n'));
+    expectMismatch(await review(STAGED), "tsconfig.json");
+  });
+
+  it("16 --staged: package.json keeps the verdict unless a field that decides resolution changes", async () => {
+    staged("../db/index.js", () => repo.write("package.json", '{ "name": "issue160-fixture", "type": "module", "description": "unrelated" }\n'));
+    expectBlock(await review(STAGED));
+    staged("../db/index.js", () => repo.write("package.json", '{ "name": "issue160-fixture", "type": "commonjs" }\n'));
+    expectMismatch(await review(STAGED), "package.json");
   });
 });
 

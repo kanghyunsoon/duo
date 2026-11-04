@@ -516,7 +516,10 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   if (decisions.length === 0) return { claims: [], limitations: [], snapshotInputs: [] };
   const matchers = decisions.map((d) => ({ d, match: compileRepoPatterns(d.forbids.importedPaths), importer: importerFilter(d) }));
   // H-103 (#160): which differing paths outside the reviewed diff this rule reads to decide.
-  const inputs = ctx.snapshotDivergence === undefined || ctx.snapshotDivergence.size === 0 ? undefined : new VerdictInputs(ctx.snapshotDivergence, (p) => sideText(ctx, ctx.to, p));
+  const inputs = ctx.snapshotDivergence === undefined || ctx.snapshotDivergence.size === 0
+    ? undefined
+    : new VerdictInputs(ctx.snapshotDivergence, (p) => sideText(ctx, ctx.to, p as RepoPath), (p) => readSourceFile(ctx.root, p).value);
+  const changedReferences: { importer: RepoPath; ref: IndexedModuleReference }[] = [];
   const changed = ctx.files.filter((f) => f.kind !== "deleted" && !f.binary && !f.path.startsWith(`${STATE_DIR_NAME}/`) && f.hunks.length > 0);
   // The index describes the working tree; another reviewed side is evaluated only where its text is the same.
   const usable: ChangedFile[] = [];
@@ -542,7 +545,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
     for (const ref of r.references) {
       const hunks = f.hunks.filter((h) => overlapsLines(ref.location, hunkRange(h))).map((h) => h.evidenceId);
       if (hunks.length === 0) continue;
-      inputs?.reference(f.path, ref);
+      if (inputs !== undefined) changedReferences.push({ importer: f.path, ref });
       const where = `${f.path}:${ref.location.startLine ?? "?"}`;
       const target = ref.target;
       if (target === undefined) {
@@ -571,12 +574,13 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   const origins = new ReexportOrigins(ctx.root, async (file) => !(await sameAsIndexed(ctx, file)));
   await origins.load(viaReexport.map((c) => c.target));
   if (inputs !== undefined) {
+    for (const { importer, ref } of changedReferences) await inputs.reference(importer, ref);
     // Every followed export-from is resolved like a changed import; its target's own exports decide the provider.
     const reached = new Set<RepoPath>();
     for (const [file, refs] of origins.loaded()) {
       for (const r of refs) {
         if (r.kind !== "export-from") continue;
-        inputs.reference(file, r);
+        await inputs.reference(file, r);
         if (r.target !== undefined) reached.add(r.target);
       }
     }
