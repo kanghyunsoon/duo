@@ -133,8 +133,8 @@ export interface WorkActivityStore {
 const WORK_ACTIVITY_LOCK_WAIT_MS = 100;
 const DEFAULT_WORK_ACTIVITY: WorkActivityStore = { touch: touchWorkTask, review: recordWorkReview };
 
-/** How long one automatic refresh waits for the common index writer lock (#4, T179). */
-const REFRESH_LOCK_TIMEOUT_MS = 5000;
+/** How long one automatic MCP refresh waits for the common index writer lock; CLI --refresh and the Graph default stay at 5 s (#4, T182). */
+const REFRESH_LOCK_TIMEOUT_MS = 30_000;
 
 /** Present on a context or review result only when DUO tried a refresh: refreshed, already current, or refused with the reason. */
 export interface IndexRefresh { readonly refreshed: boolean; readonly reason?: string }

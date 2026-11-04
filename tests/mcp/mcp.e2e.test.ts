@@ -203,7 +203,7 @@ describe("existing project through MCP: freshness, CLI parity, WAL, metrics, pro
     p.edit("src/scheduler.ts", "% 5", "% 3");
     const both = await Promise.all([s.call("duo_get_context", { task: "Scheduler.next" }), other.call("duo_get_context", { task: "Scheduler.next" })]);
     // The common writer lock lets exactly one refresh. The other read finds the index current after waiting (refreshed: false),
-    // reads it current, or gives up after the 5 s lock wait with the lock-timeout reason (a refresh can take longer on Windows).
+    // reads it current, or gives up after the 30 s lock wait with the lock-timeout reason (T182: a refresh can take longer on a busy machine).
     const refreshed = both.filter((r) => r.structuredContent.indexRefresh?.refreshed === true);
     expect(refreshed).toHaveLength(1);
     expect(refreshed[0]?.structuredContent.status).toBe("ready");
@@ -219,13 +219,14 @@ describe("existing project through MCP: freshness, CLI parity, WAL, metrics, pro
 
   it("#4: an index that cannot be refreshed safely keeps index-required with the reason (lock timeout, missing index)", async () => {
     p.edit("src/scheduler.ts", "% 3", "% 2");
-    // Another writer holds the common index lock longer than a read waits for it.
+    // Another writer holds the common index lock longer than a read waits for it. MCP waits up to 30 s (T182), not the 5 s CLI/Graph default.
+    const timed = async <T>(call: Promise<T>) => { const start = performance.now(); const result = await call; return { result, ms: performance.now() - start }; };
     const held = await withIndexWriteLock(p.root, async () => {
-      const ctx = await s.call("duo_get_context", { task: "Scheduler.next" });
+      const [{ result: ctx, ms: ctxMs }, { result: rv, ms: rvMs }] = await Promise.all([timed(s.call("duo_get_context", { task: "Scheduler.next" })), timed(s.call("duo_review_changes", {}))]);
+      for (const ms of [ctxMs, rvMs]) expect(ms).toBeGreaterThanOrEqual(29_000);
       expect(ctx.structuredContent).toMatchObject({ status: "index-required", indexRefresh: { refreshed: false } });
       expect(ctx.structuredContent.indexRefresh.reason).toMatch(/lock/iu);
       expect(ctx.content[0]?.text).toMatch(/duoctl index.*Automatic index refresh was not done: /su);
-      const rv = await s.call("duo_review_changes", {});
       expect(rv.structuredContent).toMatchObject({ status: "index-required", indexRefresh: { refreshed: false } });
       expect(rv.content[0]?.text).toContain("Automatic index refresh was not done: ");
     });
