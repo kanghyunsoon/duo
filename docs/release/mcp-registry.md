@@ -21,7 +21,7 @@
 
 - Registry로 서버를 추가해도 DUO가 바로 동작하지 않는다. 저장소마다 `duoctl init`(Truth, index, adoption baseline)이 필요하고, Node.js 24.15 이상이 필요하다.
 - 클라이언트는 저장소 안에서 서버를 실행해야 한다. `--root-from git-cwd`가 작업 디렉터리를 포함한 Git work tree의 top level을 root로 쓴다. Codex·Claude Code는 `duoctl install`이 같은 방식으로 설정하고 검증한다. 다른 클라이언트는 DUO가 설정하거나 검증하지 않는다.
-- 설명(100자)은 기능 범위를 넘지 않게 쓴다: 사람이 확정한 Decision에 대해 agent 변경을 검토한다.
+- 설명(100자)은 기능 범위를 넘지 않게 쓴다: 작업 맥락을 제공하고, 사람이 확정한 Decision에 대해 agent 변경을 검토한다.
 
 ## Version 규칙
 
