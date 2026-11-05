@@ -4,8 +4,8 @@
  * instead of building and packing again. Before it does, this check confirms that .dist/pack.json and the tarball
  * agree: the file exists, its sha512 is the integrity npm pack reported, and the package name and version are this
  * checkout's. It also refuses a stale artifact: the working tree must be clean (no tracked change since the pack), and
- * pack.json and the tarball must be newer than the checked-out commit. A fresh CI runner has no .dist/ of its own (it is
- * ignored by Git), so the tarball comes from this commit; the extra checks keep a reused local .dist/ from passing.
+ * pack.commit must equal the checked-out HEAD. A fresh CI runner has no .dist/ of its own (it is ignored by Git), so
+ * the tarball comes from this commit; the extra checks keep a reused local .dist/ from passing.
  *
  *   node scripts/ci/check-packed-artifact.mjs
  */
@@ -15,7 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const ROOT = path.resolve(process.argv[2] ?? fileURLToPath(new URL("../..", import.meta.url)));
 const PACK = path.join(ROOT, ".dist", "pack.json");
 const fail = (message) => {
   console.error(`check-packed-artifact: ${message}`);
@@ -34,8 +34,7 @@ if (pack.version !== cli.version) fail(`.dist/pack.json is version ${String(pack
 const git = (...args) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8", windowsHide: true }).trim();
 const dirty = git("status", "--porcelain", "--untracked-files=no");
 if (dirty !== "") fail(`the working tree has tracked changes, so the packed tarball may not be this commit: ${dirty.split(/\r?\n/u).slice(0, 5).join(", ")}`);
-const committedAt = Number(git("log", "-1", "--format=%ct")) * 1000;
-for (const file of [PACK, pack.tarball]) {
-  if (fs.statSync(file).mtimeMs < committedAt) fail(`${path.basename(file)} is older than the checked-out commit; pack again`);
-}
+const head = git("rev-parse", "HEAD");
+if (typeof pack.commit !== "string" || pack.commit === "") fail(".dist/pack.json has no commit; pack again");
+if (pack.commit !== head) fail(`.dist/pack.json is from commit ${pack.commit}, this checkout is ${head}; pack again`);
 console.log(`check-packed-artifact: reusing ${path.basename(pack.tarball)} · ${bytes.length} bytes · sha256 ${createHash("sha256").update(bytes).digest("hex")} · ${integrity}`);
