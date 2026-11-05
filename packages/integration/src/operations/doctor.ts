@@ -13,7 +13,7 @@
  */
 import path from "node:path";
 import { findGitTopLevel, openGitProvider, type GitProvider } from "@duo-director/analyzer";
-import { loadProjectTruth, truthAuthorityErrors, type Diagnostic, type LoadedProject } from "@duo-director/core";
+import { loadProjectTruth, truthAuthorityErrors, unsupportedDecisionPatterns, type Diagnostic, type LoadedProject } from "@duo-director/core";
 import { getAdoptionBaselineStatus, inspectStateDirectory, observeWorkingTree, redactSecrets, unscopedConstraintIds } from "@duo-director/director";
 import { inspectIndex, type IndexInspection } from "@duo-director/graph";
 import { agentAdapter, EXPECTED_MCP_TOOLS, inspectAgentIntegration, launcherOf, verifyAgentIntegration } from "../agents/integration.js";
@@ -41,7 +41,8 @@ export type DoctorGroup = "runtime" | "git" | "truth" | "index" | "analysis" | "
 
 export type DoctorActionId =
   | "install-node" | "install-git" | "git-init" | "git-first-commit" | "use-top-level" | "init" | "init-repair" | "fix-truth" | "index"
-  | "install-agent" | "connect-agent" | "fix-agent-config" | "fix-launcher" | "align-launcher" | "set-llm-credential" | "fix-llm-config";
+  | "install-agent" | "connect-agent" | "fix-agent-config" | "fix-launcher" | "align-launcher" | "set-llm-credential" | "fix-llm-config"
+  | "supersede-decision";
 
 /** One next step. commands: the exact commands to run (empty for a manual step); params: values the wording needs. */
 export interface DoctorAction {
@@ -160,7 +161,15 @@ export async function projectDoctor(rootArg: string, options: DoctorOptions): Pr
       project = loaded.value;
       const t = project.truth;
       // #14 (additive fact): confirmed Constraints that context and review never use.
-      set("truth.project", "ok", "valid", { name: t.config.name, requirements: t.requirements.length, decisions: t.decisions.length, constraints: t.constraints.length, unscopedConstraints: unscopedConstraintIds(t) });
+      const facts = { name: t.config.name, requirements: t.requirements.length, decisions: t.decisions.length, constraints: t.constraints.length, unscopedConstraints: unscopedConstraintIds(t) };
+      // H-104 (#165): a confirmed Decision pattern with unsupported syntax; legacy matching retained. Truth still loads (a warning,
+      // not an error, so the checks after this one run); the action is a superseding Decision, never an edit.
+      const unsupported = unsupportedDecisionPatterns(t);
+      if (unsupported.length === 0) set("truth.project", "ok", "valid", facts);
+      else {
+        set("truth.project", "warning", "unsupported-patterns", { ...facts, unsupportedPatterns: unsupported },
+          [{ id: "supersede-decision", commands: [], params: { ids: [...new Set(unsupported.map((u) => u.decision))].join(", ") } }]);
+      }
     } else if (loaded.diagnostics.some((d) => d.code === "PROJECT_FILE_MISSING")) {
       const state = inspectStateDirectory(root);
       if (state.state === "partial" && state.conflicts.length === 0) {

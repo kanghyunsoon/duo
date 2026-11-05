@@ -26,6 +26,13 @@ function hasForbids(forbids: unknown): boolean {
   return typeof forbids === "object" && forbids !== null && Object.values(forbids as Record<string, unknown>).some((v) => Array.isArray(v) && v.length > 0);
 }
 
+/** H-104 (#165): a governs or forbids path pattern of the candidate has "[" or "]", which are literal characters. */
+function hasBracketPattern(c: { governs?: unknown; forbids?: unknown }): boolean {
+  const forbids = (c.forbids as Record<string, unknown> | undefined) ?? {};
+  const lists = [(c.governs as Record<string, unknown> | undefined)?.["paths"], forbids["paths"], forbids["imported_paths"], forbids["importer_paths"]];
+  return lists.some((l) => Array.isArray(l) && l.some((p) => typeof p === "string" && /[[\]]/u.test(p)));
+}
+
 /** #47: forbids.importer_paths has at least one entry. */
 function hasImporterPaths(forbids: unknown): boolean {
   const importers = typeof forbids === "object" && forbids !== null ? (forbids as Record<string, unknown>)["importer_paths"] : undefined;
@@ -54,6 +61,7 @@ export function previewLines(L: Locale, p: ConfirmPreview, op: "confirm" | "reje
     // T40 (N3): governs does not scope forbids; say so wherever forbids are set.
     // #47: importer_paths narrows imported_paths; the row says so instead of "repository-wide".
     ...(hasForbids(c.forbids) ? [row("Forbids scope", t(L, hasImporterPaths(c.forbids) ? "decision.preview.forbids-scope-importers" : "decision.preview.forbids-scope"))] : []),
+    ...(hasBracketPattern(c) ? [row("Brackets", t(L, "decision.preview.brackets-literal"))] : []),
     row("Enforcement", show(L, c.enforcement)),
     row("Supersedes", supersedes),
     // H-71: the proposer as the proposal file records it (an audit label); a YAML Decision has none to show.
