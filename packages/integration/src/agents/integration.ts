@@ -340,7 +340,7 @@ export function planAgentIntegration(root: string, agent: AgentId, options: Plan
   if (adapter.projectTrustRequired) warnings.push("Codex reads .codex/config.toml only in a trusted project. Trust this folder yourself when Codex asks on first launch, or set trust_level = \"trusted\" for it under [projects] in ~/.codex/config.toml (DUO does not change trust).");
   if (adapter.approvalRequired) warnings.push("Claude Code asks you to approve project MCP servers from .mcp.json. Run claude in this project, accept the workspace trust dialog and approve duo-director (DUO does not approve it).");
 
-  if (withSkill) warnings.push(`${adapter.skillTarget}: both agents list a project skill; whether the agent loads it during a task is not verified yet.`);
+  if (withSkill) warnings.push(`${adapter.skillTarget}: both agents list a project skill; Codex was observed loading it; Claude Code is not verified yet.`);
 
   const actions: [string, FileAction][] = [[adapter.mcpTarget, mcpAction], [adapter.bridgeTarget, bridgeAction], ...(skillInvolved ? [[adapter.skillTarget, skillAction] as [string, FileAction]] : [])];
   return {

@@ -1,7 +1,7 @@
 /**
  * Opt-in project skill (S15P31A106-358, #8): written only by `duoctl install <agent> --with-skill`.
- * Both agents list it (Codex from .agents/skills, Claude Code from .claude/skills); whether an agent
- * loads it during a task is not verified yet, so this text only says how to reach DUO's existing tools.
+ * Both agents list it (Codex from .agents/skills, Claude Code from .claude/skills). Codex was observed loading it;
+ * Claude Code is not verified yet. This text only says how to reach DUO's existing tools.
  * The whole file is DUO's: it follows H-94 ownership like the other targets and is never merged.
  */
 export const SKILL_TEXT = [

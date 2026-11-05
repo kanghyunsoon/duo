@@ -324,7 +324,7 @@ describe("opt-in project skill with --with-skill (S15P31A106-358, H-94)", () => 
       const f = fixture();
       const first = plan(f, true);
       expect(first.skill).toEqual({ target: adapter.skillTarget, status: "absent", action: "create" });
-      expect(first.warnings.join(" ")).toContain("not verified yet");
+      expect(first.warnings.join(" ")).toContain("Codex was observed loading it; Claude Code is not verified yet.");
       expect((await applyAgentIntegration(f.root, first)).diagnostics).toEqual([]);
       expect(f.read(adapter.skillTarget)).toBe(SKILL_TEXT);
       expect(targets(f)[adapter.skillTarget]?.existedBefore).toBe(false);

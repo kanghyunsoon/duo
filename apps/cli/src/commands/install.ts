@@ -22,7 +22,7 @@ import { diagLines, interactive, usage, type Env } from "./shared.js";
 
 export interface InstallOptions {
   readonly launcher?: string;
-  /** Opt-in project skill (S15P31A106-358): listed by both agents; loading during a task is not verified yet. */
+  /** Opt-in project skill (S15P31A106-358): Codex was observed loading it; Claude Code is not verified yet. */
   readonly withSkill?: boolean;
 }
 
