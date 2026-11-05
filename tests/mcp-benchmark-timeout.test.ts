@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -11,6 +12,8 @@ import { describe, expect, it } from "vitest";
  */
 const BENCH = path.resolve("bench/mcp.mjs");
 const FAKE = path.resolve("tests/bench/fixtures/unresponsive-mcp.mjs");
+// node --import needs a URL: a Windows absolute path fails with ERR_UNSUPPORTED_ESM_URL_SCHEME.
+const FAIL_RM = pathToFileURL(path.resolve("tests/bench/fixtures/fail-rm.mjs")).href;
 const OUTER_LIMIT_MS = 15_000;
 
 function processIsRunning(pid: number): boolean {
@@ -31,9 +34,9 @@ function describeRun(result: SpawnSyncReturns<string>, ms: number): string {
   ].join("\n");
 }
 
-function runBenchmark(args: string[], env: NodeJS.ProcessEnv = {}): { result: SpawnSyncReturns<string>; ms: number } {
+function runBenchmark(args: string[], env: NodeJS.ProcessEnv = {}, nodeArgs: string[] = []): { result: SpawnSyncReturns<string>; ms: number } {
   const started = performance.now();
-  const result = spawnSync(process.execPath, [BENCH, ...args], {
+  const result = spawnSync(process.execPath, [...nodeArgs, BENCH, ...args], {
     cwd: path.resolve("."),
     encoding: "utf8",
     env: { ...process.env, ...env },
@@ -80,6 +83,55 @@ describe("MCP benchmark timeouts", () => {
       expect(pids.filter(processIsRunning), why).toEqual([]);
     } finally {
       fs.rmSync(temp, { recursive: true, force: true });
+    }
+  }, OUTER_LIMIT_MS + 5_000);
+
+  // #126: a temp directory that cannot be removed is a benchmark failure (exit 2), but the finished report is kept on
+  // stdout. TEMP/TMP/TMPDIR point the benchmark at a directory of this test, so a leftover copy is found and removed.
+  it.each([
+    ["every stage answered", false, 0, ""],
+    ["every stage answered", true, 2, ""],
+    ["a tools/call timeout", true, 2, "tools/call"],
+  ] as const)("writes the report for %s (removal fails: %s) and exits %i", async (_label, failRemoval, status, mode) => {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "duo-mcp-cleanup-test-"));
+    const pidFile = path.join(temp, "pids.txt");
+    const tmp = path.join(temp, "tmp");
+    fs.mkdirSync(tmp);
+    try {
+      const { result, ms } = runBenchmark(["--scenario", "single-cold", "--iterations", "1", "--concurrency", "1", "--timeout-ms", "500"], {
+        DUO_MCP_BENCHMARK_FAKE_MODE: mode,
+        DUO_MCP_BENCHMARK_PID_FILE: pidFile,
+        DUO_MCP_BENCHMARK_SERVER_SCRIPT: FAKE,
+        TEMP: tmp,
+        TMP: tmp,
+        TMPDIR: tmp,
+      }, failRemoval ? ["--import", FAIL_RM] : []);
+      const why = describeRun(result, ms);
+      expect(result.error, why).toBeUndefined();
+      expect(result.signal, why).toBeNull();
+      expect(result.status, why).toBe(status);
+      const report = JSON.parse(result.stdout) as { scenarios: Record<string, { errors: Array<{ stage: string; kind: string }> }> };
+      expect(Object.keys(report.scenarios), why).toEqual(["single-cold"]);
+      const errors = report.scenarios["single-cold"]?.errors ?? [];
+      if (mode === "tools/call") {
+        expect(errors, why).toEqual(expect.arrayContaining([expect.objectContaining({ stage: "duo_get_context", kind: "timeout" })]));
+      } else {
+        expect(errors, why).toEqual([]);
+      }
+      const leftovers = fs.readdirSync(tmp).filter((name) => name.startsWith("duo-mcp-benchmark-")).map((name) => path.join(tmp, name));
+      if (failRemoval) {
+        expect(leftovers, why).toHaveLength(1);
+        expect(result.stderr, why).toContain(`mcp-benchmark: could not remove ${leftovers[0]}`);
+      } else {
+        expect(leftovers, why).toEqual([]);
+        expect(result.stderr, why).not.toContain("could not remove");
+      }
+      const pids = fs.readFileSync(pidFile, "utf8").trim().split(/\s+/).map(Number);
+      expect(pids.length, why).toBeGreaterThan(0);
+      expect(pids.filter(processIsRunning), why).toEqual([]);
+    } finally {
+      // fs.rmSync fails at once with EPERM on Windows while a just-killed server still holds the leftover copy.
+      await fs.promises.rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   }, OUTER_LIMIT_MS + 5_000);
 
