@@ -65,10 +65,10 @@ DUO는 coding agent가 일하는 저장소에 사람이 확정한 설계 결정(
 1. 영역 책임자가 먼저 리뷰한다. 책임자가 작성자면 같은 영역의 다른 책임자나 다른 팀원이 리뷰한다.
 2. 작성자는 자기 PR을 승인하거나 merge하지 않는다.
 3. 작성자가 아닌 사람의 승인과 CI `verify` 3 OS 통과가 있으면, §5에 해당하지 않는 일반 PR은 영역 책임자(작성자 아님) 또는 maintainer가 squash merge한다.
-4. §5의 변경(Decision 권한·형식·verdict 의미, release, 보안, 유료 실행, 외부 모집)과 `.github/workflows/`, 패키지 manifest·lockfile, `scripts/release/`, `docs/conflicts.md`의 변경은 maintainer가 최종 판단하고 merge한다. Maintainer가 직접 쓴 이런 PR은 작성자가 아닌 사람의 정식 Approve와, HEAD SHA를 적은 maintainer의 최종 승인 댓글이 모두 있어야 한다. 그 뒤 작성자가 아닌 write 권한 팀원이 merge한다. 최종 승인 뒤 새 push가 있으면 둘 다 다시 받는다. 최종 승인 댓글은 maintainer 본인이 직접 쓴다. maintainer 계정으로 일하는 agent나 자동화는 이 댓글을 쓰지 않는다.
+4. §5의 변경(Decision 권한·형식·verdict 의미, release, 보안, 유료 실행, 외부 모집)과 `.github/workflows/`, 패키지 manifest·lockfile, `scripts/release/`, `docs/conflicts.md`의 변경은 maintainer가 최종 판단한다. 다른 팀원이 쓴 이런 PR은 작성자가 아닌 사람의 정식 Approve 뒤 maintainer가 최종 판단하고 직접 merge한다. Maintainer가 직접 쓴 이런 PR은 작성자가 아닌 사람의 정식 Approve와, HEAD SHA를 적은 maintainer의 최종 승인 댓글이 모두 있어야 한다. 이 PR의 merge 담당(Assignee)은 최종 승인 댓글이 올라온 뒤에 지정하고, 그 전에는 Assignee를 두지 않는다. 그 뒤 작성자가 아닌 write 권한 팀원이 merge한다. merge 담당은 merge 직전에 최종 승인 댓글의 HEAD SHA가 PR의 현재 HEAD와 같은지 확인하고, 다르거나 댓글이 없으면 merge하지 않는다. 다른 리뷰어의 Approve나 이전 HEAD의 최종 승인은 이를 대신하지 않는다. 최종 승인 뒤 새 push가 있으면 둘 다 다시 받는다. 최종 승인 댓글은 maintainer 본인이 직접 쓴다. maintainer 계정으로 일하는 agent나 자동화는 maintainer가 그 PR의 최종 판단을 명시적으로 위임한 경우에만 이 댓글을 게시하고 위임된 merge를 하며, 그 댓글에 위임으로 게시했다는 사실을 적는다.
 5. 리뷰 요청 뒤 48시간 안에 응답이 없으면 작성자가 아래 "리뷰 지연 처리"대로 다른 적격 리뷰어 1명에게 다시 요청한다. 같은 사람에게 반복해서 멘션하지 않는다.
 6. Maintainer가 자리를 비우면 3의 일반 PR은 영역 책임자가 계속 merge한다. 4의 변경, release, npm publish, tag, ruleset, 관리자 권한은 maintainer가 돌아올 때까지 기다린다.
-7. 리뷰 요청과 merge 담당을 구분한다. 리뷰 요청(Reviewers)은 검토할 사람에게만 보내고, 일반 PR은 독립 리뷰어 1명이면 충분하다. merge 담당은 PR의 Assignees에 1명을 지정한다. 작성자는 제외하고, 규칙 3·4의 자격이 있는 사람이어야 한다. 작성자가 지정하고, 작성자가 지정할 권한이 없으면 승인한 리뷰어가 지정한다. 승인이 끝나면 남은 리뷰 요청은 작성자나 merge 담당이 Remove한다.
+7. 리뷰 요청과 merge 담당을 구분한다. 리뷰 요청(Reviewers)은 검토할 사람에게만 보내고, 일반 PR은 독립 리뷰어 1명이면 충분하다. merge 담당은 PR의 Assignees에 1명을 지정한다. 작성자는 제외하고, 규칙 3·4의 자격이 있는 사람이어야 한다. 규칙 4의 PR은 규칙 4대로 정한다(maintainer가 쓴 PR은 최종 승인 뒤 지정, 다른 팀원이 쓴 PR은 maintainer). 그 밖의 PR은 작성자가 지정하고, 작성자가 지정할 권한이 없으면 승인한 리뷰어가 지정한다. 승인이 끝나면 남은 리뷰 요청은 작성자나 merge 담당이 Remove한다.
 
 ### GitHub가 강제하는 것과 운영 규칙
 
@@ -81,7 +81,7 @@ DUO는 coding agent가 일하는 저장소에 사람이 확정한 설계 결정(
 | CI | `verify` Windows·Ubuntu·macOS 통과 | 실패는 로그 근거 없이 flaky로 보지 않는다 |
 | 리뷰 스레드 | 모두 resolve | 스레드는 연 사람이 resolve한다 |
 | Merge | squash만, write 권한자는 조건을 채우면 누구나(작성자도 막지 않는다) | 작성자는 merge하지 않는다. merge 담당은 Assignee(규칙 7) |
-| Maintainer 전용 경로 | 강제하지 않는다(code owner 승인 요구 없음) | 규칙 4: 정식 Approve와 maintainer 본인의 최종 승인 댓글 |
+| Maintainer 전용 경로 | 강제하지 않는다(code owner 승인 요구 없음) | 규칙 4: 정식 Approve와 현재 HEAD를 적은 maintainer의 최종 승인 댓글. merge 담당은 최종 승인 뒤 지정하고 merge 직전에 HEAD 일치를 확인한다 |
 | Draft | 리뷰 요청 없음. Ready로 바꿀 때 CODEOWNERS가 요청 | Ready 전에 CI를 확인 |
 | 관리자 bypass | admin은 가능 | 쓰지 않는다 |
 
