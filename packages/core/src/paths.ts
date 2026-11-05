@@ -119,6 +119,23 @@ export function matchesRepoPattern(path: RepoPath, pattern: string): boolean {
   return compileRepoPattern(pattern)?.(path) ?? false;
 }
 
+/** H-104 (#165): the pattern syntax DUO supports, in the words diagnostics and tool descriptions use. */
+export const REPO_PATTERN_SYNTAX = 'Supported: "*" and "?" within a path segment, "**" as a whole segment, and a trailing "/". "[" and "]" are literal characters, and matching is case-sensitive.';
+
+/**
+ * H-104 (#165): why a repository pattern uses syntax DUO does not support, or undefined. compileRepoPattern matches
+ * these constructs literally, so they match no real file: a brace list ("*.{png,webp}"), a leading "!" (negation)
+ * and "**" that is not a whole segment ("src/a**", "**.png"). "[" and "]" are not checked: they are literal
+ * characters (app/[id]/page.tsx), not a character class. The matcher itself does not change.
+ */
+export function unsupportedPatternSyntax(pattern: string): string | undefined {
+  const posix = toPosix(pattern);
+  if (posix.startsWith("!")) return 'a leading "!" (negation) is not supported';
+  if (/[{}]/u.test(posix)) return "braces ({a,b}) are not supported; list each pattern separately";
+  if (posix.split("/").some((s) => s.includes("**") && s !== "**")) return '"**" must be a whole path segment, as in src/**/x.ts';
+  return undefined;
+}
+
 /**
  * Key under which two paths refer to the same file on a case-insensitive, Unicode-normalizing
  * file system (default Windows and macOS volumes). Used only for collision detection, never stored.

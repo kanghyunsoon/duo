@@ -4,7 +4,7 @@
  */
 import { createDiagnostic, withSource, type Diagnostic, type SourceLocation } from "../diagnostics.js";
 import type { DefinitionType } from "../ids.js";
-import { normalizeRepoPath, normalizeRepoPattern } from "../paths.js";
+import { normalizeRepoPath, normalizeRepoPattern, REPO_PATTERN_SYNTAX, unsupportedPatternSyntax } from "../paths.js";
 import type {
   ConstraintData, DecisionData, EvidencePointerData, IssueBlockData,
   ProjectConfigData, ProposalData, RequirementBlockData, SourceRefData, VisionFrontmatterData,
@@ -50,6 +50,22 @@ export class MapContext {
       for (const d of r.diagnostics) this.diagnostics.push(withSource(d, this.at([...path, i])));
     });
     return out;
+  }
+
+  /**
+   * H-104 (#165): a Decision pattern field. Loads exactly like patterns() (the value, and so the lock digest, is
+   * unchanged) and adds a warning for each pattern whose syntax DUO does not support, since it matches no file.
+   */
+  decisionPatterns(path: DataPath, values: readonly string[] | undefined): string[] {
+    const field = path.join(".");
+    (values ?? []).forEach((v, i) => {
+      const reason = unsupportedPatternSyntax(v);
+      if (reason !== undefined) {
+        this.diagnostics.push(createDiagnostic("PATTERN_SYNTAX_UNSUPPORTED",
+          `${field} pattern "${v}" uses unsupported syntax and matches no file, so it is not checked: ${reason}. ${REPO_PATTERN_SYNTAX}`, this.at([...path, i])));
+      }
+    });
+    return this.patterns(path, values);
   }
 
   sources(path: DataPath, values: readonly SourceRefData[] | undefined): SourceRef[] {
@@ -181,15 +197,15 @@ function mapDecisionContent(d: DecisionData | ProposalData, ctx: MapContext, gov
     answer: d.answer,
     rationale: d.rationale,
     owner: d.owner,
-    governs: { requirements: governs, paths: ctx.patterns(["governs", "paths"], d.governs?.paths), symbols: d.governs?.symbols ?? [] },
+    governs: { requirements: governs, paths: ctx.decisionPatterns(["governs", "paths"], d.governs?.paths), symbols: d.governs?.symbols ?? [] },
     forbids: {
       dependencies: d.forbids?.dependencies ?? [],
       symbols: d.forbids?.symbols ?? [],
-      paths: ctx.patterns(["forbids", "paths"], d.forbids?.paths),
+      paths: ctx.decisionPatterns(["forbids", "paths"], d.forbids?.paths),
       // H-72: only when present and non-empty; absent stays absent (lock digest compatibility).
-      ...((d.forbids?.imported_paths?.length ?? 0) > 0 ? { importedPaths: ctx.patterns(["forbids", "imported_paths"], d.forbids?.imported_paths) } : {}),
+      ...((d.forbids?.imported_paths?.length ?? 0) > 0 ? { importedPaths: ctx.decisionPatterns(["forbids", "imported_paths"], d.forbids?.imported_paths) } : {}),
       // #47: the same rule; the schema already rejects an empty list and importer_paths without imported_paths.
-      ...((d.forbids?.importer_paths?.length ?? 0) > 0 ? { importerPaths: ctx.patterns(["forbids", "importer_paths"], d.forbids?.importer_paths) } : {}),
+      ...((d.forbids?.importer_paths?.length ?? 0) > 0 ? { importerPaths: ctx.decisionPatterns(["forbids", "importer_paths"], d.forbids?.importer_paths) } : {}),
     },
     supersedes: d.supersedes ?? null,
     evidence: ctx.evidence(["evidence"], d.evidence),

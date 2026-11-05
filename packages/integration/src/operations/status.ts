@@ -1,6 +1,6 @@
 /** duo status (CLI status, MCP duo_get_status): write 0. */
 import { getAdoptionBaselineStatus, unscopedConstraintIds } from "@duo-director/director";
-import { listDecisionProposals, truthAuthorityErrors } from "@duo-director/core";
+import { listDecisionProposals, truthAuthorityErrors, unsupportedDecisionPatterns } from "@duo-director/core";
 import { inspectIndex } from "@duo-director/graph";
 import { errorsOf, guarded, llmPoolOf, project, withGraphReader, withRegistry, type Operation, type OperationOptions, type Failure } from "./common.js";
 
@@ -30,6 +30,8 @@ export function projectStatus(root: string, options: OperationOptions = {}): Pro
           // T40 (additive): loader errors that make review, context and Decision confirm refuse this Truth. Empty when Truth loaded completely.
           // #14 (additive): confirmed Constraints without a match scope; context and review never use them.
           unscopedConstraints: unscopedConstraintIds(truth),
+          // H-104 (#165, additive): confirmed Decision patterns with unsupported syntax; they match no file, so review does not check them.
+          unsupportedPatterns: unsupportedDecisionPatterns(truth),
           errors: truthErrors.map((d) => ({ code: d.code, message: d.message, ...(d.source === undefined ? {} : { path: d.source.path, ...(d.source.startLine === undefined ? {} : { line: d.source.startLine }) }) })),
         },
         index: i === undefined ? null : {

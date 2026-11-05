@@ -24,6 +24,8 @@ function params(c: DoctorCheck): Params {
   if (Array.isArray(f.codes)) out.codes = (f.codes as string[]).join(", ");
   if (Array.isArray(f.failed)) out.failed = (f.failed as string[]).join(", ");
   if (Array.isArray(f.problems)) out.problems = (f.problems as { code: string; path?: string }[]).map((p) => (p.path === undefined ? p.code : p.code + " (" + p.path + ")")).join(", ");
+  // H-104 (#165): confirmed Decision patterns that match no file.
+  if (Array.isArray(f.unsupportedPatterns)) out.patterns = (f.unsupportedPatterns as { decision: string; field: string; pattern: string }[]).map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ");
   if (Array.isArray(f.conflicts)) out.paths = (f.conflicts as { path: string }[]).map((p) => p.path).join(", ");
   if (AGENT_NAMES[c.id] !== undefined) out.agent = AGENT_NAMES[c.id] as string;
   return out;

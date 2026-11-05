@@ -28,6 +28,7 @@ import {
   type DecisionActor, type DecisionFileSystem, type DecisionWriteTarget,
 } from "./files.js";
 import { nextDecisionId, nextProposalId } from "./ids.js";
+import { candidatePatternErrors } from "./pattern-syntax.js";
 import { listDecisionProposals } from "./read-model.js";
 
 /** The only confirmed-state value written by DUO; used by confirm alone (AC-009-05). */
@@ -359,6 +360,8 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
         const parsed = parseProposalFile(probePath, render(probeId));
         const schemaErrors = parsed.diagnostics.filter((d) => d.severity === "error");
         const problems = parsed.value === undefined ? schemaErrors : [...schemaErrors, ...traceErrors(truth, probeId, probePath, { proposal: parsed.value })];
+        // H-104 (#165): a pattern DUO cannot match is refused here, never written and left to match nothing.
+        problems.push(...candidatePatternErrors(input));
         if (input.supersedes) {
           const target = truth.decisions.find((d) => d.id === input.supersedes);
           if (target !== undefined && target.state !== CONFIRMED) {
@@ -535,6 +538,8 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
     const probe = parseDecisionFile(decisionPath(probeId), render(probeId));
     const problems = probe.diagnostics.filter((d) => d.severity === "error");
     if (probe.value !== undefined) problems.push(...traceErrors(truth, probeId, decisionPath(probeId), { decision: probe.value }));
+    // H-104 (#165): a proposal written before this check cannot become a confirmed rule that matches nothing.
+    problems.push(...candidatePatternErrors(data, proposal.location));
     if (problems.length > 0) return failure(problems);
     const created = await createWithNewId(actor, "D", truth, render);
     if (created.value === undefined) return failure([...created.diagnostics]);
@@ -567,6 +572,8 @@ export function createDecisionService(options: DecisionServiceOptions): Decision
       : { state: CONFIRMED, owner: "human", confirmed_at: now(), confirmed_by: actor.name, lock: { digest } };
     const target = d.supersedes === null ? undefined : truth.decisions.find((t) => t.id === d.supersedes);
     const problems = traceErrors(truth, id, d.location.path, { decision: d });
+    // H-104 (#165): confirming in place writes a new rule; adding a lock to an already confirmed Decision does not.
+    if (d.state !== CONFIRMED) problems.push(...candidatePatternErrors(c.data, d.location));
     if (d.supersedes !== null && target === undefined && problems.length === 0) {
       problems.push(createDiagnostic("BROKEN_REFERENCE", `${id} supersedes ${d.supersedes}, which does not exist`, d.location));
     }
