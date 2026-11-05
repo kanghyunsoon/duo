@@ -111,8 +111,10 @@ function unscopedConstraintLimitation(truth: Pick<ProjectTruth, "constraints">):
 }
 
 /**
- * H-104 (#165, additive): a confirmed Decision pattern with unsupported syntax; legacy matching retained, so no claim can come
- * from it. Say so, with the Decision, field and pattern, instead of a silent PASS. Not a verdict input.
+ * H-104 (#165, additive): name each confirmed Decision pattern with unsupported syntax (Decision, field, pattern). Its legacy
+ * matching still applies, so it can still produce a claim or a BLOCK: "**" inside a segment acts like "*" within that segment,
+ * while braces and a leading "!" match only names that contain those characters. The limitation is not a verdict input and
+ * removes no claim.
  */
 function unsupportedPatternLimitation(truth: Pick<ProjectTruth, "decisions">): ReviewLimitation[] {
   const list = unsupportedDecisionPatterns(truth);

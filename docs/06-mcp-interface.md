@@ -56,7 +56,7 @@ Tool은 9개로 고정한다(H-10). 새 Tool이 필요하면 별도 Spec과 ADR�
 ### duo_get_status
 
 - 입력: `{}`
-- 출력: CLI `duoctl status --json`의 `result`와 같다. `initialized`, `project`, `truth` 개수, `index`(status, fullRebuildReason, changes, wouldRebuild), `baseline`(status, id, headOid, dirtyAtAdoption, findings), `pendingDecisions`, `llm`(disabled, configured, unavailable), `llmProvider`(T12B: provider, status, model?, reason?; key는 없음). `truth.unscopedConstraints`(#14, additive)는 match 범위가 없어 Context와 review가 쓰지 않는 confirmed Constraint ID이고, 비어 있지 않으면 text 요약 끝에 `constraints not checked: CON-001, …`가 붙는다. `truth.unsupportedPatterns`(H-104, additive)는 지원하지 않는 문법이라 어떤 파일과도 맞지 않는 confirmed Decision pattern이고, 비어 있지 않으면 text 요약에 `Decision patterns with unsupported syntax: …`가 붙는다. 쓰기 0, 네트워크 0.
+- 출력: CLI `duoctl status --json`의 `result`와 같다. `initialized`, `project`, `truth` 개수, `index`(status, fullRebuildReason, changes, wouldRebuild), `baseline`(status, id, headOid, dirtyAtAdoption, findings), `pendingDecisions`, `llm`(disabled, configured, unavailable), `llmProvider`(T12B: provider, status, model?, reason?; key는 없음). `truth.unscopedConstraints`(#14, additive)는 match 범위가 없어 Context와 review가 쓰지 않는 confirmed Constraint ID이고, 비어 있지 않으면 text 요약 끝에 `constraints not checked: CON-001, …`가 붙는다. `truth.unsupportedPatterns`(H-104, additive)는 지원하지 않는 문법을 쓴 confirmed Decision pattern이다. review는 그 pattern의 기존 매칭을 그대로 적용하므로 claim이나 BLOCK이 나올 수 있다. 이 목록은 verdict 근거가 아니며, 비어 있지 않으면 text 요약에 `Decision patterns with unsupported syntax: …`가 붙는다. 쓰기 0, 네트워크 0.
 
 ### duo_get_context
 
