@@ -60,7 +60,7 @@ Both agents were installed into an isolated npm prefix, with `CODEX_HOME` and `C
 | DUO bridge block | Included (`AGENTS.md`) | Not shown in `system/init` |
 | `duo-director` server | Not part of this render | `connected`, all 9 `mcp__duo-director__duo_*` tools listed (32 tools in total) |
 
-So the project paths are `.agents/skills/<name>/SKILL.md` for Codex and `.claude/skills/<name>/SKILL.md` for Claude Code, and both agents list the skill without a login or a trust step. **NOT TESTED**: whether either agent loads the skill body and follows it during a task, and whether it changes which path the first DUO call takes. That needs model sessions, which are not approved (T176). Without a login Claude Code loaded no connectors, so the deferred-tool case from #31 (finding 3) did not occur here either.
+So the project paths are `.agents/skills/<name>/SKILL.md` for Codex and `.claude/skills/<name>/SKILL.md` for Claude Code, and both agents list the skill without a login or a trust step. Codex was later observed loading the skill body in one ordinary session, which the maintainer accepted as evidence for #146 ([evidence](https://github.com/kanghyunsoon/duo/pull/146#issuecomment-6624786106), [acceptance](https://github.com/kanghyunsoon/duo/pull/146#issuecomment-6647239742)). **NOT TESTED**: whether Claude Code loads the skill body during a task, and whether the skill changes which path the first DUO call takes on either agent. That needs measured model sessions, which are not approved (T176). Without a login Claude Code loaded no connectors, so the deferred-tool case from #31 (finding 3) did not occur here either.
 
 ## Procedure
 
