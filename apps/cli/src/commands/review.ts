@@ -63,7 +63,7 @@ function renderReview(env: Env, r: ReviewResult, unscoped: readonly string[] = [
     out.push(t(L, "review.limitations"), ...r.limitations.map((l) => `  ${l.code}`));
     // #14: the one limitation a PASS reader must not miss: recorded constraints were not checked.
     if (unscoped.length > 0 && r.limitations.some((l) => l.code === "constraints-unscoped")) out.push(`    ${t(L, "review.constraints-unchecked", { ids: unscoped.join(", ") })}`);
-    // H-104 (#165): the same for a confirmed Decision pattern that matches no file.
+    // H-104 (#165): the same for a confirmed Decision pattern that has unsupported syntax.
     if (unsupported.length > 0 && r.limitations.some((l) => l.code === "decision-patterns-unsupported")) {
       out.push(`    ${t(L, "review.patterns-unchecked", { items: unsupported.map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ") })}`);
     }

@@ -162,7 +162,7 @@ export async function projectDoctor(rootArg: string, options: DoctorOptions): Pr
       const t = project.truth;
       // #14 (additive fact): confirmed Constraints that context and review never use.
       const facts = { name: t.config.name, requirements: t.requirements.length, decisions: t.decisions.length, constraints: t.constraints.length, unscopedConstraints: unscopedConstraintIds(t) };
-      // H-104 (#165): a confirmed Decision pattern with unsupported syntax matches no file. Truth still loads (a warning,
+      // H-104 (#165): a confirmed Decision pattern with unsupported syntax; legacy matching retained. Truth still loads (a warning,
       // not an error, so the checks after this one run); the action is a superseding Decision, never an edit.
       const unsupported = unsupportedDecisionPatterns(t);
       if (unsupported.length === 0) set("truth.project", "ok", "valid", facts);

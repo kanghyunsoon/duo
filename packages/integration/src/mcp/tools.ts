@@ -188,9 +188,9 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
       const unscoped = ((p.truth as { unscopedConstraints?: string[] } | undefined)?.unscopedConstraints ?? []);
       // #14: an agent should not mistake a recorded constraint for a checked rule.
       const constraints = unscoped.length === 0 ? "" : ` · constraints not checked: ${unscoped.join(", ")} (no match scope, so context and review do not use them; DUO checks rules deterministically only through confirmed Decisions with forbids)`;
-      // H-104 (#165): a confirmed Decision pattern that matches no file is not a checked rule either.
+      // H-104 (#165): a confirmed Decision pattern that has unsupported syntax is not a checked rule either.
       const unsupported = ((p.truth as { unsupportedPatterns?: { decision: string; field: string; pattern: string }[] } | undefined)?.unsupportedPatterns ?? []);
-      const patterns = unsupported.length === 0 ? "" : ` · Decision patterns not checked: ${unsupported.map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ")} (unsupported syntax matches no file; supersede the Decision with supported patterns)`;
+      const patterns = unsupported.length === 0 ? "" : ` · Decision patterns with unsupported syntax: ${unsupported.map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ")} (unsupported syntax; legacy matching retained; supersede the Decision with supported patterns)`;
       return `DUO status: index ${i?.status ?? "unknown"} · baseline ${b?.status ?? "unknown"} · pending decisions ${(p.pendingDecisions as unknown[] | undefined)?.length ?? 0} · llm ${String(p.llm)}${constraints}${patterns}`;
     },
   },

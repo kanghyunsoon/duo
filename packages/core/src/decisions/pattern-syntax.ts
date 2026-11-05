@@ -4,7 +4,7 @@
  *
  * New input is refused: a proposal with an unsupported pattern is not written (PROPOSAL_INVALID), and a confirm
  * that would write one is refused. A confirmed Decision that already has one keeps loading unchanged (file and lock
- * digest are not touched); status, doctor and review name it, because the pattern matches no file and is not checked.
+ * digest are not touched); status, doctor and review name it and retain its legacy matching behavior.
  * The matcher (compileRepoPattern) is unchanged.
  */
 import { createDiagnostic, withSeverity, type Diagnostic, type SourceLocation } from "../diagnostics.js";

@@ -111,13 +111,13 @@ function unscopedConstraintLimitation(truth: Pick<ProjectTruth, "constraints">):
 }
 
 /**
- * H-104 (#165, additive): a confirmed Decision pattern with unsupported syntax matches no file, so no claim can come
+ * H-104 (#165, additive): a confirmed Decision pattern with unsupported syntax; legacy matching retained, so no claim can come
  * from it. Say so, with the Decision, field and pattern, instead of a silent PASS. Not a verdict input.
  */
 function unsupportedPatternLimitation(truth: Pick<ProjectTruth, "decisions">): ReviewLimitation[] {
   const list = unsupportedDecisionPatterns(truth);
   if (list.length === 0) return [];
-  return [{ code: "decision-patterns-unsupported", message: `${list.length} confirmed Decision pattern(s) use unsupported syntax and match no file, so this review did not check them: ${list.map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ")}. Supersede the Decision with supported patterns.` }];
+  return [{ code: "decision-patterns-unsupported", message: `${list.length} confirmed Decision pattern(s) use unsupported syntax; legacy matching behavior is retained: ${list.map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ")}. Supersede the Decision with supported patterns.` }];
 }
 
 const zeroMetrics = {

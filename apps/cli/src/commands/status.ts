@@ -36,7 +36,7 @@ export async function statusCommand(env: Env): Promise<Outcome> {
     t(L, "status.truth", { requirements: s.truth.requirements, decisions: s.truth.decisions, constraints: s.truth.constraints, gaps: s.truth.declaredGaps }),
     // #14: a recorded constraint is not a checked rule; name the ones context and review never use.
     ...((s.truth.unscopedConstraints ?? []).length === 0 ? [] : [t(L, "status.constraints-unchecked", { ids: (s.truth.unscopedConstraints ?? []).join(", ") })]),
-    // H-104 (#165): a confirmed Decision pattern with unsupported syntax matches no file; name it.
+    // H-104 (#165): a confirmed Decision pattern with unsupported syntax; legacy matching retained; name it.
     ...((s.truth.unsupportedPatterns ?? []).length === 0 ? [] : [t(L, "status.patterns-unchecked", { items: (s.truth.unsupportedPatterns ?? []).map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ") })]),
     // T40 (N1): what the loader left out, so a lower Decision count is never silent.
     ...((s.truth.errors ?? []).length === 0 ? [] : [t(L, "status.truth-errors", { n: s.truth.errors?.length ?? 0 }),

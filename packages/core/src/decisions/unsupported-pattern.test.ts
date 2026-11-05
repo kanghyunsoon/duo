@@ -1,6 +1,6 @@
 /**
  * H-104 (#165). Repository patterns support only "*" and "?" within a segment, "**" as a whole segment and a trailing
- * "/" (docs/03-data-model.md). Before this decision anything else was matched literally and accepted silently: a
+ * "/" (docs/03-data-model.md). Before this decision unsupported constructs were accepted silently: a
  * forbids.paths rule with a brace list such as "*.{png,webp}" was proposed, confirmed and loaded without a word, and
  * it never fired (0.3.5 and next 4ab480f).
  *
@@ -32,7 +32,7 @@ const decisionYaml = (pattern: string, state: "confirmed" | "proposed", field = 
   ...(state === "confirmed" ? ['confirmed_at: "2026-11-04T00:00:00Z"', "confirmed_by: tester"] : []), "",
 ].join("\n");
 
-/** Unsupported glob syntax that is matched literally, so it matches no real file. */
+/** Unsupported syntax: braces and negation are literal; embedded ** acts like * within one segment. */
 const UNSUPPORTED = ["src/pikachu/**/*.{png,PNG,webp}", "src/{a,b}/legacy.ts", "!src/pikachu/keep.png", "src/pikachu/**.png", "src/a**/x.ts"];
 /** Supported syntax, including literal brackets (Q3), keeps working. */
 const SUPPORTED = ["src/pikachu/**/*.png", "src/pikachu/sprite?.png", "public/pikachu/", "src/**", "docs/*.md", "app/[id]/page.tsx", "src/pikachu/[ab].png"];
@@ -84,7 +84,7 @@ describe("H-104 Q1: new input with unsupported syntax is refused", () => {
     expect(r.value?.proposalId).toBe("P-001");
   });
 
-  it("a pending proposal written before this check is not confirmed into a rule that matches nothing", async () => {
+  it("a pending proposal written before this check is not confirmed into a rule that uses unsupported syntax", async () => {
     const proposed = await svc().propose(agent, { title: "No assets", question: "assets", answer: "none", forbids: { paths: ["src/pikachu/**/*.png"] }, enforcement: "block" });
     const file = path.join(root, proposed.value?.path ?? "");
     fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("- src/pikachu/**/*.png", '- "src/pikachu/**/*.{png,webp}"'));

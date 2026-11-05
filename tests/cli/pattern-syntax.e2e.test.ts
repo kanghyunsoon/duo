@@ -58,7 +58,7 @@ describe("H-104: unsupported glob syntax in Decision patterns", () => {
     const status = duoctl(p.root, ["status", "--json"]);
     expect(status.code).toBe(0);
     expect(status.json().result.truth).toMatchObject({ decisions: 2, errors: [], unsupportedPatterns: expected });
-    expect(duoctl(p.root, ["status"]).stdout).toContain(`Decision patterns not checked: D-001 forbids.paths "${BRACE}"`);
+    expect(duoctl(p.root, ["status"]).stdout).toContain(`Decision patterns with unsupported syntax: D-001 forbids.paths "${BRACE}"`);
 
     const doctor = duoctl(p.root, ["doctor", "--json"]);
     const checks = doctor.json().result.checks as Json[];
@@ -70,13 +70,13 @@ describe("H-104: unsupported glob syntax in Decision patterns", () => {
     expect(checks.find((c) => c.id === "index.freshness")?.status).not.toBe("skipped");
     const human = duoctl(p.root, ["doctor"]);
     expect(human.code).toBe(doctor.code);
-    expect(human.stdout).toContain(`Decision patterns not checked (unsupported syntax, they match no file): D-001 forbids.paths "${BRACE}"`);
+    expect(human.stdout).toContain(`Decision patterns with unsupported syntax (unsupported syntax; legacy matching retained): D-001 forbids.paths "${BRACE}"`);
     expect(human.stdout).toContain("supersedes D-001 with supported patterns");
 
     const s = await startMcp(p.root);
     sessions.push(s);
     const mcp = await s.call("duo_get_status");
-    expect(JSON.stringify(mcp.content)).toContain(`Decision patterns not checked: D-001 forbids.paths \\"${BRACE}\\"`);
+    expect(JSON.stringify(mcp.content)).toContain(`Decision patterns with unsupported syntax: D-001 forbids.paths \\"${BRACE}\\"`);
   });
 
   it("review: the supported rule still blocks, the brace rule is a limitation, and its file is unchanged", () => {
@@ -94,6 +94,17 @@ describe("H-104: unsupported glob syntax in Decision patterns", () => {
     expect(human.stdout).toContain("decision-patterns-unsupported");
     expect(human.stdout).toContain(`D-001 forbids.paths "${BRACE}": confirmed Decision patterns with unsupported syntax`);
     expect(p.read(D001)).toBe(d001);
+  });
+
+  it("a legacy ** inside a segment keeps blocking direct children, without claiming the rule was not checked", () => {
+    p.write(".duo-project/decisions/D-003.yaml", decision("D-003", "src/**.ts"));
+    p.edit("src/scheduler.ts", "% 7", "% 5");
+    const r = duoctl(p.root, ["review", "--refresh", "--json"]).json().result as Json;
+    expect(r.verdict).toBe("BLOCK");
+    expect(r.claims.some((c: Json) => c.rule === "decision-forbids" && c.subject.id === "D-003")).toBe(true);
+    const limitation = r.limitations.find((l: Json) => l.code === "decision-patterns-unsupported");
+    expect(limitation.message).toContain('D-003 forbids.paths "src/**.ts"');
+    expect(limitation.message).not.toMatch(/not checked|did not check|match no file/u);
   });
 });
 

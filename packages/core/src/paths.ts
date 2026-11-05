@@ -123,16 +123,16 @@ export function matchesRepoPattern(path: RepoPath, pattern: string): boolean {
 export const REPO_PATTERN_SYNTAX = 'Supported: "*" and "?" within a path segment, "**" as a whole segment, and a trailing "/". "[" and "]" are literal characters, and matching is case-sensitive.';
 
 /**
- * H-104 (#165): why a repository pattern uses syntax DUO does not support, or undefined. compileRepoPattern matches
- * these constructs literally, so they match no real file: a brace list ("*.{png,webp}"), a leading "!" (negation)
- * and "**" that is not a whole segment ("src/a**", "**.png"). "[" and "]" are not checked: they are literal
+ * H-104 (#165): why a repository pattern uses syntax DUO does not support, or undefined. compileRepoPattern treats
+ * braces and "!" literally, and "**" within a segment as repeated "*" wildcards, rather than recursive directories.
+ * Neither is the corresponding glob syntax. "[" and "]" are allowed: they are literal
  * characters (app/[id]/page.tsx), not a character class. The matcher itself does not change.
  */
 export function unsupportedPatternSyntax(pattern: string): string | undefined {
   const posix = toPosix(pattern);
   if (posix.startsWith("!")) return 'a leading "!" (negation) is not supported';
   if (/[{}]/u.test(posix)) return "braces ({a,b}) are not supported; list each pattern separately";
-  if (posix.split("/").some((s) => s.includes("**") && s !== "**")) return '"**" must be a whole path segment, as in src/**/x.ts';
+  if (posix.split("/").some((s) => s.includes("**") && s !== "**")) return '"**" must be a whole path segment, as in src/**/x.ts; inside a segment the legacy matcher treats it like "*", not recursive directories';
   return undefined;
 }
 

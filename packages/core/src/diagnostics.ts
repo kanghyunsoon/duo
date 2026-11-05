@@ -37,7 +37,7 @@ export const DIAGNOSTIC_SEVERITY = {
   PATH_OUTSIDE_REPOSITORY: "error",
   /**
    * H-104 (#165): a Decision path pattern with syntax DUO does not support (braces, a leading "!", "**" inside a
-   * segment). It matches no file. A warning when Project Truth is loaded (the Decision still loads, unchanged); an
+   * segment). It has unsupported syntax. A warning when Project Truth is loaded (the Decision still loads, unchanged); an
    * error when a proposal or a confirm would write it.
    */
   PATTERN_SYNTAX_UNSUPPORTED: "warning",

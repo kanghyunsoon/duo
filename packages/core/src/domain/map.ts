@@ -54,7 +54,7 @@ export class MapContext {
 
   /**
    * H-104 (#165): a Decision pattern field. Loads exactly like patterns() (the value, and so the lock digest, is
-   * unchanged) and adds a warning for each pattern whose syntax DUO does not support, since it matches no file.
+   * unchanged) and adds a warning for each pattern whose syntax DUO does not support, since it has unsupported syntax.
    */
   decisionPatterns(path: DataPath, values: readonly string[] | undefined): string[] {
     const field = path.join(".");
@@ -62,7 +62,7 @@ export class MapContext {
       const reason = unsupportedPatternSyntax(v);
       if (reason !== undefined) {
         this.diagnostics.push(createDiagnostic("PATTERN_SYNTAX_UNSUPPORTED",
-          `${field} pattern "${v}" uses unsupported syntax and matches no file, so it is not checked: ${reason}. ${REPO_PATTERN_SYNTAX}`, this.at([...path, i])));
+          `${field} pattern "${v}" uses unsupported syntax and has unsupported syntax; its legacy matching behavior is retained: ${reason}. ${REPO_PATTERN_SYNTAX}`, this.at([...path, i])));
       }
     });
     return this.patterns(path, values);
