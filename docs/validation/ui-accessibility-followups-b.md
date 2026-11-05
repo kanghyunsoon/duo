@@ -39,7 +39,9 @@ The current run does not establish the browser chrome boundary or returning focu
 - `pnpm test:ui:a11y` at the tested code SHA — 2 test files and 14 tests passed; audit execution completed with 120 cases, 0 missing, duplicate, tool, or cleanup errors; `accessibilityVerificationComplete: false`.
 - `git diff --check` — passed before report update.
 
-This is a viewport-emulation result. Physical mobile device and browser UI boundary checks still require manual evidence. Final-head Ubuntu, Windows, and macOS CI is required before marking the PR Ready.`r`n`r`n## PR #80 최신 실행 및 수동 검증 기록
+This is a viewport-emulation result. Physical mobile device and browser UI boundary checks still require manual evidence. Final-head Ubuntu, Windows, and macOS CI is required before marking the PR Ready.
+
+## PR #80 최신 실행 및 수동 검증 기록
 
 | 항목 | 값 |
 | --- | --- |
@@ -106,7 +108,7 @@ This is a viewport-emulation result. Physical mobile device and browser UI bound
 
 | 사례·요소 | 발견 | 수정 및 재확인 |
 | --- | --- | --- |
-| `base-Analysis coverage-{light,dark}-mobile`, `base-Review history-{light,dark}-mobile`, `base-Review detail-{light,dark}-mobile` | 320×800에서 표가 컨테이너 폭에 눌려 글자가 한 자씩 세로로 쪼개졌다. | 표에 `min-width: max-content`를 적용했다. Analysis coverage/Review history/Review detail 표 폭은 각각 1000/1095/1197px, 컨테이너 폭은 288/288/262px다. 밝고 어두운 6개 조건 모두 가로 `scrollLeft` 이동을 확인했고 문서 너비는 320px로 유지됐다. 수정 후 캡처에서 표 글자가 정상 단어 단위로 보인다. |
+| `base-Analysis coverage-{light,dark}-mobile`, `base-Review history-{light,dark}-mobile`, `base-Review detail-{light,dark}-mobile` | 320×800에서 표가 컨테이너 폭에 눌려 글자가 한 자씩 세로로 쪼개졌다. | 초기에 추가한 전역 `min-width: max-content`가 긴 데스크톱 표를 본문보다 넓게 만드는 리뷰가 있어 제거했다. 셀에 `overflow-wrap: break-word`를 적용해 보통 단어는 유지하면서 긴 문자열은 셀 안에서 줄바꿈하게 했다. 최신 감사의 전체 크기 캡처를 확인했다. 1280px Review detail과 Review history 표는 본문 폭에 맞고 값이 여러 줄로 읽힌다. 320px의 세 표는 단어가 글자 단위로 쪼개지지 않으며, 컨테이너 안에서 표를 가로 탐색할 수 있다. |
 | Work map 선택 노드, 비선택 노드, React Flow 출처 링크 | 선택 노드의 흰 글자가 그라데이션 배경에서 최소 3.86:1, 비선택 노드의 `.44` 불투명도 때문에 본문 대비가 낮았고 출처 링크 기본 회색도 흐렸다. | 선택 배경을 어둡게 하고 글자를 흰색으로 고정했다(양 끝점 대비 6.37:1, 8.02:1). 비선택 노드의 불투명도 저하를 제거했다(일반 본문 대비 6.26:1 light, 6.74:1 dark). 출처 링크를 테마별 `--muted`로 지정했다(6.21:1 light, 4.76:1 dark). 수정 후 Work map 캡처를 다시 확인했다. |
 | 페이지 처리 시간 레이블 | 일반 `span`의 `aria-label="server time"`은 기본 generic role에서 지원되지 않는 ARIA 이름이었다. | 화면에 이미 보이는 처리 시간 텍스트를 유지하고 중복 `aria-label`을 제거했다. 이에 해당하던 37개 반복 `aria-prohibited-attr` 결과가 최신 실행에서 사라졌다. |
 
@@ -126,13 +128,13 @@ This is a viewport-emulation result. Physical mobile device and browser UI bound
 
 Analysis coverage의 병합 셀 때문에 표 연결 검사가 복잡하다고 표시한 4개 기본 사례(테마 × 뷰포트)는 별도다. 캡처와 `scope`/`colSpan` 구조상 헤더가 시각적으로는 정상 연결됐지만, 실제 스크린리더의 행·열 헤더 발화는 이 환경에서 실행하지 않아 검증 완료로 처리하지 않았다. 물리 모바일 기기도 사용하지 않았다(320px Chrome 뷰포트 에뮬레이션만 사용).
 
-최신 전체 실행 ID는 `2026-11-03T06-43-21-361Z-29832`다. Node `v24.18.0`, pnpm `11.25.0`, Playwright `1.63.0`, axe-core `4.14.0`, Chrome `156.0.8078.80`에서 `pnpm test:ui:a11y` 2개 파일/14개 테스트가 통과했다. 사례 실행 결과는 제품 finding 0, 도구 오류 0, 120개 중 자동 상태 통과 12·미검증 108이고 `accessibilityVerificationComplete: false`다. 이 108개 상태는 감사기가 각 사례에 수동 판정 기록이 없어 붙인 상태이며, 위 표의 개별 검토 결과와 남은 항목을 구분해 읽어야 한다. 캡처 경로와 원 결과는 로컬 `.duo-a11y-runs/<runId>/cases.jsonl`에 보존했다.
+수정된 표 CSS 코드 SHA는 `1f0b5557b8f6470bfc84d38701ac4c4d984d91e3`다. 이후 전체 실행 ID `2026-11-05T00-08-40-978Z-42916`에서 Node `v24.18.0`, pnpm `11.25.0`, Playwright `1.63.0`, axe-core `4.14.0`, Chrome `156.0.8078.80`으로 `pnpm test:ui:a11y` 2개 파일/14개 테스트가 통과했다. 사례 실행 결과는 제품 finding 0, 도구 오류 0, 120개 중 자동 상태 통과 12·미검증 108이고 `accessibilityVerificationComplete: false`다. 이 108개 상태는 감사기가 각 사례에 수동 판정 기록이 없어 붙인 상태이며, 위 표의 개별 검토 결과와 남은 항목을 구분해 읽어야 한다. 수정 후 전체 크기 캡처도 다시 확인했으며, 원 결과는 로컬 `.duo-a11y-runs/<runId>/cases.jsonl`에 보존했다.
 
 ### 검증 결과와 다음 게이트
 
 - `pnpm verify` — 통과: 146개 파일, 1,428 passed, 7 skipped, 5 TODO. 문서 검증 125개 파일 통과 (52 requirements, 14 decisions, 22 issues, 5 milestones, 94 acceptance criteria, 226 links).
 - `pnpm test:ui:a11y` — UI 코드 SHA `f0f196865df5209c52c8c5cba593516008a26b3d`에서 2개 파일, 14개 테스트 통과. 전체 실행 ID와 사례별 판정은 위 최신 기록 참조. 전체 접근성 검증은 미완료.
 - 최초 `pnpm verify` 중 AVD 첫 부팅과 겹친 UI E2E 두 항목은 실패했으나, 두 항목을 격리 재실행해 통과했고 AVD를 중단한 뒤 전체 `pnpm verify`도 통과했다. 제품 결함으로 판단할 근거는 없으며 자원 경합 정황으로 기록한다.
-- 문서 전용 커밋 SHA는 생성 후 PR 설명의 검증 링크와 함께 고정한다. 코드·감사 규칙·fixture는 검증 SHA와 동일하게 유지한다.
-- `pnpm docs:validate`와 `git diff --check`는 이번 문서 변경에서 통과했다. 문서 커밋 뒤 최종 HEAD의 Ubuntu·Windows·macOS CI를 확인하고 CI 링크를 PR 설명에 기록한다.
+- `pnpm docs:validate`와 `git diff --check`는 문서 변경 전 통과했다. 최종 문서 수정 후 다시 실행한다.
+- 최종 코드·문서 커밋을 PR에 푸시한 뒤 Ubuntu·Windows·macOS CI를 확인하고 PR 설명을 갱신한다.
 - PR #80 설명은 `Refs #73`을 유지하며 자동 종료 키워드를 넣지 않는다. #73은 열린 상태로 둔다. CI 및 모든 필수 수동 검증 결과가 확인되기 전에는 접근성 완료라고 표시하지 않는다.
