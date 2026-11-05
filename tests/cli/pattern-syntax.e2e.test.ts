@@ -102,7 +102,7 @@ describe("H-104: unsupported glob syntax in Decision patterns", () => {
     expect(checks.find((c) => c.id === "index.freshness")?.status).not.toBe("skipped");
     const human = duoctl(p.root, ["doctor"]);
     expect(human.code).toBe(doctor.code);
-    expect(human.stdout).toContain(`Decision patterns with unsupported syntax (unsupported syntax; legacy matching retained): D-001 forbids.paths "${BRACE}" (${BRACE_REASON}`);
+    expect(human.stdout).toContain(`Decision patterns with unsupported syntax: D-001 forbids.paths "${BRACE}" (${BRACE_REASON}`);
     expect(human.stdout).toContain("supersedes D-001 with supported patterns");
 
     const s = await startMcp(p.root);

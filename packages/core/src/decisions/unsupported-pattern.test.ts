@@ -33,7 +33,7 @@ const decisionYaml = (pattern: string, state: "confirmed" | "proposed", field = 
 ].join("\n");
 
 /** Unsupported syntax: braces and negation are literal; embedded ** acts like * within one segment. */
-/** #167 review: extglob groups, matched literally like braces. */
+/** #167 review: extglob groups. The group is literal, but a "*" or "?" before "(" is still a wildcard (#170 review). */
 const EXTGLOB = ["src/pikachu/**/*.@(png|webp)", "src/pikachu/**/*.+(png|webp)", "src/pikachu/**/*.?(png|webp)", "src/pikachu/**/*.*(png)", "src/!(legacy)/x.ts"];
 const UNSUPPORTED = ["src/pikachu/**/*.{png,PNG,webp}", "src/{a,b}/legacy.ts", "!src/pikachu/keep.png", "src/pikachu/**.png", "src/a**/x.ts", ...EXTGLOB];
 /** Supported syntax, including literal brackets (Q3), keeps working. */
@@ -52,12 +52,21 @@ describe("H-104 Q3/Q4: the matcher is unchanged", () => {
     expect(compileRepoPattern("src/pikachu/[ab].png")?.("src/pikachu/a.png" as RepoPath)).toBe(false);
   });
 
-  it("parentheses alone are literal path characters; an extglob group keeps its literal legacy matching", () => {
+  it("parentheses alone are literal path characters; an extglob group keeps its legacy matching", () => {
     expect(unsupportedPatternSyntax("app/(marketing)/page.tsx")).toBeUndefined();
     expect(compileRepoPattern("app/(marketing)/page.tsx")?.("app/(marketing)/page.tsx" as RepoPath)).toBe(true);
     expect(compileRepoPattern("src/(group)/*.ts")?.("src/(group)/a.ts" as RepoPath)).toBe(true);
     expect(compileRepoPattern("src/pikachu/**/*.@(png|webp)")?.("src/pikachu/a.webp" as RepoPath)).toBe(false);
     expect(compileRepoPattern("src/!(legacy)/x.ts")?.("src/!(legacy)/x.ts" as RepoPath)).toBe(true);
+  });
+
+  it("a \"*\" or \"?\" before an extglob group is still a wildcard, and the reason says so (#170 review)", () => {
+    expect(compileRepoPattern("src/*(legacy).ts")?.("src/old(legacy).ts" as RepoPath)).toBe(true);
+    expect(compileRepoPattern("src/?(a).ts")?.("src/x(a).ts" as RepoPath)).toBe(true);
+    expect(compileRepoPattern("src/@(a).ts")?.("src/x(a).ts" as RepoPath)).toBe(false);
+    const reason = unsupportedPatternSyntax("src/*(legacy).ts");
+    expect(reason).toContain('a "*" or "?" before "(" is still a wildcard');
+    expect(reason).not.toContain("match only as literal characters");
   });
 
   it("matching stays case-sensitive on every OS", () => {

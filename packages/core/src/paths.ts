@@ -124,14 +124,15 @@ export const REPO_PATTERN_SYNTAX = 'Supported: "*" and "?" within a path segment
 
 /**
  * H-104 (#165): why a repository pattern uses syntax DUO does not support, or undefined. compileRepoPattern treats
- * braces, extglob groups ("@(a|b)", "*(a)", "!(a)": "(" right after "?", "*", "+", "@" or "!") and "!" literally, and "**"
+ * braces, a leading "!" and extglob groups ("@(a|b)", "*(a)", "!(a)": "(" right after "?", "*", "+", "@" or "!") literally,
+ * except that a "*" or "?" before the group is still a wildcard (src/*(legacy).ts matches src/old(legacy).ts), and "**"
  * within a segment as repeated "*" wildcards, rather than recursive directories. None is the corresponding glob syntax.
  * Parentheses alone stay literal path characters (app/(marketing)/page.tsx). "[" and "]" are allowed: they are literal
  * characters (app/[id]/page.tsx), not a character class. The matcher itself does not change.
  */
 export function unsupportedPatternSyntax(pattern: string): string | undefined {
   const posix = toPosix(pattern);
-  if (/[?*+@!]\(/u.test(posix)) return 'extglob groups such as "@(a|b)", "*(a)" or "!(a)" are not supported and match only as literal characters; list each pattern separately';
+  if (/[?*+@!]\(/u.test(posix)) return 'extglob groups such as "@(a|b)", "*(a)" or "!(a)" are not supported: "(", ")", "|", "+", "@" and "!" match as literal characters, but a "*" or "?" before "(" is still a wildcard; list each pattern separately';
   if (posix.startsWith("!")) return 'a leading "!" (negation) is not supported and matches only as a literal "!"';
   if (/[{}]/u.test(posix)) return "braces ({a,b}) are not supported and match only as literal characters; list each pattern separately";
   if (posix.split("/").some((s) => s.includes("**") && s !== "**")) return '"**" must be a whole path segment, as in src/**/x.ts; inside a segment the legacy matcher treats it like "*", not recursive directories';
