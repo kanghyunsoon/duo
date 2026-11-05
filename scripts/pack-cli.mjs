@@ -354,8 +354,9 @@ for (const f of fs.readdirSync(STAGE, { recursive: true, withFileTypes: true }))
   const abs = path.join(f.parentPath, f.name);
   files[path.relative(STAGE, abs).replaceAll("\\", "/")] = sha256(abs);
 }
+const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8", windowsHide: true }).trim();
 const report = {
-  name: packed.name, version: packed.version, tarball: path.join(OUT, packed.filename), size: packed.size, unpackedSize: packed.unpackedSize,
+  name: packed.name, version: packed.version, commit, tarball: path.join(OUT, packed.filename), size: packed.size, unpackedSize: packed.unpackedSize,
   integrity: packed.integrity, entryCount: packed.entryCount, files: packed.files.map((f) => ({ path: f.path, size: f.size })).sort((a, b) => (a.path < b.path ? -1 : 1)),
   sha256: files, dependencies: sortedDeps,
   runtimeTree: runtimeTree === undefined ? null : { file: "dist/runtime-tree.json", delivery: runtimeTree.delivery, packages: runtimeTree.packages.length, files: bundledFiles.length, treeHash: runtimeTree.treeHash, lockSha256: runtimeTree.lock.sha256 },

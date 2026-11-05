@@ -3,25 +3,29 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { definitionRef, fileRef, nodeId, symbolRef, type EntityRef, type RepoPath } from "@duo-director/core";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { GraphStoreError, type GraphEdgeInput, type GraphNodeInput, type GraphStore } from "../types.js";
 import { openNodeSqliteGraphStore } from "./node-sqlite-graph-store.js";
 
-const temps: string[] = [];
+let tempDir = "";
+let seq = 0;
+let emptyTemplate = "";
+let seededTemplate = "";
 const open: GraphStore[] = [];
 afterEach(() => { while (open.length) open.pop()?.close(); });
-afterAll(() => temps.forEach((t) => fs.rmSync(t, { recursive: true, force: true })));
-const tempFile = () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "duo-graph-"));
-  temps.push(dir);
-  return path.join(dir, "graph.db");
-};
+afterAll(() => { if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true }); });
+const tempFile = () => path.join(tempDir, `graph-${++seq}.db`);
 function openStore(file: string, options: Partial<Parameters<typeof openNodeSqliteGraphStore>[0]> = {}): GraphStore {
   const r = openNodeSqliteGraphStore({ path: file, ...options });
   expect(r.diagnostics).toEqual([]);
   if (r.value === undefined) throw new Error("open failed");
   open.push(r.value);
   return r.value;
+}
+function cloneTemplate(template: string): string {
+  const f = tempFile();
+  fs.copyFileSync(template, f);
+  return f;
 }
 
 const p = (s: string) => s as RepoPath;
@@ -61,7 +65,41 @@ const code = (fn: () => unknown) => {
   return "no error";
 };
 
-describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 NodeSqliteGraphStore (%s)", (_kind, location) => {
+// #142: initialize one temp directory plus empty and seeded SQLite template files in beforeAll,
+// outside individual 5 s test budgets. Mutating file cases copy a template; read-only cases read
+// the suite's shared seeded store. Direct schema creation and WAL reopen still use fresh tempFile()s.
+beforeAll(() => {
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "duo-graph-"));
+  emptyTemplate = tempFile();
+  const empty = openNodeSqliteGraphStore({ path: emptyTemplate });
+  expect(empty.diagnostics).toEqual([]);
+  empty.value!.close();
+
+  seededTemplate = cloneTemplate(emptyTemplate);
+  const seeded = openNodeSqliteGraphStore({ path: seededTemplate });
+  expect(seeded.diagnostics).toEqual([]);
+  seed(seeded.value!);
+  seeded.value!.close();
+});
+
+describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 NodeSqliteGraphStore (%s)", (kind, location) => {
+  let sharedSeeded: GraphStore;
+  beforeAll(() => {
+    const r = openNodeSqliteGraphStore({ path: kind === "file" ? cloneTemplate(seededTemplate) : ":memory:" });
+    expect(r.diagnostics).toEqual([]);
+    sharedSeeded = r.value!;
+    if (kind === "memory") seed(sharedSeeded);
+  });
+  afterAll(() => sharedSeeded?.close());
+
+  const emptyStore = () => openStore(kind === "file" ? cloneTemplate(emptyTemplate) : ":memory:");
+  const seededStore = () => {
+    if (kind === "file") return openStore(cloneTemplate(seededTemplate));
+    const s = openStore(":memory:");
+    seed(s);
+    return s;
+  };
+
   it("creates an empty graph with graph_schema_version 2", () => {
     const store = openStore(location());
     expect(store.graphSchemaVersion).toBe(2);
@@ -69,8 +107,7 @@ describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 Nod
   });
 
   it("round-trips nodes with source, content hash and payload", () => {
-    const store = openStore(location());
-    seed(store);
+    const store = sharedSeeded;
     const node = store.getNode(req("AUTH-01"));
     expect(node).toEqual({
       id: "req:AUTH-01", type: "requirement", ref: req("AUTH-01"),
@@ -83,8 +120,7 @@ describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 Nod
   });
 
   it("lists the nodes a file owns and keeps graph metadata (schema 2, TASK-008)", () => {
-    const store = openStore(location());
-    seed(store);
+    const store = seededStore();
     const owned = store.listNodes({ ownerFile: p("src/auth/AuthService.ts"), limit: 10 }).map((n) => n.id);
     expect(owned).toEqual(["sym:src/auth/AuthService.ts#AuthService.%23secret", "sym:src/auth/AuthService.ts#AuthService.login"]);
     expect(store.listNodes({ ownerFile: p("src/auth/AuthService.ts"), afterId: owned[0]!, limit: 10 }).map((n) => n.id)).toEqual([owned[1]]);
@@ -99,8 +135,7 @@ describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 Nod
   });
 
   it("upserts nodes by id and edges idempotently", () => {
-    const store = openStore(location());
-    seed(store);
+    const store = seededStore();
     store.upsertNodes([{ ref: req("AUTH-01"), payload: { title: "Login v2" } }]);
     store.upsertEdges([EDGES[0]!, EDGES[0]!, { ...EDGES[1]!, metadata: { provenance: "static" } }]);
     expect(store.counts()).toEqual({ nodes: 5, edges: 5 });
@@ -110,8 +145,7 @@ describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 Nod
   });
 
   it("rolls back a transaction whose edge points to a missing node", () => {
-    const store = openStore(location());
-    seed(store);
+    const store = seededStore();
     expect(code(() => store.upsertEdges([{ from: req("AUTH-01"), type: "TRACKED_BY", to: definitionRef("issue", "GAME-404") }]))).toBe("CONSTRAINT");
     expect(code(() => store.transaction((tx) => {
       tx.upsertNodes([{ ref: req("AUTH-02") }]);
@@ -121,8 +155,7 @@ describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 Nod
   });
 
   it("deletes nodes together with every edge that touches them", () => {
-    const store = openStore(location());
-    seed(store);
+    const store = seededStore();
     expect(store.deleteNodes([sym("src/auth/AuthService.ts", "AuthService.login")])).toBe(1);
     expect(store.counts()).toEqual({ nodes: 4, edges: 2 });
     expect(store.deleteEdges([{ from: dec("D-004"), type: "GOVERNS", to: req("AUTH-01") }])).toBe(1);
@@ -130,8 +163,7 @@ describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 Nod
   });
 
   it("returns adjacency in deterministic (from, type, to) order with limit and truncation", () => {
-    const store = openStore(location());
-    seed(store);
+    const store = sharedSeeded;
     const login = sym("src/auth/AuthService.ts", "AuthService.login");
     const out = store.adjacentEdges([login], { direction: "outgoing", limit: 10 });
     expect(out.edges.map((e) => `${e.type} ${e.to}`)).toEqual([
@@ -147,9 +179,8 @@ describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 Nod
   });
 
   it("gives the same results regardless of insertion order", () => {
-    const a = openStore(location());
-    const b = openStore(location());
-    seed(a);
+    const a = sharedSeeded;
+    const b = emptyStore();
     seed(b, [...NODES].reverse(), [...EDGES].reverse());
     const dump = (s: GraphStore) => ({
       nodes: s.listNodes({ limit: 100 }),
@@ -159,8 +190,7 @@ describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 Nod
   });
 
   it("pages nodes by type with keyset pagination", () => {
-    const store = openStore(location());
-    seed(store);
+    const store = sharedSeeded;
     const first = store.listNodes({ type: "symbol", limit: 1 });
     const second = store.listNodes({ type: "symbol", limit: 1, afterId: first[0]?.id ?? "" });
     expect([...first, ...second].map((n) => n.id)).toEqual([
@@ -170,7 +200,7 @@ describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 Nod
   });
 
   it("rejects invalid input", () => {
-    const store = openStore(location());
+    const store = emptyStore();
     expect(code(() => store.upsertNodes([{ ref: req("AUTH-01"), payload: { n: Number.NaN } }]))).toBe("INVALID_INPUT");
     expect(code(() => store.upsertNodes([{ ref: req("AUTH-01"), payload: { f: (() => 1) as never } }]))).toBe("INVALID_INPUT");
     expect(code(() => store.upsertEdges([{ from: req("A-1"), type: "LIKES" as never, to: req("A-2") }]))).toBe("INVALID_INPUT");
@@ -181,7 +211,7 @@ describe.each([["memory", () => ":memory:"], ["file", tempFile]])("AC-003-01 Nod
   });
 
   it("refuses to work after close", () => {
-    const store = openStore(location());
+    const store = emptyStore();
     store.close();
     expect(code(() => store.counts())).toBe("CLOSED");
   });
@@ -202,8 +232,7 @@ describe("NodeSqliteGraphStore file lifecycle", () => {
   });
 
   it("AC-003-04 fails explicitly on another graph_schema_version and reports it as regenerable", () => {
-    const f = tempFile();
-    openStore(f).close();
+    const f = cloneTemplate(emptyTemplate);
     const raw = new DatabaseSync(f);
     raw.exec("UPDATE graph_meta SET value = '99' WHERE key = 'graph_schema_version'");
     raw.close();
@@ -215,10 +244,7 @@ describe("NodeSqliteGraphStore file lifecycle", () => {
   });
 
   it("AC-003-04 recreates the graph on request", () => {
-    const f = tempFile();
-    const s = openStore(f);
-    seed(s);
-    s.close();
+    const f = cloneTemplate(seededTemplate);
     const raw = new DatabaseSync(f);
     raw.exec("UPDATE graph_meta SET value = '0' WHERE key = 'graph_schema_version'");
     raw.close();
@@ -248,10 +274,9 @@ describe("NodeSqliteGraphStore file lifecycle", () => {
   });
 
   it("AC-003-03 a second writer gets busy and still reads the last committed state", () => {
-    const f = tempFile();
+    const f = cloneTemplate(seededTemplate);
     const writer = openStore(f);
     const other = openStore(f, { busyTimeoutMs: 50 });
-    seed(writer);
     writer.transaction((tx) => {
       tx.upsertNodes([{ ref: req("AUTH-02") }]);
       expect(other.tryTransaction(() => "never")).toEqual({ status: "busy" });

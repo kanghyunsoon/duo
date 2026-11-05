@@ -12,6 +12,7 @@ import type { ContextPacket } from "../context/types.js";
 import { repositoryEvidence, truthEvidence } from "../evidence/sources.js";
 import type { EvidenceStore } from "../evidence/store.js";
 import { blockEligible } from "../llm/contract/evidence.js";
+import type { Divergence } from "./snapshot-inputs.js";
 import type { Alignment, ChangedFile, DecisionAuthority, DiffSeed, ReviewClaim, ReviewRule, TestRunEvidence } from "./types.js";
 
 export interface RuleContext {
@@ -46,6 +47,8 @@ export interface RuleContext {
   readonly baselineHeadOid?: string;
   /** Analyzers for from-side text (H-99); without it a from-side statement is not read. */
   readonly registry?: AnalyzerRegistry;
+  /** --staged / --to: paths outside the diff that differ from the working tree, and how (H-103, #160). */
+  readonly snapshotDivergence?: ReadonlyMap<string, Divergence>;
 }
 
 export interface ClaimInput {

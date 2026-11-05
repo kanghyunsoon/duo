@@ -187,7 +187,7 @@ Constraint는 Decision entity(`dec:CON-001`)다([conflicts.md C14](conflicts.md)
 
 대소문자 변환, Unicode NFC/NFD 재작성, 앞뒤 공백 제거는 하지 않는다. Git과 파일 시스템의 실제 철자를 보존한다. 대신 case-insensitive이거나 Unicode를 정규화하는 파일 시스템에서 충돌할 경로(`Auth.ts`와 `auth.ts`, NFC와 NFD `café.ts`)는 `findPathPortabilityCollisions()`가 `PATH_PORTABILITY_COLLISION`(warning)으로 보고한다. 충돌 판정 키(`portablePathKey`: NFC + 소문자)는 비교에만 쓰고 저장하지 않는다. 저장소 스캔([Repository scan과 fingerprint](#repository-scan과-fingerprint))은 tracked 경로에 Git index 철자를 쓰고, 충돌 검사는 tracked와 untracked 경로 모두에 한다.
 
-glob 패턴(`implements.paths`, `index.include/exclude` 등)은 구분자만 바꾸고 `**` 같은 세그먼트는 유지한다. 절대경로와 `..` 패턴은 거부한다. 매칭(`matchesRepoPattern`)은 저장소 root 기준이고 모든 OS에서 대소문자를 구분한다. 지원 문법은 세그먼트 안의 `*`와 `?`, 세그먼트 전체 `**`(0개 이상 디렉터리), 끝의 `/`(그 아래 전부)뿐이다. Node의 `path.matchesGlob`은 Windows와 macOS에서 대소문자를 무시해 OS마다 결과가 달라지므로 쓰지 않는다.
+glob 패턴(`implements.paths`, `index.include/exclude` 등)은 구분자만 바꾸고 `**` 같은 세그먼트는 유지한다. 절대경로와 `..` 패턴은 거부한다. 매칭(`matchesRepoPattern`)은 저장소 root 기준이고 모든 OS에서 대소문자를 구분한다. 지원 문법은 세그먼트 안의 `*`와 `?`, 세그먼트 전체 `**`(0개 이상 디렉터리), 끝의 `/`(그 아래 전부)뿐이다. `[`와 `]`는 문자 클래스가 아니라 문자 그대로다(`app/[id]/page.tsx`). 중괄호(`{a,b}`), extglob 그룹(`@(a|b)`, `*(a)`, `!(a)`처럼 `?`·`*`·`+`·`@`·`!` 바로 뒤의 `(`), 앞의 `!`(부정), 세그먼트 전체가 아닌 `**`(`src/a**`, `**.png`)는 지원하지 않는다(H-104, #165). 괄호만 있는 경로(`app/(marketing)/page.tsx`)는 문자 그대로다. Decision pattern(`governs.paths`, `forbids.paths`·`imported_paths`·`importer_paths`)의 새 입력에서는 `PATTERN_SYNTAX_UNSUPPORTED`로 거부한다(propose는 `PROPOSAL_INVALID`이고 쓰기 0, 그런 pattern을 새 규칙으로 쓰는 confirm도 거부). 이미 Project Truth에 있는 Decision은 그대로 읽고(파일·lock digest 불변) loader warning과 status·doctor·review 표시로 알린다. Node의 `path.matchesGlob`은 Windows와 macOS에서 대소문자를 무시해 OS마다 결과가 달라지므로 쓰지 않는다.
 
 ## 결정적 정렬
 
@@ -556,6 +556,7 @@ DecisionAuthority { state, active, supersedes, supersededBy }   // C241(T49): su
 - PASS는 "DUO가 현재 Evidence 범위에서 방향 위반을 찾지 못했다"는 뜻이지 버그가 없다는 뜻이 아니다. PASS에도 surface된 `missing-intent` gap이 있을 수 있다(H-80): 확정 intent 연결을 찾지 못했다는 coverage signal이며 `verdictBasis.warn`에 들어가지 않는다. 다른 surface gap은 WARN 근거다.
 - T13.1 규칙: `unlinked-addition`(R-SCOPE, task가 있을 때 task 맥락 밖이고 IMPLEMENTS가 없는 추가 application 파일 → UNKNOWN drift, 의미 후보, BLOCK 불가), `external-source-drift`(R-DRIFT, 명시적 `{path, hash, section?}`의 hash 불일치 → PARTIAL). limitation `external-source-unavailable`(원격·저장소 밖·secret·없는 파일), `external-source-hash-invalid`.
 - limitation `constraints-unscoped`(#14, additive): match 범위가 없는 confirmed Constraint가 있으면 그 ID를 message에 적는다. 이 Constraint는 Context와 review가 쓰지 않았다는 뜻이며 verdict 근거가 아니다(verdict는 claim과 gap에서만 나온다).
+- limitation `decision-patterns-unsupported`(H-104, #165, additive): confirmed Decision의 path pattern이 지원하지 않는 문법이면 Decision ID·field·pattern을 message에 적는다. 그 pattern은 어떤 파일과도 맞지 않아 검사되지 않았다는 뜻이며 verdict 근거가 아니다.
 - `semanticAssist.provider`: 호출한 Provider의 `id`, 보고된 `model`, `cacheIdentity`(secret 없음).
 
 ### Review Record (reviews/)

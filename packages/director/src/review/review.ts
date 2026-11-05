@@ -13,6 +13,7 @@ import { performance } from "node:perf_hooks";
 import { openGitProvider, type AnalyzerRegistry } from "@duo-director/analyzer";
 import {
   canonicalDiagnostics, canonicalSourceText, compareUtf8, fileRef, loadProjectTruth, nodeId, parseNodeId, readSourceFile, requireCompleteTruth, sha256Text, stableJson, STATE_DIR_NAME, success,
+  unsupportedDecisionPatterns,
   type Diagnostic, type EvidenceBasis, type ParseResult, type ProjectTruth,
 } from "@duo-director/core";
 import type { GitDiffEnd, GitProvider } from "@duo-director/analyzer";
@@ -107,6 +108,16 @@ function unscopedConstraintLimitation(truth: Pick<ProjectTruth, "constraints">):
   const ids = unscopedConstraintIds(truth);
   if (ids.length === 0) return [];
   return [{ code: "constraints-unscoped", message: `${ids.length} confirmed constraint(s) (${ids.join(", ")}) have no match scope, so context and review do not use them. Constraints are never checked deterministically; a rule DUO should check needs a confirmed Decision with forbids.` }];
+}
+
+/**
+ * H-104 (#165, additive): a confirmed Decision pattern with unsupported syntax; legacy matching retained, so no claim can come
+ * from it. Say so, with the Decision, field and pattern, instead of a silent PASS. Not a verdict input.
+ */
+function unsupportedPatternLimitation(truth: Pick<ProjectTruth, "decisions">): ReviewLimitation[] {
+  const list = unsupportedDecisionPatterns(truth);
+  if (list.length === 0) return [];
+  return [{ code: "decision-patterns-unsupported", message: `${list.length} confirmed Decision pattern(s) use unsupported syntax; legacy matching behavior is retained: ${list.map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ")}. Supersede the Decision with supported patterns.` }];
 }
 
 const zeroMetrics = {
@@ -236,10 +247,14 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
     ...(adoption.baseline?.evaluatedRules === undefined ? {} : { baselineEvaluatedRules: new Set<string>(adoption.baseline.evaluatedRules) }),
     ...(adoption.baseline === undefined ? {} : { baselineRecordedAt: adoption.baseline.recorded.at, baselineHeadOid: adoption.baseline.git.headOid }),
     ...(options.registry === undefined ? {} : { registry: options.registry }),
+    ...(snapshot.value.divergent.size === 0 ? {} : { snapshotDivergence: snapshot.value.divergent }),
   };
   const integrity = await decisionIntegrity(ctx);
   const forbids = await decisionForbids(ctx);
   const imports = await decisionForbidsImport(ctx);
+  // H-103 (#160): a differing file outside the diff that the import rule read to decide is a verdict input like a
+  // changed path (H-82): no verdict, the paths, the same failure. Other differing files stay a limitation.
+  if (imports.snapshotInputs.length > 0) return { diagnostics: [snapshotMismatch(request.diff.to, diff.value.to, imports.snapshotInputs)] };
   const drift = await externalSourceDrift(ctx);
   const additions = unlinkedAdditions(ctx);
   const conflicted = new Set([...forbids, ...imports.claims].map((c) => c.subject.id));
@@ -279,6 +294,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
       ...imports.limitations,
       ...outsideLimitation(diff.value.to, snapshot.value.outside),
       ...unscopedConstraintLimitation(truth),
+      ...unsupportedPatternLimitation(truth),
       ...(adoption.status === "incompatible" ? [{ code: "adoption-baseline-unusable", message: "The Adoption Baseline cannot be used (" + (adoption.reason ?? "unreadable") + "); violations are not told apart from pre-existing ones." }] : []),
     ],
     semanticAssist: semantic.assist,

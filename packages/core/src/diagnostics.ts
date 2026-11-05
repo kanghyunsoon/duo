@@ -35,6 +35,12 @@ export const DIAGNOSTIC_SEVERITY = {
   INVALID_ID: "error",
   INVALID_PATH: "error",
   PATH_OUTSIDE_REPOSITORY: "error",
+  /**
+   * H-104 (#165): a Decision path pattern with syntax DUO does not support (braces, a leading "!", "**" inside a
+   * segment). It has unsupported syntax. A warning when Project Truth is loaded (the Decision still loads, unchanged); an
+   * error when a proposal or a confirm would write it.
+   */
+  PATTERN_SYNTAX_UNSUPPORTED: "warning",
   /** Two paths that collide on case-insensitive or Unicode-normalizing file systems (scanner, T04). */
   PATH_PORTABILITY_COLLISION: "warning",
   WRITE_OUTSIDE_REPOSITORY: "error",
@@ -235,7 +241,7 @@ export const DIAGNOSTIC_PERSISTENCE = {
   PROJECT_FILE_MISSING: P, UNSUPPORTED_SCHEMA_VERSION: P,
   MARKDOWN_PARSE_ERROR: P, YAML_SYNTAX_ERROR: P, YAML_WARNING: P, YAML_ALIAS_NOT_ALLOWED: P, YAML_TAG_NOT_ALLOWED: P,
   SCHEMA_UNKNOWN_PROPERTY: P, SCHEMA_MISSING_PROPERTY: P, SCHEMA_INVALID_VALUE: P, INVALID_ID: P,
-  INVALID_PATH: P, PATH_OUTSIDE_REPOSITORY: P, PATH_PORTABILITY_COLLISION: P,
+  INVALID_PATH: P, PATH_OUTSIDE_REPOSITORY: P, PATTERN_SYNTAX_UNSUPPORTED: P, PATH_PORTABILITY_COLLISION: P,
   WRITE_OUTSIDE_REPOSITORY: T, WRITE_NOT_ALLOWED: T,
   METADATA_BLOCK_WITHOUT_HEADING: P, METADATA_BLOCK_MISSING: P,
   DUPLICATE_ID: P, BROKEN_REFERENCE: P, REFERENCE_TYPE_MISMATCH: P, DECISION_SUPERSEDES_SELF: P, DECISION_SUPERSEDE_CYCLE: P,

@@ -20,6 +20,7 @@ import { declaredReferenceParts, dependencyOffending, violationKey } from "../ad
 import { replacedUnresolvedSpecifier } from "./from-side.js";
 import { importedNames, ReexportOrigins, type ImportedNames, type OriginHop } from "./reexport-origin.js";
 import { hunkRange } from "./seeds.js";
+import { VerdictInputs } from "./snapshot-inputs.js";
 import type { ChangedFile, ChangedHunk, DiffSeed, ReviewClaim, ReviewLimitation } from "./types.js";
 
 const DECISIONS = `${STATE_DIR_NAME}/decisions/`;
@@ -511,10 +512,15 @@ export function importerFilter(d: Decision): (path: RepoPath) => boolean {
  * unsupported references never conflict and no text similarity is guessed: they are limitations. An
  * external package is forbids.dependencies. A pattern that matches no file is not reported.
  */
-export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonly claims: ReviewClaim[]; readonly limitations: ReviewLimitation[] }> {
+export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonly claims: ReviewClaim[]; readonly limitations: ReviewLimitation[]; readonly snapshotInputs: readonly string[] }> {
   const decisions = ctx.truth.decisions.filter((d) => isActive(d) && (d.forbids.importedPaths?.length ?? 0) > 0).sort((a, b) => compareUtf8(a.id, b.id));
-  if (decisions.length === 0) return { claims: [], limitations: [] };
+  if (decisions.length === 0) return { claims: [], limitations: [], snapshotInputs: [] };
   const matchers = decisions.map((d) => ({ d, match: compileRepoPatterns(d.forbids.importedPaths), importer: importerFilter(d) }));
+  // H-103 (#160): which differing paths outside the reviewed diff this rule reads to decide.
+  const inputs = ctx.snapshotDivergence === undefined || ctx.snapshotDivergence.size === 0
+    ? undefined
+    : new VerdictInputs(ctx.root, ctx.snapshotDivergence, (p) => sideText(ctx, ctx.to, p as RepoPath), (p) => readSourceFile(ctx.root, p).value);
+  const changedReferences: { importer: RepoPath; ref: IndexedModuleReference }[] = [];
   const changed = ctx.files.filter((f) => f.kind !== "deleted" && !f.binary && !f.path.startsWith(`${STATE_DIR_NAME}/`) && f.hunks.length > 0);
   // The index describes the working tree; another reviewed side is evaluated only where its text is the same.
   const usable: ChangedFile[] = [];
@@ -543,6 +549,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
       const changed = f.hunks.filter((h) => overlapsLines(ref.location, hunkRange(h)));
       const hunks = changed.map((h) => h.evidenceId);
       if (hunks.length === 0) continue;
+      if (inputs !== undefined) changedReferences.push({ importer: f.path, ref });
       const where = `${f.path}:${ref.location.startLine ?? "?"}`;
       const target = ref.target;
       if (target === undefined) {
@@ -570,6 +577,19 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   // side differs from the indexed working tree is not analyzed for this review (as adoption/head.ts does).
   const origins = new ReexportOrigins(ctx.root, async (file) => !(await sameAsIndexed(ctx, file)));
   await origins.load(viaReexport.map((c) => c.target));
+  if (inputs !== undefined) {
+    for (const { importer, ref } of changedReferences) await inputs.reference(importer, ref);
+    // Every followed export-from is resolved like a changed import; its target's own exports decide the provider.
+    const reached = new Set<RepoPath>();
+    for (const [file, refs] of origins.loaded()) {
+      for (const r of refs) {
+        if (r.kind !== "export-from") continue;
+        await inputs.reference(file, r);
+        if (r.target !== undefined) reached.add(r.target);
+      }
+    }
+    for (const [file, refs] of origins.loaded()) await inputs.module(file, refs, reached.has(file));
+  }
   const unverifiedChains: typeof viaReexport = [];
   for (const c of viaReexport) {
     const traced = origins.trace(c.target, importedNames(c.ref));
@@ -643,6 +663,6 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   if (originsNotBaselined.length > 0) limitations.push({ code: "imports-reexport-origin-not-baselined", message: `The Adoption Baseline was recorded before re-export origins were evaluated, so ${originsNotBaselined.length} forbidden import pair(s) found through re-exports are not BLOCK-eligible: ${preview(originsNotBaselined)}.` });
   if (fromSideUnresolved.length > 0) limitations.push({ code: "imports-from-side-unresolved", message: `${fromSideUnresolved.length} changed import(s) replaced a specifier that resolved to no file at the diff base or in the Adoption Baseline; whether the importer already reached the forbidden file is unknown, so they are not BLOCK-eligible: ${preview(fromSideUnresolved)}.` });
   if (otherSide.length > 0) limitations.push({ code: "imports-reviewed-side-not-indexed", message: `${otherSide.length} changed file(s) differ on the reviewed side from the indexed working tree; their imports ${not}: ${preview(otherSide)}.` });
-  return { claims, limitations };
+  return { claims, limitations, snapshotInputs: inputs?.paths() ?? [] };
 }
 

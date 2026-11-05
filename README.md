@@ -205,7 +205,7 @@ echo '[{"question":"project_goal","value":"Keep recurring chores fair."},
   | duoctl init --non-interactive --answers -
 ```
 
-The MCP tools do not index; when an agent gets `index-required`, run `duoctl index`. Commands: [CLI reference](docs/07-cli-interface.md). MCP tools and install contract: [MCP interface](docs/06-mcp-interface.md).
+`duo_get_context` and `duo_review_changes` refresh a stale index once when it is safe and say so in the result; when an agent still gets `index-required` (with the reason), run `duoctl index`. Commands: [CLI reference](docs/07-cli-interface.md). MCP tools and install contract: [MCP interface](docs/06-mcp-interface.md).
 
 ## Optional LLM assistance
 
