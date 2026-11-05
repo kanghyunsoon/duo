@@ -17,6 +17,11 @@ export interface TypeScriptModuleResolverOptions {
   readonly indexedFiles: ReadonlySet<RepoPath>;
   /** Optional input observer for a bounded index operation (including absent config lookups). */
   readonly readInput?: (file: string, read: () => string | undefined) => string | undefined;
+  /**
+   * Optional observer of the directories module resolution checks (#163 review). TypeScript does not look up the
+   * files of a directory it finds missing, so a caller that records lookups also needs the missing directories.
+   */
+  readonly observeDirectory?: (directory: string, exists: boolean) => void;
 }
 
 interface Config {
@@ -70,7 +75,11 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
   const host: ts.ModuleResolutionHost = {
     fileExists,
     readFile,
-    directoryExists: (d) => api.sys.directoryExists(d),
+    directoryExists: (d) => {
+      const exists = api.sys.directoryExists(d);
+      options.observeDirectory?.(d, exists);
+      return exists;
+    },
     realpath: (p) => (api.sys.realpath === undefined ? p : api.sys.realpath(p)),
     getCurrentDirectory: () => root,
     getDirectories: (d) => api.sys.getDirectories(d),

@@ -141,6 +141,11 @@ export class VerdictInputs {
   private readonly configMemo = new Map<string, Promise<readonly string[]>>();
   /** Every repository file the TypeScript resolver looked up for a non-relative specifier (#163 review). */
   private readonly lookedUp = new Set<string>();
+  /**
+   * Every repository directory the TypeScript resolver found missing in the working tree (#163 review). The resolver
+   * does not look up candidates inside it, so an existence difference under it counts as looked up.
+   */
+  private readonly missingDirectories = new Set<string>();
   private resolver: ModuleResolver | undefined;
 
   /** reviewedText / worktreeText: a file's text on the reviewed side and in the working tree (undefined when absent). */
@@ -160,17 +165,26 @@ export class VerdictInputs {
     if (!(specifier.startsWith(".") || specifier.startsWith("/"))) {
       // Only the resolver knows which files paths, baseUrl, rootDirs or package imports map it to (#163 review).
       if (this.existence.length === 0) return;
+      const inside = (absolute: string): string | undefined => {
+        const relative = path.relative(this.root, absolute).split(path.sep).join("/");
+        return relative !== "" && !relative.startsWith("../") && !path.isAbsolute(relative) ? relative : undefined;
+      };
       this.resolver ??= createTypeScriptModuleResolver({
         root: this.root,
         indexedFiles: new Set(),
         readInput: (file, read) => {
-          const relative = path.relative(this.root, file).split(path.sep).join("/");
-          if (relative !== "" && !relative.startsWith("../") && !path.isAbsolute(relative)) this.lookedUp.add(relative);
+          const relative = inside(file);
+          if (relative !== undefined) this.lookedUp.add(relative);
           return read();
+        },
+        observeDirectory: (directory, exists) => {
+          const relative = exists ? undefined : inside(directory);
+          if (relative !== undefined) this.missingDirectories.add(relative);
         },
       });
       this.resolver.resolve({ fromPath: importer, specifier, kind: ref.kind });
-      for (const p of this.existence) if (this.lookedUp.has(p)) this.found.add(p);
+      const missing = [...this.missingDirectories];
+      for (const p of this.existence) if (this.lookedUp.has(p) || missing.some((d) => p.startsWith(d + "/"))) this.found.add(p);
       return;
     }
     const base = path.posix.normalize(specifier.startsWith("/") ? specifier.slice(1) : path.posix.join(path.posix.dirname(importer), specifier));

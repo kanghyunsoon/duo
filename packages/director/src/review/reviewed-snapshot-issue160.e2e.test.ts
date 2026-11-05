@@ -347,5 +347,29 @@ describe("#160: a verdict input outside the diff that differs from the reviewed 
       expect((o.result?.limitations ?? []).map((l) => l.code)).toContain("reviewed-side-context-from-working-tree");
     });
   });
-});
 
+  // #163 review (kang987654): TypeScript does not look up files in a directory it finds missing, so before this fix
+  // deleting the target's whole directory only in the working tree gave a PASS for 17 and 20.
+  const NON_RELATIVE = [
+    ["17 a tsconfig paths alias", "tsconfig.json", ALIAS_TSCONFIG(true), "@db/legacy-db.js"],
+    ["18 a package.json imports subpath", "package.json", '{ "name": "issue160-fixture", "type": "module", "imports": { "#db/*": "./src/db/*" } }\n', "#db/legacy-db.js"],
+    ...EXACT_ALIAS,
+  ] as const;
+
+  it.each(NON_RELATIVE)("22 (%s): the target's whole directory deleted only in the working tree is not a PASS", async (_label, config, text, specifier) => {
+    await withAlias(config, text, specifier, async () => {
+      expectBlock(await review(STAGED));
+      fs.rmSync(path.join(repo.root, "src/db"), { recursive: true, force: true });
+      expectMismatch(await review(STAGED), "src/db/legacy-db.ts");
+    });
+  });
+
+  it.each(NON_RELATIVE)("23 (%s): a directory the resolver does not look in, deleted only in the working tree, keeps the verdict", async (_label, config, text, specifier) => {
+    await withAlias(config, text, specifier, async () => {
+      fs.rmSync(path.join(repo.root, "tools"), { recursive: true, force: true });
+      const o = await review(STAGED);
+      expectBlock(o);
+      expect((o.result?.limitations ?? []).map((l) => l.code)).toContain("reviewed-side-context-from-working-tree");
+    });
+  });
+});
