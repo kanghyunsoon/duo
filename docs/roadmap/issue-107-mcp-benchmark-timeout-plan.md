@@ -185,10 +185,10 @@ Windows에서는 signal 처리 방식이 POSIX와 다르므로 어떤 signal 분
 | process 정리 | `bench/mcp.mjs`의 `closeServer(session)` | session의 PID 사용. 분리된 process는 즉시 `SIGTERM`, 그 뒤 최대 3초 동안 종료를 확인하고 남으면 `SIGKILL` |
 | PID 기록 | `bench/mcp.mjs`의 `recordPid` | client 쪽에서 `DUO_MCP_BENCHMARK_PID_FILE`에 기록. 기록 실패는 server 정리 뒤 `HarnessError` |
 | 동시 worker | `bench/mcp.mjs`의 `scenario` | `Promise.allSettled`로 모든 worker가 끝난 뒤 실패 처리 |
-| temp 정리 | `bench/mcp.mjs` 끝부분 | `fs.promises.rm` retry로 삭제. JSON은 삭제 성공 뒤에만 stdout에 쓴다. |
-| 종료 코드 | `bench/mcp.mjs` | 0: 모든 stage 응답, 1: report에 stage error 있음, 2: 인자 오류, 내부 오류, PID 기록 실패, temp 삭제 실패(stdout JSON 없음) |
+| temp 정리 | `bench/mcp.mjs` 끝부분 | `fs.promises.rm` retry로 삭제. #126 cleanup 수정 이후에는 측정이 끝났으면 삭제가 실패해도 JSON을 stdout에 쓰고, 남은 경로와 오류를 stderr에 쓴다. |
+| 종료 코드 | `bench/mcp.mjs` | 0: 모든 stage 응답, 1: report에 stage error 있음, 2: 인자 오류, 내부 오류, PID 기록 실패, temp 삭제 실패. 2가 1보다 우선한다. report 완성 전 실패는 stdout이 비고, temp 삭제만 실패하면 stdout에 JSON이 있다 |
 | scenario 선택 | `bench/mcp.mjs`의 `--scenario` | 회귀 테스트는 `single-cold` 하나만 실행. 알 수 없는 이름이나 값 없는 `--scenario`는 exit code 2 |
-| 회귀 테스트 | `tests/mcp-benchmark-timeout.test.ts` | initialize, `tools/list`, `tools/call` timeout의 JSON, exit code 1, PID 정리. client와 fake server의 PID 이중 기록. 잘못된 `--scenario`와 값 없는 `--scenario`의 exit code 2. initialize, `tools/list` 모드의 PID 파일 기록 실패 시 exit code 2와 server 정리 |
+| 회귀 테스트 | `tests/mcp-benchmark-timeout.test.ts` | initialize, `tools/list`, `tools/call` timeout의 JSON, exit code 1, PID 정리. client와 fake server의 PID 이중 기록. 잘못된 `--scenario`와 값 없는 `--scenario`의 exit code 2. initialize, `tools/list` 모드의 PID 파일 기록 실패 시 exit code 2와 server 정리. temp 삭제 실패 주입 시 JSON 보존과 exit code 2, 주입 없는 정상 응답의 exit code 0 (#126) |
 | fake server | `tests/bench/fixtures/unresponsive-mcp.mjs` | 로컬에서 의도한 stage만 무응답, LLM·유료 호출 없음 |
 
 ## 작업 범위
