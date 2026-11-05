@@ -17,6 +17,7 @@ export const IS_WIN = process.platform === "win32";
 export interface PackReport {
   readonly name: string;
   readonly version: string;
+  readonly commit: string;
   readonly tarball: string;
   readonly size: number;
   readonly unpackedSize: number;

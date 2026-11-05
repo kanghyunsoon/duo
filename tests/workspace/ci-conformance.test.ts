@@ -8,18 +8,28 @@
  * Windows a multi-line run takes its exit code from the last line), a --skip-e2e flag or a custom shell would all let
  * a failing suite pass. Changing that step therefore means changing this guard on purpose.
  */
+import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parseYaml } from "@duo-director/core";
 import { DEFER_CONFORMANCE_ENV } from "../../vitest.conformance-files.js";
 
 type Env = Readonly<Record<string, unknown>>;
+interface RunDefaults { readonly defaults?: { readonly run?: { readonly shell?: unknown } } }
 interface Step { readonly name?: string; readonly run?: string; readonly shell?: unknown; readonly if?: unknown; readonly env?: Env; readonly "continue-on-error"?: unknown }
-interface Job { readonly steps?: readonly Step[]; readonly env?: Env; readonly "continue-on-error"?: unknown }
+interface Job extends RunDefaults { readonly steps?: readonly Step[]; readonly env?: Env; readonly "continue-on-error"?: unknown }
+interface Workflow extends RunDefaults { readonly env?: Env; readonly jobs: Record<string, Job> }
 const parsed = parseYaml({ path: ".github/workflows/ci.yml", text: fs.readFileSync(fileURLToPath(new URL("../../.github/workflows/ci.yml", import.meta.url)), "utf8") });
 if (parsed.value === undefined) throw new Error(JSON.stringify(parsed.diagnostics));
-const workflow = parsed.value.data as { env?: Env; jobs: Record<string, Job> };
+const workflow = parsed.value.data as Workflow;
+
+/** The step's effective shell across step, job defaults.run and workflow defaults.run (#161). */
+export const effectiveShell = (wf: RunDefaults, job: Job, step: Step): unknown =>
+  step.shell ?? job.defaults?.run?.shell ?? wf.defaults?.run?.shell;
 
 /** The step defers if the variable is "1" (or an expression that could be "1") in its effective env: workflow, job, step. */
 const defers = (job: Job, step: Step): boolean => {
@@ -46,7 +56,7 @@ describe("CI defers conformance files only to a conformance step that runs them 
       expect(conformanceAt, "no step after the deferring pnpm test runs scripts/release/conformance.mjs").toBeGreaterThan(deferredAt);
       const conformance = steps[conformanceAt] as Step;
       expect((conformance.run ?? "").trim(), "the conformance step's run must be exactly the pinned single-line command").toMatch(CONFORMANCE_RUN);
-      expect(conformance.shell, "the conformance step must use the default shell").toBeUndefined();
+      expect(effectiveShell(workflow, job, conformance), "the conformance step must use the default shell").toBeUndefined();
       expect(conformance.if, "the conformance step must not be conditional").toBeUndefined();
       expect(conformance["continue-on-error"] ?? false).toBe(false);
       expect(job["continue-on-error"] ?? false).toBe(false);
@@ -74,5 +84,74 @@ describe("the pinned conformance command (T131)", () => {
     ]) {
       expect(bad).not.toMatch(CONFORMANCE_RUN);
     }
+  });
+
+  it("reads the effective shell from the step, the job defaults and the workflow defaults (#161)", () => {
+    expect(effectiveShell({}, {}, {})).toBeUndefined();
+    expect(effectiveShell({ defaults: { run: { shell: "pwsh -command \". '{0}'; exit 0\"" } } }, {}, {})).toBe("pwsh -command \". '{0}'; exit 0\"");
+    expect(effectiveShell({}, { defaults: { run: { shell: "bash" } } }, {})).toBe("bash");
+    expect(effectiveShell({ defaults: { run: { shell: "sh" } } }, { defaults: { run: { shell: "bash" } } }, { shell: "cmd" })).toBe("cmd");
+  });
+});
+
+describe("check-packed-artifact checks the packed commit SHA (#161)", () => {
+  const CHECK_SCRIPT = fileURLToPath(new URL("../../scripts/ci/check-packed-artifact.mjs", import.meta.url));
+  let tmp = "";
+  let head = "";
+  let tarball = "";
+  let integrity = "";
+
+  beforeAll(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "duo-check-packed-artifact-"));
+    fs.mkdirSync(path.join(tmp, "apps", "cli"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, ".dist"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, "apps", "cli", "package.json"), JSON.stringify({ name: "@duo-director/cli", version: "0.4.0-rc.1" }));
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: tmp, encoding: "utf8", windowsHide: true }).trim();
+    git("init");
+    git("config", "user.email", "test@example.com");
+    git("config", "user.name", "test");
+    git("add", "apps/cli/package.json");
+    git("commit", "-m", "init");
+    head = git("rev-parse", "HEAD");
+    tarball = path.join(tmp, ".dist", "duo-director-cli-0.4.0-rc.1.tgz");
+    const bytes = Buffer.from("packed-tarball-bytes");
+    fs.writeFileSync(tarball, bytes);
+    integrity = `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
+  });
+
+  afterAll(() => {
+    if (tmp !== "") fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  const writePack = (extra: Record<string, unknown>) => {
+    const file = path.join(tmp, ".dist", "pack.json");
+    fs.writeFileSync(file, JSON.stringify({ name: "@duo-director/cli", version: "0.4.0-rc.1", tarball, integrity, ...extra }));
+    return file;
+  };
+
+  const runCheck = () => spawnSync(process.execPath, [CHECK_SCRIPT, tmp], { cwd: tmp, encoding: "utf8", windowsHide: true });
+
+  it("refuses a pack.json without commit with 'pack again'", () => {
+    writePack({});
+    const r = runCheck();
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("pack again");
+  });
+
+  it("refuses a pack.json from another commit with 'pack again'", () => {
+    writePack({ commit: "0".repeat(40) });
+    const r = runCheck();
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("pack again");
+  });
+
+  it("accepts a matching commit regardless of file times", () => {
+    const packFile = writePack({ commit: head });
+    const past = new Date("2000-01-01T00:00:00Z");
+    fs.utimesSync(packFile, past, past);
+    fs.utimesSync(tarball, past, past);
+    const r = runCheck();
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("check-packed-artifact: reusing duo-director-cli-0.4.0-rc.1.tgz");
   });
 });
