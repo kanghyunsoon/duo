@@ -131,9 +131,9 @@ export const REPO_PATTERN_SYNTAX = 'Supported: "*" and "?" within a path segment
  */
 export function unsupportedPatternSyntax(pattern: string): string | undefined {
   const posix = toPosix(pattern);
-  if (/[?*+@!]\(/u.test(posix)) return 'extglob groups such as "@(a|b)", "*(a)" or "!(a)" are not supported; list each pattern separately';
-  if (posix.startsWith("!")) return 'a leading "!" (negation) is not supported';
-  if (/[{}]/u.test(posix)) return "braces ({a,b}) are not supported; list each pattern separately";
+  if (/[?*+@!]\(/u.test(posix)) return 'extglob groups such as "@(a|b)", "*(a)" or "!(a)" are not supported and match only as literal characters; list each pattern separately';
+  if (posix.startsWith("!")) return 'a leading "!" (negation) is not supported and matches only as a literal "!"';
+  if (/[{}]/u.test(posix)) return "braces ({a,b}) are not supported and match only as literal characters; list each pattern separately";
   if (posix.split("/").some((s) => s.includes("**") && s !== "**")) return '"**" must be a whole path segment, as in src/**/x.ts; inside a segment the legacy matcher treats it like "*", not recursive directories';
   return undefined;
 }

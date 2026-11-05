@@ -13,7 +13,7 @@ import { performance } from "node:perf_hooks";
 import { openGitProvider, type AnalyzerRegistry } from "@duo-director/analyzer";
 import {
   canonicalDiagnostics, canonicalSourceText, compareUtf8, fileRef, loadProjectTruth, nodeId, parseNodeId, readSourceFile, requireCompleteTruth, sha256Text, stableJson, STATE_DIR_NAME, success,
-  unsupportedDecisionPatterns,
+  describeUnsupportedPattern, unsupportedDecisionPatterns,
   type Diagnostic, type EvidenceBasis, type ParseResult, type ProjectTruth,
 } from "@duo-director/core";
 import type { GitDiffEnd, GitProvider } from "@duo-director/analyzer";
@@ -119,7 +119,7 @@ function unscopedConstraintLimitation(truth: Pick<ProjectTruth, "constraints">):
 function unsupportedPatternLimitation(truth: Pick<ProjectTruth, "decisions">): ReviewLimitation[] {
   const list = unsupportedDecisionPatterns(truth);
   if (list.length === 0) return [];
-  return [{ code: "decision-patterns-unsupported", message: `${list.length} confirmed Decision pattern(s) use unsupported syntax; legacy matching behavior is retained: ${list.map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ")}. Supersede the Decision with supported patterns.` }];
+  return [{ code: "decision-patterns-unsupported", message: `${list.length} confirmed Decision pattern(s) use unsupported syntax; legacy matching behavior is retained: ${list.map(describeUnsupportedPattern).join(", ")}. Supersede the Decision with supported patterns.` }];
 }
 
 const zeroMetrics = {

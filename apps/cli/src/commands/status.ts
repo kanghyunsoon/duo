@@ -1,5 +1,5 @@
 /** duoctl status (T15): the shared status operation, rendered. Writes nothing. */
-import { loadProjectTruth, parseCompatibleBaseUrl } from "@duo-director/core";
+import { describeUnsupportedPattern, loadProjectTruth, parseCompatibleBaseUrl } from "@duo-director/core";
 import { projectStatus } from "@duo-director/integration";
 import { t } from "../messages.js";
 import { EXIT, type Outcome } from "../output.js";
@@ -7,7 +7,7 @@ import { operationFailure, type Env } from "./shared.js";
 
 interface StatusPayload {
   project: { name: string; vision: string; currentMilestone: string | null };
-  truth: { requirements: number; decisions: number; constraints: number; declaredGaps: number; unscopedConstraints?: string[]; unsupportedPatterns?: { decision: string; field: string; pattern: string }[]; errors?: { code: string; message: string; path?: string; line?: number }[] };
+  truth: { requirements: number; decisions: number; constraints: number; declaredGaps: number; unscopedConstraints?: string[]; unsupportedPatterns?: { decision: string; field: string; pattern: string; reason: string }[]; errors?: { code: string; message: string; path?: string; line?: number }[] };
   index: { status: string; fullRebuildReason: string | null; changes: { files: number; analysisStale: number; modulesToResolve: number; callsMaybeRecomputed: number } } | null;
   baseline: { status: string; headOid?: string; dirtyAtAdoption?: boolean; findings?: number } | null;
   analysis: { languages: { language: string; files: number; level: string }[]; fileOnly: { files: number; extensions: { extension: string; files: number }[] } } | null;
@@ -37,7 +37,7 @@ export async function statusCommand(env: Env): Promise<Outcome> {
     // #14: a recorded constraint is not a checked rule; name the ones context and review never use.
     ...((s.truth.unscopedConstraints ?? []).length === 0 ? [] : [t(L, "status.constraints-unchecked", { ids: (s.truth.unscopedConstraints ?? []).join(", ") })]),
     // H-104 (#165): a confirmed Decision pattern with unsupported syntax; legacy matching retained; name it.
-    ...((s.truth.unsupportedPatterns ?? []).length === 0 ? [] : [t(L, "status.patterns-unchecked", { items: (s.truth.unsupportedPatterns ?? []).map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ") })]),
+    ...((s.truth.unsupportedPatterns ?? []).length === 0 ? [] : [t(L, "status.patterns-unchecked", { items: (s.truth.unsupportedPatterns ?? []).map(describeUnsupportedPattern).join(", ") })]),
     // T40 (N1): what the loader left out, so a lower Decision count is never silent.
     ...((s.truth.errors ?? []).length === 0 ? [] : [t(L, "status.truth-errors", { n: s.truth.errors?.length ?? 0 }),
       ...(s.truth.errors ?? []).map((e) => `  ${e.code} ${e.path ?? ""}${e.line === undefined ? "" : `:${e.line}`} ${e.message}`)]),

@@ -36,6 +36,14 @@ function candidateFields(candidate: unknown): [string, readonly string[]][] {
   ];
 }
 
+/**
+ * One unsupported pattern as status, doctor, review and MCP status show it: the Decision, the field, the pattern and
+ * the reason, which says what the legacy matcher does with it (#167 review).
+ */
+export function describeUnsupportedPattern(u: Pick<UnsupportedDecisionPattern, "decision" | "field" | "pattern" | "reason">): string {
+  return `${u.decision} ${u.field} "${u.pattern}" (${u.reason})`;
+}
+
 /** The message for new input (propose, confirm). */
 export function unsupportedPatternMessage(field: string, pattern: string, reason: string): string {
   return `${field} pattern "${pattern}" uses unsupported syntax: ${reason}. ${REPO_PATTERN_SYNTAX}`;

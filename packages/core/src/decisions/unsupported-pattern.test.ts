@@ -15,7 +15,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { loadProjectTruth } from "../loader/project.js";
 import { compileRepoPattern, unsupportedPatternSyntax, type RepoPath } from "../paths.js";
 import type { DecisionActor } from "./files.js";
-import { unsupportedDecisionPatterns } from "./pattern-syntax.js";
+import { describeUnsupportedPattern, unsupportedDecisionPatterns } from "./pattern-syntax.js";
 import { createDecisionService } from "./service.js";
 
 const temps: string[] = [];
@@ -137,8 +137,15 @@ describe("H-104 Q2: a Decision already in Project Truth loads unchanged and is r
     const warnings = loaded.diagnostics.filter((x) => x.code === "PATTERN_SYNTAX_UNSUPPORTED");
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatchObject({ severity: "warning", source: { path: ".duo-project/decisions/D-001.yaml" } });
-    expect(warnings[0]?.message).toContain(`forbids.paths pattern "${pattern}"`);
+    expect(warnings[0]?.message).toContain(`forbids.paths pattern "${pattern}" uses unsupported syntax and keeps its legacy matching: `);
+    expect(warnings[0]?.message).not.toContain("and has unsupported syntax");
     expect(unsupportedDecisionPatterns(loaded.value?.truth ?? { decisions: [] })).toEqual([{ decision: "D-001", field: "forbids.paths", pattern, reason: expect.any(String) }]);
+  });
+
+  it("the reported line names the Decision, field, pattern and what the legacy matcher does with it (#167 review)", () => {
+    write(".duo-project/decisions/D-001.yaml", decisionYaml("src/pikachu/**/*.{png,webp}", "confirmed"));
+    const [u] = unsupportedDecisionPatterns(loadProjectTruth(root).value?.truth ?? { decisions: [] });
+    expect(u === undefined ? "" : describeUnsupportedPattern(u)).toBe('D-001 forbids.paths "src/pikachu/**/*.{png,webp}" (braces ({a,b}) are not supported and match only as literal characters; list each pattern separately)');
   });
 
   it("only confirmed Decisions are listed as unchecked rules; a supported pattern is not", () => {
