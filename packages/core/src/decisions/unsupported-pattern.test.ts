@@ -33,9 +33,11 @@ const decisionYaml = (pattern: string, state: "confirmed" | "proposed", field = 
 ].join("\n");
 
 /** Unsupported syntax: braces and negation are literal; embedded ** acts like * within one segment. */
-const UNSUPPORTED = ["src/pikachu/**/*.{png,PNG,webp}", "src/{a,b}/legacy.ts", "!src/pikachu/keep.png", "src/pikachu/**.png", "src/a**/x.ts"];
+/** #167 review: extglob groups, matched literally like braces. */
+const EXTGLOB = ["src/pikachu/**/*.@(png|webp)", "src/pikachu/**/*.+(png|webp)", "src/pikachu/**/*.?(png|webp)", "src/pikachu/**/*.*(png)", "src/!(legacy)/x.ts"];
+const UNSUPPORTED = ["src/pikachu/**/*.{png,PNG,webp}", "src/{a,b}/legacy.ts", "!src/pikachu/keep.png", "src/pikachu/**.png", "src/a**/x.ts", ...EXTGLOB];
 /** Supported syntax, including literal brackets (Q3), keeps working. */
-const SUPPORTED = ["src/pikachu/**/*.png", "src/pikachu/sprite?.png", "public/pikachu/", "src/**", "docs/*.md", "app/[id]/page.tsx", "src/pikachu/[ab].png"];
+const SUPPORTED = ["src/pikachu/**/*.png", "src/pikachu/sprite?.png", "public/pikachu/", "src/**", "docs/*.md", "app/[id]/page.tsx", "src/pikachu/[ab].png", "app/(marketing)/page.tsx", "docs/notes (draft).md", "src/(group)/*.ts"];
 
 beforeEach(() => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-glob-")));
@@ -48,6 +50,14 @@ describe("H-104 Q3/Q4: the matcher is unchanged", () => {
     expect(unsupportedPatternSyntax("app/[id]/page.tsx")).toBeUndefined();
     expect(compileRepoPattern("app/[id]/page.tsx")?.("app/[id]/page.tsx" as RepoPath)).toBe(true);
     expect(compileRepoPattern("src/pikachu/[ab].png")?.("src/pikachu/a.png" as RepoPath)).toBe(false);
+  });
+
+  it("parentheses alone are literal path characters; an extglob group keeps its literal legacy matching", () => {
+    expect(unsupportedPatternSyntax("app/(marketing)/page.tsx")).toBeUndefined();
+    expect(compileRepoPattern("app/(marketing)/page.tsx")?.("app/(marketing)/page.tsx" as RepoPath)).toBe(true);
+    expect(compileRepoPattern("src/(group)/*.ts")?.("src/(group)/a.ts" as RepoPath)).toBe(true);
+    expect(compileRepoPattern("src/pikachu/**/*.@(png|webp)")?.("src/pikachu/a.webp" as RepoPath)).toBe(false);
+    expect(compileRepoPattern("src/!(legacy)/x.ts")?.("src/!(legacy)/x.ts" as RepoPath)).toBe(true);
   });
 
   it("matching stays case-sensitive on every OS", () => {
@@ -93,6 +103,17 @@ describe("H-104 Q1: new input with unsupported syntax is refused", () => {
     expect(r.diagnostics.map((d) => [d.code, d.severity])).toEqual([["PATTERN_SYNTAX_UNSUPPORTED", "error"]]);
     expect(exists(".duo-project/decisions/D-001.yaml")).toBe(false);
     expect(fs.existsSync(file)).toBe(true);
+  });
+
+  it.each(EXTGLOB)("a pending proposal with the extglob pattern %s is not confirmed (#167 review)", async (pattern) => {
+    const proposed = await svc().propose(agent, { title: "No assets", question: "assets", answer: "none", forbids: { paths: ["src/pikachu/**/*.png"] }, enforcement: "block" });
+    const file = path.join(root, proposed.value?.path ?? "");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("- src/pikachu/**/*.png", "- " + JSON.stringify(pattern)));
+    const r = await svc().confirm(human, "P-001");
+    expect(r.value).toBeUndefined();
+    expect(r.diagnostics.map((d) => d.code)).toEqual(["PATTERN_SYNTAX_UNSUPPORTED"]);
+    expect(r.diagnostics[0]?.message).toContain(`forbids.paths pattern "${pattern}"`);
+    expect(exists(".duo-project/decisions/D-001.yaml")).toBe(false);
   });
 
   it("a proposed YAML Decision is not confirmed in place; adding a lock to an already confirmed one is not new input", async () => {

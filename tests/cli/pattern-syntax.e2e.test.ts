@@ -5,6 +5,8 @@
  */
 import fs from "node:fs";
 import { afterAll, describe, expect, it, vi } from "vitest";
+import { createDecisionService } from "@duo-director/core";
+import { run, type Io } from "../../apps/cli/src/cli.js";
 import { startMcp, type McpSession } from "../mcp/support.js";
 import { duoctl, existingProject } from "./support.js";
 
@@ -19,6 +21,7 @@ afterAll(async () => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- parsed CLI and MCP JSON
 type Json = any;
 const BRACE = "src/assets/**/*.{png,webp}";
+const EXTGLOB = "src/assets/**/*.@(png|webp)";
 const decision = (id: string, pattern: string) => [
   `id: ${id}`, "title: No raw assets", "kind: decision", "state: confirmed", "question: assets", "answer: none", "owner: human",
   "forbids:", `  paths: [${JSON.stringify(pattern)}]`, "enforcement: block", 'confirmed_at: "2026-11-04T00:00:00Z"', "confirmed_by: Ada Lovelace", "",
@@ -42,8 +45,35 @@ describe("H-104: unsupported glob syntax in Decision patterns", () => {
     expect(text).toContain("PROPOSAL_INVALID");
     expect(text).toContain(`forbids.paths pattern \\"${BRACE}\\"`);
     expect(fs.existsSync(`${p.root}/.duo-project/decisions/proposals`) ? fs.readdirSync(`${p.root}/.duo-project/decisions/proposals`) : []).toEqual([]);
+    // #167 review: an extglob group is refused the same way.
+    const ext = await s.call("duo_propose_decision", { title: "No raw assets", question: "assets", answer: "none", forbids: { paths: [EXTGLOB] }, enforcement: "block" });
+    expect(ext.isError).toBe(true);
+    expect(JSON.stringify(ext)).toContain("PROPOSAL_INVALID");
+    expect(JSON.stringify(ext)).toContain(`forbids.paths pattern \\"${EXTGLOB}\\"`);
     const ok = await s.call("duo_propose_decision", { title: "No route", question: "routes", answer: "none", forbids: { paths: ["app/[id]/page.tsx"] } });
     expect(ok.isError).toBeFalsy();
+    // Parentheses alone are literal path characters (Next.js route groups).
+    const group = await s.call("duo_propose_decision", { title: "No marketing page", question: "marketing", answer: "none", forbids: { paths: ["app/(marketing)/page.tsx"] } });
+    expect(group.isError).toBeFalsy();
+    fs.rmSync(`${p.root}/.duo-project/decisions/proposals`, { recursive: true, force: true });
+  });
+
+  it("CLI decision confirm refuses a pending proposal with an extglob pattern and writes no Decision (#167 review)", async () => {
+    const proposed = await createDecisionService({ root: p.root }).propose({ kind: "agent", name: "codex" }, { title: "No raw assets", question: "assets", answer: "none", forbids: { paths: ["src/assets/**/*.png"] }, enforcement: "block" });
+    const id = proposed.value?.proposalId ?? "";
+    const file = `${p.root}/${proposed.value?.path ?? ""}`;
+    // A proposal written before this check (an older DUO) can still hold the pattern.
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("- src/assets/**/*.png", "- " + JSON.stringify(EXTGLOB)));
+    const out: string[] = [];
+    const err: string[] = [];
+    const io: Io = {
+      out: (l) => out.push(l), err: (l) => err.push(l), isTTY: true, prompt: () => Promise.resolve(id),
+      readStdin: () => Promise.resolve(""), cwd: () => p.root, now: () => new Date("2026-11-05T00:00:00Z"), env: {},
+    };
+    expect(await run(["decision", "confirm", id], io)).toBe(1);
+    expect(err.join("\n")).toContain("PATTERN_SYNTAX_UNSUPPORTED");
+    expect(err.join("\n")).toContain(`forbids.paths pattern "${EXTGLOB}"`);
+    expect(fs.existsSync(`${p.root}/.duo-project/decisions/D-001.yaml`)).toBe(false);
     fs.rmSync(`${p.root}/.duo-project/decisions/proposals`, { recursive: true, force: true });
   });
 
