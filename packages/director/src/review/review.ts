@@ -246,10 +246,14 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
     ...(adoption.baseline === undefined ? {} : { baselineStructuralLanguages: new Set(adoption.baseline.analysis?.structuralLanguages ?? PRE_T18_STRUCTURAL_LANGUAGES) }),
     ...(adoption.baseline?.evaluatedRules === undefined ? {} : { baselineEvaluatedRules: new Set<string>(adoption.baseline.evaluatedRules) }),
     ...(adoption.baseline === undefined ? {} : { baselineRecordedAt: adoption.baseline.recorded.at }),
+    ...(snapshot.value.divergent.size === 0 ? {} : { snapshotDivergence: snapshot.value.divergent }),
   };
   const integrity = await decisionIntegrity(ctx);
   const forbids = await decisionForbids(ctx);
   const imports = await decisionForbidsImport(ctx);
+  // H-103 (#160): a differing file outside the diff that the import rule read to decide is a verdict input like a
+  // changed path (H-82): no verdict, the paths, the same failure. Other differing files stay a limitation.
+  if (imports.snapshotInputs.length > 0) return { diagnostics: [snapshotMismatch(request.diff.to, diff.value.to, imports.snapshotInputs)] };
   const drift = await externalSourceDrift(ctx);
   const additions = unlinkedAdditions(ctx);
   const conflicted = new Set([...forbids, ...imports.claims].map((c) => c.subject.id));

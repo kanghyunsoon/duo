@@ -50,6 +50,8 @@ interface Module {
 
 export class ReexportOrigins {
   private readonly modules = new Map<RepoPath, Module | undefined>();
+  /** Every module load() read and its indexed references, excluded ones included (H-103 verdict inputs). */
+  private readonly read = new Map<RepoPath, readonly IndexedModuleReference[]>();
 
   /** excluded: files whose indexed analysis does not describe the side being evaluated (treated as not analyzed). */
   constructor(private readonly root: string, private readonly excluded: (file: RepoPath) => boolean | Promise<boolean> = () => false) {}
@@ -61,10 +63,16 @@ export class ReexportOrigins {
       const need = frontier.filter((p) => !this.modules.has(p)).sort(compareUtf8);
       const read = await readIndexedModuleReferences(this.root, need);
       for (const [i, r] of read.entries()) {
+        this.read.set(need[i] as RepoPath, r.status === "ok" ? r.references : []);
         this.modules.set(need[i] as RepoPath, r.status === "ok" && !(await this.excluded(r.path)) ? { references: r.references, exports: r.exports } : undefined);
       }
       frontier = [...new Set(need.flatMap((p) => this.modules.get(p)?.references.filter((r) => r.kind === "export-from" && r.target !== undefined).map((r) => r.target as RepoPath) ?? []))];
     }
+  }
+
+  /** The modules load() read, with their indexed references (empty when not analyzed). */
+  loaded(): ReadonlyMap<RepoPath, readonly IndexedModuleReference[]> {
+    return this.read;
   }
 
   /** The origin of each name an import of `target` takes. Call load() with `target` first. */

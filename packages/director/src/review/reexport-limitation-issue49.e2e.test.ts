@@ -13,7 +13,8 @@
  * the chain and no claim: namespace and side-effect imports of a barrel (every name), `export * as ns`, a name
  * that more than one `export *` module provides, `export *` of a module whose exports are not listed (CommonJS),
  * an imported name no module provides, cycles and chains longer than MAX_REEXPORT_DEPTH (4). With --staged, a
- * barrel whose reviewed side differs from the working tree is not traced. Import-then-export is not followed in
+ * barrel whose reviewed side differs from the working tree is a verdict input: no verdict, REVIEW_SNAPSHOT_MISMATCH
+ * (H-103, #160). Import-then-export is not followed in
  * either stage.
  *
  * - Only the names the import takes are traced, so an unrelated name from the same barrel is not reported.
@@ -281,7 +282,7 @@ describe("Issue #49 Stage 2 (H-98): exact re-export origins with an origin-evalu
     expectLimitation(await page('import { legacyQuery, doesNotExist } from "../db/all.js";\n'), "src/ui/page.ts:1 → src/db/all.ts → src/db/legacy-db.ts");
   });
 
-  it("review --staged: a barrel whose unstaged edit differs from the staged snapshot is not traced as an exact origin", async () => {
+  it("review --staged: a barrel whose unstaged edit differs from the staged snapshot gives no verdict (H-103)", async () => {
     const staged = async (barrel?: string): Promise<ReviewResult> => {
       repo.git("reset", "-q", "--hard");
       repo.git("clean", "-fdq");
@@ -290,11 +291,9 @@ describe("Issue #49 Stage 2 (H-98): exact re-export origins with an origin-evalu
       if (barrel !== undefined) repo.write("src/db/switch.ts", barrel);
       return review(repo, { from: "HEAD", to: "INDEX" });
     };
-    // The staged snapshot imports safe.ts; the working tree's switch.ts re-exports legacy-db.
-    const changed = await staged(reexport("./legacy-db.js"));
-    expect(changed.verdict).toBe("PASS");
-    expect(forbiddenImports(changed)).toEqual([]);
-    expect(throughReexport(changed)[0]?.message).toContain("src/ui/page.ts:1 → src/db/switch.ts → src/db/legacy-db.ts (D-001)");
+    // The staged snapshot imports safe.ts; the working tree's switch.ts re-exports legacy-db. Before H-103 this was
+    // PASS with the Stage 1 limitation, read from the working tree; the barrel is a verdict input, so no verdict.
+    await expect(staged(reexport("./legacy-db.js"))).rejects.toThrow(/REVIEW_SNAPSHOT_MISMATCH[\s\S]*src\/db\/switch\.ts/u);
     // Control: the barrel is the same in both, so the origin is safe.ts.
     const clean = await staged();
     expect(clean.verdict).toBe("PASS");

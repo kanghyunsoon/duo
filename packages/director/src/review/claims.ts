@@ -12,6 +12,7 @@ import type { ContextPacket } from "../context/types.js";
 import { repositoryEvidence, truthEvidence } from "../evidence/sources.js";
 import type { EvidenceStore } from "../evidence/store.js";
 import { blockEligible } from "../llm/contract/evidence.js";
+import type { Divergence } from "./snapshot-inputs.js";
 import type { Alignment, ChangedFile, DecisionAuthority, DiffSeed, ReviewClaim, ReviewRule, TestRunEvidence } from "./types.js";
 
 export interface RuleContext {
@@ -42,6 +43,8 @@ export interface RuleContext {
   readonly baselineEvaluatedRules?: ReadonlySet<string>;
   /** When the baseline was recorded (UTC ISO 8601). */
   readonly baselineRecordedAt?: string;
+  /** --staged / --to: paths outside the diff that differ from the working tree, and how (H-103, #160). */
+  readonly snapshotDivergence?: ReadonlyMap<string, Divergence>;
 }
 
 export interface ClaimInput {
