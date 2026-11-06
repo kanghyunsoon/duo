@@ -34,8 +34,16 @@
  *   imported name alone ("default", or none) does not identify the from-side statement. So are a namespace
  *   import with another local name, a bare `export * from`, and a dynamic import. The pairing is one to one: a
  *   second statement next to the replaced or kept one is new, BLOCK. A from side that resolved to a JSON file
- *   (`require("./settings")`) resolved, so it stays BLOCK. Without an Adoption Baseline, P8a has no provenance
- *   and stays BLOCK.
+ *   (`require("./settings")`) or, through a `.js` specifier, to a `.jsx` file resolved, so it stays BLOCK. The from-side statement must also be gone from the
+ *   whole file: no relative reference of any kind, names or spelling may still reach the old module, and the
+ *   file may not gain a statement of the same kind and names. One moved below (also through the `@db/*` alias),
+ *   kept on its own line after a statement boundary moved, kept as `import type`, merged into another import of
+ *   the old module, or respelled (`../db/legacy-db-v0`) is BLOCK. So are `import type` → value import, and a
+ *   review whose Adoption Baseline commit is not in the clone (shallow checkout): nothing shows the old specifier
+ *   resolved nowhere there. Still WARN: two references replaced one by one (same or different missing modules),
+ *   `import type { X }` → `import { type X }`, an unrelated barrel import added next to the barrel respecify, and
+ *   a bare package import named like the old file. Without an Adoption Baseline, P8a has no provenance and stays
+ *   BLOCK.
  * - P8b: The `to` side no longer resolves. Current `next` behavior: no claim, `imports-unresolved`
  *   limitation, PASS.
  * - N1: A change inside the function body that does not touch the import line. Current `next`
@@ -50,12 +58,13 @@
  * - Per the #48 direction, reordering, moving, alias-only changes, splitting and merging are not new
  *   violations under any policy, and an unresolved `from` or `to` side must not BLOCK by guess.
  */
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { AnalyzerRegistry } from "@duo-director/analyzer";
 import { createDecisionService, fileRef, nodeId, type RepoPath } from "@duo-director/core";
-import { openProjectGraphStore, type GraphStore } from "@duo-director/graph";
+import { indexRepository, openProjectGraphStore, type GraphStore } from "@duo-director/graph";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { captureAdoptionBaseline } from "../adoption/baseline.js";
 import { violationKey } from "../adoption/key.js";
@@ -102,7 +111,7 @@ const FILES: Record<string, string> = {
     "}",
     "",
   ].join("\n"),
-  "src/db/index.ts": 'export { legacyQuery, legacyCount } from "./legacy-db.js";\n',
+  "src/db/index.ts": 'export { legacyQuery, legacyCount } from "./legacy-db.js";\nexport { legacyQuery as modernQuery } from "./modern-db.js";\n',
   "src/ui/orders-page.ts": `${IMPORT_LEGACY}\nexport function renderOrders(): string {\n  return legacyQuery("orders");\n}\n`,
   "src/ui/report-page.ts":
     'import { legacyQuery, legacyCount } from "../db/legacy-db.js";\n\nexport function renderReport(): string {\n  return legacyQuery("r") + legacyCount("r");\n}\n',
@@ -122,6 +131,14 @@ const FILES: Record<string, string> = {
   "src/ui/lazy-page.ts": 'export const load = () => import("./gone-lazy.js");\n',
   "src/ui/settings.json": '{ "a": 1 }\n',
   "src/ui/cjs-page.ts": 'const cfg = require("./settings");\n\nexport const c = cfg;\n',
+  "src/ui/asi-page.ts": 'import { legacyQuery } from "./gone-asi.js"\n;\nexport const a = legacyQuery;\n',
+  "src/ui/types-page.ts": 'import type { LegacyRow } from "./gone-types.js";\n\nexport type R = LegacyRow;\n',
+  "src/ui/merge-page.ts": 'import { legacyQuery } from "./gone-m.js";\nimport { legacyCount } from "./gone-m.js";\n\nexport const m = [legacyQuery, legacyCount];\n',
+  "src/ui/two-page.ts": 'import { legacyQuery as a } from "./gone1.js";\nimport { legacyCount } from "./gone2.js";\n\nexport const t = [a, legacyCount];\n',
+  "src/ui/pkg-page.ts": 'import { z } from "zod";\nimport { legacyQuery } from "./zod.js";\n\nexport const p = [z, legacyQuery];\n',
+  "src/ui/widget.jsx": 'export const legacyQuery = () => "widget";\n',
+  "src/ui/jsx-page.ts": 'import { legacyQuery } from "./widget.js";\n\nexport const w = legacyQuery;\n',
+  "src/ui/dup-page.ts": 'import { legacyQuery as a } from "./gone-d.js";\n\nexport const x = a;\n\nimport { legacyQuery as b } from "./gone-d.js";\n\nexport const y = b;\n',
 };
 
 beforeAll(async () => {
@@ -396,6 +413,119 @@ describe("Issue #48: forbidden-import adoption provenance pinned fixtures (P1–
     expectIntroduced(await scenario((r) => r.edit("src/ui/cjs-page.ts", '"./settings"', '"../db/legacy-db.js"')), "src/ui/cjs-page.ts");
   });
 
+  /** BLOCK, no H-99 limitation; other imports-* limitations (the kept unresolved import) may remain. */
+  const expectBlocked = (res: ReviewResult, source: string) => {
+    expect(forbiddenImports(res)).toHaveLength(1);
+    expect(forbiddenImports(res)[0]).toMatchObject({ provenance: "introduced", blockEligible: true, violationKey: pairKey(source) });
+    expect(importLimits(res)).not.toContain("imports-from-side-unresolved");
+    expect(res.verdict).toBe("BLOCK");
+  };
+
+  it("P8a control (H-99 (2)): the unresolved statement moved below and a new statement in its place is still introduced, BLOCK", async () => {
+    expectBlocked(await scenario((r) => r.write(
+      "src/ui/archive-page.ts",
+      'import { legacyQuery as lq } from "../db/legacy-db.js";\n\nexport function renderArchive(): string {\n  return legacyQuery("a");\n}\nimport { legacyQuery } from "../db/legacy-db-v0.js";\nexport const q = lq;\n',
+    )), "src/ui/archive-page.ts");
+  });
+
+  it("P8a control (H-99 (2), Amendment path): the same move with the new statement through the barrel is still introduced, BLOCK", async () => {
+    expectBlocked(await scenario((r) => r.write(
+      "src/ui/archive-page.ts",
+      'import { legacyQuery as lq } from "../db/index.js";\n\nexport function renderArchive(): string {\n  return legacyQuery("a");\n}\nimport { legacyQuery } from "../db/legacy-db-v0.js";\nexport const q = lq;\n',
+    )), "src/ui/archive-page.ts");
+  });
+
+  it("P8a control (H-99 (2)): the unresolved statement kept after its own-line semicolon becomes a new statement is still introduced, BLOCK", async () => {
+    expectBlocked(await scenario((r) => r.write(
+      "src/ui/asi-page.ts",
+      'import { legacyQuery } from "./gone-asi.js"\nimport { legacyQuery as lq } from "../db/legacy-db.js";\nexport const a = legacyQuery;\n',
+    )), "src/ui/asi-page.ts");
+  });
+
+  it("P8a control (H-99 (2)): import type replaced by a value import is not the same statement, BLOCK", async () => {
+    expectBlocked(await scenario((r) => r.edit("src/ui/types-page.ts", 'import type { LegacyRow } from "./gone-types.js";', 'import { LegacyRow } from "../db/legacy-db.js";')), "src/ui/types-page.ts");
+  });
+
+  it("P8a control (H-99 (2)): the unresolved statement kept as import type next to a new value import is still introduced, BLOCK", async () => {
+    expectBlocked(await scenario((r) => r.edit(
+      "src/ui/archive-page.ts",
+      'import { legacyQuery } from "../db/legacy-db-v0.js";\n',
+      'import type { legacyQuery } from "../db/legacy-db-v0.js";\nimport { legacyQuery as lq } from "../db/legacy-db.js";\nexport const q = lq;\n',
+    )), "src/ui/archive-page.ts");
+  });
+
+  it("P8a control (H-99 (2)): the unresolved statement merged into another import of the same missing module is still introduced, BLOCK", async () => {
+    expectBlocked(await scenario((r) => r.edit(
+      "src/ui/merge-page.ts",
+      'import { legacyQuery } from "./gone-m.js";\nimport { legacyCount } from "./gone-m.js";\n',
+      'import { legacyQuery as lq } from "../db/legacy-db.js";\nimport { legacyCount, legacyQuery } from "./gone-m.js";\nexport const q = lq;\n',
+    )), "src/ui/merge-page.ts");
+  });
+
+  it("P8a control (H-99 (2)): the unresolved statement moved below with another spelling of the same module is still introduced, BLOCK", async () => {
+    expectBlocked(await scenario((r) => r.write(
+      "src/ui/archive-page.ts",
+      'import { legacyQuery as lq } from "../db/legacy-db.js";\n\nexport function renderArchive(): string {\n  return legacyQuery("a");\n}\nimport { legacyQuery } from "../db/legacy-db-v0";\nexport const q = lq;\n',
+    )), "src/ui/archive-page.ts");
+  });
+
+  it("P8a with two aliased imports of the same missing module, each replaced: both lines are the same statements, WARN", async () => {
+    const res = await scenario((r) => {
+      r.edit("src/ui/dup-page.ts", 'import { legacyQuery as a } from "./gone-d.js";', 'import { legacyQuery as a } from "../db/legacy-db.js";');
+      r.edit("src/ui/dup-page.ts", 'import { legacyQuery as b } from "./gone-d.js";', 'import { legacyQuery as b } from "../db/legacy-db.js";');
+    });
+    expect(forbiddenImports(res)[0]).toMatchObject({ provenance: "unverified-at-adoption", blockEligible: false, violationKey: pairKey("src/ui/dup-page.ts") });
+    expect(importLimits(res)).toEqual(["imports-from-side-unresolved"]);
+    expect(res.verdict).toBe("WARN");
+  });
+
+  it("P8a with import type { X } respelled as import { type X }: the same statement, WARN", async () => {
+    const res = await scenario((r) => r.edit("src/ui/types-page.ts", 'import type { LegacyRow } from "./gone-types.js";', 'import { type LegacyRow } from "../db/legacy-db.js";'));
+    expect(forbiddenImports(res)[0]).toMatchObject({ provenance: "unverified-at-adoption", blockEligible: false, violationKey: pairKey("src/ui/types-page.ts") });
+    expect(importLimits(res)).toEqual(["imports-from-side-unresolved"]);
+    expect(res.verdict).toBe("WARN");
+  });
+
+  it("P8a control (H-99 (2)): the unresolved statement moved below through a tsconfig path alias is still introduced, BLOCK", async () => {
+    expectBlocked(await scenario((r) => r.write(
+      "src/ui/archive-page.ts",
+      'import { legacyQuery as lq } from "../db/legacy-db.js";\n\nexport function renderArchive(): string {\n  return legacyQuery("a");\n}\nimport { legacyQuery } from "@db/legacy-db-v0.js";\nexport const q = lq;\n',
+    )), "src/ui/archive-page.ts");
+  });
+
+  it("P8a with two different missing modules, each replaced by the same forbidden specifier: both are the same statements, WARN", async () => {
+    const res = await scenario((r) => {
+      r.edit("src/ui/two-page.ts", '"./gone1.js"', '"../db/legacy-db.js"');
+      r.edit("src/ui/two-page.ts", '"./gone2.js"', '"../db/legacy-db.js"');
+    });
+    expect(forbiddenImports(res)[0]).toMatchObject({ provenance: "unverified-at-adoption", blockEligible: false, violationKey: pairKey("src/ui/two-page.ts") });
+    expect(importLimits(res)).toEqual(["imports-from-side-unresolved"]);
+    expect(res.verdict).toBe("WARN");
+  });
+
+  it("P8a through re-exports with an added barrel import whose origin is allowed (modern-db): still the same statement, WARN", async () => {
+    const res = await scenario((r) => r.edit(
+      "src/ui/archive-page.ts",
+      'import { legacyQuery } from "../db/legacy-db-v0.js";\n',
+      'import { legacyQuery } from "../db/index.js";\nimport { modernQuery } from "../db/index.js";\nexport const m = modernQuery;\n',
+    ));
+    expect(forbiddenImports(res)).toHaveLength(1);
+    expect(forbiddenImports(res)[0]).toMatchObject({ provenance: "unverified-at-adoption", blockEligible: false, violationKey: pairKey("src/ui/archive-page.ts") });
+    expect(importLimits(res)).toEqual(["imports-from-side-unresolved"]);
+    expect(res.verdict).toBe("WARN");
+  });
+
+  it("P8a next to a bare package import named like the old file (zod vs ./zod.js): the package is not the old module, WARN", async () => {
+    const res = await scenario((r) => r.edit("src/ui/pkg-page.ts", '"./zod.js"', '"../db/legacy-db.js"'));
+    expect(forbiddenImports(res)[0]).toMatchObject({ provenance: "unverified-at-adoption", blockEligible: false, violationKey: pairKey("src/ui/pkg-page.ts") });
+    expect(importLimits(res)).toContain("imports-from-side-unresolved");
+    expect(res.verdict).toBe("WARN");
+  });
+
+  it("P8a control (H-99 (2)): a from side whose .js specifier named an existing .jsx file resolved, so it is still introduced, BLOCK", async () => {
+    expectBlocked(await scenario((r) => r.edit("src/ui/jsx-page.ts", '"./widget.js"', '"../db/legacy-db.js"')), "src/ui/jsx-page.ts");
+  });
+
   it("P8b: pins current next behavior (the to side no longer resolves: no claim, imports-unresolved limitation, PASS)", async () => {
     const res = await scenario((r) => r.edit("src/ui/orders-page.ts", '"../db/legacy-db.js"', '"../db/legacy-db-v0.js"'));
     expect(forbiddenImports(res)).toEqual([]);
@@ -427,6 +557,46 @@ describe("Issue #48 P8a without an Adoption Baseline", () => {
     expect(claims[0]).toMatchObject({ alignment: "CONFLICT", blockEligible: true, violationKey: pairKey("src/ui/archive-page.ts") });
     expect(claims[0]?.provenance).toBeUndefined();
     expect(importLimits(res)).toEqual([]);
+    expect(res.verdict).toBe("BLOCK");
+  });
+});
+
+describe("Issue #48 P8a when the Adoption Baseline commit is not in the clone", () => {
+  it("P8a control (H-99 (1), (3)): a from side that resolved at the baseline stays BLOCK in a shallow clone that lacks the baseline commit", async () => {
+    const repo = makeContextRepo(temps, registry, fixture);
+    const confirmed = await createDecisionService({ root: repo.root, clock: at("2026-09-01T00:00:00.000Z") }).confirm(human, "D-001");
+    if (confirmed.value === undefined) throw new Error(JSON.stringify(confirmed.diagnostics));
+    repo.git("add", "-A");
+    repo.git("commit", "-q", "-m", "confirm D-001");
+    await repo.index();
+    const captured = await withGraph(repo.root, (graph) =>
+      captureAdoptionBaseline(repo.root, { graph, registry, historyWindow: HISTORY, actor: human, clock: at("2026-09-02T00:00:00.000Z") }),
+    );
+    if (captured.value === undefined || captured.value.status !== "captured") throw new Error(JSON.stringify(captured));
+    repo.git("add", "-A");
+    repo.git("commit", "-q", "-m", "capture adoption baseline");
+    // modern-db.ts is deleted after the baseline: modern-page's import resolved at the baseline but not at the diff base.
+    repo.git("rm", "-q", "src/db/modern-db.ts");
+    repo.git("commit", "-q", "-m", "drop modern-db");
+    const clone = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-i48-shallow-")));
+    temps.push(clone);
+    fs.rmSync(clone, { recursive: true, force: true });
+    execFileSync("git", ["clone", "-q", "--depth", "1", `file://${repo.root.replace(/\\/g, "/")}`, clone], { windowsHide: true });
+    const baselineCommit = captured.value.baseline.git.headOid;
+    expect(() => execFileSync("git", ["cat-file", "-e", `${baselineCommit}^{commit}`], { cwd: clone, stdio: "ignore", windowsHide: true })).toThrow();
+    const file = path.join(clone, "src/ui/modern-page.ts");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace('"../db/modern-db.js"', '"../db/legacy-db.js"'));
+    await withGraph(clone, async (store) => {
+      const indexed = await indexRepository(clone, { store, registry, historyWindow: HISTORY });
+      if (indexed.value === undefined) throw new Error(JSON.stringify(indexed.diagnostics));
+    });
+    const res = await withGraph(clone, async (graph) => {
+      const out = await reviewChanges(clone, { diff: W }, { graph, registry, historyWindow: HISTORY });
+      if (out.value === undefined) throw new Error(JSON.stringify(out.diagnostics));
+      return out.value.result;
+    });
+    expect(forbiddenImports(res)[0]).toMatchObject({ provenance: "introduced", blockEligible: true, violationKey: pairKey("src/ui/modern-page.ts") });
+    expect(importLimits(res)).not.toContain("imports-from-side-unresolved");
     expect(res.verdict).toBe("BLOCK");
   });
 });
