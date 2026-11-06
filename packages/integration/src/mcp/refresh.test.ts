@@ -29,6 +29,19 @@ describe("MCP automatic index refresh follow-ups (#172)", () => {
     expect(result.kind === "ok" ? result.payload.indexRefresh : undefined).toEqual({ refreshed: true });
   });
 
+  it("says still stale after the refresh check when the index was already current and then changed", async () => {
+    // Another request refreshed first, so this one finds the index current ({ refreshed: false }); then a file changes.
+    let reads = 0;
+    const alreadyCurrent = async () => ({ value: { refreshed: false }, diagnostics: [] }) as never;
+    const result = await readWithSafeRefresh("/repo", async () => { reads += 1; return op("index-required"); }, undefined, alreadyCurrent);
+    expect(reads).toBe(2);
+    expect(result.kind === "ok" ? result.payload.indexRefresh : undefined).toEqual({ refreshed: false, reason: expect.stringContaining("still stale after the automatic refresh check") });
+    const summary = TOOLS.duo_review_changes.summarize(result.kind === "ok" ? result.payload : {});
+    expect(summary).toContain("DUO checked the index once, but the index is still stale after the automatic refresh check");
+    expect(summary).not.toContain("Automatic index refresh was not done");
+    expect(summary).not.toContain("after the refresh (");
+  });
+
   it("does not refresh for a request that is already cancelled", async () => {
     const controller = new AbortController();
     controller.abort();

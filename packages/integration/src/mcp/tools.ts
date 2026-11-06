@@ -139,8 +139,10 @@ const REFRESH_LOCK_TIMEOUT_MS = 30_000;
 /** Present on a context or review result only when DUO tried a refresh: refreshed, already current, or refused with the reason. */
 export interface IndexRefresh { readonly refreshed: boolean; readonly reason?: string }
 
-/** #172: the read after a successful refresh can still be stale (another write in between); index-required always carries a reason. */
+/** #172: the read after the refresh step can still be stale (another write in between); index-required always carries a reason. */
 const STALE_AGAIN = "the index became stale again after the refresh (a file probably changed in between)";
+/** #172 review: refreshed false means the index was already current (another request may have refreshed it), so nothing ran "before" this read. */
+const STILL_STALE = "the index is still stale after the automatic refresh check (it was current when checked, so a file probably changed afterwards)";
 
 /**
  * #4: a read that finds a stale index asks the graph for one safe refresh under the common writer lock, then reads again
@@ -165,13 +167,19 @@ export async function readWithSafeRefresh<P extends { readonly status: string }>
   const second = await read();
   if (second.kind !== "ok") return second;
   const stillStale = second.payload.status === "index-required";
-  return { ...second, payload: { ...second.payload, indexRefresh: { refreshed: refreshed.value.refreshed, ...(stillStale ? { reason: STALE_AGAIN } : {}) } } };
+  const reason = refreshed.value.refreshed ? STALE_AGAIN : STILL_STALE;
+  return { ...second, payload: { ...second.payload, indexRefresh: { refreshed: refreshed.value.refreshed, ...(stillStale ? { reason } : {}) } } };
 }
 
 /** What the human summary says about an automatic refresh. */
 function refreshLines(r: IndexRefresh | undefined): { readonly before: string; readonly refused: string } {
   if (r === undefined) return { before: "", refused: "" };
-  if (r.reason !== undefined) return { before: "", refused: r.refreshed ? `\nDUO refreshed the index once, but ${r.reason}.` : `\nAutomatic index refresh was not done: ${r.reason}` };
+  if (r.reason !== undefined) {
+    const refused = r.refreshed ? `\nDUO refreshed the index once, but ${r.reason}.`
+      : r.reason === STILL_STALE ? `\nDUO checked the index once, but ${r.reason}.`
+      : `\nAutomatic index refresh was not done: ${r.reason}`;
+    return { before: "", refused };
+  }
   return { before: r.refreshed ? "The DUO index was stale; DUO refreshed it once before answering.\n\n" : "", refused: "" };
 }
 
