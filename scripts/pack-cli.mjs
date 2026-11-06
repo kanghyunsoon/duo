@@ -255,6 +255,8 @@ const manifest = {
   ...(cli.repository === undefined ? {} : { repository: cli.repository }),
   ...(cli.homepage === undefined ? {} : { homepage: cli.homepage }),
   ...(cli.bugs === undefined ? {} : { bugs: cli.bugs }),
+  // MCP Registry ownership check: the published package.json must carry the server.json name (T178).
+  ...(cli.mcpName === undefined ? {} : { mcpName: cli.mcpName }),
   type: "module",
   bin: { duoctl: "dist/duoctl.js" },
   // npm-packlist adds README, LICENSE, package.json and the bundled dependencies (node_modules/) by itself.
