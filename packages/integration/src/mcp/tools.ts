@@ -139,27 +139,39 @@ const REFRESH_LOCK_TIMEOUT_MS = 30_000;
 /** Present on a context or review result only when DUO tried a refresh: refreshed, already current, or refused with the reason. */
 export interface IndexRefresh { readonly refreshed: boolean; readonly reason?: string }
 
+/** #172: the read after a successful refresh can still be stale (another write in between); index-required always carries a reason. */
+const STALE_AGAIN = "the index became stale again after the refresh (a file probably changed in between)";
+
 /**
  * #4: a read that finds a stale index asks the graph for one safe refresh under the common writer lock, then reads again
  * with a fresh graph reader (never the pre-refresh snapshot, never more than once). A refused refresh keeps the first
  * index-required result and adds the reason. The CLI does not use this: it stays explicit.
  */
-async function readWithSafeRefresh<P extends { readonly status: string }>(root: string, read: () => Promise<Operation<P>>): Promise<Operation<P & { indexRefresh?: IndexRefresh }>> {
+export async function readWithSafeRefresh<P extends { readonly status: string }>(
+  root: string,
+  read: () => Promise<Operation<P>>,
+  signal?: AbortSignal,
+  refresh: typeof refreshIndexIfSafe = refreshIndexIfSafe,
+): Promise<Operation<P & { indexRefresh?: IndexRefresh }>> {
   const first = await read();
   if (first.kind !== "ok" || first.payload.status !== "index-required") return first;
-  const refresh = await refreshIndexIfSafe(root, { lockTimeoutMs: REFRESH_LOCK_TIMEOUT_MS });
-  if (refresh.value === undefined) {
-    const reason = redactSecrets(refresh.diagnostics.map((d) => d.message).join("; ") || "the index could not be refreshed safely").text;
+  // #172: a cancelled request neither waits for the index lock nor writes an index nobody will read.
+  if (signal?.aborted === true) return first;
+  const refreshed = await refresh(root, { lockTimeoutMs: REFRESH_LOCK_TIMEOUT_MS });
+  if (refreshed.value === undefined) {
+    const reason = redactSecrets(refreshed.diagnostics.map((d) => d.message).join("; ") || "the index could not be refreshed safely").text;
     return { ...first, payload: { ...first.payload, indexRefresh: { refreshed: false, reason } } };
   }
   const second = await read();
-  return second.kind === "ok" ? { ...second, payload: { ...second.payload, indexRefresh: { refreshed: refresh.value.refreshed } } } : second;
+  if (second.kind !== "ok") return second;
+  const stillStale = second.payload.status === "index-required";
+  return { ...second, payload: { ...second.payload, indexRefresh: { refreshed: refreshed.value.refreshed, ...(stillStale ? { reason: STALE_AGAIN } : {}) } } };
 }
 
 /** What the human summary says about an automatic refresh. */
 function refreshLines(r: IndexRefresh | undefined): { readonly before: string; readonly refused: string } {
   if (r === undefined) return { before: "", refused: "" };
-  if (r.reason !== undefined) return { before: "", refused: `\nAutomatic index refresh was not done: ${r.reason}` };
+  if (r.reason !== undefined) return { before: "", refused: r.refreshed ? `\nDUO refreshed the index once, but ${r.reason}.` : `\nAutomatic index refresh was not done: ${r.reason}` };
   return { before: r.refreshed ? "The DUO index was stale; DUO refreshed it once before answering.\n\n" : "", refused: "" };
 }
 
@@ -231,7 +243,7 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
     run: async (args, ctx) => {
       const op = await readWithSafeRefresh(ctx.root, () => projectContext(ctx.root, { task: args.task, ...(args.budget === undefined ? {} : { budget: args.budget }), ...(args.profile === undefined ? {} : { profile: args.profile }) }, {
         signal: ctx.signal, ...(ctx.tokenCounts === undefined ? {} : { tokenCounts: ctx.tokenCounts }),
-      }));
+      }), ctx.signal);
       if (op.kind === "ok") {
         const resolution = op.payload.context.resolution;
         const candidates = resolution?.ambiguities.length === 0 ? resolution.seeds
@@ -264,7 +276,7 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
         diff: { from: args.from === undefined ? "HEAD" : diffEnd(args.from), to: args.to === undefined ? "WORKTREE" : diffEnd(args.to), ...(args.files === undefined ? {} : { files: args.files as RepoPath[] }) },
         ...(args.task === undefined ? {} : { task: args.task }), ...(args.budget === undefined ? {} : { budget: args.budget }),
         ...(args.includeSemanticAssist === undefined ? {} : { includeSemanticAssist: args.includeSemanticAssist }),
-      }, { signal: ctx.signal, llm: ctx.llm, ...(ctx.tokenCounts === undefined ? {} : { tokenCounts: ctx.tokenCounts }) }));
+      }, { signal: ctx.signal, llm: ctx.llm, ...(ctx.tokenCounts === undefined ? {} : { tokenCounts: ctx.tokenCounts }) }), ctx.signal);
       if (op.kind === "ok" && args.task !== undefined) {
         const at = new Date();
         const duoSessionId = ctx.duoSessionId;

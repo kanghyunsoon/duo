@@ -1,0 +1,42 @@
+/**
+ * #172: follow-ups to the MCP automatic index refresh (#4, #133).
+ */
+import { describe, expect, it } from "vitest";
+import { readWithSafeRefresh, TOOLS } from "./tools.js";
+
+const op = (status: string) => ({ kind: "ok" as const, payload: { status }, diagnostics: [] });
+const refreshedOnce = (calls: { n: number }) => async () => {
+  calls.n += 1;
+  return { value: { refreshed: true }, diagnostics: [] } as never;
+};
+
+describe("MCP automatic index refresh follow-ups (#172)", () => {
+  it("gives a reason when the read after a successful refresh is still index-required", async () => {
+    const calls = { n: 0 };
+    let reads = 0;
+    const result = await readWithSafeRefresh("/repo", async () => { reads += 1; return op("index-required"); }, undefined, refreshedOnce(calls));
+    expect(calls.n).toBe(1);
+    expect(reads).toBe(2);
+    expect(result.kind === "ok" ? result.payload.indexRefresh : undefined).toEqual({ refreshed: true, reason: expect.stringContaining("stale again") });
+    const summary = TOOLS.duo_get_context.summarize(result.kind === "ok" ? result.payload : {});
+    expect(summary).toContain("INDEX_REQUIRED");
+    expect(summary).toContain("DUO refreshed the index once, but the index became stale again");
+  });
+
+  it("adds no reason when the second read is ready", async () => {
+    let reads = 0;
+    const result = await readWithSafeRefresh("/repo", async () => op(reads++ === 0 ? "index-required" : "ready"), undefined, refreshedOnce({ n: 0 }));
+    expect(result.kind === "ok" ? result.payload.indexRefresh : undefined).toEqual({ refreshed: true });
+  });
+
+  it("does not refresh for a request that is already cancelled", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const calls = { n: 0 };
+    let reads = 0;
+    const result = await readWithSafeRefresh("/repo", async () => { reads += 1; return op("index-required"); }, controller.signal, refreshedOnce(calls));
+    expect(calls.n).toBe(0);
+    expect(reads).toBe(1);
+    expect(result).toEqual(op("index-required"));
+  });
+});
