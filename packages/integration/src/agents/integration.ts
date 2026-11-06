@@ -19,9 +19,10 @@ import { claudeCodeAdapter } from "./claude-code.js";
 import { codexAdapter } from "./codex.js";
 import { checkLauncher, currentHost, effectiveLauncherHost, launcherDisplay, NPX_LAUNCHER, PATH_LAUNCHER, type HostEnvironment } from "./launcher.js";
 import { findBlock, removeBlock, upsertBlock } from "./managed-block.js";
+import { SKILL_TEXT } from "./skill.js";
 import {
   AGENT_IDS, type AgentId, type AgentIntegrationPlan, type AgentIntegrationState, type AgentIntegrationVerification, type BridgeStatus, type DuoLauncher,
-  type FileAction, type IntegrationConflict, type IntegrationStatus, type McpInspection, type VerifyCheck, type LauncherVersionMismatchWarning,
+  type FileAction, type IntegrationConflict, type IntegrationStatus, type McpInspection, type SkillStatus, type VerifyCheck, type LauncherVersionMismatchWarning,
 } from "./types.js";
 
 const ADAPTERS: Readonly<Record<AgentId, AgentIntegrationAdapter>> = { codex: codexAdapter, "claude-code": claudeCodeAdapter };
@@ -98,7 +99,7 @@ function readOwnership(root: string, adapter: AgentIntegrationAdapter): Ownershi
   if (file.text === undefined) return { ...file, valid: false, targets: {}, created: [] };
   try {
     const value = JSON.parse(file.text) as Record<string, unknown> | null;
-    const allowed = [adapter.mcpTarget, adapter.bridgeTarget];
+    const allowed = [adapter.mcpTarget, adapter.bridgeTarget, adapter.skillTarget];
     if (value !== null && typeof value === "object" && !Array.isArray(value) && value.format === "duo.agent-file-ownership/1") {
       if (value.targets !== null && typeof value.targets === "object" && !Array.isArray(value.targets)) {
         const rawTargets = value.targets as Record<string, unknown>;
@@ -132,6 +133,7 @@ function hadDuoContent(target: string, text: string): boolean {
   for (const a of Object.values(ADAPTERS)) {
     if (a.mcpTarget === target) return a.remove(text, true) !== undefined;
     if (a.bridgeTarget === target) return removeBlock(text, BRIDGE_MARKERS) !== undefined;
+    if (a.skillTarget === target) return text === SKILL_TEXT;
   }
   return false;
 }
@@ -144,9 +146,20 @@ function onlyDuoContent(target: string, text: string | undefined): boolean {
       const next = removeBlock(text, BRIDGE_MARKERS);
       return next !== undefined && next.trim() === "";
     }
+    if (a.skillTarget === target) return text === SKILL_TEXT;
   }
   return false;
 }
+
+function inspectSkill(file: ReadFile, record: TargetOwnership | undefined): SkillStatus {
+  if (file.text === undefined) return "absent";
+  if (file.text === SKILL_TEXT) return "current";
+  // An older DUO text only when the record says DUO created it and nobody changed it since (H-94 (3)).
+  return record !== undefined && !record.existedBefore && record.postSha256 === file.hash ? "outdated" : "foreign";
+}
+
+/** The skill file is DUO's as a whole: delete it only when ownership allows (H-94), otherwise leave it untouched. */
+const removeSkill = (keepFile: boolean): null | undefined => (keepFile ? undefined : null);
 
 interface RemovalDecision {
   readonly next: string | null | undefined;
@@ -237,6 +250,8 @@ export interface PlanOptions {
    * creates it before this plan is applied. Only AGENT_NOT_INITIALIZED is skipped; conflicts and launcher problems still block.
    */
   readonly assumeInitialized?: boolean;
+  /** Also write the opt-in project skill (S15P31A106-358). The default install never does. */
+  readonly withSkill?: boolean;
 }
 
 const fileAction = (before: string | undefined, next: string | null | undefined): FileAction =>
@@ -295,7 +310,27 @@ export function planAgentIntegration(root: string, agent: AgentId, options: Plan
   } else if (bridgeStatus !== "current") {
     bridgeAction = bridgeFile.text === undefined ? "create" : "modify";
   }
-  const hasMutations = mcpAction === "create" || mcpAction === "modify" || bridgeAction === "create" || bridgeAction === "modify";
+  const skillFile = readTarget(root, adapter.skillTarget);
+  const skillRecord = ownership.valid ? ownership.targets[adapter.skillTarget] : undefined;
+  const withSkill = options.withSkill === true;
+  // #146 review: without --with-skill, a recorded skill path that is no longer a regular file is left out of the plan,
+  // so it cannot block repairing the MCP config and bridge; the path and its ownership record stay as they are.
+  const skillLeftAlone = !withSkill && skillRecord !== undefined && skillFile.problem !== undefined;
+  const skillInvolved = withSkill || (skillRecord !== undefined && !skillLeftAlone);
+  const skillStatus = inspectSkill(skillFile, skillRecord);
+  let skillAction: FileAction = "none";
+  if (withSkill) {
+    if (skillFile.problem !== undefined) {
+      conflicts.push({ target: adapter.skillTarget, reason: skillFile.problem });
+      skillAction = "blocked";
+    } else if (skillStatus === "foreign") {
+      conflicts.push({ target: adapter.skillTarget, reason: "a skill DUO did not write is already at this path; DUO does not overwrite it (install without --with-skill)" });
+      skillAction = "blocked";
+    } else if (skillStatus !== "current") {
+      skillAction = skillStatus === "absent" ? "create" : "modify";
+    }
+  }
+  const hasMutations = [mcpAction, bridgeAction, skillAction].some((a) => a === "create" || a === "modify");
   if (ownership.problem !== undefined && hasMutations) {
     if (symlinkOnOwnershipPath(root, ownershipPath(agent))) {
       conflicts.push({ target: ownershipPath(agent), reason: ownership.problem });
@@ -308,15 +343,19 @@ export function planAgentIntegration(root: string, agent: AgentId, options: Plan
   if (adapter.projectTrustRequired) warnings.push("Codex reads .codex/config.toml only in a trusted project. Trust this folder yourself when Codex asks on first launch, or set trust_level = \"trusted\" for it under [projects] in ~/.codex/config.toml (DUO does not change trust).");
   if (adapter.approvalRequired) warnings.push("Claude Code asks you to approve project MCP servers from .mcp.json. Run claude in this project, accept the workspace trust dialog and approve duo-director (DUO does not approve it).");
 
-  const actions: [string, FileAction][] = [[adapter.mcpTarget, mcpAction], [adapter.bridgeTarget, bridgeAction]];
+  if (withSkill) warnings.push(`${adapter.skillTarget}: both agents list a project skill; Codex was observed loading it; Claude Code is not verified yet.`);
+  if (skillLeftAlone) warnings.push(`${adapter.skillTarget}: ${skillFile.problem}; DUO leaves it and its ownership record unchanged.`);
+
+  const actions: [string, FileAction][] = [[adapter.mcpTarget, mcpAction], [adapter.bridgeTarget, bridgeAction], ...(skillInvolved ? [[adapter.skillTarget, skillAction] as [string, FileAction]] : [])];
   return {
     format: "duo.agent-integration-plan/1", operation: "install", agent, repositoryRoot: root, launcher,
     mcp: { target: adapter.mcpTarget, status: inspection.status, ...(inspection.current === undefined ? {} : { current: inspection.current }), planned, action: mcpAction },
     bridge: { target: adapter.bridgeTarget, status: bridgeStatus, plannedBlock: lines.join("\n"), action: bridgeAction },
+    ...(skillInvolved ? { skill: { target: adapter.skillTarget, status: skillFile.problem === undefined ? skillStatus : "foreign", action: skillAction } } : {}),
     requirements: { duoctlAvailable: launch.available, projectTrustRequired: adapter.projectTrustRequired, approvalRequired: adapter.approvalRequired },
     ...summarize(actions), conflicts, warnings, blockers,
     applicable: blockers.length === 0, noop: actions.every(([, a]) => a === "none"),
-    files: [{ path: adapter.mcpTarget, hash: mcpFile.hash }, { path: adapter.bridgeTarget, hash: bridgeFile.hash }, { path: ownershipPath(agent), hash: ownership.hash }],
+    files: [{ path: adapter.mcpTarget, hash: mcpFile.hash }, { path: adapter.bridgeTarget, hash: bridgeFile.hash }, ...(skillInvolved ? [{ path: adapter.skillTarget, hash: skillFile.hash }] : []), { path: ownershipPath(agent), hash: ownership.hash }],
   };
 }
 
@@ -366,16 +405,32 @@ export function planAgentRemoval(root: string, agent: AgentId): AgentIntegration
     bridgeAction = fileAction(bridgeFile.text, decision.next);
     if (decision.reason !== undefined) warnings.push(decision.reason);
   }
+  // The skill is involved only when DUO's record names it or the file is DUO's text; any other skill there is left alone.
+  const skillFile = readTarget(root, adapter.skillTarget);
+  const skillRecord = ownership.valid ? ownership.targets[adapter.skillTarget] : undefined;
+  const skillInvolved = skillFile.text !== undefined && (skillRecord !== undefined || skillFile.text === SKILL_TEXT);
+  let skillAction: FileAction = "none";
+  if (skillInvolved) {
+    const decision = decideTargetRemoval(root, adapter.skillTarget, skillFile, ownership, removeSkill);
+    skillAction = fileAction(skillFile.text, decision.next);
+    if (decision.next === undefined) {
+      const why = skillRecord === undefined
+        ? (ownership.problem !== undefined ? "invalid install record" : "no install record")
+        : skillRecord.existedBefore ? "it existed before DUO" : "modified since DUO installed it";
+      warnings.push(`keep ${adapter.skillTarget} (${why})`);
+    }
+  }
   const blockers = conflicts.map((c) => createDiagnostic("AGENT_INTEGRATION_CONFLICT", `${c.target}: ${c.reason}`));
-  const actions: [string, FileAction][] = [[adapter.mcpTarget, mcpAction], [adapter.bridgeTarget, bridgeAction]];
+  const actions: [string, FileAction][] = [[adapter.mcpTarget, mcpAction], [adapter.bridgeTarget, bridgeAction], ...(skillInvolved ? [[adapter.skillTarget, skillAction] as [string, FileAction]] : [])];
   return {
     format: "duo.agent-integration-plan/1", operation: "remove", agent, repositoryRoot: root, launcher,
     mcp: { target: adapter.mcpTarget, status: state.mcp.status, ...(state.mcp.current === undefined ? {} : { current: state.mcp.current }), action: mcpAction },
     bridge: { target: adapter.bridgeTarget, status: state.bridge.status, action: bridgeAction },
+    ...(skillInvolved ? { skill: { target: adapter.skillTarget, status: inspectSkill(skillFile, skillRecord), action: skillAction } } : {}),
     requirements: { duoctlAvailable: true, projectTrustRequired: adapter.projectTrustRequired, approvalRequired: adapter.approvalRequired },
     ...summarize(actions), conflicts, warnings, blockers,
     applicable: blockers.length === 0, noop: actions.every(([, a]) => a === "none"),
-    files: [{ path: adapter.mcpTarget, hash: mcpFile.hash }, { path: adapter.bridgeTarget, hash: bridgeFile.hash }, { path: ownershipPath(agent), hash: ownership.hash }],
+    files: [{ path: adapter.mcpTarget, hash: mcpFile.hash }, { path: adapter.bridgeTarget, hash: bridgeFile.hash }, ...(skillInvolved ? [{ path: adapter.skillTarget, hash: skillFile.hash }] : []), { path: ownershipPath(agent), hash: ownership.hash }],
   };
 }
 
@@ -393,6 +448,7 @@ function nextContents(root: string, plan: AgentIntegrationPlan, ownership: Owner
     const planned = adapter.plannedEntry(plan.launcher);
     if (plan.mcp.action === "create" || plan.mcp.action === "modify") out.set(adapter.mcpTarget, adapter.write(mcpFile.text, planned) ?? mcpFile.text ?? "");
     if (plan.bridge.action === "create" || plan.bridge.action === "modify") out.set(adapter.bridgeTarget, upsertBlock(bridgeFile.text, bridgeLines(launcherDisplay(plan.launcher)), BRIDGE_MARKERS));
+    if (plan.skill?.action === "create" || plan.skill?.action === "modify") out.set(adapter.skillTarget, SKILL_TEXT);
   } else {
     if (mcpFile.text !== undefined && (plan.mcp.action === "modify" || plan.mcp.action === "delete")) {
       const decision = decideTargetRemoval(root, adapter.mcpTarget, mcpFile, ownership, (keepFile) => adapter.remove(mcpFile.text as string, keepFile));
@@ -405,6 +461,11 @@ function nextContents(root: string, plan: AgentIntegrationPlan, ownership: Owner
       });
       if (decision.next !== undefined) out.set(adapter.bridgeTarget, decision.next);
     }
+    const skillFile = readTarget(root, adapter.skillTarget);
+    if (skillFile.text !== undefined && plan.skill?.action === "delete") {
+      const decision = decideTargetRemoval(root, adapter.skillTarget, skillFile, ownership, removeSkill);
+      if (decision.next !== undefined) out.set(adapter.skillTarget, decision.next);
+    }
   }
   return out;
 }
@@ -415,11 +476,20 @@ function buildUpdatedOwnership(
   before: ReadonlyMap<string, ReadFile>,
   after: ReadonlyMap<string, string>,
   backupPaths: ReadonlyMap<string, string>,
+  skillPlanned: boolean,
 ): Record<string, TargetOwnership> {
   const out: Record<string, TargetOwnership> = {};
-  for (const target of [adapter.mcpTarget, adapter.bridgeTarget]) {
+  for (const target of [adapter.mcpTarget, adapter.bridgeTarget, adapter.skillTarget]) {
     const prev = ownership.valid ? ownership.targets[target] : undefined;
+    // The skill joins the record only when DUO writes it, already owns it, or finds its own text there (kept as pre-existing), never for someone else's skill.
+    if (target === adapter.skillTarget && prev === undefined && !after.has(target) && before.get(target)?.text !== SKILL_TEXT) continue;
     const pre = before.get(target);
+    // A recorded target DUO did not write keeps its record when DUO could not read it as a regular file, or when the plan
+    // left the skill out, even if its path changed between plan and apply (#146 review).
+    if (prev !== undefined && !after.has(target) && (pre?.problem !== undefined || (target === adapter.skillTarget && !skillPlanned))) {
+      out[target] = prev;
+      continue;
+    }
     const postText = after.get(target) ?? pre?.text;
     if (postText === undefined) continue;
     const postSha256 = sha256(postText);
@@ -480,11 +550,12 @@ export async function applyAgentIntegration(root: string, plan: AgentIntegration
   const beforeFiles = new Map<string, ReadFile>([
     [adapter.mcpTarget, readTarget(root, adapter.mcpTarget)],
     [adapter.bridgeTarget, readTarget(root, adapter.bridgeTarget)],
+    [adapter.skillTarget, readTarget(root, adapter.skillTarget)],
   ]);
   const next = nextContents(root, plan, ownership);
   for (const [rel, text] of next) {
     const action = fileAction(beforeFiles.get(rel)?.text, text);
-    const plannedAction = rel === adapter.mcpTarget ? plan.mcp.action : plan.bridge.action;
+    const plannedAction = rel === adapter.mcpTarget ? plan.mcp.action : rel === adapter.bridgeTarget ? plan.bridge.action : (plan.skill?.action ?? "none");
     if (action !== plannedAction) {
       return failure([createDiagnostic("AGENT_PLAN_STALE", `${rel} no longer matches the planned ${plannedAction} action; plan again`)]);
     }
@@ -538,7 +609,7 @@ export async function applyAgentIntegration(root: string, plan: AgentIntegration
       const g = guardWrite(root, recordPath, "regenerable");
       if (g.value === undefined) throw Object.assign(new Error("guard"), { diagnostics: g.diagnostics });
       if (plan.operation === "install") {
-        const updatedTargets = buildUpdatedOwnership(adapter, ownership, beforeFiles, afterTexts, backupPaths);
+        const updatedTargets = buildUpdatedOwnership(adapter, ownership, beforeFiles, afterTexts, backupPaths, plan.skill !== undefined);
         await writeFileAtomic(g.value.absolute, formatOwnershipRecord(plan.agent, updatedTargets));
       } else if (ownership.hash !== null) {
         await fsp.rm(g.value.absolute, { force: true });

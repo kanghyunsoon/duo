@@ -20,6 +20,8 @@ export interface AgentIntegrationAdapter {
   readonly mcpTarget: string;
   /** Repository-relative bridge file. */
   readonly bridgeTarget: string;
+  /** Repository-relative project skill file, written only with --with-skill. */
+  readonly skillTarget: string;
   readonly projectTrustRequired: boolean;
   readonly approvalRequired: boolean;
   /** The entry DUO writes for this launcher (portable: no absolute repository path). */

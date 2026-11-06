@@ -7,6 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -488,6 +489,45 @@ describe("duoctl setup: connecting Codex and Claude Code (Jira -319)", () => {
     expect(fixed.code).toBe(0);
     expect(fixed.json().result).toMatchObject({ status: "unchanged", applied: false, steps: { agents: { codex: { status: "ok" } } }, agents: { codex: { verify: { ok: true } } }, remaining: [expect.stringContaining("Codex: trust")] });
     expect(snapshot(r.root)).toEqual(before);
+  });
+
+  it("a skill from install --with-skill keeps its H-94 ownership through setup: a failed agent write rolls back, a successful one keeps the record", async () => {
+    const r = repo();
+    const env = onPath();
+    const skill = ".claude/skills/duo/SKILL.md";
+    const record = ".duo-project/runtime/agent-integration/claude-code.json";
+    expect((await setup(r.root, ["--agent", "claude-code", "--yes", "--json"], { env })).code).toBe(0);
+    const installed = terminal(r.root, { env });
+    expect(await run(["install", "claude-code", "--with-skill", "--yes"], installed.io), installed.out.join("\n")).toBe(0);
+    const skillText = read(r.root, skill);
+    const owned = () => (JSON.parse(read(r.root, record)) as { targets: Record<string, { existedBefore: boolean }> }).targets[skill];
+    expect(owned()).toMatchObject({ existedBefore: false });
+
+    // Setup has an agent write to make (CLAUDE.md is gone) while DUO's skill is installed; that write fails once.
+    fs.rmSync(path.join(r.root, "CLAUDE.md"));
+    const files = snapshot(r.root, userFiles);
+    const recordBefore = read(r.root, record);
+    const rename = fsp.rename;
+    const failing = vi.spyOn(fsp, "rename").mockImplementation(async (from, to) => {
+      if (to === path.join(r.root, "CLAUDE.md")) throw new Error("bridge write failure");
+      return rename(from, to);
+    });
+    const failed = await setup(r.root, ["--agent", "claude-code", "--yes", "--json"], { env });
+    failing.mockRestore();
+    expect(failed.code).toBe(1);
+    expect(failed.json().result).toMatchObject({ status: "failed", steps: { agents: { "claude-code": { status: "failed" } } } });
+    expect(snapshot(r.root, userFiles)).toEqual(files);
+    expect(read(r.root, record)).toBe(recordBefore);
+
+    const fixed = await setup(r.root, ["--agent", "claude-code", "--yes", "--json"], { env });
+    expect(fixed.code, fixed.out.join("\n")).toBe(0);
+    expect(fixed.json().result).toMatchObject({ steps: { agents: { "claude-code": { status: "ok" } } } });
+    expect(read(r.root, skill)).toBe(skillText);
+    expect(owned()).toMatchObject({ existedBefore: false });
+    // install remove still knows DUO wrote the skill.
+    const removed = terminal(r.root, { env });
+    expect(await run(["install", "remove", "claude-code", "--yes"], removed.io), removed.out.join("\n")).toBe(0);
+    expect(fs.existsSync(path.join(r.root, skill))).toBe(false);
   });
 
   it.each(["path", "npx"] as const)("the %s resume keeps agent order and launcher, asks before new writes, and finishes both agents", async (launcher) => {
