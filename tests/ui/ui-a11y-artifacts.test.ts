@@ -138,11 +138,17 @@ describe("UI accessibility audit artifacts", () => {
     expect(assessTable({ complex: true, headerIds: ["group"], cells: [{ headers: [], hasRowHeader: false, hasColumnHeader: true }] }).kind).toBe("complex");
   });
 
-  it("compares the full expected focus order and rejects inserted, missing, repeated or reversed targets", () => {
+  it("compares the full expected focus order and rejects missing, unexpected, duplicated, reordered and trapped targets", () => {
     const expected = ["skip", "nav:overview", "nav:search"];
     expect(compareFocusSequence(expected, expected).pass).toBe(true);
-    for (const actual of [["skip", "extra", "nav:overview", "nav:search"], ["skip", "nav:overview"],
-      ["skip", "nav:overview", "nav:overview"], ["skip", "nav:search", "nav:overview"]]) {
+    const invalidSequences = [
+      ["skip", "nav:overview"],
+      ["skip", "extra", "nav:overview", "nav:search"],
+      ["skip", "nav:overview", "nav:overview", "nav:search"],
+      ["skip", "nav:search", "nav:overview"],
+      ["skip", "nav:overview", "nav:overview", "nav:overview"],
+    ];
+    for (const actual of invalidSequences) {
       expect(compareFocusSequence(expected, actual).pass).toBe(false);
     }
   });

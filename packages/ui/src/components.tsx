@@ -45,7 +45,7 @@ export function Page(props: { readonly title: string; readonly children: ReactNo
       <header className="page-head">
         <h1 id="page-title">{props.title}</h1>
         {props.onRefresh === undefined ? null : <button type="button" onClick={props.onRefresh}>Refresh</button>}
-        {props.durationMs === undefined ? null : <span className="muted small" aria-label="server time">{props.durationMs} ms</span>}
+        {props.durationMs === undefined ? null : <span className="muted small">{props.durationMs} ms</span>}
       </header>
       {props.children}
     </section>

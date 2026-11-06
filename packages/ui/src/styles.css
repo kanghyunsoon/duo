@@ -51,6 +51,7 @@ dialog p, dialog dd, dialog code { overflow-wrap: anywhere; }
 dialog label { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
 dialog label input, dialog label textarea { width: 100%; min-width: 0; }
 .table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.table-scroll :is(th, td) { overflow-wrap: break-word; }
 .table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 pre.truth, pre.slice { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); padding: 8px; border-radius: 4px; max-height: 360px; overflow: auto; }
 .packet-items { padding-left: 18px; }
@@ -86,6 +87,7 @@ main:has(.work-page) { max-width: none; min-width: 0; }
 .work-canvas { min-width: 0; height: clamp(520px, 65vh, 760px); background: color-mix(in srgb, var(--bg) 65%, var(--panel)); }
 .work-canvas .react-flow__controls { border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 3px 12px rgb(20 30 50 / 8%); overflow: hidden; }
 .work-canvas .react-flow__minimap { border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 3px 12px rgb(20 30 50 / 8%); overflow: hidden; }
+.work-canvas .react-flow__attribution a { color: var(--muted); }
 .react-flow__node.work-node { border: 1px solid color-mix(in srgb, var(--line) 85%, #90a4b8); border-left: 4px solid var(--work-file); border-radius: 13px; padding: 0; text-align: left; background: var(--panel); color: var(--fg); box-shadow: 0 5px 16px rgb(27 45 70 / 11%); transition: opacity .2s ease, box-shadow .2s ease; }
 .react-flow__node.work-node { cursor: grab; }
 .react-flow__node.work-node:active { cursor: grabbing; }
@@ -96,11 +98,11 @@ main:has(.work-page) { max-width: none; min-width: 0; }
 .react-flow__node.work-node--test { border-left-color: var(--work-test); }
 .react-flow__node.work-node--worktree { border-left-color: #8693a3; }
 .react-flow__node.work-node--symbol { border-left-color: #5e9d75; }
-.react-flow__node.work-node--muted { opacity: .44; filter: saturate(.45); }
-.react-flow__node.work-node--focus { border: 1px solid #565bc6; border-left: 4px solid #4c51bf; background: linear-gradient(135deg, #7477df, #555bc5); color: #fff; box-shadow: 0 12px 28px rgb(80 85 190 / 27%); }
+.react-flow__node.work-node--muted { filter: saturate(.45); }
+.react-flow__node.work-node--focus { border: 1px solid #565bc6; border-left: 4px solid #4c51bf; background: linear-gradient(135deg, #4f55b5, #41479e); color: #fff; box-shadow: 0 12px 28px rgb(80 85 190 / 27%); }
 .work-node-body { min-width: 0; padding: 12px 14px; }
 .work-node-top { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 750; letter-spacing: .09em; color: var(--muted); }
-.work-node--focus .work-node-top { color: rgb(255 255 255 / 78%); }
+.work-node--focus .work-node-top { color: #fff; }
 .work-node-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--work-file); }
 .work-node--task .work-node-dot { background: var(--work-purple); }
 .work-node--document .work-node-dot { background: var(--work-doc); }
@@ -109,7 +111,7 @@ main:has(.work-page) { max-width: none; min-width: 0; }
 .work-node-live { margin-left: auto; color: #fff; font-size: 9px; }
 .work-node-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; margin-top: 7px; font-size: 13.5px; font-weight: 680; line-height: 1.35; }
 .work-node-subtitle { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-top: 7px; color: var(--muted); font-size: 11px; }
-.work-node--focus .work-node-subtitle { color: rgb(255 255 255 / 78%); }
+.work-node--focus .work-node-subtitle { color: #fff; }
 .work-detail { min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 18px 20px; overflow-wrap: anywhere; }
 .work-detail-kicker { color: var(--accent); font-size: 10px; letter-spacing: .12em; font-weight: 750; margin-bottom: 7px; }
 .work-detail h2 { display: block; font-size: 17px; line-height: 1.4; }
