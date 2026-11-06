@@ -385,5 +385,38 @@ describe("opt-in project skill with --with-skill (S15P31A106-358, H-94)", () => 
       expect((await applyAgentIntegration(f.root, removal)).diagnostics).toEqual([]);
       expect(f.read(adapter.skillTarget)).toBe(edited);
     });
+
+    // #146 review: a recorded skill path that is no longer a regular file must not block a plain install or setup.
+    for (const kind of ["directory", "symlink"] as const) {
+      it(`${adapter.id}: a ${kind} at the recorded skill path does not block a plain install from repairing the bridge, and keeps the record`, async (ctx) => {
+        const f = fixture();
+        expect((await applyAgentIntegration(f.root, plan(f, true))).diagnostics).toEqual([]);
+        const recorded = (JSON.parse(f.read(record)) as { targets: Record<string, unknown> }).targets[adapter.skillTarget];
+        const skill = path.join(f.root, adapter.skillTarget);
+        fs.rmSync(skill);
+        if (kind === "directory") fs.mkdirSync(skill);
+        else {
+          f.write("elsewhere.md", "not DUO's skill\n");
+          try { fs.symlinkSync(path.join(f.root, "elsewhere.md"), skill, "file"); } catch { ctx.skip(); }
+        }
+        fs.rmSync(path.join(f.root, adapter.bridgeTarget));
+
+        const plain = plan(f, false);
+        expect(plain.applicable).toBe(true);
+        expect(plain.skill).toBeUndefined();
+        expect(plain.files.map((x) => x.path)).not.toContain(adapter.skillTarget);
+        expect(plain.bridge.action).toBe("create");
+        expect(plain.warnings.join(" ")).toContain(`${adapter.skillTarget}: `);
+        expect(plain.warnings.join(" ")).toContain("DUO leaves it and its ownership record unchanged");
+        expect((await applyAgentIntegration(f.root, plain)).diagnostics).toEqual([]);
+
+        expect(fs.existsSync(path.join(f.root, adapter.bridgeTarget))).toBe(true);
+        expect(fs.lstatSync(skill).isFile()).toBe(false);
+        if (kind === "symlink") expect(f.read("elsewhere.md")).toBe("not DUO's skill\n");
+        expect((JSON.parse(f.read(record)) as { targets: Record<string, unknown> }).targets[adapter.skillTarget]).toEqual(recorded);
+        // With --with-skill the same path is still a conflict, never overwritten.
+        expect(plan(f, true).applicable).toBe(false);
+      });
+    }
   }
 });

@@ -313,7 +313,10 @@ export function planAgentIntegration(root: string, agent: AgentId, options: Plan
   const skillFile = readTarget(root, adapter.skillTarget);
   const skillRecord = ownership.valid ? ownership.targets[adapter.skillTarget] : undefined;
   const withSkill = options.withSkill === true;
-  const skillInvolved = withSkill || skillRecord !== undefined;
+  // #146 review: without --with-skill, a recorded skill path that is no longer a regular file is left out of the plan,
+  // so it cannot block repairing the MCP config and bridge; the path and its ownership record stay as they are.
+  const skillLeftAlone = !withSkill && skillRecord !== undefined && skillFile.problem !== undefined;
+  const skillInvolved = withSkill || (skillRecord !== undefined && !skillLeftAlone);
   const skillStatus = inspectSkill(skillFile, skillRecord);
   let skillAction: FileAction = "none";
   if (withSkill) {
@@ -341,6 +344,7 @@ export function planAgentIntegration(root: string, agent: AgentId, options: Plan
   if (adapter.approvalRequired) warnings.push("Claude Code asks you to approve project MCP servers from .mcp.json. Run claude in this project, accept the workspace trust dialog and approve duo-director (DUO does not approve it).");
 
   if (withSkill) warnings.push(`${adapter.skillTarget}: both agents list a project skill; Codex was observed loading it; Claude Code is not verified yet.`);
+  if (skillLeftAlone) warnings.push(`${adapter.skillTarget}: ${skillFile.problem}; DUO leaves it and its ownership record unchanged.`);
 
   const actions: [string, FileAction][] = [[adapter.mcpTarget, mcpAction], [adapter.bridgeTarget, bridgeAction], ...(skillInvolved ? [[adapter.skillTarget, skillAction] as [string, FileAction]] : [])];
   return {
@@ -479,6 +483,11 @@ function buildUpdatedOwnership(
     // The skill joins the record only when DUO writes it, already owns it, or finds its own text there (kept as pre-existing), never for someone else's skill.
     if (target === adapter.skillTarget && prev === undefined && !after.has(target) && before.get(target)?.text !== SKILL_TEXT) continue;
     const pre = before.get(target);
+    // A recorded target DUO could not read as a regular file and did not write keeps its record (#146 review).
+    if (prev !== undefined && pre?.problem !== undefined && !after.has(target)) {
+      out[target] = prev;
+      continue;
+    }
     const postText = after.get(target) ?? pre?.text;
     if (postText === undefined) continue;
     const postSha256 = sha256(postText);
