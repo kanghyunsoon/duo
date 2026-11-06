@@ -30,7 +30,7 @@ export function projectStatus(root: string, options: OperationOptions = {}): Pro
           // T40 (additive): loader errors that make review, context and Decision confirm refuse this Truth. Empty when Truth loaded completely.
           // #14 (additive): confirmed Constraints without a match scope; context and review never use them.
           unscopedConstraints: unscopedConstraintIds(truth),
-          // H-104 (#165, additive): confirmed Decision patterns with unsupported syntax; they have unsupported syntax, so review does not check them.
+          // H-104 (#165, additive): confirmed Decision patterns with unsupported syntax. Review still applies their legacy matching; this list reports them and is not a verdict input.
           unsupportedPatterns: unsupportedDecisionPatterns(truth),
           errors: truthErrors.map((d) => ({ code: d.code, message: d.message, ...(d.source === undefined ? {} : { path: d.source.path, ...(d.source.startLine === undefined ? {} : { line: d.source.startLine }) }) })),
         },

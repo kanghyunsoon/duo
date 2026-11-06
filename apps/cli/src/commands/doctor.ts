@@ -4,6 +4,7 @@
  * IDs and reason codes; the --json result is the duo.doctor/1 payload. Exit 0 unless a check is an
  * error (6, ACTION_REQUIRED): warnings, an agent that is not connected and a disabled LLM keep 0.
  */
+import { describeUnsupportedPattern, type UnsupportedDecisionPattern } from "@duo-director/core";
 import { LLMProviderPool, projectDoctor, type DoctorAction, type DoctorCheck, type DoctorPayload } from "@duo-director/integration";
 import { t, type Locale, type MessageKey } from "../messages.js";
 import { columns, padColumns } from "../terminal-width.js";
@@ -25,7 +26,7 @@ function params(c: DoctorCheck): Params {
   if (Array.isArray(f.failed)) out.failed = (f.failed as string[]).join(", ");
   if (Array.isArray(f.problems)) out.problems = (f.problems as { code: string; path?: string }[]).map((p) => (p.path === undefined ? p.code : p.code + " (" + p.path + ")")).join(", ");
   // H-104 (#165): confirmed Decision patterns that have unsupported syntax.
-  if (Array.isArray(f.unsupportedPatterns)) out.patterns = (f.unsupportedPatterns as { decision: string; field: string; pattern: string }[]).map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ");
+  if (Array.isArray(f.unsupportedPatterns)) out.patterns = (f.unsupportedPatterns as UnsupportedDecisionPattern[]).map(describeUnsupportedPattern).join(", ");
   if (Array.isArray(f.conflicts)) out.paths = (f.conflicts as { path: string }[]).map((p) => p.path).join(", ");
   if (AGENT_NAMES[c.id] !== undefined) out.agent = AGENT_NAMES[c.id] as string;
   return out;

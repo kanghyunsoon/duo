@@ -5,7 +5,7 @@
  * is not a process error: the exit code follows it only with --fail-on (or --strict).
  */
 import { decisionAuthorityLabel, provenanceLabel, recordReview, renderGapQuestions, reviewLlmMetric, unscopedConstraintIds, type ReviewResult, type Verdict } from "@duo-director/director";
-import { normalizeRepoPath, unsupportedDecisionPatterns, type RepoPath, type UnsupportedDecisionPattern } from "@duo-director/core";
+import { describeUnsupportedPattern, normalizeRepoPath, unsupportedDecisionPatterns, type RepoPath, type UnsupportedDecisionPattern } from "@duo-director/core";
 import { indexRepository } from "@duo-director/graph";
 import { diffEnd, projectReview, withGraphWriter } from "@duo-director/integration";
 import { t } from "../messages.js";
@@ -65,7 +65,7 @@ function renderReview(env: Env, r: ReviewResult, unscoped: readonly string[] = [
     if (unscoped.length > 0 && r.limitations.some((l) => l.code === "constraints-unscoped")) out.push(`    ${t(L, "review.constraints-unchecked", { ids: unscoped.join(", ") })}`);
     // H-104 (#165): the same for a confirmed Decision pattern that has unsupported syntax.
     if (unsupported.length > 0 && r.limitations.some((l) => l.code === "decision-patterns-unsupported")) {
-      out.push(`    ${t(L, "review.patterns-unchecked", { items: unsupported.map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ") })}`);
+      out.push(`    ${t(L, "review.patterns-unchecked", { items: unsupported.map(describeUnsupportedPattern).join(", ") })}`);
     }
   }
   const a = r.semanticAssist;

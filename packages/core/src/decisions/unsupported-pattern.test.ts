@@ -15,7 +15,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { loadProjectTruth } from "../loader/project.js";
 import { compileRepoPattern, unsupportedPatternSyntax, type RepoPath } from "../paths.js";
 import type { DecisionActor } from "./files.js";
-import { unsupportedDecisionPatterns } from "./pattern-syntax.js";
+import { describeUnsupportedPattern, unsupportedDecisionPatterns } from "./pattern-syntax.js";
 import { createDecisionService } from "./service.js";
 
 const temps: string[] = [];
@@ -33,7 +33,7 @@ const decisionYaml = (pattern: string, state: "confirmed" | "proposed", field = 
 ].join("\n");
 
 /** Unsupported syntax: braces and negation are literal; embedded ** acts like * within one segment. */
-/** #167 review: extglob groups, matched literally like braces. */
+/** #167 review: extglob groups. The group is literal, but a "*" or "?" before "(" is still a wildcard (#170 review). */
 const EXTGLOB = ["src/pikachu/**/*.@(png|webp)", "src/pikachu/**/*.+(png|webp)", "src/pikachu/**/*.?(png|webp)", "src/pikachu/**/*.*(png)", "src/!(legacy)/x.ts"];
 const UNSUPPORTED = ["src/pikachu/**/*.{png,PNG,webp}", "src/{a,b}/legacy.ts", "!src/pikachu/keep.png", "src/pikachu/**.png", "src/a**/x.ts", ...EXTGLOB];
 /** Supported syntax, including literal brackets (Q3), keeps working. */
@@ -52,12 +52,21 @@ describe("H-104 Q3/Q4: the matcher is unchanged", () => {
     expect(compileRepoPattern("src/pikachu/[ab].png")?.("src/pikachu/a.png" as RepoPath)).toBe(false);
   });
 
-  it("parentheses alone are literal path characters; an extglob group keeps its literal legacy matching", () => {
+  it("parentheses alone are literal path characters; an extglob group keeps its legacy matching", () => {
     expect(unsupportedPatternSyntax("app/(marketing)/page.tsx")).toBeUndefined();
     expect(compileRepoPattern("app/(marketing)/page.tsx")?.("app/(marketing)/page.tsx" as RepoPath)).toBe(true);
     expect(compileRepoPattern("src/(group)/*.ts")?.("src/(group)/a.ts" as RepoPath)).toBe(true);
     expect(compileRepoPattern("src/pikachu/**/*.@(png|webp)")?.("src/pikachu/a.webp" as RepoPath)).toBe(false);
     expect(compileRepoPattern("src/!(legacy)/x.ts")?.("src/!(legacy)/x.ts" as RepoPath)).toBe(true);
+  });
+
+  it("a \"*\" or \"?\" before an extglob group is still a wildcard, and the reason says so (#170 review)", () => {
+    expect(compileRepoPattern("src/*(legacy).ts")?.("src/old(legacy).ts" as RepoPath)).toBe(true);
+    expect(compileRepoPattern("src/?(a).ts")?.("src/x(a).ts" as RepoPath)).toBe(true);
+    expect(compileRepoPattern("src/@(a).ts")?.("src/x(a).ts" as RepoPath)).toBe(false);
+    const reason = unsupportedPatternSyntax("src/*(legacy).ts");
+    expect(reason).toContain('a "*" or "?" before "(" is still a wildcard');
+    expect(reason).not.toContain("match only as literal characters");
   });
 
   it("matching stays case-sensitive on every OS", () => {
@@ -137,8 +146,15 @@ describe("H-104 Q2: a Decision already in Project Truth loads unchanged and is r
     const warnings = loaded.diagnostics.filter((x) => x.code === "PATTERN_SYNTAX_UNSUPPORTED");
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatchObject({ severity: "warning", source: { path: ".duo-project/decisions/D-001.yaml" } });
-    expect(warnings[0]?.message).toContain(`forbids.paths pattern "${pattern}"`);
+    expect(warnings[0]?.message).toContain(`forbids.paths pattern "${pattern}" uses unsupported syntax and keeps its legacy matching: `);
+    expect(warnings[0]?.message).not.toContain("and has unsupported syntax");
     expect(unsupportedDecisionPatterns(loaded.value?.truth ?? { decisions: [] })).toEqual([{ decision: "D-001", field: "forbids.paths", pattern, reason: expect.any(String) }]);
+  });
+
+  it("the reported line names the Decision, field, pattern and what the legacy matcher does with it (#167 review)", () => {
+    write(".duo-project/decisions/D-001.yaml", decisionYaml("src/pikachu/**/*.{png,webp}", "confirmed"));
+    const [u] = unsupportedDecisionPatterns(loadProjectTruth(root).value?.truth ?? { decisions: [] });
+    expect(u === undefined ? "" : describeUnsupportedPattern(u)).toBe('D-001 forbids.paths "src/pikachu/**/*.{png,webp}" (braces ({a,b}) are not supported and match only as literal characters; list each pattern separately)');
   });
 
   it("only confirmed Decisions are listed as unchecked rules; a supported pattern is not", () => {

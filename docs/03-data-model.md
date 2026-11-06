@@ -556,7 +556,7 @@ DecisionAuthority { state, active, supersedes, supersededBy }   // C241(T49): su
 - PASS는 "DUO가 현재 Evidence 범위에서 방향 위반을 찾지 못했다"는 뜻이지 버그가 없다는 뜻이 아니다. PASS에도 surface된 `missing-intent` gap이 있을 수 있다(H-80): 확정 intent 연결을 찾지 못했다는 coverage signal이며 `verdictBasis.warn`에 들어가지 않는다. 다른 surface gap은 WARN 근거다.
 - T13.1 규칙: `unlinked-addition`(R-SCOPE, task가 있을 때 task 맥락 밖이고 IMPLEMENTS가 없는 추가 application 파일 → UNKNOWN drift, 의미 후보, BLOCK 불가), `external-source-drift`(R-DRIFT, 명시적 `{path, hash, section?}`의 hash 불일치 → PARTIAL). limitation `external-source-unavailable`(원격·저장소 밖·secret·없는 파일), `external-source-hash-invalid`.
 - limitation `constraints-unscoped`(#14, additive): match 범위가 없는 confirmed Constraint가 있으면 그 ID를 message에 적는다. 이 Constraint는 Context와 review가 쓰지 않았다는 뜻이며 verdict 근거가 아니다(verdict는 claim과 gap에서만 나온다).
-- limitation `decision-patterns-unsupported`(H-104, #165, additive): confirmed Decision의 path pattern이 지원하지 않는 문법이면 Decision ID·field·pattern을 message에 적는다. 그 pattern은 어떤 파일과도 맞지 않아 검사되지 않았다는 뜻이며 verdict 근거가 아니다.
+- limitation `decision-patterns-unsupported`(H-104, #165, additive): confirmed Decision의 path pattern이 지원하지 않는 문법이면 Decision ID·field·pattern을 message에 적는다. 그 pattern의 기존 매칭은 그대로 적용되므로 claim이나 BLOCK이 나올 수 있다. 세그먼트 안 `**`는 그 세그먼트 안의 `*`처럼 맞고, 중괄호와 앞의 `!`는 그 문자를 이름에 가진 경로에만 맞는다. 이 limitation 자체는 verdict 근거가 아니며 claim을 없애지 않는다.
 - `semanticAssist.provider`: 호출한 Provider의 `id`, 보고된 `model`, `cacheIdentity`(secret 없음).
 
 ### Review Record (reviews/)

@@ -7,7 +7,7 @@
  * definitions, the Graph and evidence, and propose a Decision. There is no tool to confirm or reject
  * a Decision, write Truth, record a Review, index or capture the Adoption Baseline.
  */
-import { compileRepoPattern, DEFINITION_ID_PATTERN, MCP_SERVER_NAME, normalizeRepoPath, normalizeRepoPattern, REPO_PATTERN_SYNTAX, type RepoPath } from "@duo-director/core";
+import { compileRepoPattern, DEFINITION_ID_PATTERN, describeUnsupportedPattern, MCP_SERVER_NAME, normalizeRepoPath, normalizeRepoPattern, REPO_PATTERN_SYNTAX, type RepoPath } from "@duo-director/core";
 import { ambiguityRemediation, decisionAuthorityParts, MAX_BUDGET, MIN_BUDGET, provenanceLabel, redactSecrets, renderContextMarkdown, renderGapQuestions, reviewLlmMetric, type ReviewResult, type SeedAmbiguity, type TokenCountMemo } from "@duo-director/director";
 import { z } from "zod";
 import type { LLMProviderPool } from "../llm/factory.js";
@@ -219,9 +219,9 @@ export const TOOLS: { readonly [N in ToolName]: ToolDefinition<N> } = {
       const unscoped = ((p.truth as { unscopedConstraints?: string[] } | undefined)?.unscopedConstraints ?? []);
       // #14: an agent should not mistake a recorded constraint for a checked rule.
       const constraints = unscoped.length === 0 ? "" : ` · constraints not checked: ${unscoped.join(", ")} (no match scope, so context and review do not use them; DUO checks rules deterministically only through confirmed Decisions with forbids)`;
-      // H-104 (#165): a confirmed Decision pattern that has unsupported syntax is not a checked rule either.
-      const unsupported = ((p.truth as { unsupportedPatterns?: { decision: string; field: string; pattern: string }[] } | undefined)?.unsupportedPatterns ?? []);
-      const patterns = unsupported.length === 0 ? "" : ` · Decision patterns with unsupported syntax: ${unsupported.map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ")} (unsupported syntax; legacy matching retained; supersede the Decision with supported patterns)`;
+      // H-104 (#165): name confirmed Decision patterns with unsupported syntax; review still applies their legacy matching.
+      const unsupported = ((p.truth as { unsupportedPatterns?: { decision: string; field: string; pattern: string; reason: string }[] } | undefined)?.unsupportedPatterns ?? []);
+      const patterns = unsupported.length === 0 ? "" : ` · Decision patterns with unsupported syntax: ${unsupported.map(describeUnsupportedPattern).join(", ")} (supersede the Decision with supported patterns)`;
       return `DUO status: index ${i?.status ?? "unknown"} · baseline ${b?.status ?? "unknown"} · pending decisions ${(p.pendingDecisions as unknown[] | undefined)?.length ?? 0} · llm ${String(p.llm)}${constraints}${patterns}`;
     },
   },

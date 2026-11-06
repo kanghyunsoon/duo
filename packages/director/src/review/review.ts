@@ -13,7 +13,7 @@ import { performance } from "node:perf_hooks";
 import { openGitProvider, type AnalyzerRegistry } from "@duo-director/analyzer";
 import {
   canonicalDiagnostics, canonicalSourceText, compareUtf8, fileRef, loadProjectTruth, nodeId, parseNodeId, readSourceFile, requireCompleteTruth, sha256Text, stableJson, STATE_DIR_NAME, success,
-  unsupportedDecisionPatterns,
+  describeUnsupportedPattern, unsupportedDecisionPatterns,
   type Diagnostic, type EvidenceBasis, type ParseResult, type ProjectTruth,
 } from "@duo-director/core";
 import type { GitDiffEnd, GitProvider } from "@duo-director/analyzer";
@@ -111,13 +111,16 @@ function unscopedConstraintLimitation(truth: Pick<ProjectTruth, "constraints">):
 }
 
 /**
- * H-104 (#165, additive): a confirmed Decision pattern with unsupported syntax; legacy matching retained, so no claim can come
- * from it. Say so, with the Decision, field and pattern, instead of a silent PASS. Not a verdict input.
+ * H-104 (#165, additive): name each confirmed Decision pattern with unsupported syntax (Decision, field, pattern). Its legacy
+ * matching still applies, so it can still produce a claim or a BLOCK: "**" inside a segment acts like "*" within that segment,
+ * braces and a leading "!" match only names that contain those characters, and an extglob group is literal except
+ * for a "*" or "?" before it, which is still a wildcard. The limitation is not a verdict input and
+ * removes no claim.
  */
 function unsupportedPatternLimitation(truth: Pick<ProjectTruth, "decisions">): ReviewLimitation[] {
   const list = unsupportedDecisionPatterns(truth);
   if (list.length === 0) return [];
-  return [{ code: "decision-patterns-unsupported", message: `${list.length} confirmed Decision pattern(s) use unsupported syntax; legacy matching behavior is retained: ${list.map((u) => `${u.decision} ${u.field} "${u.pattern}"`).join(", ")}. Supersede the Decision with supported patterns.` }];
+  return [{ code: "decision-patterns-unsupported", message: `${list.length} confirmed Decision pattern(s) use unsupported syntax: ${list.map(describeUnsupportedPattern).join(", ")}. Supersede the Decision with supported patterns.` }];
 }
 
 const zeroMetrics = {

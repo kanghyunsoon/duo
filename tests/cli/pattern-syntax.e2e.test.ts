@@ -22,6 +22,8 @@ afterAll(async () => {
 type Json = any;
 const BRACE = "src/assets/**/*.{png,webp}";
 const EXTGLOB = "src/assets/**/*.@(png|webp)";
+/** What the legacy matcher does with BRACE, as status, doctor, review and MCP show it after the pattern. */
+const BRACE_REASON = "braces ({a,b}) are not supported and match only as literal characters";
 const decision = (id: string, pattern: string) => [
   `id: ${id}`, "title: No raw assets", "kind: decision", "state: confirmed", "question: assets", "answer: none", "owner: human",
   "forbids:", `  paths: [${JSON.stringify(pattern)}]`, "enforcement: block", 'confirmed_at: "2026-11-04T00:00:00Z"', "confirmed_by: Ada Lovelace", "",
@@ -88,7 +90,7 @@ describe("H-104: unsupported glob syntax in Decision patterns", () => {
     const status = duoctl(p.root, ["status", "--json"]);
     expect(status.code).toBe(0);
     expect(status.json().result.truth).toMatchObject({ decisions: 2, errors: [], unsupportedPatterns: expected });
-    expect(duoctl(p.root, ["status"]).stdout).toContain(`Decision patterns with unsupported syntax: D-001 forbids.paths "${BRACE}"`);
+    expect(duoctl(p.root, ["status"]).stdout).toContain(`Decision patterns with unsupported syntax: D-001 forbids.paths "${BRACE}" (${BRACE_REASON}`);
 
     const doctor = duoctl(p.root, ["doctor", "--json"]);
     const checks = doctor.json().result.checks as Json[];
@@ -100,13 +102,13 @@ describe("H-104: unsupported glob syntax in Decision patterns", () => {
     expect(checks.find((c) => c.id === "index.freshness")?.status).not.toBe("skipped");
     const human = duoctl(p.root, ["doctor"]);
     expect(human.code).toBe(doctor.code);
-    expect(human.stdout).toContain(`Decision patterns with unsupported syntax (unsupported syntax; legacy matching retained): D-001 forbids.paths "${BRACE}"`);
+    expect(human.stdout).toContain(`Decision patterns with unsupported syntax: D-001 forbids.paths "${BRACE}" (${BRACE_REASON}`);
     expect(human.stdout).toContain("supersedes D-001 with supported patterns");
 
     const s = await startMcp(p.root);
     sessions.push(s);
     const mcp = await s.call("duo_get_status");
-    expect(JSON.stringify(mcp.content)).toContain(`Decision patterns with unsupported syntax: D-001 forbids.paths \\"${BRACE}\\"`);
+    expect(JSON.stringify(mcp.content)).toContain(`Decision patterns with unsupported syntax: D-001 forbids.paths \\"${BRACE}\\" (${BRACE_REASON}`);
   });
 
   it("review: the supported rule still blocks, the brace rule is a limitation, and its file is unchanged", () => {
@@ -115,14 +117,15 @@ describe("H-104: unsupported glob syntax in Decision patterns", () => {
     const r = duoctl(p.root, ["review", "--refresh", "--json"]).json().result as Json;
     expect(r.verdict).toBe("BLOCK");
     expect(r.claims.filter((c: Json) => c.rule === "decision-forbids").map((c: Json) => c.subject.id)).toEqual(["D-002"]);
-    expect(r.limitations).toContainEqual({ code: "decision-patterns-unsupported", message: expect.stringContaining(`D-001 forbids.paths "${BRACE}"`) });
+    expect(r.limitations).toContainEqual({ code: "decision-patterns-unsupported", message: expect.stringContaining(`D-001 forbids.paths "${BRACE}" (${BRACE_REASON}`) });
     fs.rmSync(`${p.root}/src/assets/a.png`);
     const webpOnly = duoctl(p.root, ["review", "--refresh", "--json"]).json().result as Json;
     expect(webpOnly.verdict).toBe("PASS");
     expect(webpOnly.limitations.map((l: Json) => l.code)).toContain("decision-patterns-unsupported");
     const human = duoctl(p.root, ["review"]);
     expect(human.stdout).toContain("decision-patterns-unsupported");
-    expect(human.stdout).toContain(`D-001 forbids.paths "${BRACE}": confirmed Decision patterns with unsupported syntax`);
+    expect(human.stdout).toContain(`D-001 forbids.paths "${BRACE}" (${BRACE_REASON}`);
+    expect(human.stdout).toContain("): confirmed Decision patterns with unsupported syntax");
     expect(p.read(D001)).toBe(d001);
   });
 
@@ -134,6 +137,8 @@ describe("H-104: unsupported glob syntax in Decision patterns", () => {
     expect(r.claims.some((c: Json) => c.rule === "decision-forbids" && c.subject.id === "D-003")).toBe(true);
     const limitation = r.limitations.find((l: Json) => l.code === "decision-patterns-unsupported");
     expect(limitation.message).toContain('D-003 forbids.paths "src/**.ts"');
+    // The reason says what still happens: "**" inside a segment acts like "*" (#167 review).
+    expect(limitation.message).toContain('treats it like "*"');
     expect(limitation.message).not.toMatch(/not checked|did not check|match no file/u);
   });
 });
