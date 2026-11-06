@@ -17,10 +17,11 @@ import {
 } from "./claims.js";
 import { nonApplicationReason } from "./scope.js";
 import { declaredReferenceParts, dependencyOffending, violationKey } from "../adoption/key.js";
+import { replacedUnresolvedSpecifier } from "./from-side.js";
 import { importedNames, ReexportOrigins, type ImportedNames, type OriginHop } from "./reexport-origin.js";
 import { hunkRange } from "./seeds.js";
 import { VerdictInputs } from "./snapshot-inputs.js";
-import type { ChangedFile, DiffSeed, ReviewClaim, ReviewLimitation } from "./types.js";
+import type { ChangedFile, ChangedHunk, DiffSeed, ReviewClaim, ReviewLimitation } from "./types.js";
 
 const DECISIONS = `${STATE_DIR_NAME}/decisions/`;
 const PROPOSALS = `${STATE_DIR_NAME}/decisions/proposals/`;
@@ -534,16 +535,19 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   const unsupported: string[] = [];
   const notIndexedTarget: string[] = [];
   const unavailable: string[] = [];
-  // A site reached through re-exports (#49 Stage 2) carries the names it takes and the re-export chain.
-  const groups = new Map<string, { d: Decision; source: RepoPath; target: RepoPath; sites: { ref: IndexedModuleReference; hunks: string[]; via?: { names: string[]; chain: readonly OriginHop[] } }[] }>();
-  const viaReexport: (Parameters<typeof reexportChains>[1][number] & { source: RepoPath; hunks: string[] })[] = [];
+  // One site shape for direct and re-export sites: the changed hunks (H-99 reads their removed lines) and, for a
+  // site reached through re-exports (#49 Stage 2), the names it takes and the re-export chain.
+  type Site = { ref: IndexedModuleReference; hunks: string[]; changed: ChangedHunk[]; via?: { names: string[]; chain: readonly OriginHop[] } };
+  const groups = new Map<string, { d: Decision; file: ChangedFile; source: RepoPath; target: RepoPath; sites: Site[] }>();
+  const viaReexport: (Parameters<typeof reexportChains>[1][number] & { file: ChangedFile; hunks: string[]; changed: ChangedHunk[] })[] = [];
   usable.forEach((f, i) => {
     const r = indexed[i];
     if (r === undefined || r.status === "unavailable") { unavailable.push(f.path); return; }
     if (r.status !== "ok") return; // no analyzer (L0): the changed file's capability limitation is reported already
     if (!matchers.some(({ importer }) => importer(f.path))) return; // #47: no Decision checks imports from this file
     for (const ref of r.references) {
-      const hunks = f.hunks.filter((h) => overlapsLines(ref.location, hunkRange(h))).map((h) => h.evidenceId);
+      const changed = f.hunks.filter((h) => overlapsLines(ref.location, hunkRange(h)));
+      const hunks = changed.map((h) => h.evidenceId);
       if (hunks.length === 0) continue;
       if (inputs !== undefined) changedReferences.push({ importer: f.path, ref });
       const where = `${f.path}:${ref.location.startLine ?? "?"}`;
@@ -558,12 +562,12 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
       }
       // H-96 (2): an importer outside a Decision's importer_paths gets neither its claim nor its re-export limitation.
       const indirect = matchers.filter(({ match, importer }) => importer(f.path) && !match.some((m) => m(target)));
-      if (indirect.length > 0) viaReexport.push({ where, ref, target, decisions: indirect, source: f.path, hunks });
+      if (indirect.length > 0) viaReexport.push({ where, ref, target, decisions: indirect, file: f, hunks, changed });
       for (const { d, match, importer } of matchers) {
         if (!importer(f.path) || !match.some((m) => m(target))) continue;
         const key = `${d.id}\n${f.path}\n${target}`;
-        const g = groups.get(key) ?? { d, source: f.path, target, sites: [] };
-        g.sites.push({ ref, hunks });
+        const g = groups.get(key) ?? { d, file: f, source: f.path, target, sites: [] };
+        g.sites.push({ ref, hunks, changed });
         groups.set(key, g);
       }
     }
@@ -598,9 +602,9 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
         byOrigin.set(o.file, v);
       }
       for (const [origin, via] of byOrigin) {
-        const key = `${d.id}\n${c.source}\n${origin}`;
-        const g = groups.get(key) ?? { d, source: c.source, target: origin, sites: [] };
-        g.sites.push({ ref: c.ref, hunks: c.hunks, via });
+        const key = `${d.id}\n${c.file.path}\n${origin}`;
+        const g = groups.get(key) ?? { d, file: c.file, source: c.file.path, target: origin, sites: [] };
+        g.sites.push({ ref: c.ref, hunks: c.hunks, changed: c.changed, via });
         groups.set(key, g);
       }
     }
@@ -610,13 +614,25 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   const originCoverage = ctx.baselineEvaluatedRules?.has("decision-forbids-import-origin") === true;
   const originsNotBaselined: string[] = [];
   const claims: ReviewClaim[] = [];
+  const fromSideUnresolved: string[] = [];
+  const readSide = { from: (p: RepoPath) => sideText(ctx, ctx.from, p), to: (p: RepoPath) => sideText(ctx, ctx.to, p) };
   for (const g of [...groups.values()].sort((a, b) => compareUtf8(a.d.id, b.d.id) || compareUtf8(a.source, b.source) || compareUtf8(a.target, b.target))) {
     const where = g.sites.map((s) => `${g.source}:${s.ref.location.startLine ?? "?"} ${s.ref.kind} "${s.ref.specifier}"${s.ref.typeOnly ? " (type-only)" : ""}${s.via === undefined ? "" : ` re-exports ${s.via.names.join(", ")} from ${g.target} via ${s.via.chain.map((h) => h.file).join(" → ")}`}`).join("; ");
     // A baseline that did not evaluate this rule cannot say whether the relation existed at adoption (H-72),
     // unless the Decision itself was confirmed after the baseline was recorded. A pair seen only through
     // re-exports needs a baseline that evaluated re-export origins (H-98 (5)-(6)).
     const throughOnly = g.sites.every((s) => s.via !== undefined);
-    const unverifiable = ctx.baselineKeys !== undefined && (throughOnly ? !originCoverage : !coverage && !confirmedAfterBaseline(g.d.confirmedAt, ctx.baselineRecordedAt));
+    const uncovered = ctx.baselineKeys !== undefined && (throughOnly ? !originCoverage : !coverage && !confirmedAfterBaseline(g.d.confirmedAt, ctx.baselineRecordedAt));
+    // H-99 (#48 P8a): every changed statement of a pair the baseline lacks replaced a from-side specifier that
+    // resolved to no file, so whether the importer already reached the target is unknown: not BLOCK-eligible.
+    // This holds for a pair found only through re-exports too: the from side says nothing either way about
+    // whether the old import reached the origin, directly or through a barrel.
+    let replaced = false;
+    if (ctx.baselineKeys !== undefined && !uncovered && !ctx.baselineKeys.has(violationKey("decision-forbids-import", g.d.id, `import:${nodeId(fileRef(g.source))}->${nodeId(fileRef(g.target))}`))) {
+      replaced = true;
+      for (const s of g.sites) if (!(await replacedUnresolvedSpecifier(ctx, readSide, g.file, s.ref, s.changed))) { replaced = false; break; }
+    }
+    const unverifiable = uncovered || replaced;
     const c = makeClaim(ctx, {
       rule: "decision-forbids-import", subject: { kind: "decision", id: g.d.id }, key: `import:${g.source}->${g.target}`, alignment: "CONFLICT", reason: "forbidden-import",
       enforced: g.d.enforcement === "block",
@@ -633,7 +649,8 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
       violation: { key: violationKey("decision-forbids-import", g.d.id, `import:${nodeId(fileRef(g.source))}->${nodeId(fileRef(g.target))}`), touched: true, ...(unverifiable ? { unverifiable: true } : {}) },
     });
     if (c !== undefined) claims.push(c);
-    if (c?.provenance === "unverified-at-adoption" && throughOnly) originsNotBaselined.push(`${g.source} → ${g.target} (${g.d.id})`);
+    if (replaced && c !== undefined) fromSideUnresolved.push(...g.sites.map((s) => `${g.source}:${s.ref.location.startLine ?? "?"}`));
+    else if (c?.provenance === "unverified-at-adoption" && throughOnly) originsNotBaselined.push(`${g.source} → ${g.target} (${g.d.id})`);
   }
   const limitations: ReviewLimitation[] = [];
   const not = "were not checked against forbids.imported_paths";
@@ -644,6 +661,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   if (unavailable.length > 0) limitations.push({ code: "imports-index-unavailable", message: `The indexed imports of ${unavailable.length} changed file(s) could not be read and ${not}: ${preview(unavailable)}.` });
   if (throughReexport.length > 0) limitations.push({ code: "imports-through-reexport", message: `${throughReexport.length} changed import(s) can reach a file in forbids.imported_paths through re-exports that were not checked binding by binding: ${preview(throughReexport)}.` });
   if (originsNotBaselined.length > 0) limitations.push({ code: "imports-reexport-origin-not-baselined", message: `The Adoption Baseline was recorded before re-export origins were evaluated, so ${originsNotBaselined.length} forbidden import pair(s) found through re-exports are not BLOCK-eligible: ${preview(originsNotBaselined)}.` });
+  if (fromSideUnresolved.length > 0) limitations.push({ code: "imports-from-side-unresolved", message: `${fromSideUnresolved.length} changed import(s) replaced a specifier that resolved to no file at the diff base or in the Adoption Baseline; whether the importer already reached the forbidden file is unknown, so they are not BLOCK-eligible: ${preview(fromSideUnresolved)}.` });
   if (otherSide.length > 0) limitations.push({ code: "imports-reviewed-side-not-indexed", message: `${otherSide.length} changed file(s) differ on the reviewed side from the indexed working tree; their imports ${not}: ${preview(otherSide)}.` });
   return { claims, limitations, snapshotInputs: inputs?.paths() ?? [] };
 }

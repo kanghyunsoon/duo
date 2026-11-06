@@ -4,7 +4,7 @@
  * computed here once, from the T12A policy: CONFLICT AND an enforced rule AND Project Truth AND
  * observable evidence (repository, git, test). LLM evidence never makes a claim block.
  */
-import type { GitDiffEnd, GitProvider } from "@duo-director/analyzer";
+import type { AnalyzerRegistry, GitDiffEnd, GitProvider } from "@duo-director/analyzer";
 import { compareUtf8, definitionRef, sha256Text, type Diagnostic, type EvidenceBasis, type ProjectTruth } from "@duo-director/core";
 import type { GraphNode, GraphReader } from "@duo-director/graph";
 import type { SourceReader } from "../context/retrieve.js";
@@ -43,6 +43,10 @@ export interface RuleContext {
   readonly baselineEvaluatedRules?: ReadonlySet<string>;
   /** When the baseline was recorded (UTC ISO 8601). */
   readonly baselineRecordedAt?: string;
+  /** The commit the baseline describes (H-99: a from-side specifier is also checked there). */
+  readonly baselineHeadOid?: string;
+  /** Analyzers for from-side text (H-99); without it a from-side statement is not read. */
+  readonly registry?: AnalyzerRegistry;
   /** --staged / --to: paths outside the diff that differ from the working tree, and how (H-103, #160). */
   readonly snapshotDivergence?: ReadonlyMap<string, Divergence>;
 }
