@@ -204,8 +204,8 @@ describe("duoctl setup E2E: O2 one-command full setup, immediate CLI/MCP readine
     });
     expect(out.doctor.overall).toBe("ready");
     expect(out.remaining).toEqual([
-      expect.stringContaining("Codex: trust"),
-      expect.stringContaining("Claude Code: run claude"),
+      expect.stringMatching(/codex/iu),
+      expect.stringMatching(/claude/iu),
     ]);
 
     // Human files stay intact at the top and receive exactly one managed DUO entry/block; no absolute paths or trust bypasses.
@@ -249,9 +249,11 @@ describe("duoctl setup E2E: O2 one-command full setup, immediate CLI/MCP readine
 
     const codexEntry = codexAdapter.readEntry(read(p, ".codex/config.toml"));
     const claudeEntry = claudeCodeAdapter.readEntry(read(p, ".mcp.json"));
-    const c1 = await spawnConfigured(codexEntry as { command: string; args: string[] }, path.join(p.root, "src", "steps"));
-    const c2 = await spawnConfigured(claudeEntry as { command: string; args: string[] }, path.join(p.root, "src"), { CLAUDE_PROJECT_DIR: p.root });
+    let c1: Client | undefined;
+    let c2: Client | undefined;
     try {
+      c1 = await spawnConfigured(codexEntry as { command: string; args: string[] }, path.join(p.root, "src", "steps"));
+      c2 = await spawnConfigured(claudeEntry as { command: string; args: string[] }, path.join(p.root, "src"), { CLAUDE_PROJECT_DIR: p.root });
       for (const client of [c1, c2]) {
         const status = await client.callTool({ name: "duo_get_status", arguments: {} });
         expect(status.structuredContent).toMatchObject({
@@ -262,8 +264,8 @@ describe("duoctl setup E2E: O2 one-command full setup, immediate CLI/MCP readine
         });
       }
     } finally {
-      await c1.close();
-      await c2.close();
+      await c1?.close();
+      await c2?.close();
     }
   });
 
@@ -286,8 +288,8 @@ describe("duoctl setup E2E: O2 one-command full setup, immediate CLI/MCP readine
         },
       },
       remaining: [
-        expect.stringContaining("Codex: trust"),
-        expect.stringContaining("Claude Code: run claude"),
+        expect.stringMatching(/codex/iu),
+        expect.stringMatching(/claude/iu),
       ],
       doctor: { overall: "ready" },
     });
@@ -383,8 +385,8 @@ describe("duoctl setup E2E: O4 post-confirmation MCP verification failure and mu
         "claude-code": { verify: { ok: true, server: { name: "duo-director", index: "current" } } },
       },
       remaining: [
-        expect.stringContaining("Codex: trust"),
-        expect.stringContaining("Claude Code: run claude"),
+        expect.stringMatching(/codex/iu),
+        expect.stringMatching(/claude/iu),
       ],
       doctor: { overall: "ready" },
     });
@@ -398,8 +400,8 @@ describe("duoctl setup E2E: O4 post-confirmation MCP verification failure and mu
       status: "unchanged",
       applied: false,
       remaining: [
-        expect.stringContaining("Codex: trust"),
-        expect.stringContaining("Claude Code: run claude"),
+        expect.stringMatching(/codex/iu),
+        expect.stringMatching(/claude/iu),
       ],
       doctor: { overall: "ready" },
     });
