@@ -67,7 +67,9 @@ describe("tryAcquireFileLock", () => {
 
 describe("withIndexWriteLock with an alias at the lock path (#148 review)", () => {
   for (const kind of ["hard link", "non-empty file"] as const) {
-    it(`refuses a ${kind} before SQLite opens it and leaves the external WAL database unchanged`, async () => {
+    // makeRepo runs git five times. On a busy Windows runner that took 6-8 s (next 129814a), past the 5 s default,
+    // while the refusal itself does not wait (lockTimeoutMs: 0). Same budget as the other makeRepo tests in this package.
+    it(`refuses a ${kind} before SQLite opens it and leaves the external WAL database unchanged`, { timeout: 60_000 }, async () => {
       const repo = makeRepo(temps, { ".duo-project/project.yaml": "schema_version: 1\nname: hardlink\n", "src/a.ts": "export const a = 1;\n" });
       const outside = tempDir();
       const external = path.join(outside, "external.db");
