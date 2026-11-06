@@ -28,14 +28,15 @@ type Statement = { readonly bindings: readonly { readonly local: string; readonl
 /**
  * What identifies a statement besides its specifier. A named binding is its imported name. A default or
  * namespace binding ("default", "*") says nothing on its own, so its local (or, for a re-export, exported)
- * name is part of it. Undefined for a statement with no names (a side-effect or dynamic import): nothing
- * ties it to a from-side statement, so it is a new statement (H-99 (2)).
+ * name is part of it. A bare `export * from` names nothing. Undefined for a statement with no names (a
+ * side-effect import, a dynamic import or a bare `export * from`): nothing ties it to a from-side statement,
+ * so it is a new statement (H-99 (2)).
  */
 const names = (r: Statement): string | undefined => {
   const anonymous = (imported: string) => imported === "default" || imported === "*";
   const parts = [
     ...r.bindings.map((b) => (anonymous(b.imported) ? `${b.imported} as ${b.local}` : b.imported)),
-    ...r.reexports.map((x) => (anonymous(x.imported) ? `export ${x.imported} as ${x.exported}` : x.imported)),
+    ...r.reexports.filter((x) => x.exported !== "*").map((x) => (anonymous(x.imported) ? `export ${x.imported} as ${x.exported}` : x.imported)),
   ];
   return parts.length === 0 ? undefined : parts.sort().join("\u0000");
 };
@@ -58,27 +59,39 @@ async function existsIn(ctx: RuleContext, source: GitBlobSource, files: readonly
   return false;
 }
 
-/** The import statement on the changed line replaced a from-side specifier that resolved to no file (H-99 (1)). */
+/** Every statement of `ref`'s kind and names that starts or ends inside one of the line ranges. */
+function statementsIn(ctx: RuleContext, file: RepoPath, text: string, ref: IndexedModuleReference, own: string, ranges: readonly (readonly [number, number])[]) {
+  const analysis = ctx.registry?.analyze({ path: file, content: encoder.encode(text) }).value;
+  return (analysis?.moduleReferences ?? []).filter((r) => {
+    const start = r.location.startLine ?? 0;
+    return r.kind === ref.kind && names(r) === own && ranges.some(([a, b]) => start <= b && (r.location.endLine ?? start) >= a);
+  });
+}
+
+/**
+ * The import statement on the changed line replaced a from-side specifier that resolved to no file (H-99 (1)).
+ * The pairing is one to one: the changed lines hold exactly one statement of this kind and names on each side,
+ * with different specifiers. A second statement on the to side, or the from-side statement kept as it was, means
+ * the diff added a statement, which stays BLOCK-eligible (H-99 (2)).
+ */
 export async function replacedUnresolvedSpecifier(
-  ctx: RuleContext, readFromSide: (file: RepoPath) => Promise<string | undefined>, file: ChangedFile, ref: IndexedModuleReference, hunks: readonly ChangedHunk[],
+  ctx: RuleContext, readSide: { readonly from: (file: RepoPath) => Promise<string | undefined>; readonly to: (file: RepoPath) => Promise<string | undefined> },
+  file: ChangedFile, ref: IndexedModuleReference, hunks: readonly ChangedHunk[],
 ): Promise<boolean> {
   const from = ctx.from;
   if (ctx.registry === undefined || from === "WORKTREE" || file.kind === "added" || file.kind === "untracked") return false;
-  const ranges = hunks.filter((h) => h.oldLines > 0).map((h) => [h.oldStart, h.oldStart + h.oldLines - 1] as const);
-  if (ranges.length === 0) return false; // only added lines: a new statement
-  const oldPath = file.oldPath ?? file.path;
-  const text = await readFromSide(oldPath);
-  if (text === undefined) return false;
+  const oldRanges = hunks.filter((h) => h.oldLines > 0).map((h) => [h.oldStart, h.oldStart + h.oldLines - 1] as const);
+  if (oldRanges.length === 0) return false; // only added lines: a new statement
+  const newRanges = hunks.filter((h) => h.newLines > 0).map((h) => [h.newStart, h.newStart + h.newLines - 1] as const);
   const own = names(ref);
   if (own === undefined) return false;
-  const analysis = ctx.registry.analyze({ path: oldPath, content: encoder.encode(text) }).value;
-  const before = (analysis?.moduleReferences ?? []).filter((r) => {
-    const start = r.location.startLine ?? 0;
-    return r.kind === ref.kind && names(r) === own && r.specifier !== ref.specifier
-      && ranges.some(([a, b]) => start <= b && (r.location.endLine ?? start) >= a);
-  });
-  const only = before.length === 1 ? before[0] : undefined;
-  if (only === undefined || !(only.specifier.startsWith("./") || only.specifier.startsWith("../"))) return false;
+  const oldPath = file.oldPath ?? file.path;
+  const [oldText, newText] = [await readSide.from(oldPath), await readSide.to(file.path)];
+  if (oldText === undefined || newText === undefined) return false;
+  const before = statementsIn(ctx, oldPath, oldText, ref, own, oldRanges);
+  const after = statementsIn(ctx, file.path, newText, ref, own, newRanges);
+  const only = before.length === 1 && after.length === 1 ? before[0] : undefined;
+  if (only === undefined || only.specifier === after[0]?.specifier || !(only.specifier.startsWith("./") || only.specifier.startsWith("../"))) return false;
   const candidates = resolutionCandidates(oldPath, only.specifier);
   if (candidates === undefined) return false;
   const sources: GitBlobSource[] = [from === "HEAD" || from === "INDEX" ? from : { commit: from.commit }];

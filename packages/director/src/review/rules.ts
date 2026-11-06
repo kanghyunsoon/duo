@@ -615,7 +615,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   const originsNotBaselined: string[] = [];
   const claims: ReviewClaim[] = [];
   const fromSideUnresolved: string[] = [];
-  const readFromSide = (p: RepoPath) => sideText(ctx, ctx.from, p);
+  const readSide = { from: (p: RepoPath) => sideText(ctx, ctx.from, p), to: (p: RepoPath) => sideText(ctx, ctx.to, p) };
   for (const g of [...groups.values()].sort((a, b) => compareUtf8(a.d.id, b.d.id) || compareUtf8(a.source, b.source) || compareUtf8(a.target, b.target))) {
     const where = g.sites.map((s) => `${g.source}:${s.ref.location.startLine ?? "?"} ${s.ref.kind} "${s.ref.specifier}"${s.ref.typeOnly ? " (type-only)" : ""}${s.via === undefined ? "" : ` re-exports ${s.via.names.join(", ")} from ${g.target} via ${s.via.chain.map((h) => h.file).join(" → ")}`}`).join("; ");
     // A baseline that did not evaluate this rule cannot say whether the relation existed at adoption (H-72),
@@ -630,7 +630,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
     let replaced = false;
     if (ctx.baselineKeys !== undefined && !uncovered && !ctx.baselineKeys.has(violationKey("decision-forbids-import", g.d.id, `import:${nodeId(fileRef(g.source))}->${nodeId(fileRef(g.target))}`))) {
       replaced = true;
-      for (const s of g.sites) if (!(await replacedUnresolvedSpecifier(ctx, readFromSide, g.file, s.ref, s.changed))) { replaced = false; break; }
+      for (const s of g.sites) if (!(await replacedUnresolvedSpecifier(ctx, readSide, g.file, s.ref, s.changed))) { replaced = false; break; }
     }
     const unverifiable = uncovered || replaced;
     const c = makeClaim(ctx, {

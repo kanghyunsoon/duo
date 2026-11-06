@@ -31,8 +31,11 @@
  *   statement, a from side that resolved to another file (`src/ui/modern-page.ts` → `modern-db`), a new
  *   file, and a specifier change together with a new statement of the same pair. A default import with another
  *   local name (`config-page.ts`) and a side-effect import (`polyfill-page.ts`) are new statements too: the
- *   imported name alone ("default", or none) does not identify the from-side statement. Without an Adoption
- *   Baseline, P8a has no provenance and stays BLOCK.
+ *   imported name alone ("default", or none) does not identify the from-side statement. So are a namespace
+ *   import with another local name, a bare `export * from`, and a dynamic import. The pairing is one to one: a
+ *   second statement next to the replaced or kept one is new, BLOCK. A from side that resolved to a JSON file
+ *   (`require("./settings")`) resolved, so it stays BLOCK. Without an Adoption Baseline, P8a has no provenance
+ *   and stays BLOCK.
  * - P8b: The `to` side no longer resolves. Current `next` behavior: no claim, `imports-unresolved`
  *   limitation, PASS.
  * - N1: A change inside the function body that does not touch the import line. Current `next`
@@ -114,6 +117,11 @@ const FILES: Record<string, string> = {
     'import { legacyQuery } from "../db/modern-db.js";\n\nexport function renderModern(): string {\n  return legacyQuery("m");\n}\n',
   "src/ui/config-page.ts": 'import cfg from "./missing-config.js";\n\nexport const config = cfg;\n',
   "src/ui/polyfill-page.ts": 'import "./old-polyfill.js";\n\nexport const ready = true;\n',
+  "src/ui/barrel-ui.ts": 'export * from "./gone-barrel.js";\n',
+  "src/ui/ns-page.ts": 'import * as legacy from "./gone-ns.js";\n\nexport const n = legacy;\n',
+  "src/ui/lazy-page.ts": 'export const load = () => import("./gone-lazy.js");\n',
+  "src/ui/settings.json": '{ "a": 1 }\n',
+  "src/ui/cjs-page.ts": 'const cfg = require("./settings");\n\nexport const c = cfg;\n',
 };
 
 beforeAll(async () => {
@@ -343,6 +351,49 @@ describe("Issue #48: forbidden-import adoption provenance pinned fixtures (P1–
 
   it("P8a control (H-99 (2)): a side-effect import names nothing, so replacing its unresolved specifier is a new statement, BLOCK", async () => {
     expectIntroduced(await scenario((r) => r.edit("src/ui/polyfill-page.ts", '"./old-polyfill.js"', '"../db/legacy-db.js"')), "src/ui/polyfill-page.ts");
+  });
+
+  it("P8a control (H-99 (2)): a bare export * from names nothing, so replacing its unresolved specifier is a new statement, BLOCK", async () => {
+    expectIntroduced(await scenario((r) => r.edit("src/ui/barrel-ui.ts", '"./gone-barrel.js"', '"../db/legacy-db.js"')), "src/ui/barrel-ui.ts");
+  });
+
+  it("P8a control (H-99 (2)): the unresolved statement kept as it was next to a new statement of the same name is still introduced, BLOCK", async () => {
+    const res = await scenario((r) => r.edit(
+      "src/ui/archive-page.ts",
+      'import { legacyQuery } from "../db/legacy-db-v0.js";\n',
+      "import { legacyQuery } from '../db/legacy-db-v0.js';\nimport { legacyQuery as lq } from \"../db/legacy-db.js\";\nexport const q = lq;\n",
+    ));
+    expect(forbiddenImports(res)).toHaveLength(1);
+    expect(forbiddenImports(res)[0]).toMatchObject({ provenance: "introduced", blockEligible: true, violationKey: pairKey("src/ui/archive-page.ts") });
+    expect(importLimits(res)).toEqual(["imports-unresolved"]);
+    expect(res.verdict).toBe("BLOCK");
+  });
+
+  it("P8a control (H-99 (2)): one unresolved statement replaced by two statements of the same name, one to legacy-db, is still introduced, BLOCK", async () => {
+    expectIntroduced(await scenario((r) => r.edit(
+      "src/ui/archive-page.ts",
+      'import { legacyQuery } from "../db/legacy-db-v0.js";\n',
+      'import { legacyQuery } from "../db/modern-db.js";\nimport { legacyQuery as lq } from "../db/legacy-db.js";\nexport const q = lq;\n',
+    )), "src/ui/archive-page.ts");
+  });
+
+  it("P8a with a namespace import: the same local name with the unresolved specifier replaced is the same statement, WARN", async () => {
+    const res = await scenario((r) => r.edit("src/ui/ns-page.ts", '"./gone-ns.js"', '"../db/legacy-db.js"'));
+    expect(forbiddenImports(res)[0]).toMatchObject({ provenance: "unverified-at-adoption", blockEligible: false, violationKey: pairKey("src/ui/ns-page.ts") });
+    expect(importLimits(res)).toEqual(["imports-from-side-unresolved"]);
+    expect(res.verdict).toBe("WARN");
+  });
+
+  it("P8a control (H-99 (2)): a namespace import with another local name is a new statement, BLOCK", async () => {
+    expectIntroduced(await scenario((r) => r.edit("src/ui/ns-page.ts", 'import * as legacy from "./gone-ns.js";', 'import * as db from "../db/legacy-db.js";\nconst legacy = db;')), "src/ui/ns-page.ts");
+  });
+
+  it("P8a control (H-99 (2)): a dynamic import names nothing, so replacing its unresolved specifier is a new statement, BLOCK", async () => {
+    expectIntroduced(await scenario((r) => r.edit("src/ui/lazy-page.ts", '"./gone-lazy.js"', '"../db/legacy-db.js"')), "src/ui/lazy-page.ts");
+  });
+
+  it("P8a control (H-99 (2)): a from side that resolved to a JSON file (require(\"./settings\") → settings.json) is still introduced, BLOCK", async () => {
+    expectIntroduced(await scenario((r) => r.edit("src/ui/cjs-page.ts", '"./settings"', '"../db/legacy-db.js"')), "src/ui/cjs-page.ts");
   });
 
   it("P8b: pins current next behavior (the to side no longer resolves: no claim, imports-unresolved limitation, PASS)", async () => {
