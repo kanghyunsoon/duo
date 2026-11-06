@@ -4,6 +4,8 @@
 
 This report records the four-screen review for [GitHub issue #101](https://github.com/kanghyunsoon/duo/issues/101): Overview, Pending decisions, Review, and Work map. It covers actual NVDA announcements in Chrome and every axe `incomplete` result associated with those screens.
 
+The tested UI has no standalone proposal-detail route such as `/decisions/:id`: `packages/ui/src/app.tsx` routes only `/decisions` to `DecisionsPage`. A pending proposal's detail is the inline `<article>` and description list on that page; the Confirm dialog contains a second description list for the exact candidate being confirmed. A committed Decision may link to the generic `/entity/:id` screen, but no proposal was confirmed during this non-mutating review, so that post-confirmation entity flow is outside the observed Pending decisions session.
+
 This is a targeted manual accessibility review. It is not a claim of WCAG conformance, and it does not change the audit classification code.
 
 ## Environment and evidence
@@ -52,6 +54,7 @@ No missing, incorrect, or misleading Overview announcement was found in the revi
 | Page and main content | `Pending decisions` was announced as the current navigation link, main landmark, region, and level-one heading. `Refresh` was announced as a button. | Pass — the route and main content are identifiable. |
 | Introductory status | The human-decision explanation and the loading status were announced before the loaded content replaced the status. | Pass — purpose and asynchronous state are available. |
 | Pending section | `Pending (2) heading level 2 button expanded` | Pass — the disclosure name, count, role, level, and state are exposed. |
+| Proposal detail surface | There is no separate proposal-detail page. Proposal fields are rendered inline in each named proposal article, and the Confirm dialog renders the exact candidate fields in a description list. | Coverage clarification — the recorded session captured the proposal actions and dialog structure, but did not transcribe every term/value pair or their reading order. Individual inline and preview field announcements remain unverified. |
 | Proposal actions | `Confirm… button` and `Reject… button` | Pass — both human actions have visible matching names. |
 | Confirm dialog | `Confirm P-001? dialog`, the confirmation consequence, and a form landmark were announced. The initial edit was announced as `Type P-001 to confirm`, blank. `Cancel` was announced as a button. | Pass — role, title, consequence, input label, and cancellation are available. |
 | Confirm dialog close | Closing without submission returned traversal to the proposal's `Confirm…` and `Reject…` actions. | Pass — the trigger context is restored. |
@@ -60,7 +63,7 @@ No missing, incorrect, or misleading Overview announcement was found in the revi
 
 Transient `unknown` speech while the native dialog opened and the Korean OneCore voice's `English (not supported)` language message did not replace or hide the subsequent dialog title, description, form, or controls. They are environment transitions rather than DUO product findings.
 
-No missing or incorrect Pending decisions announcement was found. No action was submitted, and no Decision or rejection record was created during listening.
+No missing or incorrect Pending decisions announcement was found in the announcements that were captured. Individual proposal/candidate description-list fields remain unverified as stated above. No action was submitted, and no Decision or rejection record was created during listening.
 
 ## NVDA results — Review
 
@@ -116,11 +119,18 @@ Those records may remain mechanically unverified for screenshot review tracked o
 
 All Pending decisions `incomplete` results are `color-contrast` records that axe could not calculate while a native modal and backdrop overlapped the document. They cover 32 node records in 12 open-dialog and Escape-focus cases; there are no supplemental-table incomplete results.
 
+The affected solid color pairs were measured in Chrome with `getComputedStyle()` under both color schemes, then evaluated with the WCAG 2 relative-luminance formula. Regular dialog text covers the heading, paragraphs, strong text, and label; muted text covers the two explanatory spans.
+
+| Text category | Light theme | Dark theme |
+|---|---|---|
+| Regular dialog text | `#1d1f21` on `#ffffff` — `16.53:1` | `#e5e7ea` on `#1d2024` — `13.20:1` |
+| Muted dialog text | `#5b6168` on `#ffffff` — `6.26:1` | `#a1a7ae` on `#1d2024` — `6.74:1` |
+
 | Case IDs | Targets | Decision and reason |
 |---|---|---|
-| `modal-confirm-{light,dark}-desktop` and the corresponding `-escape-focus` cases | Confirmation paragraph; two muted explanatory spans; confirmation label | Pass — axe reported background overlap rather than a measured failure. PR #80's manual screenshot review found no dialog clipping or overlap, and the reviewed text uses the dialog's normal text/muted token combinations. NVDA exposed the consequence, explanations, and input label. |
-| `modal-confirm-{light,dark}-mobile` and the corresponding `-escape-focus` cases | `#c-P-001`; confirmation paragraph; `confirmed Decision` strong text | Pass — axe reported partial obstruction while the tall native dialog was inside a 320px viewport. The dialog is scrollable, PR #80's mobile capture review found no inaccessible clipping, and NVDA announced the title and consequence as dialog content. |
-| `modal-reject-{light,dark}-mobile` and the corresponding `-escape-focus` cases | Rejection explanation paragraph | Pass — the result is the same modal/backdrop partial-overlap uncertainty, not a measured contrast failure. The paragraph was present in the reviewed captures and announced in full by NVDA. |
+| `modal-confirm-{light,dark}-desktop` and the corresponding `-escape-focus` cases | Confirmation paragraph; two muted explanatory spans; confirmation label | Pass — the regular pair measures `16.53:1` light and `13.20:1` dark; the muted pair measures `6.26:1` light and `6.74:1` dark. Axe reported background overlap rather than a measured failure. NVDA exposed the consequence, explanations, and input label. |
+| `modal-confirm-{light,dark}-mobile` and the corresponding `-escape-focus` cases | `#c-P-001`; confirmation paragraph; `confirmed Decision` strong text | Pass — all use the regular pair measured at `16.53:1` light and `13.20:1` dark. Axe reported partial obstruction while the tall native dialog was inside a 320px viewport; the dialog is scrollable and NVDA announced the title and consequence as dialog content. |
+| `modal-reject-{light,dark}-mobile` and the corresponding `-escape-focus` cases | Rejection explanation paragraph | Pass — the paragraph uses the regular pair measured at `16.53:1` light and `13.20:1` dark. The incomplete result was modal/backdrop overlap uncertainty, not a measured contrast failure, and NVDA announced the paragraph in full. |
 
 The base list, loading/error, empty, and modal-keyboard records contain no axe incomplete item for this screen.
 
@@ -141,7 +151,7 @@ The seven populated Work map cases are `base-Work map-{light,dark}-{desktop,mobi
 | `aria-prohibited-attr` on `.react-flow__controls` | All seven populated cases | Pass — React Flow places `aria-label="Control Panel"` on a generic `div`, so that wrapper name is not exposed as a group. The wrapper does not convey required state or instructions, and NVDA exposed its three child operations individually as `Zoom In`, `Zoom Out`, and `Fit View` buttons. The unsupported redundant wrapper label creates no user-facing barrier. |
 | `color-contrast` on task/current/focus/muted node type, title, and subtitle elements, including `.work-node-live` | All seven populated cases, with focus/muted variants in `form-work-add` | Pass — axe could not calculate colors through the React Flow canvas composition. PR #80 separately measured the corrected selected-node endpoints at 6.37:1 and 8.02:1 and ordinary node text at 6.26:1 light and 6.74:1 dark. NVDA also exposed node type, name, subtitle, and selected state as text. |
 | `color-contrast` on worktree, file, document, Decision, and specification node type/title/subtitle selectors | Desktop base cases, `workmap-keyboard`, `form-work-add`, and/or `form-work-validation` as listed in the raw records | Pass — these selectors use the same corrected node text/background tokens. The differences are graph visibility and generated node data, not distinct color pairs. PR #80's capture and ratio review covers the rendered node combinations, and NVDA announced each node's type, title, and secondary label. |
-| `color-contrast` on `.work-detail-kicker` and the selected-detail `h2` | `form-work-add` | Pass — axe reported overlap uncertainty after adding and selecting work, not a measured low ratio. PR #80's screenshot review found the detail panel readable, and NVDA announced the selected kind and level-two detail title. |
+| `color-contrast` on `.work-detail-kicker` and the selected-detail `h2` | `form-work-add` | Pass — Chrome computed the kicker as `#1f5fbf` on `#ffffff` (`6.09:1`) in light mode and `#7fb0ff` on `#1d2024` (`7.44:1`) in dark mode. The `h2` resolves to `#1d1f21` on `#ffffff` (`16.53:1`) and `#e5e7ea` on `#1d2024` (`13.20:1`). Axe reported overlap uncertainty after adding and selecting work, while NVDA announced the selected kind and level-two detail title. |
 | `color-contrast` on the React Flow attribution link | All seven populated cases | Pass — axe stopped at the SVG/image child. PR #80 measured the corrected link at 6.21:1 light and 4.76:1 dark; NVDA announced `React Flow attribution` as a link. |
 
 These grouped rows cover all 110 Work map incomplete node records. The exact per-case selectors remain in the local run's `cases.jsonl`; grouping does not omit any distinct color or ARIA reason.
@@ -159,6 +169,6 @@ These grouped rows cover all 110 Work map incomplete node records. The exact per
 
 ## Completion status
 
-All four screens assigned in issue #101 have actual NVDA results and a reasoned decision for every axe incomplete record. No product finding was identified, so no follow-up bug was opened.
+All four screens assigned in issue #101 have actual NVDA results and a reasoned decision for every axe incomplete record. The only recorded screen-reader coverage gap is the field-by-field announcement order of the inline Pending proposal and Confirm candidate description lists; there is no separate proposal-detail route. No product finding was identified, so no follow-up bug was opened.
 
 The raw run's `accessibilityVerificationComplete` remains `false`: the generated artifacts preserve their original mechanical findings, and screenshot-only review is tracked separately. This report supplies the manual evidence for issue #101 without rewriting audit output or claiming WCAG conformance.
