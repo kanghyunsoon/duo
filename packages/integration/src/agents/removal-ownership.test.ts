@@ -441,5 +441,29 @@ describe("opt-in project skill with --with-skill (S15P31A106-358, H-94)", () => 
         expect((JSON.parse(f.read(record)) as { targets: Record<string, unknown> }).targets[adapter.skillTarget]).toEqual(recorded);
       });
     }
+
+    // #176 item 1: remove keeps a recorded skill path that is not a regular file, and says so.
+    for (const kind of ["directory", "symlink"] as const) {
+      it(`${adapter.id}: remove warns and keeps a ${kind} at the recorded skill path`, async (ctx) => {
+        const f = fixture();
+        expect((await applyAgentIntegration(f.root, plan(f, true))).diagnostics).toEqual([]);
+        const skill = path.join(f.root, adapter.skillTarget);
+        fs.rmSync(skill);
+        if (kind === "directory") fs.mkdirSync(skill);
+        else {
+          f.write("elsewhere.md", "not DUO's skill\n");
+          try { fs.symlinkSync(path.join(f.root, "elsewhere.md"), skill, "file"); } catch { ctx.skip(); }
+        }
+
+        const removal = planAgentRemoval(f.root, adapter.id);
+        expect(removal.skill).toBeUndefined();
+        expect(removal.willDelete).not.toContain(adapter.skillTarget);
+        expect(removal.warnings.some((w) => w.startsWith(`keep ${adapter.skillTarget} (`))).toBe(true);
+        expect((await applyAgentIntegration(f.root, removal)).diagnostics).toEqual([]);
+
+        expect(fs.lstatSync(skill).isFile()).toBe(false);
+        if (kind === "symlink") expect(f.read("elsewhere.md")).toBe("not DUO's skill\n");
+      });
+    }
   }
 });
