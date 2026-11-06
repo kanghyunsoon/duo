@@ -476,6 +476,7 @@ function buildUpdatedOwnership(
   before: ReadonlyMap<string, ReadFile>,
   after: ReadonlyMap<string, string>,
   backupPaths: ReadonlyMap<string, string>,
+  skillPlanned: boolean,
 ): Record<string, TargetOwnership> {
   const out: Record<string, TargetOwnership> = {};
   for (const target of [adapter.mcpTarget, adapter.bridgeTarget, adapter.skillTarget]) {
@@ -483,8 +484,9 @@ function buildUpdatedOwnership(
     // The skill joins the record only when DUO writes it, already owns it, or finds its own text there (kept as pre-existing), never for someone else's skill.
     if (target === adapter.skillTarget && prev === undefined && !after.has(target) && before.get(target)?.text !== SKILL_TEXT) continue;
     const pre = before.get(target);
-    // A recorded target DUO could not read as a regular file and did not write keeps its record (#146 review).
-    if (prev !== undefined && pre?.problem !== undefined && !after.has(target)) {
+    // A recorded target DUO did not write keeps its record when DUO could not read it as a regular file, or when the plan
+    // left the skill out, even if its path changed between plan and apply (#146 review).
+    if (prev !== undefined && !after.has(target) && (pre?.problem !== undefined || (target === adapter.skillTarget && !skillPlanned))) {
       out[target] = prev;
       continue;
     }
@@ -607,7 +609,7 @@ export async function applyAgentIntegration(root: string, plan: AgentIntegration
       const g = guardWrite(root, recordPath, "regenerable");
       if (g.value === undefined) throw Object.assign(new Error("guard"), { diagnostics: g.diagnostics });
       if (plan.operation === "install") {
-        const updatedTargets = buildUpdatedOwnership(adapter, ownership, beforeFiles, afterTexts, backupPaths);
+        const updatedTargets = buildUpdatedOwnership(adapter, ownership, beforeFiles, afterTexts, backupPaths, plan.skill !== undefined);
         await writeFileAtomic(g.value.absolute, formatOwnershipRecord(plan.agent, updatedTargets));
       } else if (ownership.hash !== null) {
         await fsp.rm(g.value.absolute, { force: true });

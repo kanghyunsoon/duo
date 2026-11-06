@@ -418,5 +418,28 @@ describe("opt-in project skill with --with-skill (S15P31A106-358, H-94)", () => 
         expect(plan(f, true).applicable).toBe(false);
       });
     }
+
+    // #146 review follow-up: the plan left the skill out, so its record survives even if the path changes before apply.
+    for (const change of ["removed", "replaced by a file"] as const) {
+      it(`${adapter.id}: a left-out skill keeps its record when its path is ${change} between plan and apply`, async () => {
+        const f = fixture();
+        expect((await applyAgentIntegration(f.root, plan(f, true))).diagnostics).toEqual([]);
+        const recorded = (JSON.parse(f.read(record)) as { targets: Record<string, unknown> }).targets[adapter.skillTarget];
+        const skill = path.join(f.root, adapter.skillTarget);
+        fs.rmSync(skill);
+        fs.mkdirSync(skill);
+        fs.rmSync(path.join(f.root, adapter.bridgeTarget));
+
+        const plain = plan(f, false);
+        expect(plain.skill).toBeUndefined();
+        fs.rmdirSync(skill);
+        if (change === "replaced by a file") f.write(adapter.skillTarget, "someone else's skill\n");
+        expect((await applyAgentIntegration(f.root, plain)).diagnostics).toEqual([]);
+
+        expect(fs.existsSync(path.join(f.root, adapter.bridgeTarget))).toBe(true);
+        if (change === "replaced by a file") expect(f.read(adapter.skillTarget)).toBe("someone else's skill\n");
+        expect((JSON.parse(f.read(record)) as { targets: Record<string, unknown> }).targets[adapter.skillTarget]).toEqual(recorded);
+      });
+    }
   }
 });
