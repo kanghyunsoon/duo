@@ -5,8 +5,8 @@
  * Requirement or Constraint would have to be judged, the claim is UNKNOWN and a semantic candidate.
  */
 import {
-  canonicalSourceText, compareUtf8, compileRepoPattern, decisionLockDigest, fileRef, nodeId, parseDecisionFile, parseDefinitionMarkdown, readSourceFile,
-  STATE_DIR_NAME, testRef, verifyDecisionLock, type Decision, type RepoPath, type SourceLocation,
+  canonicalSourceText, compareUtf8, compileRepoPattern, decisionLockDigest, fileRef, nodeId, parseDecisionFile, parseDefinitionMarkdown, parseNodeId, readSourceFile,
+  STATE_DIR_NAME, testRef, verifyDecisionLock, type Decision, type EntityRef, type RepoPath, type SourceLocation,
 } from "@duo-director/core";
 import { languageProfile, type GitBlobSource, type GitDiffEnd } from "@duo-director/analyzer";
 import { MAX_REEXPORT_DEPTH, readIndexedModuleReferences, type GraphNode, type IndexedModuleReference } from "@duo-director/graph";
@@ -199,15 +199,29 @@ export async function decisionForbids(ctx: RuleContext): Promise<ReviewClaim[]> 
   return out;
 }
 
-/** Requirements each code seed implements (IMPLEMENTS edges: declared or annotation). */
+/**
+ * H-105 (#166): the entities whose IMPLEMENTS and GOVERNS links count for a code seed. A Symbol seed also uses its owner
+ * file, the file that CONTAINS it in the graph, so implements.paths and governs.paths (file-level edges) reach a change
+ * inside a symbol. A File seed is its own owner.
+ */
+function linkedEntities(ctx: RuleContext, s: DiffSeed): EntityRef[] {
+  if (s.entity.type !== "symbol") return [s.entity];
+  const owners = ctx.graph.adjacentEdges([s.entity], { direction: "incoming", types: ["CONTAINS"], limit: 1000 }).edges
+    .flatMap((e) => { const ref = parseNodeId(e.from); return ref?.type === "file" ? [ref] : []; });
+  return [s.entity, ...owners];
+}
+
+/** Requirements each code seed implements (IMPLEMENTS edges: declared or annotation; for a Symbol also its owner file's, H-105). */
 function implemented(ctx: RuleContext): Map<string, DiffSeed[]> {
   const out = new Map<string, DiffSeed[]>();
   for (const s of codeSeeds(ctx)) {
     // IMPLEMENTS also links Issues (H-78); this rule is about Requirements only.
-    const edges = ctx.graph.adjacentEdges([s.entity], { direction: "outgoing", types: ["IMPLEMENTS"], limit: 1000 }).edges.filter((e) => e.to.startsWith("req:"));
+    const edges = ctx.graph.adjacentEdges(linkedEntities(ctx, s), { direction: "outgoing", types: ["IMPLEMENTS"], limit: 1000 }).edges.filter((e) => e.to.startsWith("req:"));
     for (const e of edges) {
       const id = e.to.slice("req:".length);
-      out.set(id, [...(out.get(id) ?? []), s]);
+      // A Requirement reached through both the Symbol and its owner file lists the seed once (H-105).
+      const seeds = out.get(id) ?? [];
+      if (!seeds.includes(s)) out.set(id, [...seeds, s]);
     }
   }
   return out;
@@ -218,7 +232,7 @@ export function decisionGovernance(ctx: RuleContext, conflicted: ReadonlySet<str
   const add = (id: string, s: DiffSeed) => { if (!(byDecision.get(id) ?? []).includes(s)) byDecision.set(id, [...(byDecision.get(id) ?? []), s]); };
   const active = new Map(ctx.truth.decisions.filter(isActive).map((d) => [d.id, d] as const));
   for (const s of codeSeeds(ctx)) {
-    for (const e of ctx.graph.adjacentEdges([s.entity], { direction: "incoming", types: ["GOVERNS"], limit: 1000 }).edges) {
+    for (const e of ctx.graph.adjacentEdges(linkedEntities(ctx, s), { direction: "incoming", types: ["GOVERNS"], limit: 1000 }).edges) {
       const id = e.from.slice("dec:".length);
       if (active.has(id)) add(id, s);
     }
