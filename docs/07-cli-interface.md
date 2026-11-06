@@ -167,6 +167,8 @@ Pending decisions: 0
 LLM: disabled
 ```
 
+바뀐 파일 없이 Git history만 움직여 index가 stale이면(빈 commit 등, #175) `Index` 줄이 `Index: stale (Git history moved since the last index; no file changed)`로 그 이유를 보인다. 사람 출력만이고 `duo.status/1`, index 상태, 종료 코드는 그대로다.
+
 match 범위가 없는 confirmed Constraint가 있으면 `Truth` 줄 아래에 `Constraints not checked: CON-001, CON-002. …` 줄을 보인다(#14). JSON은 `truth.unscopedConstraints`(additive, 없으면 빈 배열)이고 MCP `duo_get_status` text 요약에도 같은 ID가 붙는다. doctor는 `truth.project` facts에 `unscopedConstraints`를 더하고 그 check 아래에 같은 안내를 한 줄 보인다. check 상태(`ok`)와 종료 코드는 바뀌지 않는다. review는 limitation `constraints-unscoped`와 그 아래 ID 줄을 보인다.
 
 confirmed Decision의 path pattern이 지원하지 않는 문법(중괄호, extglob 그룹, 앞의 `!`, 세그먼트 안 `**`)이면(H-104, #165) status는 `Decision patterns with unsupported syntax: D-001 forbids.paths "…". …` 줄을 보이고, JSON은 `truth.unsupportedPatterns`(additive, `{decision, field, pattern, reason}`, 없으면 빈 배열)이며 MCP `duo_get_status` text 요약에도 붙는다. doctor `truth.project`는 `warning`·`unsupported-patterns`(facts `unsupportedPatterns`, action `supersede-decision`)이고 overall이 `warnings`라 종료 코드는 0이다. Project Truth를 쓰는 다음 check는 그대로 돈다. review는 limitation `decision-patterns-unsupported`와 그 아래 줄을 보인다. Decision 파일과 lock은 바뀌지 않는다. confirm preview는 pattern에 `[`·`]`가 있으면 `Brackets` 줄로 문자 그대로임을 알린다.
