@@ -1,12 +1,16 @@
 /**
  * Built-CLI subprocess E2E journey for `duoctl setup` (#3, Jira S15P31A106-254).
  *
- * Covers the acceptance criteria in docs/roadmap/0.4.0-t183-one-command-setup.md §10 across Windows, Ubuntu, and macOS:
- *   O1 — Zero-write refusals (missing confirmation in non-interactive mode, pre-write agent config conflicts)
+ * Covers the acceptance criteria in docs/roadmap/0.4.0-t183-one-command-setup.md (## Flow, ## Refusals and recovery,
+ * ## JSON result, ## Verification) and H-102 across Windows, Ubuntu, and macOS:
+ *   O1 — Zero-write refusals (missing confirmation in non-interactive mode, pre-write agent config conflicts,
+ *        and dirty working tree baseline policy enforcement vs `--baseline-policy head`)
  *   O2 — One-command full setup (Project Truth, SQLite index, adoption baseline, Codex + Claude Code MCP verification,
  *        non-destructive human file preservation, trust/approval boundary, and immediate `context`/`review` readiness)
- *   O3 — Idempotent rerun (`unchanged` with no `--yes` and zero file diffs) and stale-index incremental refresh
- *   O4 — Post-confirmation MCP verification failure (`resume` contract, preserved Truth, and recovery on rerun)
+ *   O3 — Idempotent rerun (`unchanged` with no `--yes`, preserved `remaining` guidance, and zero file diffs)
+ *        and stale-index incremental refresh
+ *   O4 — Post-confirmation MCP verification failure (`resume` contract across multi-agent steps, preserved Truth,
+ *        confirmation gate for pending agent writes on resume, and full recovery on rerun)
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -47,7 +51,7 @@ async function spawnConfigured(entry: { command: string; args: readonly string[]
   return client;
 }
 
-describe("duoctl setup E2E: O1 zero-write refusals and pre-write conflict gate (#3, S15P31A106-254)", () => {
+describe("duoctl setup E2E: O1 zero-write refusals, conflict gate, and dirty-tree baseline policy (#3, S15P31A106-254)", () => {
   it("O1-a: non-interactive setup without --yes exits 6 (confirmation-required) and writes 0 files", () => {
     const p = existingProject(temps);
     p.write(".codex/config.toml", CODEX_HUMAN);
@@ -104,6 +108,39 @@ describe("duoctl setup E2E: O1 zero-write refusals and pre-write conflict gate (
     expect(payload.diagnostics.map((d: { code: string }) => d.code)).toContain("AGENT_INTEGRATION_CONFLICT");
     expect(exists(p, ".duo-project")).toBe(false);
     expect(snapshot(p.root)).toEqual(before);
+  });
+
+  it("O1-c: dirty working tree without --baseline-policy refuses with 0 writes; --baseline-policy head captures HEAD_BASELINE", () => {
+    const p = existingProject(temps);
+    p.edit("src/scheduler.ts", "% 7", "% 6");
+
+    const before = snapshot(p.root);
+    const refused = setup(p, ["--yes"]);
+    expect(refused.code).toBe(6);
+    expect(refused.json().result).toMatchObject({
+      status: "action-required",
+      applied: false,
+      steps: {
+        repository: { status: "ok" },
+        baseline: { status: "action-required", detail: "dirty working tree" },
+      },
+    });
+    expect(refused.json().diagnostics.map((d: { code: string }) => d.code)).toContain("ADOPTION_DIRTY_POLICY_REQUIRED");
+    expect(exists(p, ".duo-project")).toBe(false);
+    expect(snapshot(p.root)).toEqual(before);
+
+    const accepted = setup(p, ["--baseline-policy", "head", "--yes"]);
+    expect(accepted.code, accepted.stdout + accepted.stderr).toBe(0);
+    expect(accepted.json().result).toMatchObject({
+      status: "set-up",
+      applied: true,
+      steps: {
+        truth: { status: "ok" },
+        index: { status: "ok" },
+        baseline: { status: "ok" },
+      },
+      baseline: { dirtyAtAdoption: true },
+    });
   });
 });
 
@@ -177,6 +214,7 @@ describe("duoctl setup E2E: O2 one-command full setup, immediate CLI/MCP readine
     expect(toml.split("# duo-director:begin")).toHaveLength(2);
     expect(toml).not.toContain("trust_level");
     expect(toml).not.toContain(p.root);
+    expect(toml).not.toContain(p.root.replaceAll("\\", "/"));
 
     const agentsMd = read(p, "AGENTS.md");
     expect(agentsMd.startsWith(AGENTS_HUMAN)).toBe(true);
@@ -191,6 +229,8 @@ describe("duoctl setup E2E: O2 one-command full setup, immediate CLI/MCP readine
       command: "duoctl",
       args: ["mcp", "--root-from", "env:CLAUDE_PROJECT_DIR", "--agent", "claude-code"],
     });
+    expect(mcpJsonText).not.toContain(p.root);
+    expect(mcpJsonText).not.toContain(p.root.replaceAll("\\", "/"));
 
     const claudeMd = read(p, "CLAUDE.md");
     expect(claudeMd.startsWith(CLAUDE_HUMAN)).toBe(true);
@@ -227,7 +267,7 @@ describe("duoctl setup E2E: O2 one-command full setup, immediate CLI/MCP readine
     }
   });
 
-  it("O3-a: rerunning duoctl setup on an already configured repository needs no --yes, reports unchanged, and writes 0 bytes", () => {
+  it("O3-a: rerunning duoctl setup on an already configured repository needs no --yes, reports unchanged with remaining guidance, and writes 0 bytes", () => {
     const before = snapshot(p.root);
     const r = setup(p, ["--agent", "codex", "--agent", "claude-code"]);
 
@@ -245,6 +285,10 @@ describe("duoctl setup E2E: O2 one-command full setup, immediate CLI/MCP readine
           "claude-code": { status: "ok" },
         },
       },
+      remaining: [
+        expect.stringContaining("Codex: trust"),
+        expect.stringContaining("Claude Code: run claude"),
+      ],
       doctor: { overall: "ready" },
     });
     expect(snapshot(p.root)).toEqual(before);
@@ -271,8 +315,8 @@ describe("duoctl setup E2E: O2 one-command full setup, immediate CLI/MCP readine
   });
 });
 
-describe("duoctl setup E2E: O4 post-confirmation MCP verification failure and resume recovery (#3, S15P31A106-254)", () => {
-  it("O4: preserves Project Truth and names the resume command when MCP verification fails, then converges on rerun with a healthy PATH", () => {
+describe("duoctl setup E2E: O4 post-confirmation MCP verification failure and multi-agent resume recovery (#3, S15P31A106-254)", () => {
+  it("O4: preserves Project Truth and names the multi-agent resume command when MCP verification fails, gates pending writes on --yes, and converges on rerun", () => {
     const p = existingProject(temps);
     const brokenBin = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-setup-broken-bin-")));
     temps.push(brokenBin);
@@ -282,47 +326,83 @@ describe("duoctl setup E2E: O4 post-confirmation MCP verification failure and re
     fs.writeFileSync(path.join(brokenBin, "duoctl"), "#!/bin/sh\nexit 3\n", { mode: 0o755 });
     const brokenEnv = envWithPath([brokenBin]);
 
-    const failed = setup(p, ["--agent", "codex", "--yes"], "", brokenEnv);
+    // 1. First run with broken PATH: Truth, index, and baseline succeed; codex fails MCP verification; claude-code is skipped.
+    const failed = setup(p, ["--agent", "codex", "--agent", "claude-code", "--yes"], "", brokenEnv);
     expect(failed.code).toBe(1);
     const failedPayload = failed.json();
     expect(failedPayload.result).toMatchObject({
       status: "failed",
       applied: true,
-      resume: "duoctl setup --agent codex",
+      resume: "duoctl setup --agent codex --agent claude-code",
       steps: {
         repository: { status: "ok" },
         truth: { status: "ok" },
         index: { status: "ok" },
         baseline: { status: "ok" },
-        agents: { codex: { status: "failed" } },
+        agents: {
+          codex: { status: "failed" },
+          "claude-code": { status: "skipped" },
+        },
       },
     });
     expect(failedPayload.diagnostics.map((d: { code: string }) => d.code)).toContain("AGENT_VERIFY_FAILED");
     expect(exists(p, ".duo-project/project.yaml")).toBe(true);
     expect(exists(p, failedPayload.result.baseline.path as string)).toBe(true);
     expect(read(p, ".codex/config.toml")).toContain("[mcp_servers.duo-director]");
+    expect(exists(p, ".mcp.json")).toBe(false);
 
     const truthBeforeResume = read(p, ".duo-project/project.yaml");
+    const afterFirstFailure = snapshot(p.root);
 
-    // Rerun the exact resume command (without --yes, since config files were already written and only verification remains) using healthy PATH.
-    const resumed = setup(p, ["--agent", "codex"], "", env);
+    // 2. Running the resume command without --yes in non-interactive mode requires confirmation because claude-code still has pending writes.
+    const unconfirmedResume = setup(p, ["--agent", "codex", "--agent", "claude-code"], "", env);
+    expect(unconfirmedResume.code).toBe(6);
+    expect(unconfirmedResume.json().result).toMatchObject({
+      status: "confirmation-required",
+      applied: false,
+    });
+    expect(snapshot(p.root)).toEqual(afterFirstFailure);
+
+    // 3. Running the resume command with --yes and healthy PATH re-verifies codex, applies + verifies claude-code, and preserves Project Truth.
+    const resumed = setup(p, ["--agent", "codex", "--agent", "claude-code", "--yes"], "", env);
     expect(resumed.code, resumed.stdout + resumed.stderr).toBe(0);
     expect(resumed.json().result).toMatchObject({
-      status: "unchanged",
-      applied: false,
+      status: "set-up",
+      applied: true,
       steps: {
         truth: { status: "existing" },
         index: { status: "existing" },
         baseline: { status: "existing" },
-        agents: { codex: { status: "ok" } },
-      },
-      agents: {
-        codex: {
-          verify: { ok: true, server: { name: "duo-director", index: "current" } },
+        agents: {
+          codex: { status: "ok" },
+          "claude-code": { status: "ok" },
         },
       },
+      agents: {
+        codex: { verify: { ok: true, server: { name: "duo-director", index: "current" } } },
+        "claude-code": { verify: { ok: true, server: { name: "duo-director", index: "current" } } },
+      },
+      remaining: [
+        expect.stringContaining("Codex: trust"),
+        expect.stringContaining("Claude Code: run claude"),
+      ],
       doctor: { overall: "ready" },
     });
     expect(read(p, ".duo-project/project.yaml")).toBe(truthBeforeResume);
+
+    // 4. Subsequent rerun without --yes is now completely unchanged (0 writes) and still returns remaining guidance.
+    const afterResume = snapshot(p.root);
+    const converged = setup(p, ["--agent", "codex", "--agent", "claude-code"], "", env);
+    expect(converged.code, converged.stdout + converged.stderr).toBe(0);
+    expect(converged.json().result).toMatchObject({
+      status: "unchanged",
+      applied: false,
+      remaining: [
+        expect.stringContaining("Codex: trust"),
+        expect.stringContaining("Claude Code: run claude"),
+      ],
+      doctor: { overall: "ready" },
+    });
+    expect(snapshot(p.root)).toEqual(afterResume);
   });
 });
