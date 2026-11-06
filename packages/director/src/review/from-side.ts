@@ -6,8 +6,8 @@
  * Both revisions and the actual diff are read (H-99 (3)): the from-side text is analyzed with the same
  * analyzer, and "resolved to no file" is shown, not guessed: a relative specifier none of whose resolution
  * candidates exists in the diff base tree or in the Adoption Baseline commit. A non-relative specifier, a
- * new statement (no from-side statement of the same kind and names), more than one candidate statement, or
- * any existing candidate file keeps the claim BLOCK-eligible (H-99 (2)).
+ * new statement (no from-side statement of the same kind and names, or a statement with no names), more than
+ * one candidate statement, or any existing candidate file keeps the claim BLOCK-eligible (H-99 (2)).
  */
 import path from "node:path";
 import type { GitBlobSource } from "@duo-director/analyzer";
@@ -17,14 +17,28 @@ import type { RuleContext } from "./claims.js";
 import type { ChangedFile, ChangedHunk } from "./types.js";
 
 const encoder = new TextEncoder();
-const EXTENSIONS = [".ts", ".tsx", ".d.ts", ".mts", ".d.mts", ".cts", ".d.cts", ".js", ".jsx", ".mjs", ".cjs"];
+const EXTENSIONS = [".ts", ".tsx", ".d.ts", ".mts", ".d.mts", ".cts", ".d.cts", ".js", ".jsx", ".mjs", ".cjs", ".json"];
 /** A .js-family specifier also names the TypeScript source next to it (TypeScript resolution). */
 const SOURCE_FOR: Readonly<Record<string, readonly string[]>> = {
   ".js": [".ts", ".tsx", ".d.ts"], ".jsx": [".tsx"], ".mjs": [".mts", ".d.mts"], ".cjs": [".cts", ".d.cts"],
 };
 
-const names = (r: { readonly bindings: readonly { readonly imported: string }[]; readonly reexports: readonly { readonly imported: string }[] }) =>
-  [...r.bindings.map((b) => b.imported), ...r.reexports.map((x) => x.imported)].sort().join("\u0000");
+type Statement = { readonly bindings: readonly { readonly local: string; readonly imported: string }[]; readonly reexports: readonly { readonly exported: string; readonly imported: string }[] };
+
+/**
+ * What identifies a statement besides its specifier. A named binding is its imported name. A default or
+ * namespace binding ("default", "*") says nothing on its own, so its local (or, for a re-export, exported)
+ * name is part of it. Undefined for a statement with no names (a side-effect or dynamic import): nothing
+ * ties it to a from-side statement, so it is a new statement (H-99 (2)).
+ */
+const names = (r: Statement): string | undefined => {
+  const anonymous = (imported: string) => imported === "default" || imported === "*";
+  const parts = [
+    ...r.bindings.map((b) => (anonymous(b.imported) ? `${b.imported} as ${b.local}` : b.imported)),
+    ...r.reexports.map((x) => (anonymous(x.imported) ? `export ${x.imported} as ${x.exported}` : x.imported)),
+  ];
+  return parts.length === 0 ? undefined : parts.sort().join("\u0000");
+};
 
 /** Every file a relative specifier written in `from` could resolve to; undefined when it leaves the repository. */
 export function resolutionCandidates(from: RepoPath, specifier: string): string[] | undefined {
@@ -55,10 +69,12 @@ export async function replacedUnresolvedSpecifier(
   const oldPath = file.oldPath ?? file.path;
   const text = await readFromSide(oldPath);
   if (text === undefined) return false;
+  const own = names(ref);
+  if (own === undefined) return false;
   const analysis = ctx.registry.analyze({ path: oldPath, content: encoder.encode(text) }).value;
   const before = (analysis?.moduleReferences ?? []).filter((r) => {
     const start = r.location.startLine ?? 0;
-    return r.kind === ref.kind && names(r) === names(ref) && r.specifier !== ref.specifier
+    return r.kind === ref.kind && names(r) === own && r.specifier !== ref.specifier
       && ranges.some(([a, b]) => start <= b && (r.location.endLine ?? start) >= a);
   });
   const only = before.length === 1 ? before[0] : undefined;

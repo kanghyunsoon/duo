@@ -29,7 +29,10 @@
  *   Since H-99 (#48 P8a): the claim stays, `unverified-at-adoption`, not BLOCK-eligible, with the
  *   `imports-from-side-unresolved` limitation (`path:line`), WARN. Still BLOCK (H-99 (2)): a new import
  *   statement, a from side that resolved to another file (`src/ui/modern-page.ts` → `modern-db`), a new
- *   file, and a specifier change together with a new statement of the same pair.
+ *   file, and a specifier change together with a new statement of the same pair. A default import with another
+ *   local name (`config-page.ts`) and a side-effect import (`polyfill-page.ts`) are new statements too: the
+ *   imported name alone ("default", or none) does not identify the from-side statement. Without an Adoption
+ *   Baseline, P8a has no provenance and stays BLOCK.
  * - P8b: The `to` side no longer resolves. Current `next` behavior: no claim, `imports-unresolved`
  *   limitation, PASS.
  * - N1: A change inside the function body that does not touch the import line. Current `next`
@@ -109,6 +112,8 @@ const FILES: Record<string, string> = {
   "src/db/modern-db.ts": "export function legacyQuery(sql: string): string {\n  return sql.trim();\n}\n",
   "src/ui/modern-page.ts":
     'import { legacyQuery } from "../db/modern-db.js";\n\nexport function renderModern(): string {\n  return legacyQuery("m");\n}\n',
+  "src/ui/config-page.ts": 'import cfg from "./missing-config.js";\n\nexport const config = cfg;\n',
+  "src/ui/polyfill-page.ts": 'import "./old-polyfill.js";\n\nexport const ready = true;\n',
 };
 
 beforeAll(async () => {
@@ -325,6 +330,21 @@ describe("Issue #48: forbidden-import adoption provenance pinned fixtures (P1–
     )), "src/ui/archive-page.ts");
   });
 
+  it("P8a control (H-99 (2)): a default import with another local name is a new statement, BLOCK", async () => {
+    expectIntroduced(await scenario((r) => r.edit("src/ui/config-page.ts", 'import cfg from "./missing-config.js";', 'import db from "../db/legacy-db.js";\nconst cfg = db;')), "src/ui/config-page.ts");
+  });
+
+  it("P8a with a default import: the same local name with the unresolved specifier replaced is the same statement, WARN", async () => {
+    const res = await scenario((r) => r.edit("src/ui/config-page.ts", '"./missing-config.js"', '"../db/legacy-db.js"'));
+    expect(forbiddenImports(res)[0]).toMatchObject({ provenance: "unverified-at-adoption", blockEligible: false, violationKey: pairKey("src/ui/config-page.ts") });
+    expect(importLimits(res)).toEqual(["imports-from-side-unresolved"]);
+    expect(res.verdict).toBe("WARN");
+  });
+
+  it("P8a control (H-99 (2)): a side-effect import names nothing, so replacing its unresolved specifier is a new statement, BLOCK", async () => {
+    expectIntroduced(await scenario((r) => r.edit("src/ui/polyfill-page.ts", '"./old-polyfill.js"', '"../db/legacy-db.js"')), "src/ui/polyfill-page.ts");
+  });
+
   it("P8b: pins current next behavior (the to side no longer resolves: no claim, imports-unresolved limitation, PASS)", async () => {
     const res = await scenario((r) => r.edit("src/ui/orders-page.ts", '"../db/legacy-db.js"', '"../db/legacy-db-v0.js"'));
     expect(forbiddenImports(res)).toEqual([]);
@@ -338,5 +358,24 @@ describe("Issue #48: forbidden-import adoption provenance pinned fixtures (P1–
     expect(forbiddenImports(res)).toEqual([]);
     expect(importLimits(res)).toEqual([]);
     expect(res.verdict).toBe("PASS");
+  });
+});
+
+describe("Issue #48 P8a without an Adoption Baseline", () => {
+  it("P8a control: with no baseline there is no provenance, so the replaced unresolved specifier stays BLOCK without imports-from-side-unresolved", async () => {
+    const repo = makeContextRepo(temps, registry, fixture);
+    const confirmed = await createDecisionService({ root: repo.root, clock: at("2026-09-01T00:00:00.000Z") }).confirm(human, "D-001");
+    if (confirmed.value === undefined) throw new Error(JSON.stringify(confirmed.diagnostics));
+    repo.git("add", "-A");
+    repo.git("commit", "-q", "-m", "confirm D-001");
+    repo.edit("src/ui/archive-page.ts", '"../db/legacy-db-v0.js"', '"../db/legacy-db.js"');
+    const res = await review(repo);
+    expect(res.baseline.status).toBe("missing");
+    const claims = forbiddenImports(res);
+    expect(claims).toHaveLength(1);
+    expect(claims[0]).toMatchObject({ alignment: "CONFLICT", blockEligible: true, violationKey: pairKey("src/ui/archive-page.ts") });
+    expect(claims[0]?.provenance).toBeUndefined();
+    expect(importLimits(res)).toEqual([]);
+    expect(res.verdict).toBe("BLOCK");
   });
 });
