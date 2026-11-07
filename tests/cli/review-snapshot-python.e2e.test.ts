@@ -22,6 +22,7 @@ const TARGET = "app/db/legacy_db.py";
 const D001 = `id: D-001\ntitle: No legacy_db imports\nkind: decision\nstate: proposed\nquestion: legacy_db\nanswer: Code does not import ${TARGET}\nforbids:\n  imported_paths: ["${TARGET}"]\nenforcement: block\n`;
 const PAGE = "from app.db.legacy_db import legacy_query\n\n\ndef page():\n    return legacy_query(\"x\")\n";
 const VERDICT = /\b(PASS|WARN|BLOCK|ASK)\b/u;
+const firstMessage = (j: { diagnostics: unknown }) => (j.diagnostics as { code: string; message: string }[])[0]?.message ?? "";
 const records = (root: string) => fs.existsSync(path.join(root, ".duo-project/reviews")) ? fs.readdirSync(path.join(root, ".duo-project/reviews")).sort() : [];
 
 describe("#160 Stage 2: a Python import target that differs from the staged snapshot gives no verdict", () => {
@@ -56,7 +57,7 @@ describe("#160 Stage 2: a Python import target that differs from the staged snap
     expect(json).toMatchObject({ ok: false, exitCode: 1 });
     expect(json.result ?? null).toBeNull();
     expect(json.diagnostics.map((d: { code: string }) => d.code)).toEqual(["REVIEW_SNAPSHOT_MISMATCH"]);
-    expect((json.diagnostics as { message: string }[])[0]?.message).toContain(TARGET);
+    expect(firstMessage(json)).toContain(TARGET);
     const human = duoctl(p.root, ["review", "--staged"]);
     expect(human.code).toBe(1);
     expect(human.stdout).not.toMatch(VERDICT);
