@@ -42,6 +42,17 @@ export async function sideText(ctx: RuleContext, side: GitDiffEnd, file: RepoPat
   return blob.value === undefined ? undefined : canonicalSourceText(decoder.decode(blob.value));
 }
 
+/** The indexed repository file paths, read from the graph's File nodes (keyset pages). Called at most once per review. */
+function indexedFilePaths(ctx: RuleContext): ReadonlySet<string> {
+  const out = new Set<string>();
+  for (let afterId: string | undefined; ;) {
+    const page = ctx.graph.listNodes({ type: "file", limit: 1000, ...(afterId === undefined ? {} : { afterId }) });
+    for (const n of page) if (n.ref.type === "file") out.add(n.ref.path);
+    if (page.length < 1000) return out;
+    afterId = page[page.length - 1]?.id;
+  }
+}
+
 /** Whether the reviewed side of `file` has the indexed (working-tree) text; always true when the working tree is reviewed. */
 async function sameAsIndexed(ctx: RuleContext, file: RepoPath): Promise<boolean> {
   if (ctx.to === "WORKTREE") return true;
@@ -533,7 +544,7 @@ export async function decisionForbidsImport(ctx: RuleContext): Promise<{ readonl
   // H-103 (#160): which differing paths outside the reviewed diff this rule reads to decide.
   const inputs = ctx.snapshotDivergence === undefined || ctx.snapshotDivergence.size === 0
     ? undefined
-    : new VerdictInputs(ctx.root, ctx.snapshotDivergence, (p) => sideText(ctx, ctx.to, p as RepoPath), (p) => readSourceFile(ctx.root, p).value);
+    : new VerdictInputs(ctx.root, ctx.snapshotDivergence, (p) => sideText(ctx, ctx.to, p as RepoPath), (p) => readSourceFile(ctx.root, p).value, () => indexedFilePaths(ctx));
   const changedReferences: { importer: RepoPath; ref: IndexedModuleReference }[] = [];
   const changed = ctx.files.filter((f) => f.kind !== "deleted" && !f.binary && !f.path.startsWith(`${STATE_DIR_NAME}/`) && f.hunks.length > 0);
   // The index describes the working tree; another reviewed side is evaluated only where its text is the same.
