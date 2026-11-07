@@ -420,6 +420,8 @@ export function planAgentRemoval(root: string, agent: AgentId): AgentIntegration
       warnings.push(`keep ${adapter.skillTarget} (${why})`);
     }
   }
+  // #176: a recorded skill path that is not a regular file is left in place; say so instead of dropping it silently.
+  if (!skillInvolved && skillRecord !== undefined && skillFile.problem !== undefined) warnings.push(`keep ${adapter.skillTarget} (${skillFile.problem})`);
   const blockers = conflicts.map((c) => createDiagnostic("AGENT_INTEGRATION_CONFLICT", `${c.target}: ${c.reason}`));
   const actions: [string, FileAction][] = [[adapter.mcpTarget, mcpAction], [adapter.bridgeTarget, bridgeAction], ...(skillInvolved ? [[adapter.skillTarget, skillAction] as [string, FileAction]] : [])];
   return {
