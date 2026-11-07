@@ -8,7 +8,7 @@ import { operationFailure, type Env } from "./shared.js";
 interface StatusPayload {
   project: { name: string; vision: string; currentMilestone: string | null };
   truth: { requirements: number; decisions: number; constraints: number; declaredGaps: number; unscopedConstraints?: string[]; unsupportedPatterns?: { decision: string; field: string; pattern: string; reason: string }[]; errors?: { code: string; message: string; path?: string; line?: number }[] };
-  index: { status: string; fullRebuildReason: string | null; changes: { files: number; analysisStale: number; modulesToResolve: number; callsMaybeRecomputed: number } } | null;
+  index: { status: string; fullRebuildReason: string | null; changes: { files: number; analysisStale: number; modulesToResolve: number; callsMaybeRecomputed: number }; wouldRebuild?: { full: boolean; parse: number; history: boolean; projectTruth: boolean } } | null;
   baseline: { status: string; headOid?: string; dirtyAtAdoption?: boolean; findings?: number } | null;
   analysis: { languages: { language: string; files: number; level: string }[]; fileOnly: { files: number; extensions: { extension: string; files: number }[] } } | null;
   pendingDecisions: { id: string; title: string }[];
@@ -26,6 +26,9 @@ export async function statusCommand(env: Env): Promise<Outcome> {
   const a = s.analysis;
   // T21: a stale, missing or incompatible index says what refreshes it (status itself never indexes).
   const indexNeedsRun = s.index?.status === "stale" || s.index?.status === "missing" || s.index?.status === "incompatible";
+  // #175: stale with no changed file and no Project Truth change means only Git history moved; name that reason.
+  const w = s.index?.wouldRebuild;
+  const historyOnly = s.index?.status === "stale" && s.index.fullRebuildReason === null && c?.files === 0 && w?.history === true && w.parse === 0 && !w.projectTruth;
   const fileOnlyExts = a?.fileOnly.extensions.slice(0, 5).map((e) => (e.extension === "" ? "(none)" : `.${e.extension}`)).join(", ") ?? "";
   const analysis = a === null ? undefined : [
     ...a.languages.map((l) => `${l.language} ${l.level} (${l.files})`),
@@ -41,7 +44,7 @@ export async function statusCommand(env: Env): Promise<Outcome> {
     // T40 (N1): what the loader left out, so a lower Decision count is never silent.
     ...((s.truth.errors ?? []).length === 0 ? [] : [t(L, "status.truth-errors", { n: s.truth.errors?.length ?? 0 }),
       ...(s.truth.errors ?? []).map((e) => `  ${e.code} ${e.path ?? ""}${e.line === undefined ? "" : `:${e.line}`} ${e.message}`)]),
-    t(L, "status.index", { status: s.index?.status ?? "unknown", reason: s.index?.fullRebuildReason == null ? "" : ` (full rebuild: ${s.index.fullRebuildReason})` }),
+    t(L, "status.index", { status: s.index?.status ?? "unknown", reason: s.index?.fullRebuildReason == null ? (historyOnly ? t(L, "status.index-history-only") : "") : ` (full rebuild: ${s.index.fullRebuildReason})` }),
     ...(indexNeedsRun ? [t(L, "status.index-remediation")] : []),
     ...(c === undefined ? [] : [t(L, "status.changes", { files: c.files, analysis: c.analysisStale, modules: c.modulesToResolve, calls: c.callsMaybeRecomputed })]),
     ...(analysis === undefined || analysis === "" ? [] : [t(L, "status.analysis", { languages: analysis })]),
