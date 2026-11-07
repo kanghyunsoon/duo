@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parseYaml } from "@duo-director/core";
 import { DEFER_CONFORMANCE_ENV } from "../../vitest.conformance-files.js";
@@ -28,7 +28,7 @@ if (parsed.value === undefined) throw new Error(JSON.stringify(parsed.diagnostic
 const workflow = parsed.value.data as Workflow;
 
 /** The step's effective shell across step, job defaults.run and workflow defaults.run (#161). */
-export const effectiveShell = (wf: RunDefaults, job: Job, step: Step): unknown =>
+const effectiveShell = (wf: RunDefaults, job: Job, step: Step): unknown =>
   step.shell ?? job.defaults?.run?.shell ?? wf.defaults?.run?.shell;
 
 /** The step defers if the variable is "1" (or an expression that could be "1") in its effective env: workflow, job, step. */
@@ -94,23 +94,30 @@ describe("the pinned conformance command (T131)", () => {
   });
 });
 
-describe("check-packed-artifact checks the packed commit SHA (#161)", () => {
+describe("check-packed-artifact checks the packed commit SHA (#161) and a clean pack (#171)", () => {
   const CHECK_SCRIPT = fileURLToPath(new URL("../../scripts/ci/check-packed-artifact.mjs", import.meta.url));
+  const TRACKED_SCRIPT = fileURLToPath(new URL("../../scripts/ci/tracked-changes.mjs", import.meta.url));
   let tmp = "";
   let head = "";
   let tarball = "";
   let integrity = "";
+  let git: (...args: string[]) => string = () => "";
 
   beforeAll(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "duo-check-packed-artifact-"));
     fs.mkdirSync(path.join(tmp, "apps", "cli"), { recursive: true });
     fs.mkdirSync(path.join(tmp, ".dist"), { recursive: true });
     fs.writeFileSync(path.join(tmp, "apps", "cli", "package.json"), JSON.stringify({ name: "@duo-director/cli", version: "0.4.0-rc.1" }));
-    const git = (...args: string[]) => execFileSync("git", args, { cwd: tmp, encoding: "utf8", windowsHide: true }).trim();
+    fs.writeFileSync(path.join(tmp, "src.ts"), "export const value = 1;\n");
+    fs.writeFileSync(path.join(tmp, ".gitignore"), ".dist/\n");
+    git = (...args: string[]) => execFileSync("git", args, { cwd: tmp, encoding: "utf8", windowsHide: true }).trim();
     git("init");
     git("config", "user.email", "test@example.com");
     git("config", "user.name", "test");
-    git("add", "apps/cli/package.json");
+    // The developer's global Git config must not decide the outcome (#171): no signing in this temporary repository.
+    git("config", "commit.gpgsign", "false");
+    git("config", "core.autocrlf", "false");
+    git("add", "apps/cli/package.json", "src.ts", ".gitignore");
     git("commit", "-m", "init");
     head = git("rev-parse", "HEAD");
     tarball = path.join(tmp, ".dist", "duo-director-cli-0.4.0-rc.1.tgz");
@@ -139,14 +146,38 @@ describe("check-packed-artifact checks the packed commit SHA (#161)", () => {
   });
 
   it("refuses a pack.json from another commit with 'pack again'", () => {
-    writePack({ commit: "0".repeat(40) });
+    writePack({ commit: "0".repeat(40), dirty: false });
     const r = runCheck();
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("pack again");
   });
 
+  it("refuses a pack.json without the dirty field with 'pack again' (#171)", () => {
+    writePack({ commit: head });
+    const r = runCheck();
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("pack again");
+  });
+
+  it("refuses a pack made with a tracked edit that was reverted before the check (#171)", async () => {
+    const { trackedChanges } = (await import(pathToFileURL(TRACKED_SCRIPT).href)) as { trackedChanges: (root: string) => string[] };
+    const source = path.join(tmp, "src.ts");
+    const original = fs.readFileSync(source, "utf8");
+    fs.writeFileSync(source, "export const value = 2;\n");
+    // What pack-cli records at pack time: the tree has a tracked change.
+    const atPack = trackedChanges(tmp);
+    expect(atPack.length).toBeGreaterThan(0);
+    writePack({ commit: head, dirty: atPack.length > 0 });
+    fs.writeFileSync(source, original);
+    expect(trackedChanges(tmp)).toEqual([]);
+    const r = runCheck();
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("from a working tree with tracked changes");
+    expect(r.stderr).toContain("pack again");
+  });
+
   it("accepts a matching commit regardless of file times", () => {
-    const packFile = writePack({ commit: head });
+    const packFile = writePack({ commit: head, dirty: false });
     const past = new Date("2000-01-01T00:00:00Z");
     fs.utimesSync(packFile, past, past);
     fs.utimesSync(tarball, past, past);
