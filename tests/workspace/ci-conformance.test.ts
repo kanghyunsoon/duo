@@ -11,12 +11,14 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parseYaml } from "@duo-director/core";
 import { DEFER_CONFORMANCE_ENV } from "../../vitest.conformance-files.js";
+import { formatNpmFailure, isolatedEnv, npm } from "../distribution/support.js";
 
 type Env = Readonly<Record<string, unknown>>;
 interface RunDefaults { readonly defaults?: { readonly run?: { readonly shell?: unknown } } }
@@ -188,5 +190,55 @@ describe("check-packed-artifact checks the packed commit SHA (#161) and a clean 
     const r = runCheck();
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toContain("check-packed-artifact: reusing duo-director-cli-0.4.0-rc.1.tgz");
+  });
+});
+
+describe("distribution npm timeout diagnostics (#37)", () => {
+  const npmLogDirs = () => fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith("duo-npm-logs-"));
+
+  it("returns an empty logTail on success and cleans up its temporary logs directory", () => {
+    const before = new Set(npmLogDirs());
+    const r = npm(["--version"], os.tmpdir(), isolatedEnv([]));
+    expect(r.status).toBe(0);
+    expect(r.logTail).toBe("");
+    expect(npmLogDirs().filter((d) => !before.has(d))).toEqual([]);
+    expect(formatNpmFailure("npm --version", r)).toContain("npm log tail: (none)");
+  });
+
+  it("captures npm's debug log tail and spawn error/signal when npm times out with empty stderr", async () => {
+    const before = new Set(npmLogDirs());
+    const sockets = new Set<net.Socket>();
+    const server = net.createServer((socket) => {
+      sockets.add(socket);
+      socket.once("close", () => sockets.delete(socket));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as net.AddressInfo).port;
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "duo-npm-timeout-test-"));
+    try {
+      const r = npm(
+        ["ping", `--registry=http://127.0.0.1:${port}`, "--fetch-retries=0", "--loglevel=error"],
+        cwd,
+        isolatedEnv([]),
+        { timeoutMs: 4_000, logTailLines: 20 },
+      );
+      expect(r.status).toBeNull();
+      expect(r.signal).toBe("SIGTERM");
+      expect(r.error?.message).toMatch(/ETIMEDOUT/u);
+      expect(r.stderr).toBe("");
+      expect(r.logTail).toContain(`http://127.0.0.1:${port}`);
+      expect(npmLogDirs().filter((d) => !before.has(d))).toEqual([]);
+      const detail = formatNpmFailure("npm install -D", r, 4_000);
+      expect(detail).toContain("npm install -D: status null, signal SIGTERM, error");
+      expect(detail).toContain("ETIMEDOUT");
+      expect(detail).toContain("4000 ms");
+      expect(detail).toContain("npm log tail:\n");
+      expect(detail).toContain(`http://127.0.0.1:${port}`);
+      expect(detail).toContain("notice PING");
+    } finally {
+      for (const s of sockets) s.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });
