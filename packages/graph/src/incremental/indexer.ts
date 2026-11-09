@@ -35,7 +35,7 @@ import { openNodeSqliteGraphStore } from "../store/node-sqlite/node-sqlite-graph
 import { GraphStoreError, type GraphOpenResult, type GraphStore } from "../store/types.js";
 import { pruneAnalysisCache, readCachedAnalyses, writeCachedAnalysis, type AnalysisCacheKey } from "./analysis-cache.js";
 import {
-  analysisFreshnessOf, FILE_FRESHNESS, hashOnDisk, loadPreviousState, moduleFreshnessOf, resolutionSignals, STATE_PREFIX,
+  analysisFreshnessOf, configFileExists, FILE_FRESHNESS, hashOnDisk, loadPreviousState, moduleFreshnessOf, resolutionSignals, STATE_PREFIX,
 } from "./assess.js";
 import { applyGraphDiff, diffScopes, type GraphDiff } from "./diff.js";
 import {
@@ -387,6 +387,8 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
     analyzerRegistryDigest,
     historyWindow: window,
     files, configs,
+    // #151 Stage B: candidates probed and absent in this run (already UTF-8 order, no duplicates).
+    absentConfigs: resolver.absentConfigs?.() ?? [],
     truthScope: digests.get(TRUTH_SCOPE) ?? EMPTY_DIGEST,
     ...(gitState?.headOid === undefined || history === undefined ? {} : { history: { headOid: gitState.headOid, shallow: gitState.shallow, summary: history } }),
     ...(gitState === undefined ? {} : {
@@ -415,6 +417,8 @@ async function indexUnderLock(root: string, options: IndexOptions): Promise<Pars
       && sameDatabase() && !sourceTextChanged && !consumedChanged
       && [...consumed.values()].every((input) => input.read() === input.value)
       && [...recordedConfigs].every(([c, h]) => hashOnDisk(rootDir, c as RepoPath) === h)
+      // #151 Stage B: a candidate this run found absent must still be absent, or the state would miss it.
+      && (resolver.absentConfigs?.() ?? []).every((c) => !configFileExists(rootDir, c))
       && JSON.stringify(loadProjectTruth(rootDir).value?.truth) === truthSignature;
     if (!stable) return moved();
   }

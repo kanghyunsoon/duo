@@ -57,6 +57,14 @@ export function isResolutionConfigFile(repoPath: string): boolean {
   return RESOLUTION_CONFIG.test(repoPath.slice(repoPath.lastIndexOf("/") + 1));
 }
 
+/**
+ * Whether a recorded absent config candidate is now a file (#151 Stage B). statSync without throwing: on Windows
+ * existsSync of a missing path costs about four times as much, and a status check may test thousands of candidates.
+ */
+export function configFileExists(root: string, repoPath: string): boolean {
+  return fs.statSync(path.join(root, repoPath), { throwIfNoEntry: false })?.isFile() === true;
+}
+
 export function hashOnDisk(root: string, repoPath: RepoPath): string | undefined {
   try {
     return computeContentHash(fs.readFileSync(path.join(root, repoPath)), fingerprintModeOf(repoPath)).contentHash;
@@ -79,9 +87,13 @@ export function resolutionSignals(root: string, changes: readonly FingerprintCha
   const configChanges = indexed.filter((c) => isResolutionConfigFile(c.path)).map((c) => c.path);
   const changedConfigs = new Set<string>(configChanges);
   for (const [p, c] of Object.entries(previous?.configs ?? {})) if (hashOnDisk(root, p as RepoPath) !== c.contentHash) changedConfigs.add(p);
+  // #151 Stage B: a probed candidate that was absent and exists now (an ignored or excluded config is not a changed
+  // file) re-resolves the files under its directory. Existence only: an absent path is not read.
+  const appeared = (previous?.absentConfigs ?? []).filter((p) => configFileExists(root, p));
+  for (const p of appeared) changedConfigs.add(p);
   return {
     fileSetChanged: indexed.some((c) => c.status === "ADDED" || c.status === "DELETED"),
-    configDirs: configChanges.map((p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "")),
+    configDirs: [...configChanges, ...appeared].map((p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "")),
     changedConfigs,
   };
 }

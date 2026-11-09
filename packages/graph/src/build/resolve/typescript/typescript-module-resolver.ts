@@ -6,7 +6,7 @@
  */
 import { builtinModules, createRequire } from "node:module";
 import nodePath from "node:path";
-import { createDiagnostic, normalizeRepoPath, type Diagnostic, type RepoPath } from "@duo-director/core";
+import { compareUtf8, createDiagnostic, normalizeRepoPath, type Diagnostic, type RepoPath } from "@duo-director/core";
 import type ts from "typescript";
 import type { ModuleResolution, ModuleResolutionRequest, ModuleResolver } from "../module-resolver.js";
 
@@ -126,14 +126,27 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     return config;
   };
 
+  /**
+   * Candidates this resolver probed and found absent (#151 Stage B): a tsconfig.json or jsconfig.json that, had it
+   * existed, would have been chosen before the one found further up. index-state v5 records them so a config that
+   * appears later (an ignored or excluded one is not a scanned file) makes the index stale.
+   */
+  const absent = new Set<RepoPath>();
+  const exists = (file: string, check: (f: string) => boolean): boolean => {
+    if (check(file)) return true;
+    const repoPath = toRepoPath(file);
+    if (repoPath !== undefined) absent.add(repoPath);
+    return false;
+  };
+
   /** Nearest tsconfig.json (then jsconfig.json) from the file's directory up to the repository root. */
   const configFor = (dir: string): Config | undefined => {
     if (nearest.has(dir)) return nearest.get(dir);
     let found: Config | undefined;
     const ts1 = nodePath.join(dir, "tsconfig.json");
     const js1 = nodePath.join(dir, "jsconfig.json");
-    if (fileExists(ts1)) found = loadConfig(ts1, false);
-    else if (fileExists(js1)) found = loadConfig(js1, true);
+    if (exists(ts1, fileExists)) found = loadConfig(ts1, false);
+    else if (exists(js1, fileExists)) found = loadConfig(js1, true);
     else if (nodePath.resolve(dir) !== root) {
       const parent = nodePath.dirname(dir);
       found = parent === dir ? undefined : configFor(parent);
@@ -152,7 +165,7 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
   const nearestPathFor = (dir: string): RepoPath | undefined => {
     if (nearestPaths.has(dir)) return nearestPaths.get(dir);
     let found: RepoPath | undefined;
-    const candidate = [nodePath.join(dir, "tsconfig.json"), nodePath.join(dir, "jsconfig.json")].find((f) => api.sys.fileExists(f));
+    const candidate = [nodePath.join(dir, "tsconfig.json"), nodePath.join(dir, "jsconfig.json")].find((f) => exists(f, (c) => api.sys.fileExists(c)));
     if (candidate !== undefined) {
       readFile(candidate);
       found = toRepoPath(candidate);
@@ -202,6 +215,9 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     },
     nearestConfig(fromPath) {
       return nearestPathFor(nodePath.dirname(nodePath.join(root, fromPath)));
+    },
+    absentConfigs() {
+      return [...absent].sort(compareUtf8);
     },
     configDiagnostics(configPath, opts) {
       const known = diagnosticsByConfig.get(configPath);

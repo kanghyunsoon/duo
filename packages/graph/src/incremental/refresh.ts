@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createDiagnostic, failure, requireCompleteTruth, loadProjectTruth, success, type ParseResult, type RepoPath } from "@duo-director/core";
 import { GRAPH_DB_FILE_PATH, indexRepository, openProjectGraphReader, openProjectGraphStore, sameScanAndGit, takeScanSnapshot, type IndexOptions } from "./indexer.js";
-import { hashOnDisk } from "./assess.js";
+import { configFileExists, hashOnDisk } from "./assess.js";
 import { inspectIndex } from "./inspect.js";
 import { withIndexWriteLock, type IndexWriteLockOptions } from "./write-lock.js";
 import { INDEX_STATE_TOKEN_KEY, readIndexState } from "./state.js";
@@ -32,10 +32,14 @@ async function refreshUnderGuard(root: string, options: RefreshIndexOptions): Pr
     // index does not pay for this (its own guard checks once before writing).
     const scope = { include: truth.value.truth.config.index.include, exclude: truth.value.truth.config.index.exclude };
     const configsAtStart = new Map(Object.keys(readIndexState(root).state?.configs ?? {}).map((c) => [c, hashOnDisk(root, c as RepoPath)] as const));
+    // #151 Stage B: recorded absent config candidates that are still absent now must stay absent until the end (one
+    // that already appeared is what makes the index stale and is re-read by this run).
+    const absentAtStart = (readIndexState(root).state?.absentConfigs ?? []).filter((c) => !configFileExists(root, c));
     const snapshot = await takeScanSnapshot(root, scope);
     if (snapshot === undefined) return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: the repository or its Git state could not be read")]);
     const stable = async () => await sameScanAndGit(root, scope, snapshot)
       && [...configsAtStart].every(([c, h]) => hashOnDisk(root, c as RepoPath) === h)
+      && absentAtStart.every((c) => !configFileExists(root, c))
       && JSON.stringify(loadProjectTruth(root).value?.truth) === truthSignature;
     const moved = () => failure<RefreshIndexResult>([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: repository inputs changed during recovery")]);
     const dbFile = path.join(path.resolve(root), GRAPH_DB_FILE_PATH);

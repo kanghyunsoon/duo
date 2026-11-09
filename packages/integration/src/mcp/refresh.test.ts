@@ -1,6 +1,12 @@
 /**
  * #172: follow-ups to the MCP automatic index refresh (#4, #133).
  */
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createDefaultAnalyzerRegistry } from "@duo-director/analyzer";
+import { INDEX_STATE_FILE_PATH, indexRepository, openProjectGraphStore } from "@duo-director/graph";
 import { describe, expect, it } from "vitest";
 import { readWithSafeRefresh, TOOLS } from "./tools.js";
 
@@ -52,4 +58,46 @@ describe("MCP automatic index refresh follow-ups (#172)", () => {
     expect(reads).toBe(1);
     expect(result).toEqual(op("index-required"));
   });
+});
+
+describe("MCP refresh after a DUO upgrade (#151 Stage B, index-state v5)", () => {
+  it("keeps index-required with the exact reason for a v4 state, writes nothing, and never claims it was resolved", async () => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-mcp-v4-")));
+    const created = await createDefaultAnalyzerRegistry();
+    if (created.value === undefined) throw new Error(JSON.stringify(created.diagnostics));
+    try {
+      fs.mkdirSync(path.join(root, ".duo-project"), { recursive: true });
+      fs.mkdirSync(path.join(root, "src"), { recursive: true });
+      fs.writeFileSync(path.join(root, ".duo-project/project.yaml"), "schema_version: 1\nname: upgrade\n");
+      fs.writeFileSync(path.join(root, ".gitignore"), ".duo-project/generated/\n.duo-project/cache/\n.duo-project/runtime/\n");
+      fs.writeFileSync(path.join(root, "src/a.ts"), "export const a = 1;\n");
+      const git = (...args: string[]) => execFileSync("git", args, { cwd: root, windowsHide: true, stdio: "pipe" });
+      git("-c", "init.defaultBranch=main", "init", "-q");
+      git("-c", "user.email=t@duo.invalid", "-c", "user.name=t", "-c", "commit.gpgsign=false", "add", "-A");
+      git("-c", "user.email=t@duo.invalid", "-c", "user.name=t", "-c", "commit.gpgsign=false", "commit", "-qm", "init");
+      const store = openProjectGraphStore(root).value;
+      if (store === undefined) throw new Error("graph");
+      try { expect((await indexRepository(root, { store, registry: created.value })).value).toBeDefined(); } finally { store.close(); }
+      // What an older DUO left behind: the same state at version 4, without absentConfigs.
+      const statePath = path.join(root, INDEX_STATE_FILE_PATH);
+      const state = JSON.parse(fs.readFileSync(statePath, "utf8")) as Record<string, unknown>;
+      delete state.absentConfigs;
+      fs.writeFileSync(statePath, `${JSON.stringify({ ...state, version: 4 })}\n`);
+      const before = fs.readFileSync(statePath, "utf8");
+
+      let reads = 0;
+      const result = await readWithSafeRefresh(root, async () => { reads += 1; return op("index-required"); });
+      expect(reads).toBe(1);
+      const indexRefresh = result.kind === "ok" ? result.payload.indexRefresh : undefined;
+      expect(indexRefresh?.refreshed).toBe(false);
+      expect(indexRefresh?.reason).toContain("requires an existing compatible index (incompatible); run duoctl index explicitly");
+      expect(fs.readFileSync(statePath, "utf8")).toBe(before);
+      const summary = TOOLS.duo_get_context.summarize(result.kind === "ok" ? result.payload : {});
+      expect(summary).toContain("INDEX_REQUIRED");
+      expect(summary).toContain("Automatic index refresh was not done: Safe index refresh requires an existing compatible index (incompatible)");
+    } finally {
+      created.value.dispose();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
