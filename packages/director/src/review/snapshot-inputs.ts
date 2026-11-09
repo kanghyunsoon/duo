@@ -22,6 +22,8 @@
  *   discovered source roots) run on both sides' file sets. When the result differs, the paths that decide it (the
  *   resolved or candidate modules, otherwise an __init__.py or project metadata file whose existence or text differs)
  *   are inputs. Only files whose existence or text can change a Python resolution are compared.
+ * - for a C/C++ quoted #include (#160 Stage 2): the graph resolves it against the includer's directory and the indexed
+ *   file set only, so a path whose existence differs and that the graph's own rule resolves this include to is an input.
  *
  * Content differences that cannot change the result are not inputs: a module that re-exports nothing on either side
  * (an export-from in a comment or a string does not count), a config of another directory, or a config option that
@@ -32,7 +34,8 @@ import { builtinModules } from "node:module";
 import path from "node:path";
 import { compareUtf8, type RepoPath } from "@duo-director/core";
 import {
-  createTypeScriptModuleResolver, discoverPythonRoots, resolvePython, type IndexedModuleReference, type ModuleResolution, type ModuleResolver, type PythonRoots,
+  createTypeScriptModuleResolver, discoverPythonRoots, resolveCppInclude, resolvePython,
+  type IndexedModuleReference, type ModuleResolution, type ModuleResolver, type PythonRoots,
 } from "@duo-director/graph";
 
 /** How a path outside the diff differs: it exists on one side only, or exists on both with other content. */
@@ -180,6 +183,7 @@ export class VerdictInputs {
   /** A module reference of importer whose resolution decides the result (a changed import or a followed export-from). */
   async reference(importer: RepoPath, ref: IndexedModuleReference): Promise<void> {
     if (ref.target !== undefined && this.divergent.get(ref.target) === "existence") this.found.add(ref.target);
+    if (ref.kind === "include") { this.includeReference(importer, ref); return; }
     if (PY_IMPORTER.test(importer)) { await this.pythonReference(importer, ref); return; }
     if (!JS_IMPORTER.test(importer)) return;
     const specifier = ref.specifier;
@@ -232,6 +236,18 @@ export class VerdictInputs {
   /** The differing verdict inputs, sorted. */
   paths(): string[] {
     return [...this.found].sort(compareUtf8);
+  }
+
+  /**
+   * #160 Stage 2: a C/C++ #include. The graph resolves a quoted include against the includer's directory and the indexed
+   * files (no include paths), so it resolves differently on the two sides exactly when its target exists on one side
+   * only. Each path whose existence differs is tried as the target with the graph's own rule (resolveCppInclude), so the
+   * rule is not restated here. A system include (<...>) resolves to no repository file on either side.
+   */
+  private includeReference(importer: RepoPath, ref: IndexedModuleReference): void {
+    if (ref.resolution.status === "external" && ref.resolution.reason === "system-include") return;
+    const request = { fromPath: importer, specifier: ref.specifier, kind: ref.kind, language: "cpp" } as const;
+    for (const p of this.existence) if (resolveCppInclude(request, new Set([p]), false).status === "resolved") this.found.add(p);
   }
 
   /**
