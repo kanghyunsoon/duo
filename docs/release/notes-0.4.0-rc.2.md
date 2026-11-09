@@ -67,6 +67,7 @@ The TS/JS analyzer identity changed, so an index made by an earlier version is r
 - The MCP refresh waits for the index lock up to 30 seconds even if the request is cancelled during the wait (#198 is not included). 30 seconds is an initial value from the current measurements and is not guaranteed to be shorter than every MCP client timeout.
 - Real Codex and Claude Code approval prompts, Claude Code loading of the `--with-skill` skill during a task, and manual accessibility checks (`accessibilityVerificationComplete: false`) are still not verified.
 - Carried over from 0.4.0-rc.1: launcher PATH behavior measured on Windows only, and Work map redaction limited to the known credential formats.
+- Still open: editing an unrelated part of the README after setup can make reviews WARN (#7).
 - Node.js `>=24.15.0`.
 
 ## Release channel

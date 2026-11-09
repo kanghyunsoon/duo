@@ -137,7 +137,7 @@
 | Unchanged | Truth schema(`schema_version: 1`, 새 선택 field `forbids.importer_paths`만), Decision Lock 형식과 digest, `duo.context/1`·`duo.context-packet/1`·`duo.gap-assessment/1`·`duo.review-record/1`·`duo.adoption-baseline/2`, Graph 형식, index state version, MCP tool 9개와 input schema, CLI 종료 코드, runtime dependency 트리(0.4.0-rc.1 대비 shrinkwrap diff는 version 두 곳, 67 packages) |
 | Migration | 없음. Truth·lock·Record·agent 설정을 다시 쓰지 않는다. TS/JS analyzer identity와 analyzer registry가 바뀌어 기존 index는 stale이고 `duoctl index` 한 번(MCP에서는 안전한 첫 호출)으로 current가 된다 |
 | Downgrade | 0.4.0-rc.1·0.3.x는 `importer_paths`가 없으면 같은 Truth를 읽고 위 경우에 이전 판정을 낸다. 0.4.0-rc.1·0.3.4에는 소유권 기록이 없고 #104가 있다. 0.3.5는 skill 대상이 든 기록을 invalid로 보고 지우지 않는다. 0.3 Truth의 floor는 그대로 0.2.2 |
-| Known limitation | #160 Stage 2 미완료(snapshot을 직접 분석하지 않고 판정 입력이 다르면 `REVIEW_SNAPSHOT_MISMATCH`), #151 Stage B 미포함(Git이 무시하거나 `index.exclude`가 뺀 `tsconfig.json`·`jsconfig.json`을 index 뒤에 만들면 index가 stale이 되지 않는다), MCP lock 대기 중 취소 미반영(#198 미포함), 30초는 현재 측정에 근거한 초기값, 실제 agent 승인 UX·Claude Code의 skill 작업 중 로딩·접근성 수동 검증(#73·#101) 미완료, rc.1의 launcher·redaction 한계 그대로 |
+| Known limitation | #160 Stage 2 미완료(snapshot을 직접 분석하지 않고 판정 입력이 다르면 `REVIEW_SNAPSHOT_MISMATCH`), #151 Stage B 미포함(Git이 무시하거나 `index.exclude`가 뺀 `tsconfig.json`·`jsconfig.json`을 index 뒤에 만들면 index가 stale이 되지 않는다), MCP lock 대기 중 취소 미반영(#198 미포함), 30초는 현재 측정에 근거한 초기값, 실제 agent 승인 UX·Claude Code의 skill 작업 중 로딩·접근성 수동 검증(#73·#101) 미완료, rc.1의 launcher·redaction 한계와 #7(README 무관 수정의 WARN) 그대로 |
 
 ## 0.3.3 변경 분류 (T78, H-87)
 
