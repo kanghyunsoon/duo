@@ -8,13 +8,13 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/kanghyunsoon/duo#readme",
-  "version": "0.4.0-rc.1",
+  "version": "0.4.0-rc.2",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@duo-director/cli",
-      "version": "0.4.0-rc.1",
+      "version": "0.4.0-rc.2",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

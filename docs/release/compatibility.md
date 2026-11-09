@@ -103,9 +103,9 @@
 | Downgrade | 0.3.4는 같은 Truth를 읽고 Work map 파일을 무시한다. 0.3 Truth의 floor는 그대로 0.2.2 |
 | Known limitation | launcher PATH는 Windows에서만 측정(pnpm dlx 식별 불가, npm test/start·run-script·pnpm run 미측정, Yarn Classic 부분), redaction은 알려진 credential 형식만, 접근성 수동 검증 미완료(#73), C259·C260·#7·#4 그대로 |
 
-## 0.4.0-rc.1 이후 `next` 변경 (미출시)
+## 0.4.0-rc.2 변경 분류 (branch `next`, dist-tag `next`)
 
-다음 release에 들어갈 `next`의 변경. release 때 그 version 절로 옮긴다.
+0.4.0-rc.1 → 0.4.0-rc.2. prerelease이며 stable `latest`는 0.3.5다. 0.3.5의 #104 수정(H-94, 소유권 기록)을 포함한다. Release notes: [notes-0.4.0-rc.2.md](notes-0.4.0-rc.2.md).
 
 | 분류 | 내용 |
 |---|---|
@@ -130,6 +130,14 @@
 | Additive public | `duoctl install codex`·`claude-code`의 선택 option `--with-skill`(#146, S15P31A106-358): project skill을 함께 쓰고 H-94 소유권 기록에 skill 경로가 대상으로 들어갈 수 있다. `duo.agent-integration-plan/1`의 선택 field `skill`(`target`, `status`: absent·current·outdated·foreign, `action`)은 option을 쓰거나 DUO skill이 관련될 때만 나온다. 같은 `/1`. option 없는 install의 plan과 bridge는 그대로. 구버전은 skill 대상이 든 기록을 invalid로 보고 파일을 지우지 않는다(H-94 fallback) |
 | Behavior correction | Index freshness after a DUO upgrade: analyzer registry digest가 기록과 다르면(analyzer 추가·제거·변경) 다시 분석할 파일이 없어도 `status`·inspection·MCP가 `stale`로 보고한다. 예: TS/JS analyzer만 바뀐 버전으로 올린 Python·C++ 저장소. 이전에는 `current`로 보고했지만 다음 `duoctl index`가 새 identity로 state를 다시 썼다(graph는 같음). index 한 번(parse 0, graph 그대로) 뒤 `current`이고 다음 index는 아무것도 쓰지 않는다. 형식 변경 없음 |
 | Behavior correction | Index의 module resolution(#151 Stage A): TS/JS importer에 가장 가까운 `tsconfig.json`·`jsconfig.json`이 Git이 무시하거나 `index.exclude`로 scan에서 빠진 파일이고 index 뒤에 생기거나 바뀌면, 다음 `duoctl index`(incremental)가 수정하지 않은 TS/JS importer도 그 config로 다시 해석한다. 이전에는 수정한 importer만 새 config를 쓰고 나머지는 `index --full` 전까지 config 없는 결과(IMPORTS·CALLS 누락)를 유지했다. 결과는 같은 tree의 clean full rebuild와 같다. 가장 가까운 config는 그대로이고 그 `extends` 대상만 index 뒤에 생긴 경우는 포함하지 않는다(이전 결과를 다시 쓴다, `next`와 같다). index-state(v4)·graph·`duo.*/1` 형식 그대로. index 없이 그런 config를 stale로 알리는 것(status, MCP)은 #151 Stage B로 남는다 |
+| Additive public | 새 명령 `duoctl setup`(#3, #150·#152·#153, H-102): 처음 설정을 계획 하나와 확인 한 번으로 묶는다(Truth, index, Adoption Baseline, `--agent codex`·`claude-code`). 확인 전 쓰기 0, 비대화형은 `--yes` 없으면 exit 6(`confirmation-required`). 기존 `init`·`install`·`doctor`의 계약은 그대로 |
+| Behavior correction | CLI(#122·#116·#155·#184): 값을 받는 전역 option(`--root`·`--locale`)을 명령 앞에 둘 수 있다. 두 번째 `install remove`는 "Already configured" 대신 DUO가 설정돼 있지 않다고 말한다. Decision TTY·actor 권한 실패에 이유와 다음 행동을 안내한다. `status`가 Git history만 바뀐 stale index를 그렇게 표시한다. JSON·종료 코드는 그대로 |
+| Index | 계산된 `import()`(#50 L2a, #121)는 unresolved module reference(`computed-specifier`)로 기록되고 review는 `imports-unresolved`를 남긴다. index state의 unresolved reason에 `computed-specifier`가 추가돼, 이 값이 든 state를 구버전은 `state-invalid`로 보고 다음 index에서 다시 만든다 |
+| Internal-only | index write lock 파일 `.duo-project/generated/index-writer.lock`(#143·#148): `duoctl index`·`--refresh`와 MCP 자동 갱신이 같은 lock을 쓰고, writer가 죽으면 OS가 lock을 푼다. 대기는 CLI·Graph 기본 5초, MCP 자동 갱신 30초이며 넘으면 `GRAPH_WRITE_REFUSED`(CLI)·`index-required`와 이유(MCP). H-94 소유권 기록 `runtime/agent-integration/<agent>.json`(`duo.agent-file-ownership/1`, 0.3.5와 같음). 게시 package.json의 `mcpName`(#141, Registry 등록은 별도) |
+| Unchanged | Truth schema(`schema_version: 1`, 새 선택 field `forbids.importer_paths`만), Decision Lock 형식과 digest, `duo.context/1`·`duo.context-packet/1`·`duo.gap-assessment/1`·`duo.review-record/1`·`duo.adoption-baseline/2`, Graph 형식, index state version, MCP tool 9개와 input schema, CLI 종료 코드, runtime dependency 트리(0.4.0-rc.1 대비 shrinkwrap diff는 version 두 곳, 67 packages) |
+| Migration | 없음. Truth·lock·Record·agent 설정을 다시 쓰지 않는다. TS/JS analyzer identity와 analyzer registry가 바뀌어 기존 index는 stale이고 `duoctl index` 한 번(MCP에서는 안전한 첫 호출)으로 current가 된다 |
+| Downgrade | 0.4.0-rc.1·0.3.x는 `importer_paths`가 없으면 같은 Truth를 읽고 위 경우에 이전 판정을 낸다. 0.4.0-rc.1·0.3.4에는 소유권 기록이 없고 #104가 있다. 0.3.5는 skill 대상이 든 기록을 invalid로 보고 지우지 않는다. 0.3 Truth의 floor는 그대로 0.2.2 |
+| Known limitation | #160 Stage 2 미완료(snapshot을 직접 분석하지 않고 판정 입력이 다르면 `REVIEW_SNAPSHOT_MISMATCH`), #151 Stage B 미포함(Git이 무시하거나 `index.exclude`가 뺀 `tsconfig.json`·`jsconfig.json`을 index 뒤에 만들면 index가 stale이 되지 않는다), MCP lock 대기 중 취소 미반영(#198 미포함), 30초는 현재 측정에 근거한 초기값, 실제 agent 승인 UX·Claude Code의 skill 작업 중 로딩·접근성 수동 검증(#73·#101) 미완료, rc.1의 launcher·redaction 한계 그대로 |
 
 ## 0.3.3 변경 분류 (T78, H-87)
 
