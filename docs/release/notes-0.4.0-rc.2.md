@@ -40,6 +40,11 @@ Release candidate on the `next` development line, for the npm dist-tag `next` (`
 - A second `install remove` says DUO is not configured (#116). Valued global options such as `--root` and `--locale` work before the command (#122).
 - The published `package.json` has `mcpName` (`io.github.kanghyunsoon/duo`), which the MCP Registry needs. Registering in the Registry is a separate step and is not part of this release.
 
+### Local UI recovery (#178, #179)
+
+- A malformed entity address (for example `/entity/%`) or an API response without the expected success envelope shows recovery guidance (`UI_INVALID_RESPONSE`) instead of an empty page. An unexpected rendering error is contained to the page.
+- The Work map shows that it is reconnecting when the connection drops. After two failed revision checks it warns that the information shown may be stale, and it checks again every 5 seconds. Screen-reader announcements of these messages are not verified (#101).
+
 ## Index after upgrading
 
 The TS/JS analyzer identity changed, so an index made by an earlier version is reported as `stale`. Run `duoctl index` once. A Python or C/C++ repository whose files do not need new analysis is also reported `stale` until that one run (#201); the run rewrites only the index state and the next `duoctl index` writes nothing. In MCP, the first safe call refreshes it.
@@ -68,6 +73,7 @@ The TS/JS analyzer identity changed, so an index made by an earlier version is r
 - Real Codex and Claude Code approval prompts, Claude Code loading of the `--with-skill` skill during a task, and manual accessibility checks (`accessibilityVerificationComplete: false`) are still not verified.
 - Carried over from 0.4.0-rc.1: launcher PATH behavior measured on Windows only, and Work map redaction limited to the known credential formats.
 - Still open: editing an unrelated part of the README after setup can make reviews WARN (#7).
+- On Windows, a nearest `tsconfig.json` or `jsconfig.json` with a JSON syntax error makes indexing fail with a TypeScript "Debug Failure" instead of reporting `TSCONFIG_INVALID` (#205). 0.4.0-rc.1 and 0.3.5 have the same problem. Fix the JSON syntax and run `duoctl index` again.
 - Node.js `>=24.15.0`.
 
 ## Release channel
