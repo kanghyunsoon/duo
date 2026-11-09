@@ -9,7 +9,8 @@ import { FileLockRefusedError, tryAcquireFileLock, type HeldFileLock } from "../
  * The lock directory used by #143 at .duo-project/generated/index-write.lock is no longer used.
  */
 export const INDEX_WRITE_LOCK_PATH = `${STATE_DIR_NAME}/generated/index-writer.lock`;
-export interface IndexWriteLockOptions { readonly lockTimeoutMs?: number }
+/** signal (#172): a cancelled caller stops waiting for the lock and starts no index write. */
+export interface IndexWriteLockOptions { readonly lockTimeoutMs?: number; readonly signal?: AbortSignal }
 export interface IndexWriteLease { readonly root: string }
 const leases = new WeakMap<IndexWriteLease, { active: boolean; indexing: boolean; pending: Set<Promise<unknown>> }>();
 
@@ -72,6 +73,9 @@ export async function withIndexWriteLock<T>(root: string, fn: (lease: IndexWrite
   }
   let held: HeldFileLock | undefined;
   for (;;) {
+    if (options.signal?.aborted === true) {
+      return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Index lock wait cancelled: the request was cancelled; no index write was started")]);
+    }
     try {
       held = tryAcquireFileLock(file);
     } catch (error) {

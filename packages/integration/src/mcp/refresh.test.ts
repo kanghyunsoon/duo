@@ -52,4 +52,19 @@ describe("MCP automatic index refresh follow-ups (#172)", () => {
     expect(reads).toBe(1);
     expect(result).toEqual(op("index-required"));
   });
+
+  it("passes the request signal into the refresh and skips the second read once it is cancelled", async () => {
+    const controller = new AbortController();
+    let seen: AbortSignal | undefined;
+    let reads = 0;
+    const cancelDuringRefresh = async (_root: string, options?: { signal?: AbortSignal }) => {
+      seen = options?.signal;
+      controller.abort();
+      return { value: { refreshed: true }, diagnostics: [] } as never;
+    };
+    const result = await readWithSafeRefresh("/repo", async () => { reads += 1; return op("index-required"); }, controller.signal, cancelDuringRefresh);
+    expect(seen).toBe(controller.signal);
+    expect(reads).toBe(1);
+    expect(result).toEqual(op("index-required"));
+  });
 });

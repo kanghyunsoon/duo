@@ -118,7 +118,7 @@ Tool 호출마다 `openProjectGraphReader`로 열고 끝나기 전에 닫는다(
 
 ## Cancellation
 
-MCP 요청 취소(client의 `notifications/cancelled`)는 SDK의 `ctx.mcpReq.signal`(AbortSignal)로 들어와 shared operation의 `signal`로 넘어간다. context는 `compileContext`, review는 `reviewChanges`(와 LLM semantic assist)까지 전달한다. 취소된 요청은 응답하지 않고 서버는 다음 요청을 계속 받는다(T16.1 wire test).
+MCP 요청 취소(client의 `notifications/cancelled`)는 SDK의 `ctx.mcpReq.signal`(AbortSignal)로 들어와 shared operation의 `signal`로 넘어간다. context는 `compileContext`, review는 `reviewChanges`(와 LLM semantic assist)까지 전달한다. 자동 index 갱신에도 전달해서, 취소된 요청은 갱신을 시작하지 않고 이미 시작한 writer lock 대기도 멈추며 갱신 뒤 두 번째 읽기를 하지 않는다(#172). lock을 잡은 뒤 진행 중인 갱신은 중간에 끊지 않는다. 취소된 요청은 응답하지 않고 서버는 다음 요청을 계속 받는다(T16.1 wire test).
 
 ## Metrics
 

@@ -41,6 +41,27 @@ it("holds the lock without a journal file next to it (#148 review)", async () =>
   const lock = fs.lstatSync(path.join(repo.root, INDEX_WRITE_LOCK_PATH));
   expect({ size: lock.size, nlink: lock.nlink }).toEqual({ size: 0, nlink: 1 });
 });
+it("stops waiting for the lock when the caller cancels, and runs nothing (#172)", async () => {
+  const repo = makeRepo(temps, { ".duo-project/project.yaml": "schema_version: 1\nname: cancel\n", "src/a.ts": "export const a = 1;\n" });
+  let release!: () => void;
+  const holder = withIndexWriteLock(repo.root, () => new Promise<void>((resolve) => { release = resolve; }));
+  const controller = new AbortController();
+  let ran = false;
+  const started = performance.now();
+  const waiting = withIndexWriteLock(repo.root, async () => { ran = true; }, { lockTimeoutMs: 60_000, signal: controller.signal });
+  globalThis.setTimeout(() => controller.abort(), 100);
+  const result = await waiting;
+  expect(ran).toBe(false);
+  expect(result.diagnostics[0]).toMatchObject({ code: "GRAPH_WRITE_REFUSED", message: expect.stringContaining("cancelled") });
+  expect(performance.now() - started).toBeLessThan(10_000);
+  release();
+  await holder;
+  // An already-cancelled caller does not take a free lock either.
+  const free = await withIndexWriteLock(repo.root, async () => { ran = true; }, { signal: controller.signal });
+  expect(ran).toBe(false);
+  expect(free.diagnostics[0]?.message).toContain("cancelled");
+  expect(await released(repo.root)).toBe(true);
+});
 it("converts a source deletion during analysis to a recovery refusal and releases the lock", async () => {
   const repo = makeRepo(temps, { ".duo-project/project.yaml": "schema_version: 1\nname: error\n", "src/a.ts": "export const a = 1;\n" });
   const registry = await baseRegistry();
