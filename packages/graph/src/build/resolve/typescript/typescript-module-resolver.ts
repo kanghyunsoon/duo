@@ -143,6 +143,27 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
   };
   const noConfig: Config = { key: "", options: NO_CONFIG_OPTIONS, cache: api.createModuleResolutionCache(root, (f) => f, NO_CONFIG_OPTIONS), files: [] };
 
+  /**
+   * The nearest config path by existence only (#151), memoized per directory. The same lookup order as configFor; no
+   * config is parsed and a missing file is not read. A config that is found is read once, so the run's input check
+   * (readInput) sees it.
+   */
+  const nearestPaths = new Map<string, RepoPath | undefined>();
+  const nearestPathFor = (dir: string): RepoPath | undefined => {
+    if (nearestPaths.has(dir)) return nearestPaths.get(dir);
+    let found: RepoPath | undefined;
+    const candidate = [nodePath.join(dir, "tsconfig.json"), nodePath.join(dir, "jsconfig.json")].find((f) => api.sys.fileExists(f));
+    if (candidate !== undefined) {
+      readFile(candidate);
+      found = toRepoPath(candidate);
+    } else if (nodePath.resolve(dir) !== root) {
+      const parent = nodePath.dirname(dir);
+      found = parent === dir ? undefined : nearestPathFor(parent);
+    }
+    nearestPaths.set(dir, found);
+    return found;
+  };
+
   const resolveUncached = (request: ModuleResolutionRequest): ModuleResolution => {
     const { specifier } = request;
     if (specifier.startsWith("node:") || BUILTINS.has(specifier) || BUILTINS.has(specifier.split("/")[0] ?? "")) return { status: "external", reason: "builtin" };
@@ -178,6 +199,9 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     diagnostics,
     configFiles(fromPath) {
       return configFor(nodePath.dirname(nodePath.join(root, fromPath)))?.files ?? [];
+    },
+    nearestConfig(fromPath) {
+      return nearestPathFor(nodePath.dirname(nodePath.join(root, fromPath)));
     },
     configDiagnostics(configPath, opts) {
       const known = diagnosticsByConfig.get(configPath);
