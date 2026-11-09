@@ -40,9 +40,11 @@
  *   kept on its own line after a statement boundary moved, kept as `import type`, merged into another import of
  *   the old module, or respelled (`../db/legacy-db-v0`) is BLOCK. So are `import type` → value import, and a
  *   review whose Adoption Baseline commit is not in the clone (shallow checkout): nothing shows the old specifier
- *   resolved nowhere there. Still WARN: two references replaced one by one (same or different missing modules),
- *   `import type { X }` → `import { type X }`, an unrelated barrel import added next to the barrel respecify, and
- *   a bare package import named like the old file. Without an Adoption Baseline, P8a has no provenance and stays
+ *   resolved nowhere there. In a partial clone whose baseline blobs cannot be fetched, existence is read from the
+ *   tree (#187): a from side that resolved at the baseline is BLOCK, one missing in every tree is still WARN.
+ *   Still WARN: two references replaced one by one (same or different missing modules), `import type { X }` →
+ *   `import { type X }`, an unrelated barrel import added next to the barrel respecify, and a bare package import
+ *   named like the old file. Without an Adoption Baseline, P8a has no provenance and stays
  *   BLOCK.
  * - P8b: The `to` side no longer resolves. Current `next` behavior: no claim, `imports-unresolved`
  *   limitation, PASS.
@@ -561,42 +563,97 @@ describe("Issue #48 P8a without an Adoption Baseline", () => {
   });
 });
 
-describe("Issue #48 P8a when the Adoption Baseline commit is not in the clone", () => {
+/**
+ * A repository whose Adoption Baseline was captured while src/db/modern-db.ts existed, then modern-db.ts was deleted:
+ * modern-page's import resolved at the baseline but not at the diff base.
+ */
+async function baselineThenDropModernDb(): Promise<{ readonly repo: ContextRepo; readonly baselineCommit: string }> {
+  const repo = makeContextRepo(temps, registry, fixture);
+  const confirmed = await createDecisionService({ root: repo.root, clock: at("2026-09-01T00:00:00.000Z") }).confirm(human, "D-001");
+  if (confirmed.value === undefined) throw new Error(JSON.stringify(confirmed.diagnostics));
+  repo.git("add", "-A");
+  repo.git("commit", "-q", "-m", "confirm D-001");
+  await repo.index();
+  const captured = await withGraph(repo.root, (graph) =>
+    captureAdoptionBaseline(repo.root, { graph, registry, historyWindow: HISTORY, actor: human, clock: at("2026-09-02T00:00:00.000Z") }),
+  );
+  if (captured.value === undefined || captured.value.status !== "captured") throw new Error(JSON.stringify(captured));
+  repo.git("add", "-A");
+  repo.git("commit", "-q", "-m", "capture adoption baseline");
+  repo.git("rm", "-q", "src/db/modern-db.ts");
+  repo.git("commit", "-q", "-m", "drop modern-db");
+  return { repo, baselineCommit: captured.value.baseline.git.headOid };
+}
+
+function cloneOf(source: string, args: readonly string[]): string {
+  const clone = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-i48-clone-")));
+  temps.push(clone);
+  fs.rmSync(clone, { recursive: true, force: true });
+  execFileSync("git", ["clone", "-q", ...args, `file://${source.replace(/\\/g, "/")}`, clone], { windowsHide: true });
+  return clone;
+}
+
+/** Index and review the working tree of `root` (a clone, not a ContextRepo). */
+async function reviewAt(root: string): Promise<ReviewResult> {
+  await withGraph(root, async (store) => {
+    const indexed = await indexRepository(root, { store, registry, historyWindow: HISTORY });
+    if (indexed.value === undefined) throw new Error(JSON.stringify(indexed.diagnostics));
+  });
+  return withGraph(root, async (graph) => {
+    const out = await reviewChanges(root, { diff: W }, { graph, registry, historyWindow: HISTORY });
+    if (out.value === undefined) throw new Error(JSON.stringify(out.diagnostics));
+    return out.value.result;
+  });
+}
+
+const replaceIn = (root: string, file: string, from: string, to: string) => {
+  const abs = path.join(root, file);
+  fs.writeFileSync(abs, fs.readFileSync(abs, "utf8").replace(from, to));
+};
+
+describe("Issue #48 P8a when the Adoption Baseline cannot be read in full", () => {
   it("P8a control (H-99 (1), (3)): a from side that resolved at the baseline stays BLOCK in a shallow clone that lacks the baseline commit", async () => {
-    const repo = makeContextRepo(temps, registry, fixture);
-    const confirmed = await createDecisionService({ root: repo.root, clock: at("2026-09-01T00:00:00.000Z") }).confirm(human, "D-001");
-    if (confirmed.value === undefined) throw new Error(JSON.stringify(confirmed.diagnostics));
-    repo.git("add", "-A");
-    repo.git("commit", "-q", "-m", "confirm D-001");
-    await repo.index();
-    const captured = await withGraph(repo.root, (graph) =>
-      captureAdoptionBaseline(repo.root, { graph, registry, historyWindow: HISTORY, actor: human, clock: at("2026-09-02T00:00:00.000Z") }),
-    );
-    if (captured.value === undefined || captured.value.status !== "captured") throw new Error(JSON.stringify(captured));
-    repo.git("add", "-A");
-    repo.git("commit", "-q", "-m", "capture adoption baseline");
-    // modern-db.ts is deleted after the baseline: modern-page's import resolved at the baseline but not at the diff base.
-    repo.git("rm", "-q", "src/db/modern-db.ts");
-    repo.git("commit", "-q", "-m", "drop modern-db");
-    const clone = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-i48-shallow-")));
-    temps.push(clone);
-    fs.rmSync(clone, { recursive: true, force: true });
-    execFileSync("git", ["clone", "-q", "--depth", "1", `file://${repo.root.replace(/\\/g, "/")}`, clone], { windowsHide: true });
-    const baselineCommit = captured.value.baseline.git.headOid;
+    const { repo, baselineCommit } = await baselineThenDropModernDb();
+    const clone = cloneOf(repo.root, ["--depth", "1"]);
     expect(() => execFileSync("git", ["cat-file", "-e", `${baselineCommit}^{commit}`], { cwd: clone, stdio: "ignore", windowsHide: true })).toThrow();
-    const file = path.join(clone, "src/ui/modern-page.ts");
-    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace('"../db/modern-db.js"', '"../db/legacy-db.js"'));
-    await withGraph(clone, async (store) => {
-      const indexed = await indexRepository(clone, { store, registry, historyWindow: HISTORY });
-      if (indexed.value === undefined) throw new Error(JSON.stringify(indexed.diagnostics));
-    });
-    const res = await withGraph(clone, async (graph) => {
-      const out = await reviewChanges(clone, { diff: W }, { graph, registry, historyWindow: HISTORY });
-      if (out.value === undefined) throw new Error(JSON.stringify(out.diagnostics));
-      return out.value.result;
-    });
+    replaceIn(clone, "src/ui/modern-page.ts", '"../db/modern-db.js"', '"../db/legacy-db.js"');
+    const res = await reviewAt(clone);
     expect(forbiddenImports(res)[0]).toMatchObject({ provenance: "introduced", blockEligible: true, violationKey: pairKey("src/ui/modern-page.ts") });
     expect(importLimits(res)).not.toContain("imports-from-side-unresolved");
     expect(res.verdict).toBe("BLOCK");
+  });
+
+  it("#187: in a partial clone whose baseline blobs cannot be fetched, a from side that resolved at the baseline stays BLOCK; a missing one stays WARN", async () => {
+    const { repo, baselineCommit } = await baselineThenDropModernDb();
+    // Full clone control: the baseline blob is local, so the from side resolved there and the claim is introduced.
+    replaceIn(repo.root, "src/ui/modern-page.ts", '"../db/modern-db.js"', '"../db/legacy-db.js"');
+    const full = await review(repo);
+    expect(forbiddenImports(full)[0]).toMatchObject({ provenance: "introduced", blockEligible: true });
+    expect(full.verdict).toBe("BLOCK");
+    repo.git("checkout", "--", "src/ui/modern-page.ts");
+
+    repo.git("config", "uploadpack.allowFilter", "true");
+    const clone = cloneOf(repo.root, ["--filter=blob:none"]);
+    // The lazy fetch of a missing blob must fail: point origin at a path that does not exist.
+    const gone = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-i48-gone-")));
+    temps.push(gone);
+    execFileSync("git", ["remote", "set-url", "origin", path.join(gone, "missing.git")], { cwd: clone, windowsHide: true });
+    // modern-db.ts exists in the baseline tree, but its blob is not in the clone and cannot be fetched.
+    expect(execFileSync("git", ["ls-tree", "--name-only", baselineCommit, "--", "src/db/modern-db.ts"], { cwd: clone, encoding: "utf8", windowsHide: true }).trim()).toBe("src/db/modern-db.ts");
+    expect(() => execFileSync("git", ["cat-file", "blob", `${baselineCommit}:src/db/modern-db.ts`], { cwd: clone, stdio: "ignore", windowsHide: true })).toThrow();
+
+    replaceIn(clone, "src/ui/modern-page.ts", '"../db/modern-db.js"', '"../db/legacy-db.js"');
+    const partial = await reviewAt(clone);
+    expect(forbiddenImports(partial)[0]).toMatchObject({ provenance: "introduced", blockEligible: true, violationKey: pairKey("src/ui/modern-page.ts") });
+    expect(importLimits(partial)).not.toContain("imports-from-side-unresolved");
+    expect(partial.verdict).toBe("BLOCK");
+
+    // A from side that is missing in every tree is still the H-99 case in the same partial clone: WARN.
+    execFileSync("git", ["checkout", "--", "src/ui/modern-page.ts"], { cwd: clone, windowsHide: true });
+    replaceIn(clone, "src/ui/archive-page.ts", '"../db/legacy-db-v0.js"', '"../db/legacy-db.js"');
+    const missing = await reviewAt(clone);
+    expect(forbiddenImports(missing)[0]).toMatchObject({ provenance: "unverified-at-adoption", blockEligible: false, violationKey: pairKey("src/ui/archive-page.ts") });
+    expect(importLimits(missing)).toEqual(["imports-from-side-unresolved"]);
+    expect(missing.verdict).toBe("WARN");
   });
 });

@@ -353,7 +353,7 @@ depends_on: [TASK-002]
 
 - **Goal**: Git 상태와 Evidence provenance(HEAD / Index / Working Tree, 변경, diff, HEAD 내용, co-change 후보, Issue 키 후보)를 LLM 없이 read-only로 제공한다. Graph 갱신과 freshness 판정은 하지 않는다.
 - **Input**: 02 EvidenceProvider, 04 CHANGED_WITH 규칙
-- **Output**: `GitProvider`(`openGitProvider`: repositoryState, listWorkingTreeChanges, listChanges, getDiff, blobProvenance, readBlob, listCommits), `computeCoChangeCandidates`, `extractIssueKeys`. core `EvidenceProvider` 인터페이스 연결은 TASK-013(C44)
+- **Output**: `GitProvider`(`openGitProvider`: repositoryState, listWorkingTreeChanges, listChanges, getDiff, blobProvenance, readBlob, pathsExist(#187), listCommits), `computeCoChangeCandidates`, `extractIssueKeys`. core `EvidenceProvider` 인터페이스 연결은 TASK-013(C44)
 - **Dependencies**: [TASK-002](#task-002-core-스키마-loader-추적성-파서)
 - **Files expected to change**: `packages/analyzer/src/git/**`(Scanner의 Git 실행도 `git/exec.ts`로 옮김)
 - **Status**: done (T06)
