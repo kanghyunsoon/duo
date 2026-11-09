@@ -164,11 +164,15 @@ describe("check-packed-artifact checks the packed commit SHA (#161) and a clean 
     const source = path.join(tmp, "src.ts");
     const original = fs.readFileSync(source, "utf8");
     fs.writeFileSync(source, "export const value = 2;\n");
-    // What pack-cli records at pack time: the tree has a tracked change.
-    const atPack = trackedChanges(tmp);
-    expect(atPack.length).toBeGreaterThan(0);
-    writePack({ commit: head, dirty: atPack.length > 0 });
-    fs.writeFileSync(source, original);
+    try {
+      // What pack-cli records at pack time: the tree has a tracked change.
+      const atPack = trackedChanges(tmp);
+      expect(atPack.length).toBeGreaterThan(0);
+      writePack({ commit: head, dirty: atPack.length > 0 });
+    } finally {
+      // Restored even if an assertion above fails, so the shared repository stays clean for the other tests (#190 review).
+      fs.writeFileSync(source, original);
+    }
     expect(trackedChanges(tmp)).toEqual([]);
     const r = runCheck();
     expect(r.status).toBe(1);
