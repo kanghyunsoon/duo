@@ -49,21 +49,24 @@ No missing, incorrect, or misleading Overview announcement was found in the revi
 
 ## NVDA results — Pending decisions
 
+A supplemental pass on 2026-11-09 closed the field-order gap at the final PR #168 head (`0421a4ceb27532bd3b1c721c8a4d3e873354d338`). It used Windows Enterprise 25H2 build `26200.9711`, NVDA `2026.2` with add-ons disabled, Chrome `156.0.8078.80`, and Node `v24.18.0`. A fresh temporary copy of `fixtures/review/app` supplied two pending proposals; the Confirm dialog was cancelled without submitting an action. NVDA's Chromium virtual buffer exposed both description lists. To produce one bounded log entry per static row, the runtime-only probe also applied temporary `tabindex="-1"` attributes and focused the existing rows in DOM order; it did not change their text, roles, order, source files, or stored project data.
+
 | Check | Actual announcement or observation | Decision |
 |---|---|---|
 | Page and main content | `Pending decisions` was announced as the current navigation link, main landmark, region, and level-one heading. `Refresh` was announced as a button. | Pass — the route and main content are identifiable. |
 | Introductory status | The human-decision explanation and the loading status were announced before the loaded content replaced the status. | Pass — purpose and asynchronous state are available. |
 | Pending section | `Pending (2) heading level 2 button expanded` | Pass — the disclosure name, count, role, level, and state are exposed. |
-| Proposal detail surface | There is no separate proposal-detail page. Proposal fields are rendered inline in each named proposal article, and the Confirm dialog renders the exact candidate fields in a description list. | Coverage clarification — the recorded session captured the proposal actions and dialog structure, but did not transcribe every term/value pair or their reading order. Individual inline and preview field announcements remain unverified. |
+| Proposal detail surface | There is no separate proposal-detail page. For `P-001`, NVDA announced the named proposal heading and then each inline term followed by its value: Question, Answer, Rationale, Governs, Forbids, Forbids scope, Enforcement, Supersedes, Proposed by, and File. | Pass — all ten inline fields were exposed in source order with their corresponding values; no term or value was missing or paired with the next row. |
 | Proposal actions | `Confirm… button` and `Reject… button` | Pass — both human actions have visible matching names. |
-| Confirm dialog | `Confirm P-001? dialog`, the confirmation consequence, and a form landmark were announced. The initial edit was announced as `Type P-001 to confirm`, blank. `Cancel` was announced as a button. | Pass — role, title, consequence, input label, and cancellation are available. |
+| Confirm candidate fields | After `Confirm P-001? dialog`, NVDA announced Title `Accessibility proposal one`, Question `a11y_contract`, Answer `fixture`, Kind `(not set)`, Rationale, Governs, Forbids, Forbids scope, Enforcement `block`, Supersedes `(not set)`, Proposed by, Stale `no`, and Expected Decision ID `D-011` with its qualification. | Pass — all 13 candidate terms were followed by the exact value displayed in the dialog, in source order. |
+| Confirm dialog | `Confirm P-001? dialog`, the confirmation consequence, and a form landmark were announced. The initial edit was announced as `Type P-001 to confirm`, blank. `Cancel` was announced as a button. | Pass — role, title, consequence, candidate fields, input label, and cancellation are available. |
 | Confirm dialog close | Closing without submission returned traversal to the proposal's `Confirm…` and `Reject…` actions. | Pass — the trigger context is restored. |
 | Reject dialog | `Reject P-001? dialog`, the permanent-record explanation, form landmark, and `Reason (optional) edit multi line blank` were announced. `Cancel` was announced as a button. | Pass — role, title, consequence, optional input, and cancellation are available. |
 | Reject dialog close | Closing returned focus to `Reject… button`. | Pass — focus returns to the invoking action. |
 
 Transient `unknown` speech while the native dialog opened and the Korean OneCore voice's `English (not supported)` language message did not replace or hide the subsequent dialog title, description, form, or controls. They are environment transitions rather than DUO product findings.
 
-No missing or incorrect Pending decisions announcement was found in the announcements that were captured. Individual proposal/candidate description-list fields remain unverified as stated above. No action was submitted, and no Decision or rejection record was created during listening.
+No missing, incorrect, or misordered Pending decisions announcement was found. No action was submitted, and no Decision or rejection record was created during listening.
 
 ## NVDA results — Review
 
@@ -162,13 +165,13 @@ These grouped rows cover all 110 Work map incomplete node records. The exact per
 2. Prepare any small repository with `duoctl init`, an index, two pending proposals, a recorded review, and one Work map task.
 3. Start `duoctl ui`, open the four reviewed routes in Chrome, and run NVDA Speech Viewer or a bounded NVDA debug log.
 4. On Overview, confirm headings, named landmarks, navigation links, Refresh, and disclosure states.
-5. On Pending decisions, open Confirm and Reject without submitting either action; confirm dialog titles, explanations, inputs, cancellation, and trigger restoration.
+5. On Pending decisions, read every inline proposal term/value pair in order, then open Confirm and Reject without submitting either action; confirm every candidate term/value pair, dialog titles, explanations, inputs, cancellation, and trigger restoration.
 6. On Review, submit the default deterministic review; confirm form names, busy state, result heading/verdict, claims table headers, and section states.
 7. On Work map, Tab through the graph, select different nodes with Enter and Space, and confirm pressed state, detail synchronization, and the three named graph controls.
 8. Compare the audit's incomplete records with the grouped decisions above and repeat at least one result independently.
 
 ## Completion status
 
-All four screens assigned in issue #101 have actual NVDA results and a reasoned decision for every axe incomplete record. The only recorded screen-reader coverage gap is the field-by-field announcement order of the inline Pending proposal and Confirm candidate description lists; there is no separate proposal-detail route. No product finding was identified, so no follow-up bug was opened.
+All four screens assigned in issue #101 have actual NVDA results and a reasoned decision for every axe incomplete record. The inline Pending proposal and Confirm candidate description lists were verified field by field; there is no separate proposal-detail route. No product finding was identified, so no follow-up bug was opened.
 
 The raw run's `accessibilityVerificationComplete` remains `false`: the generated artifacts preserve their original mechanical findings, and screenshot-only review is tracked separately. This report supplies the manual evidence for issue #101 without rewriting audit output or claiming WCAG conformance.
