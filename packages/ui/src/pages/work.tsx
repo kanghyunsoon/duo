@@ -187,6 +187,8 @@ export function WorkPage() {
   const [expanded, setExpanded] = useState<{ readonly nodes: readonly WorkNode[]; readonly edges: readonly WorkEdge[]; readonly truncated: boolean }>({ nodes: [], edges: [], truncated: false });
   const [expandDepth, setExpandDepth] = useState(1);
   const [load, setLoad] = useState<Load<WorkMap>>({ state: "loading" });
+  const [reconnecting, setReconnecting] = useState(false);
+  const [verificationFailed, setVerificationFailed] = useState(false);
   const selectedTaskRef = useRef(selectedTask);
   selectedTaskRef.current = selectedTask;
   const fetching = useRef(false);
@@ -196,7 +198,7 @@ export function WorkPage() {
     fetching.current = true;
     const requestedSelection = selectedTaskRef.current;
     void api.get<WorkMap>(`/api/work-map?${q({ selected: requestedSelection })}`).then((result) => {
-      if (requestedSelection === selectedTaskRef.current) setLoad({ state: "ok", data: result.data });
+      if (requestedSelection === selectedTaskRef.current) { setLoad({ state: "ok", data: result.data }); setVerificationFailed(false); }
       else queued.current = true;
     }).catch((error: unknown) => {
       if (requestedSelection === selectedTaskRef.current) setLoad({ state: "error", error: error instanceof Error ? error : new Error(String(error)) });
@@ -222,6 +224,8 @@ export function WorkPage() {
     let queued = false;
     let lastCheck = 0;
     let scheduled: number | undefined;
+    let retry: number | undefined;
+    let failures = 0;
     const check = () => {
       if (revision.current === undefined) return; // The initial map request is already in flight.
       if (checking) { queued = true; return; }
@@ -234,23 +238,41 @@ export function WorkPage() {
       checking = true;
       lastCheck = Date.now();
       void api.get<{ revision: string }>("/api/work-revision").then((result) => {
-        if (live && result.data.revision !== revision.current) reload();
-      }).catch(() => { /* A later event or interval retries. */ }).finally(() => {
+        if (!live) return;
+        if (typeof result.data.revision !== "string") throw new Error("Invalid revision response");
+        failures = 0;
+        if (retry !== undefined) { window.clearTimeout(retry); retry = undefined; }
+        if (result.data.revision !== revision.current) reload();
+        else setVerificationFailed(false);
+      }).catch(() => {
+        if (!live) return;
+        failures += 1;
+        if (failures >= 2) setVerificationFailed(true);
+        if (retry === undefined) retry = window.setTimeout(() => { retry = undefined; check(); }, 5000);
+      }).finally(() => {
         checking = false;
         if (queued && live) { queued = false; check(); }
       });
     };
     checkRevision.current = check;
+    stream.onerror = () => { if (live) { setReconnecting(true); check(); } };
     stream.onmessage = (event) => {
       let kind: string;
       try { kind = (JSON.parse(event.data) as { kind: string }).kind; } catch { return; }
+      if (kind === "connected") setReconnecting(false);
       if (kind === "connected" || kind === "tasks-changed" || kind === "graph-changed" || kind === "repository-changed") check();
     };
     const visible = () => { if (document.visibilityState === "visible") check(); };
+    const offline = () => { setReconnecting(true); check(); };
+    const online = () => { if (stream.readyState === EventSource.OPEN) setReconnecting(false); check(); };
     document.addEventListener("visibilitychange", visible);
+    window.addEventListener("offline", offline);
+    window.addEventListener("online", online);
     const timer = window.setInterval(() => { if (document.visibilityState === "visible") check(); }, 60_000);
     return () => { live = false; checkRevision.current = () => {}; stream.close(); window.clearInterval(timer);
-      if (scheduled !== undefined) window.clearTimeout(scheduled); document.removeEventListener("visibilitychange", visible); };
+      if (retry !== undefined) window.clearTimeout(retry);
+      if (scheduled !== undefined) window.clearTimeout(scheduled); document.removeEventListener("visibilitychange", visible);
+      window.removeEventListener("offline", offline); window.removeEventListener("online", online); };
   }, [reload]);
   const map = load.state === "ok" ? load.data : undefined;
   const selected = map?.selectedTaskId ?? null;
@@ -324,6 +346,8 @@ export function WorkPage() {
 
   return <div className="work-page"><Page title="Work map" onRefresh={reload}>
     <p className="work-intro">Follow the work in progress and the files, tests, and decisions connected by DUO.</p>
+    {verificationFailed ? <p role="status" className="box box-warn">Unable to check for updates. The displayed information may be out of date. Use Refresh to try again.</p>
+      : reconnecting ? <p role="status" className="box box-warn">Live connection interrupted. Reconnecting; updates are still checked periodically.</p> : null}
     <form className="form work-form" onSubmit={(e) => { void add(e); }}>
       <label>Agent <input value={agent} onChange={(e) => setAgent(e.target.value)} maxLength={80} required /></label>
       <label>Work name <input value={name} onChange={(e) => setName(e.target.value)} maxLength={200} required size={30} /></label>
