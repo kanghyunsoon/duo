@@ -11,6 +11,11 @@ import { baseRegistry, makeRepo } from "./testing.js";
 const temps: string[] = [];
 afterAll(() => temps.forEach((root) => fs.rmSync(root, { recursive: true, force: true })));
 const released = async (root: string) => (await withIndexWriteLock(root, async () => true, { lockTimeoutMs: 0 })).value === true;
+/**
+ * makeRepo runs git five times; on a busy Windows runner that took 6-8 s, past the 5 s default (#188). The two tests
+ * below that index already pass 120 s; these take the same 60 s budget as file-lock.test.ts (#188 review).
+ */
+const MAKE_REPO_BUDGET = { timeout: 60_000 };
 /** Windows without Developer Mode cannot create symlinks (EPERM); the case runs on the other OSes. */
 const symlinks = (() => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "duo-symlink-probe-"));
@@ -18,7 +23,7 @@ const symlinks = (() => {
   try { fs.symlinkSync(path.join(dir, "absent"), path.join(dir, "link"), "file"); return true; } catch { return false; }
 })();
 for (const entry of [INDEX_WRITE_LOCK_PATH, `${INDEX_WRITE_LOCK_PATH}-journal`]) {
-  it.runIf(symlinks)(`refuses a dangling symlink at ${entry} and creates nothing outside the worktree (#148 review)`, async () => {
+  it.runIf(symlinks)(`refuses a dangling symlink at ${entry} and creates nothing outside the worktree (#148 review)`, MAKE_REPO_BUDGET, async () => {
     const repo = makeRepo(temps, { ".duo-project/project.yaml": "schema_version: 1\nname: link\n", "src/a.ts": "export const a = 1;\n" });
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), "duo-outside-"));
     temps.push(outside);
@@ -31,7 +36,7 @@ for (const entry of [INDEX_WRITE_LOCK_PATH, `${INDEX_WRITE_LOCK_PATH}-journal`])
     expect(fs.existsSync(target)).toBe(false);
   });
 }
-it("holds the lock without a journal file next to it (#148 review)", async () => {
+it("holds the lock without a journal file next to it (#148 review)", MAKE_REPO_BUDGET, async () => {
   const repo = makeRepo(temps, { ".duo-project/project.yaml": "schema_version: 1\nname: journal\n", "src/a.ts": "export const a = 1;\n" });
   const seen = await withIndexWriteLock(repo.root, async () => fs.readdirSync(path.dirname(path.join(repo.root, INDEX_WRITE_LOCK_PATH))));
   expect(seen.value).toContain("index-writer.lock");
