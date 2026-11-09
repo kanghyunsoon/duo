@@ -441,5 +441,51 @@ describe("opt-in project skill with --with-skill (S15P31A106-358, H-94)", () => 
         expect((JSON.parse(f.read(record)) as { targets: Record<string, unknown> }).targets[adapter.skillTarget]).toEqual(recorded);
       });
     }
+
+    // #176 item 1: remove keeps a recorded skill path that is not a regular file, and says so.
+    for (const kind of ["directory", "symlink"] as const) {
+      it(`${adapter.id}: remove warns and keeps a ${kind} at the recorded skill path`, async (ctx) => {
+        const f = fixture();
+        expect((await applyAgentIntegration(f.root, plan(f, true))).diagnostics).toEqual([]);
+        const skill = path.join(f.root, adapter.skillTarget);
+        fs.rmSync(skill);
+        if (kind === "directory") fs.mkdirSync(skill);
+        else {
+          f.write("elsewhere.md", "not DUO's skill\n");
+          try { fs.symlinkSync(path.join(f.root, "elsewhere.md"), skill, "file"); } catch { ctx.skip(); }
+        }
+
+        const removal = planAgentRemoval(f.root, adapter.id);
+        expect(removal.skill).toBeUndefined();
+        expect(removal.willDelete).not.toContain(adapter.skillTarget);
+        expect(removal.warnings.some((w) => w.startsWith(`keep ${adapter.skillTarget} (`))).toBe(true);
+        expect((await applyAgentIntegration(f.root, removal)).diagnostics).toEqual([]);
+
+        expect(fs.lstatSync(skill).isFile()).toBe(false);
+        if (kind === "symlink") expect(f.read("elsewhere.md")).toBe("not DUO's skill\n");
+      });
+    }
+
+    // #176 item 1, the reproduced case: the skill folder is a junction (a directory symlink on Ubuntu and macOS) to a folder
+    // outside the repository. Junctions need no symlink privilege on Windows, so this runs on all three OS.
+    it(`${adapter.id}: remove warns and keeps a junction at the recorded skill folder, and leaves its target untouched`, async () => {
+      const f = fixture();
+      expect((await applyAgentIntegration(f.root, plan(f, true))).diagnostics).toEqual([]);
+      const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "duo-skill-outside-")));
+      temps.push(outside);
+      fs.writeFileSync(path.join(outside, "SKILL.md"), SKILL_TEXT);
+      const folder = path.dirname(path.join(f.root, adapter.skillTarget));
+      fs.rmSync(folder, { recursive: true });
+      fs.symlinkSync(outside, folder, "junction");
+
+      const removal = planAgentRemoval(f.root, adapter.id);
+      expect(removal.skill).toBeUndefined();
+      expect(removal.willDelete).not.toContain(adapter.skillTarget);
+      expect(removal.warnings.some((w) => w.startsWith(`keep ${adapter.skillTarget} (`))).toBe(true);
+      expect((await applyAgentIntegration(f.root, removal)).diagnostics).toEqual([]);
+
+      expect(fs.lstatSync(folder).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(path.join(outside, "SKILL.md"), "utf8")).toBe(SKILL_TEXT);
+    });
   }
 });
