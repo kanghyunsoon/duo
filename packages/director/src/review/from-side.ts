@@ -65,16 +65,13 @@ export function resolutionCandidates(from: RepoPath, specifier: string): string[
 }
 
 /**
- * Whether any of `files` exists at `source`. Undefined when that cannot be shown: a missing object is "absent",
- * but any other failure (a commit not in this clone, as in a shallow checkout) proves nothing.
+ * Whether any of `files` exists at `source`, read from the tree or the index (#187), not from blob contents: a partial
+ * clone whose blobs cannot be fetched still shows which paths exist. Undefined when that cannot be shown (a commit or
+ * tree not in this clone, as in a shallow checkout): that proves nothing, so the claim stays BLOCK-eligible.
  */
 async function existsIn(ctx: RuleContext, source: GitBlobSource, files: readonly string[]): Promise<boolean | undefined> {
-  for (const f of files) {
-    const blob = await ctx.git.readBlob(source, f as RepoPath);
-    if (blob.value !== undefined) return true;
-    if (!blob.diagnostics.every((d) => d.code === "GIT_OBJECT_NOT_FOUND")) return undefined;
-  }
-  return false;
+  const found = await ctx.git.pathsExist(source, files as readonly RepoPath[]);
+  return found.value === undefined ? undefined : found.value.size > 0;
 }
 
 /** Every module reference in the file, as the analyzer reads it. */
