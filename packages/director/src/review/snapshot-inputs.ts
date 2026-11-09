@@ -18,6 +18,10 @@
  * - as a module whose re-exports the trace reads (it has export-from on either side), or as the target of such an
  *   export-from (its own exports decide which module provides a name);
  * - the same resolution checks for every export-from it follows.
+ * - for a Python importer (#160 Stage 2, non-TS/JS imports): the indexer's Python resolution (relative imports and the
+ *   discovered source roots) run on both sides' file sets. When the result differs, the paths that decide it (the
+ *   resolved or candidate modules, otherwise an __init__.py or project metadata file whose existence or text differs)
+ *   are inputs. Only files whose existence or text can change a Python resolution are compared.
  *
  * Content differences that cannot change the result are not inputs: a module that re-exports nothing on either side
  * (an export-from in a comment or a string does not count), a config of another directory, or a config option that
@@ -27,14 +31,24 @@
 import { builtinModules } from "node:module";
 import path from "node:path";
 import { compareUtf8, type RepoPath } from "@duo-director/core";
-import { createTypeScriptModuleResolver, type IndexedModuleReference, type ModuleResolver } from "@duo-director/graph";
+import {
+  createTypeScriptModuleResolver, discoverPythonRoots, resolvePython, type IndexedModuleReference, type ModuleResolution, type ModuleResolver, type PythonRoots,
+} from "@duo-director/graph";
 
 /** How a path outside the diff differs: it exists on one side only, or exists on both with other content. */
 export type Divergence = "existence" | "content";
 
 type Text = (file: string) => string | undefined | Promise<string | undefined>;
+type PythonSide = { readonly files: ReadonlySet<string>; readonly roots: PythonRoots };
+/** The indexed repository files (the working tree side of the index), read once and only when a Python import needs it. */
+type IndexedFiles = () => ReadonlySet<string> | Promise<ReadonlySet<string>>;
 
 const JS_IMPORTER = /\.[cm]?[jt]sx?$/u;
+const PY_IMPORTER = /\.py$/u;
+/** Python project metadata whose text decides source roots (graph python.ts METADATA_FILE). */
+const PY_METADATA = /(?:^|\/)(?:pyproject\.toml|setup\.cfg)$/u;
+/** A file whose existence or text can change a Python resolution: a module, a package marker, metadata, setup.py. */
+const PY_RESOLUTION_FILE = /(?:\.py|(?:^|\/)(?:pyproject\.toml|setup\.cfg))$/u;
 const SOURCE_EXTENSION = /(?:\.d)?\.[cm]?[jt]sx?$/u;
 const BUILTINS = new Set(builtinModules);
 const URL_SPECIFIER = /^[a-z][a-z0-9+.-]*:/iu;
@@ -50,6 +64,8 @@ const PACKAGE_FIELDS = ["browser", "exports", "imports", "main", "module", "name
 const QUOTES = new Set(['"', "'", "`"]);
 
 const stem = (p: string) => p.replace(SOURCE_EXTENSION, "");
+const resolutionPaths = (r: ModuleResolution): readonly string[] => (r.status === "resolved" ? [r.path] : r.status === "ambiguous" ? r.candidates : []);
+const resolutionKey = (r: ModuleResolution) => JSON.stringify([r.status, ...resolutionPaths(r)]);
 
 /**
  * The text with comments removed and string and template contents blanked (quotes kept), so that only real
@@ -147,10 +163,16 @@ export class VerdictInputs {
    */
   private readonly missingDirectories = new Set<string>();
   private resolver: ModuleResolver | undefined;
+  /** The Python file sets and source roots of both sides, built once per review (#160 Stage 2). */
+  private python: Promise<{ readonly worktree: PythonSide; readonly reviewed: PythonSide } | undefined> | undefined;
 
-  /** reviewedText / worktreeText: a file's text on the reviewed side and in the working tree (undefined when absent). */
+  /**
+   * reviewedText / worktreeText: a file's text on the reviewed side and in the working tree (undefined when absent).
+   * indexedFiles: the indexed file set; without it Python imports are checked only by their indexed target (Stage 1).
+   */
   constructor(
     private readonly root: string, private readonly divergent: ReadonlyMap<string, Divergence>, private readonly reviewedText: Text, private readonly worktreeText: Text,
+    private readonly indexedFiles?: IndexedFiles,
   ) {
     this.existence = [...divergent.keys()].filter((p) => divergent.get(p) === "existence");
   }
@@ -158,6 +180,7 @@ export class VerdictInputs {
   /** A module reference of importer whose resolution decides the result (a changed import or a followed export-from). */
   async reference(importer: RepoPath, ref: IndexedModuleReference): Promise<void> {
     if (ref.target !== undefined && this.divergent.get(ref.target) === "existence") this.found.add(ref.target);
+    if (PY_IMPORTER.test(importer)) { await this.pythonReference(importer, ref); return; }
     if (!JS_IMPORTER.test(importer)) return;
     const specifier = ref.specifier;
     if (specifier.startsWith("node:") || BUILTINS.has(specifier) || BUILTINS.has(specifier.split("/")[0] ?? "") || URL_SPECIFIER.test(specifier)) return;
@@ -209,6 +232,55 @@ export class VerdictInputs {
   /** The differing verdict inputs, sorted. */
   paths(): string[] {
     return [...this.found].sort(compareUtf8);
+  }
+
+  /**
+   * #160 Stage 2: a Python import resolved on both sides. The index resolved it on the working tree; the reviewed side
+   * may have another module set (a target deleted or added only in the working tree) or other source roots. When the two
+   * results differ, the paths that decide the difference are inputs, so the review fails instead of deciding from the
+   * working tree (a false PASS, or a BLOCK the snapshot does not have).
+   */
+  private async pythonReference(importer: RepoPath, ref: IndexedModuleReference): Promise<void> {
+    // A Python file whose content differs cannot change where an import resolves; its existence, or metadata text, can.
+    const relevant = [...this.divergent.keys()].filter((p) => PY_METADATA.test(p) || (this.divergent.get(p) === "existence" && PY_RESOLUTION_FILE.test(p)));
+    if (relevant.length === 0 || this.indexedFiles === undefined) return;
+    this.python ??= this.pythonSides(relevant);
+    const sides = await this.python;
+    if (sides === undefined) return;
+    const request = { fromPath: importer, specifier: ref.specifier, kind: ref.kind, language: "python" } as const;
+    const worktree = resolvePython(request, sides.worktree.files, sides.worktree.roots);
+    const reviewed = resolvePython(request, sides.reviewed.files, sides.reviewed.roots);
+    if (resolutionKey(worktree) === resolutionKey(reviewed)) return;
+    const named = [...resolutionPaths(worktree), ...resolutionPaths(reviewed)].filter((p) => this.divergent.has(p));
+    // Otherwise the roots differ: a package marker or project metadata decided it.
+    const decisive = named.length > 0 ? named : relevant.filter((p) => PY_METADATA.test(p) || p.endsWith("/__init__.py") || p.endsWith("setup.py"));
+    for (const p of decisive.length > 0 ? decisive : relevant) this.found.add(p);
+  }
+
+  /** Both sides' Python file sets (indexed files, with the existence of differing Python files taken from each side) and roots. */
+  private async pythonSides(relevant: readonly string[]): Promise<{ readonly worktree: PythonSide; readonly reviewed: PythonSide } | undefined> {
+    if (this.indexedFiles === undefined) return undefined;
+    const indexed = await this.indexedFiles();
+    const worktreeFiles = new Set(indexed);
+    const reviewedFiles = new Set(indexed);
+    const reviewedMetadata = new Map<string, string | undefined>();
+    for (const p of relevant) {
+      const reviewedText = await this.reviewedText(p);
+      if (PY_METADATA.test(p)) reviewedMetadata.set(p, reviewedText);
+      if (this.divergent.get(p) !== "existence") continue;
+      if ((await this.worktreeText(p)) === undefined) worktreeFiles.delete(p);
+      else worktreeFiles.add(p);
+      if (reviewedText === undefined) reviewedFiles.delete(p);
+      else reviewedFiles.add(p);
+    }
+    // Root discovery reads metadata text synchronously: read every metadata file of either set first.
+    const metadataText = new Map<string, string | undefined>();
+    for (const p of new Set([...worktreeFiles, ...reviewedFiles])) if (PY_METADATA.test(p) && !metadataText.has(p)) metadataText.set(p, await this.worktreeText(p));
+    const side = (files: ReadonlySet<string>, read: (p: string) => string | undefined): PythonSide => ({ files, roots: discoverPythonRoots(files, (p) => read(p)) });
+    return {
+      worktree: side(worktreeFiles, (p) => metadataText.get(p)),
+      reviewed: side(reviewedFiles, (p) => (reviewedMetadata.has(p) ? reviewedMetadata.get(p) : metadataText.get(p))),
+    };
   }
 
   /** The differing resolver configuration of files in dir (memoized per directory). */
