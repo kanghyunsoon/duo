@@ -15,7 +15,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createDefaultAnalyzerRegistry } from "@duo-director/analyzer";
+import { createDefaultAnalyzerRegistry, readFingerprintFile } from "@duo-director/analyzer";
 import {
   createDecisionService,
   listDecisionProposals,
@@ -31,10 +31,13 @@ import {
   GRAPH_REVISION_KEY,
   INDEX_STATE_FILE_PATH,
   INDEX_STATE_TOKEN_KEY,
+  INDEX_WRITE_LOCK_PATH,
   indexRepository,
   openProjectGraphReader,
   openProjectGraphStore,
   readIndexState,
+  refreshIndexIfSafe,
+  withIndexWriteLock,
 } from "@duo-director/graph";
 import {
   LLMProviderPool,
@@ -72,12 +75,25 @@ function inspectStateFiles(root) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const fullPath = path.join(dir, entry.name);
       const relPath = path.relative(root, fullPath).split(path.sep).join("/");
-      if (entry.isDirectory()) {
-        walk(fullPath);
+      const st = fs.lstatSync(fullPath);
+      if (relPath === INDEX_WRITE_LOCK_PATH) {
+        // T180 (#148): .duo-project/generated/index-writer.lock is a persistent 0-byte regular file
+        // whose OS-level SQLite lock is released by the kernel when the connection closes.
+        if (!st.isFile() || st.isSymbolicLink() || st.size !== 0 || st.nlink !== 1) {
+          danglingLocks.push(relPath);
+        }
         continue;
       }
-      if (entry.name.endsWith(".lock") || entry.name.endsWith(".duo.bak")) {
+      if (
+        entry.name.endsWith(".lock") ||
+        entry.name.endsWith(".duo.bak") ||
+        relPath.startsWith(`${INDEX_WRITE_LOCK_PATH}-`)
+      ) {
         danglingLocks.push(relPath);
+        continue;
+      }
+      if (st.isDirectory()) {
+        walk(fullPath);
         continue;
       }
       if (entry.name.endsWith(".json")) {
@@ -173,6 +189,7 @@ export function captureRepoSnapshot(root) {
     dbToken: undefined,
     stateToken: undefined,
     tokenMatched: true,
+    fingerprintsMatched: true,
     revision: undefined,
     inspectionStatus: undefined,
     invariantDiagnostics: [],
@@ -181,6 +198,7 @@ export function captureRepoSnapshot(root) {
 
   if (fs.existsSync(dbPath) || fs.existsSync(statePath)) {
     const stateResult = readIndexState(root);
+    const fpResult = readFingerprintFile(root);
     const readerResult = openProjectGraphReader(root);
     if (!readerResult.value) {
       graph = {
@@ -189,9 +207,14 @@ export function captureRepoSnapshot(root) {
         dbToken: undefined,
         stateToken: stateResult.state?.token,
         tokenMatched: false,
+        fingerprintsMatched: false,
         revision: undefined,
         inspectionStatus: stateResult.problem ?? "error",
-        invariantDiagnostics: readerResult.diagnostics.map((d) => ({ code: d.code, message: d.message })),
+        invariantDiagnostics: [
+          ...stateResult.diagnostics,
+          ...fpResult.diagnostics,
+          ...readerResult.diagnostics,
+        ].map((d) => ({ code: d.code, message: d.message })),
         dump: { nodes: [], edges: [] },
       };
     } else {
@@ -200,18 +223,28 @@ export function captureRepoSnapshot(root) {
         const dbToken = store.readMeta(INDEX_STATE_TOKEN_KEY);
         const revision = store.readMeta(GRAPH_REVISION_KEY);
         const stateToken = stateResult.state?.token;
+        const fpSignature = (f) =>
+          `${f.path}|${f.state}|${f.fingerprintMode}|${f.contentHash}|${f.size}|${f.gitBlobOid ?? ""}`;
+        const stateFpSignatures = (stateResult.state?.files ?? []).map(fpSignature);
+        const fileFpSignatures = (fpResult.value ?? []).map(fpSignature);
+        const fingerprintsMatched =
+          stateResult.state !== undefined &&
+          fpResult.diagnostics.length === 0 &&
+          arraysEqual(stateFpSignatures, fileFpSignatures);
         const invariantDiagnostics = [
           ...stateResult.diagnostics,
+          ...fpResult.diagnostics,
           ...checkGraph(store, stateResult.state ? { fingerprints: stateResult.state.files } : {}),
         ].map((d) => ({ code: d.code, message: d.message }));
         const dump = dumpGraph(store);
         const tokenMatched = dbToken !== undefined && stateToken !== undefined && dbToken === stateToken;
         graph = {
           exists: true,
-          ok: invariantDiagnostics.length === 0 && tokenMatched,
+          ok: invariantDiagnostics.length === 0 && tokenMatched && fingerprintsMatched,
           dbToken,
           stateToken,
           tokenMatched,
+          fingerprintsMatched,
           revision,
           inspectionStatus: stateResult.problem ?? "ok",
           invariantDiagnostics,
@@ -343,6 +376,9 @@ export function evaluateConcurrencyOracle({
       silentReasons.push(
         `index-state.json token (${concurrentSnapshot.graph.stateToken}) does not match graph.sqlite token (${concurrentSnapshot.graph.dbToken})`,
       );
+    }
+    if (concurrentSnapshot.graph.fingerprintsMatched === false) {
+      silentReasons.push("index-state.json file fingerprints do not match fingerprints.json");
     }
     if (succeededCount > 0 && (!graphNodesEqual || !graphEdgesEqual)) {
       silentReasons.push(
@@ -667,9 +703,9 @@ export async function runScenarioConcurrentGraphIndex({ workerCount = 4, preInde
       checkGraphEquivalence: true,
     });
   } finally {
-    registry.dispose();
-    fs.rmSync(seqRoot, { recursive: true, force: true });
-    fs.rmSync(concRoot, { recursive: true, force: true });
+    registry?.dispose();
+    if (seqRoot) fs.rmSync(seqRoot, { recursive: true, force: true });
+    if (concRoot) fs.rmSync(concRoot, { recursive: true, force: true });
   }
 }
 
@@ -819,9 +855,9 @@ export async function runScenarioConcurrentContextAndReview({ workerCount = 6 } 
     }
     return oracleResult;
   } finally {
-    registry.dispose();
-    fs.rmSync(seqRoot, { recursive: true, force: true });
-    fs.rmSync(concRoot, { recursive: true, force: true });
+    registry?.dispose();
+    if (seqRoot) fs.rmSync(seqRoot, { recursive: true, force: true });
+    if (concRoot) fs.rmSync(concRoot, { recursive: true, force: true });
   }
 }
 
@@ -886,9 +922,9 @@ export async function runScenarioConcurrentWorkMapActivity({ workerCount = 6 } =
       checkWorkTasksEquivalence: true,
     });
   } finally {
-    registry.dispose();
-    fs.rmSync(seqRoot, { recursive: true, force: true });
-    fs.rmSync(concRoot, { recursive: true, force: true });
+    registry?.dispose();
+    if (seqRoot) fs.rmSync(seqRoot, { recursive: true, force: true });
+    if (concRoot) fs.rmSync(concRoot, { recursive: true, force: true });
   }
 }
 
@@ -1036,5 +1072,312 @@ export async function runScenarioConcurrentGitWorktrees() {
       fs.rmSync(wtRoot, { recursive: true, force: true });
       fs.rmSync(mainRoot, { recursive: true, force: true });
     }
+  }
+}
+
+/**
+ * Scenario C6a (Jira S15P31A106-257 / Issue #4 & #34): Multiple agents concurrently triggering
+ * automatic index recovery (`MCP_TOOLS.duo_get_context`, `MCP_TOOLS.duo_review_changes`, and
+ * `refreshIndexIfSafe`) across both a source-edit stale state and a history-only (empty commit)
+ * stale state. Verifies single-rebuild serialization under `index-writer.lock`, freshness of all
+ * concurrent reads, and 100% equivalence against the sequential baseline.
+ */
+export async function runScenarioConcurrentAutoIndexRecovery({ workerCount = 6 } = {}) {
+  let seqRoot;
+  let concRoot;
+  let registry;
+
+  try {
+    seqRoot = createConcurrencyFixtureRepo("duo-c6a-seq-");
+    concRoot = createConcurrencyFixtureRepo("duo-c6a-conc-");
+    const registryResult = await createDefaultAnalyzerRegistry();
+    registry = registryResult.value;
+    if (!registry) {
+      throw new Error(`Failed to initialize analyzer registry: ${JSON.stringify(registryResult.diagnostics)}`);
+    }
+
+    await prepareCommittedIndexedRepo(seqRoot, registry);
+    await prepareCommittedIndexedRepo(concRoot, registry);
+
+    const llm = new LLMProviderPool();
+    const runRecoveryWorker = async (root, roundLabel, index) => {
+      const ctx = {
+        root,
+        agentName: `agent-${index + 1}`,
+        duoSessionId: `c6a-${roundLabel}-session-${index + 1}`,
+        signal: new AbortController().signal,
+        llm,
+      };
+      const task = `AUTH-01 src/handler.ts ${roundLabel}-${index + 1}`;
+      if (index % 3 === 0) {
+        const res = await MCP_TOOLS.duo_get_context.run({ task }, ctx);
+        const payload = res.op.kind === "ok" ? res.op.payload : undefined;
+        return {
+          ok: res.op.kind === "ok" && payload?.status === "ready",
+          refreshed: Boolean(payload?.indexRefresh?.refreshed),
+          signature:
+            res.op.kind === "ok"
+              ? `mcp-context:${payload.status}:seeds=${payload.context?.resolution?.seeds?.length ?? 0}`
+              : "mcp-context:failed",
+          codes: res.op.diagnostics.map((d) => d.code),
+          error: res.op.diagnostics.map((d) => d.message).join("; "),
+        };
+      }
+      if (index % 3 === 1) {
+        const res = await MCP_TOOLS.duo_review_changes.run({ task }, ctx);
+        const payload = res.op.kind === "ok" ? res.op.payload : undefined;
+        return {
+          ok: res.op.kind === "ok" && payload?.status === "ready",
+          refreshed: Boolean(payload?.indexRefresh?.refreshed),
+          signature:
+            res.op.kind === "ok"
+              ? `mcp-review:${payload.status}:verdict=${payload.verdict ?? "none"}:claims=${payload.claims?.length ?? 0}`
+              : "mcp-review:failed",
+          codes: res.op.diagnostics.map((d) => d.code),
+          error: res.op.diagnostics.map((d) => d.message).join("; "),
+        };
+      }
+      const refreshRes = await refreshIndexIfSafe(root, { registry, lockTimeoutMs: 30_000 });
+      const ctxOp = await projectContext(root, { task: "AUTH-01 src/handler.ts" }, { registry });
+      const diagnostics = [...refreshRes.diagnostics, ...ctxOp.diagnostics];
+      return {
+        ok:
+          refreshRes.value !== undefined &&
+          ctxOp.kind === "ok" &&
+          ctxOp.payload.status === "ready",
+        refreshed: Boolean(refreshRes.value?.refreshed),
+        signature:
+          ctxOp.kind === "ok"
+            ? `direct-refresh-context:${ctxOp.payload.status}:seeds=${ctxOp.payload.context.resolution?.seeds.length ?? 0}`
+            : "direct-refresh-context:failed",
+        codes: diagnostics.map((d) => d.code),
+        error: diagnostics.map((d) => d.message).join("; "),
+      };
+    };
+
+    // Round 1: Stale index caused by a tracked source file modification
+    const sourceMutation =
+      "\nexport function isTokenFresh(issuedAt: number, now: number): boolean {\n  return now >= issuedAt && now - issuedAt < 3600_000;\n}\n";
+    fs.appendFileSync(path.join(seqRoot, "src/handler.ts"), sourceMutation, "utf8");
+    fs.appendFileSync(path.join(concRoot, "src/handler.ts"), sourceMutation, "utf8");
+
+    const seqRound1 = [];
+    for (let i = 0; i < workerCount; i++) {
+      const out = await runRecoveryWorker(seqRoot, "r1", i);
+      if (!out.ok) {
+        throw new Error(`Sequential C6a Round 1 baseline failed at worker ${i}: ${out.error}`);
+      }
+      seqRound1.push(out);
+    }
+    const concRound1 = await Promise.all(
+      Array.from({ length: workerCount }, (_, i) => runRecoveryWorker(concRoot, "r1", i)),
+    );
+
+    // Round 2: Stale index caused by a history-only move (commit + empty commit)
+    for (const root of [seqRoot, concRoot]) {
+      gitExec(root, ["add", "-A"]);
+      gitExec(root, ["commit", "-qm", "commit round 1 handler update"]);
+      const refreshAfterCommit = await refreshIndexIfSafe(root, { registry });
+      if (!refreshAfterCommit.value) {
+        throw new Error(`Post-commit refresh failed: ${JSON.stringify(refreshAfterCommit.diagnostics)}`);
+      }
+      gitExec(root, ["commit", "--allow-empty", "-qm", "empty commit moves HEAD"]);
+    }
+
+    const seqRound2 = [];
+    for (let i = 0; i < workerCount; i++) {
+      const out = await runRecoveryWorker(seqRoot, "r2", i);
+      if (!out.ok) {
+        throw new Error(`Sequential C6a Round 2 baseline failed at worker ${i}: ${out.error}`);
+      }
+      seqRound2.push(out);
+    }
+    const concRound2 = await Promise.all(
+      Array.from({ length: workerCount }, (_, i) => runRecoveryWorker(concRoot, "r2", i)),
+    );
+
+    const allSeq = [...seqRound1, ...seqRound2];
+    const allConc = [...concRound1, ...concRound2];
+    const seqSignatures = allSeq.map((o) => o.signature);
+    const concSignatures = allConc.map((o) => o.signature);
+
+    const seqR1Refreshed = seqRound1.filter((o) => o.refreshed).length;
+    const concR1Refreshed = concRound1.filter((o) => o.refreshed).length;
+    const seqR2Refreshed = seqRound2.filter((o) => o.refreshed).length;
+    const concR2Refreshed = concRound2.filter((o) => o.refreshed).length;
+
+    const baselineSnapshot = captureRepoSnapshot(seqRoot);
+    const concurrentSnapshot = captureRepoSnapshot(concRoot);
+    const oracleResult = evaluateConcurrencyOracle({
+      scenario: "C6a:concurrent-auto-index-recovery",
+      baselineSnapshot,
+      concurrentSnapshot,
+      outcomes: allConc,
+      checkTruthEquivalence: true,
+      checkGraphEquivalence: true,
+      checkWorkTasksEquivalence: true,
+    });
+
+    const extraSilentReasons = [];
+    if (seqR1Refreshed !== 1 || concR1Refreshed !== 1) {
+      extraSilentReasons.push(
+        `Round 1 (source edit) expected exactly 1 index rebuild, got sequential=${seqR1Refreshed}, concurrent=${concR1Refreshed}`,
+      );
+    }
+    if (seqR2Refreshed !== 1 || concR2Refreshed !== 1) {
+      extraSilentReasons.push(
+        `Round 2 (history move) expected exactly 1 index rebuild, got sequential=${seqR2Refreshed}, concurrent=${concR2Refreshed}`,
+      );
+    }
+    if (JSON.stringify(seqSignatures) !== JSON.stringify(concSignatures)) {
+      extraSilentReasons.push(
+        `Auto-recovery payload signatures differed from sequential baseline: ${JSON.stringify(concSignatures)} vs ${JSON.stringify(seqSignatures)}`,
+      );
+    }
+
+    const silentReasons = [...oracleResult.silentReasons, ...extraSilentReasons];
+    return {
+      ...oracleResult,
+      classification: silentReasons.length > 0 ? "silent-inconsistency" : oracleResult.classification,
+      silentReasons,
+      rounds: {
+        sourceEditRefreshedCount: concR1Refreshed,
+        historyMoveRefreshedCount: concR2Refreshed,
+      },
+    };
+  } finally {
+    registry?.dispose();
+    if (seqRoot) fs.rmSync(seqRoot, { recursive: true, force: true });
+    if (concRoot) fs.rmSync(concRoot, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Scenario C6b (Jira S15P31A106-257 / Issue #4 & #34): Active writer lock contention during
+ * automatic index recovery (`withIndexWriteLock` held past `lockTimeoutMs`), verifying that
+ * contending `refreshIndexIfSafe` callers fail closed with `GRAPH_WRITE_REFUSED` (`explicit-error`)
+ * while concurrent `projectContext` / `projectReview` reads stay `index-required` without corrupting
+ * the existing graph or state files, and that a subsequent recovery wave after lock release converges
+ * to `safe` and matches the sequential baseline.
+ */
+export async function runScenarioConcurrentAutoIndexRecoveryContention({
+  workerCount = 4,
+  lockTimeoutMs = 40,
+} = {}) {
+  let seqRoot;
+  let concRoot;
+  let registry;
+
+  try {
+    seqRoot = createConcurrencyFixtureRepo("duo-c6b-seq-");
+    concRoot = createConcurrencyFixtureRepo("duo-c6b-conc-");
+    const registryResult = await createDefaultAnalyzerRegistry();
+    registry = registryResult.value;
+    if (!registry) {
+      throw new Error(`Failed to initialize analyzer registry: ${JSON.stringify(registryResult.diagnostics)}`);
+    }
+
+    await prepareCommittedIndexedRepo(seqRoot, registry);
+    await prepareCommittedIndexedRepo(concRoot, registry);
+
+    const mutation = "\nexport const SESSION_SCHEMA_REV = 2;\n";
+    fs.appendFileSync(path.join(seqRoot, "src/session.ts"), mutation, "utf8");
+    fs.appendFileSync(path.join(concRoot, "src/session.ts"), mutation, "utf8");
+
+    const preContentionSnapshot = captureRepoSnapshot(concRoot);
+    let contendingOutcomes = [];
+
+    // Hold the OS index writer lock on concRoot while contending workers attempt automatic recovery
+    const lockRun = await withIndexWriteLock(concRoot, async () => {
+      contendingOutcomes = await Promise.all(
+        Array.from({ length: workerCount }, async (_, i) => {
+          const res = await refreshIndexIfSafe(concRoot, { registry, lockTimeoutMs });
+          const readOp =
+            i % 2 === 0
+              ? await projectContext(concRoot, { task: "AUTH-01 src/session.ts" }, { registry })
+              : await projectReview(
+                  concRoot,
+                  { diff: { from: "HEAD", to: "WORKTREE" }, task: "AUTH-01 src/session.ts" },
+                  { registry },
+                );
+          const stayedIndexRequired = readOp.kind === "ok" && readOp.payload.status === "index-required";
+          const hasTimeoutMsg = res.diagnostics.some((d) => d.message.includes("Index lock timeout"));
+          return {
+            ok: res.value !== undefined,
+            codes: stayedIndexRequired && hasTimeoutMsg ? res.diagnostics.map((d) => d.code) : [],
+            error:
+              res.diagnostics.map((d) => d.message).join("; ") ||
+              `Unexpected read status during contention: ${readOp.kind === "ok" ? readOp.payload.status : "failed"}`,
+          };
+        }),
+      );
+      return true;
+    });
+    if (lockRun.diagnostics.length > 0) {
+      throw new Error(`Failed to acquire outer index writer lock: ${JSON.stringify(lockRun.diagnostics)}`);
+    }
+
+    const postContentionSnapshot = captureRepoSnapshot(concRoot);
+    const contentionOracle = evaluateConcurrencyOracle({
+      scenario: "C6b:auto-index-recovery-lock-timeout",
+      baselineSnapshot: preContentionSnapshot,
+      concurrentSnapshot: postContentionSnapshot,
+      outcomes: contendingOutcomes,
+      checkTruthEquivalence: true,
+      checkGraphEquivalence: true,
+    });
+
+    // Subsequent recovery wave after the lock is released: must recover cleanly and match seqRoot
+    const seqRecovery = await refreshIndexIfSafe(seqRoot, { registry, lockTimeoutMs: 30_000 });
+    if (!seqRecovery.value?.refreshed) {
+      throw new Error(`Sequential C6b recovery baseline failed: ${JSON.stringify(seqRecovery.diagnostics)}`);
+    }
+    const concRecoveryWave = await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        const res = await refreshIndexIfSafe(concRoot, { registry, lockTimeoutMs: 30_000 });
+        return {
+          ok: res.value !== undefined,
+          refreshed: Boolean(res.value?.refreshed),
+          codes: res.diagnostics.map((d) => d.code),
+          error: res.diagnostics.map((d) => d.message).join("; "),
+        };
+      }),
+    );
+    const recoveredRefreshedCount = concRecoveryWave.filter((o) => o.refreshed).length;
+    const recoveryOracle = evaluateConcurrencyOracle({
+      scenario: "C6b:post-timeout-recovery",
+      baselineSnapshot: captureRepoSnapshot(seqRoot),
+      concurrentSnapshot: captureRepoSnapshot(concRoot),
+      outcomes: concRecoveryWave,
+      checkTruthEquivalence: true,
+      checkGraphEquivalence: true,
+    });
+
+    const silentReasons = [
+      ...contentionOracle.silentReasons,
+      ...recoveryOracle.silentReasons,
+      ...(recoveryOracle.classification !== "safe"
+        ? [`Post-timeout recovery classification was ${recoveryOracle.classification}, expected safe`]
+        : []),
+      ...(recoveredRefreshedCount !== 1
+        ? [`Post-timeout recovery expected exactly 1 rebuild, got ${recoveredRefreshedCount}`]
+        : []),
+    ];
+
+    return {
+      ...contentionOracle,
+      classification: silentReasons.length > 0 ? "silent-inconsistency" : contentionOracle.classification,
+      silentReasons,
+      equivalence: recoveryOracle.equivalence,
+      postTimeoutRecovery: {
+        classification: recoveryOracle.classification,
+        succeededCount: recoveryOracle.succeededCount,
+        refreshedCount: recoveredRefreshedCount,
+      },
+    };
+  } finally {
+    registry?.dispose();
+    if (seqRoot) fs.rmSync(seqRoot, { recursive: true, force: true });
+    if (concRoot) fs.rmSync(concRoot, { recursive: true, force: true });
   }
 }

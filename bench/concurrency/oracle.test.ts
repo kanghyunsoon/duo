@@ -1,16 +1,19 @@
 /**
- * Issue #34 ([AGT-02]) Phase 2: Unit and integration verification for the concurrency oracle
- * (`bench/concurrency/oracle.mjs`) and Scenarios C1 (Decision proposals) & C2 (Graph indexing).
+ * Issue #34 ([AGT-02]) & Issue #4 (Jira S15P31A106-257): Unit and integration verification for the
+ * concurrency oracle (`bench/concurrency/oracle.mjs`) and Scenarios C1–C6.
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { createDecisionService, DECISION_LOCK_PATH } from "@duo-director/core";
+import { INDEX_WRITE_LOCK_PATH } from "@duo-director/graph";
 import {
   captureRepoSnapshot,
   createConcurrencyFixtureRepo,
   evaluateConcurrencyOracle,
+  runScenarioConcurrentAutoIndexRecovery,
+  runScenarioConcurrentAutoIndexRecoveryContention,
   runScenarioConcurrentContextAndReview,
   runScenarioConcurrentDecisionProposals,
   runScenarioConcurrentGitWorktrees,
@@ -38,6 +41,7 @@ function makeCleanSnapshot(overrides = {}) {
       dbToken: "token-123",
       stateToken: "token-123",
       tokenMatched: true,
+      fingerprintsMatched: true,
       revision: "1",
       inspectionStatus: "fresh",
       invariantDiagnostics: [],
@@ -148,9 +152,61 @@ describe("Issue #34 Concurrency Oracle — 3-Tier Classification Rules", () => {
     assert.ok(result.silentReasons.some((r) => r.includes("Dangling lock/backup files")));
     assert.ok(result.silentReasons.some((r) => r.includes("does not match graph.sqlite token")));
   });
+
+  it("O1: accepts a persistent 0-byte index-writer.lock (T180) and flags non-empty lock files or fingerprint desync", () => {
+    const repoRoot = createConcurrencyFixtureRepo("duo-o1-lock-");
+    try {
+      const lockAbs = path.join(repoRoot, INDEX_WRITE_LOCK_PATH);
+      fs.mkdirSync(path.dirname(lockAbs), { recursive: true });
+      fs.writeFileSync(lockAbs, "", "utf8");
+      const validSnap = captureRepoSnapshot(repoRoot);
+      assert.deepEqual(validSnap.danglingLocks, []);
+
+      fs.writeFileSync(lockAbs, "non-empty", "utf8");
+      const invalidSnap = captureRepoSnapshot(repoRoot);
+      assert.deepEqual(invalidSnap.danglingLocks, [INDEX_WRITE_LOCK_PATH]);
+
+      fs.rmSync(lockAbs, { force: true });
+      fs.mkdirSync(lockAbs, { recursive: true });
+      const dirLockSnap = captureRepoSnapshot(repoRoot);
+      assert.deepEqual(dirLockSnap.danglingLocks, [INDEX_WRITE_LOCK_PATH]);
+      fs.rmSync(lockAbs, { recursive: true, force: true });
+
+      fs.writeFileSync(lockAbs, "", "utf8");
+      const walAbs = `${lockAbs}-wal`;
+      fs.writeFileSync(walAbs, "", "utf8");
+      const sidecarSnap = captureRepoSnapshot(repoRoot);
+      assert.deepEqual(sidecarSnap.danglingLocks, [`${INDEX_WRITE_LOCK_PATH}-wal`]);
+      fs.rmSync(walAbs, { force: true });
+
+      const fpDesync = evaluateConcurrencyOracle({
+        scenario: "unit-fingerprint-desync",
+        baselineSnapshot: makeCleanSnapshot(),
+        concurrentSnapshot: makeCleanSnapshot({
+          graph: {
+            exists: true,
+            ok: false,
+            dbToken: "token-123",
+            stateToken: "token-123",
+            tokenMatched: true,
+            fingerprintsMatched: false,
+            invariantDiagnostics: [],
+            dump: { nodes: ["node-a", "node-b"], edges: ["edge-1"] },
+          },
+        }),
+        outcomes: [{ ok: true, codes: [] }],
+      });
+      assert.equal(fpDesync.classification, "silent-inconsistency");
+      assert.ok(
+        fpDesync.silentReasons.some((r) => r.includes("index-state.json file fingerprints do not match fingerprints.json")),
+      );
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });
 
-describe("Issue #34 Scenario C1 & C2 — Real Repository Concurrency Verification", () => {
+describe("Issue #34 & #4 Scenarios C1–C6 — Real Repository Concurrency Verification", () => {
   it("Scenario C1: 6 concurrent agent Decision proposals serialize safely and match sequential baseline", async () => {
     const report = await runScenarioConcurrentDecisionProposals({ workerCount: 6 });
     assert.equal(report.classification, "safe");
@@ -270,6 +326,38 @@ describe("Issue #34 Scenario C1 & C2 — Real Repository Concurrency Verificatio
     assert.deepEqual(report.silentReasons, []);
     assert.equal(report.equivalence.decisionsEqual, true);
     assert.equal(report.equivalence.proposalsEqual, true);
+    assert.equal(report.equivalence.graphNodesEqual, true);
+    assert.equal(report.equivalence.graphEdgesEqual, true);
+  });
+
+  it("Scenario C6a (O2): 6 concurrent agents triggering automatic index recovery rebuild once per stale round and match sequential baseline", async () => {
+    const report = await runScenarioConcurrentAutoIndexRecovery({ workerCount: 6 });
+    assert.equal(report.classification, "safe", `Unexpected issues: ${report.silentReasons.join("; ")}`);
+    assert.equal(report.succeededCount, 12);
+    assert.equal(report.failedCount, 0);
+    assert.deepEqual(report.silentReasons, []);
+    assert.equal(report.rounds.sourceEditRefreshedCount, 1);
+    assert.equal(report.rounds.historyMoveRefreshedCount, 1);
+    assert.equal(report.equivalence.decisionsEqual, true);
+    assert.equal(report.equivalence.proposalsEqual, true);
+    assert.equal(report.equivalence.graphNodesEqual, true);
+    assert.equal(report.equivalence.graphEdgesEqual, true);
+    assert.equal(report.equivalence.workTasksEqual, true);
+  });
+
+  it("Scenario C6b (O3): active index-writer.lock contention produces explicit GRAPH_WRITE_REFUSED without corruption and recovers cleanly once released", async () => {
+    const report = await runScenarioConcurrentAutoIndexRecoveryContention({
+      workerCount: 4,
+      lockTimeoutMs: 40,
+    });
+    assert.equal(report.classification, "explicit-error", `Unexpected issues: ${report.silentReasons.join("; ")}`);
+    assert.equal(report.succeededCount, 0);
+    assert.equal(report.failedCount, 4);
+    assert.deepEqual(report.explicitErrorCodes, ["GRAPH_WRITE_REFUSED"]);
+    assert.deepEqual(report.silentReasons, []);
+    assert.equal(report.postTimeoutRecovery.classification, "safe");
+    assert.equal(report.postTimeoutRecovery.succeededCount, 4);
+    assert.equal(report.postTimeoutRecovery.refreshedCount, 1);
     assert.equal(report.equivalence.graphNodesEqual, true);
     assert.equal(report.equivalence.graphEdgesEqual, true);
   });
