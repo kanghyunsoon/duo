@@ -57,6 +57,12 @@ export interface ModuleResolver {
    */
   configFiles(fromPath: RepoPath): readonly RepoPath[];
   /**
+   * The nearest tsconfig.json/jsconfig.json of fromPath (the first entry of configFiles), found by existence only: no
+   * config is parsed. Lets an incremental build check cheaply that a stored result was resolved with the config that
+   * applies now (#151). Undefined without a config, or for a language without config files.
+   */
+  nearestConfig?(fromPath: RepoPath): RepoPath | undefined;
+  /**
    * Problems of one config file (the nearest config of some file), recorded when it was read.
    * Undefined when it was not read in this run, unless load is set (reading a config is cheap and
    * resolves nothing). Lets an incremental build report the same persistent diagnostics (T08.1).
