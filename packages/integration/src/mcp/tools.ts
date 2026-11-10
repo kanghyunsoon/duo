@@ -157,13 +157,16 @@ export async function readWithSafeRefresh<P extends { readonly status: string }>
 ): Promise<Operation<P & { indexRefresh?: IndexRefresh }>> {
   const first = await read();
   if (first.kind !== "ok" || first.payload.status !== "index-required") return first;
-  // #172: a cancelled request neither waits for the index lock nor writes an index nobody will read.
-  if (signal?.aborted === true) return first;
-  const refreshed = await refresh(root, { lockTimeoutMs: REFRESH_LOCK_TIMEOUT_MS });
+  const cancelled = () => signal?.aborted === true; // A function: `aborted` can change while the refresh runs.
+  // #172: a cancelled request neither waits for the index lock nor writes an index nobody will read;
+  // the signal also ends a lock wait that is already running.
+  if (cancelled()) return first;
+  const refreshed = await refresh(root, { lockTimeoutMs: REFRESH_LOCK_TIMEOUT_MS, ...(signal === undefined ? {} : { signal }) });
   if (refreshed.value === undefined) {
     const reason = redactSecrets(refreshed.diagnostics.map((d) => d.message).join("; ") || "the index could not be refreshed safely").text;
     return { ...first, payload: { ...first.payload, indexRefresh: { refreshed: false, reason } } };
   }
+  if (cancelled()) return first; // A cancelled request is not answered, so skip the second read.
   const second = await read();
   if (second.kind !== "ok") return second;
   const stillStale = second.payload.status === "index-required";
