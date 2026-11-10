@@ -14,7 +14,7 @@ Release candidate on the `next` development line, for the npm dist-tag `next` (`
 
 ### The index refreshes itself in MCP when it is safe (#4, #133, #143, #148, #149, #172, #183)
 
-- When the index is stale, `duo_get_context` and `duo_review_changes` refresh it once before answering, if that is safe. They wait at most 30 seconds for another writer. If the refresh is refused or the index is stale again afterwards, the tool returns the existing `index-required` result with a reason. A request that is already cancelled does not refresh.
+- When the index is stale, `duo_get_context` and `duo_review_changes` refresh it once before answering, if that is safe. They wait at most 30 seconds for another writer. If the refresh is refused or the index is stale again afterwards, the tool returns the existing `index-required` result with a reason. A request that is cancelled, before or while it waits for the index lock, stops waiting and does not refresh (#172, #198). A refresh that already holds the lock is not interrupted.
 - Results can carry the optional field `indexRefresh` (`refreshed`, `reason`). It is absent when DUO did not try to refresh.
 - `duoctl index` and the MCP refresh take the same index write lock (`.duo-project/generated/index-writer.lock`). The operating system releases it when a writer dies. The CLI waits at most 5 seconds and then fails with `GRAPH_WRITE_REFUSED` and the reason. The CLI never refreshes on its own; `duoctl index` and `--refresh` behave as before.
 - `duoctl status` says when only Git history moved since the last index (#175).
@@ -68,8 +68,8 @@ The TS/JS analyzer identity changed, so an index made by an earlier version is r
 ## Known limitations
 
 - #160 Stage 2 is not complete. Review does not analyze the reviewed snapshot directly: when an input of the judgment differs from the working tree, it fails with `REVIEW_SNAPSHOT_MISMATCH` instead of giving a verdict.
-- #151 (Stage B is not included): a `tsconfig.json` or `jsconfig.json` that Git ignores or `index.exclude` leaves out, created after an index, does not make the index stale. `status` reports `current` and imports stay resolved without its settings.
-- The MCP refresh waits for the index lock up to 30 seconds even if the request is cancelled during the wait (#198 is not included). 30 seconds is an initial value from the current measurements and is not guaranteed to be shorter than every MCP client timeout.
+- #151 (Stage B is not included): a `tsconfig.json` or `jsconfig.json` that Git ignores or `index.exclude` leaves out, created after an index, does not make the index stale. `status` reports `current` and MCP does not refresh. Running `duoctl index` resolves imports again with it (Stage A, #192). A config that only changes through an `extends` target created later is not picked up.
+- The 30-second MCP lock wait is an initial value from the current measurements and is not guaranteed to be shorter than every MCP client timeout.
 - Real Codex and Claude Code approval prompts, Claude Code loading of the `--with-skill` skill during a task, and manual accessibility checks (`accessibilityVerificationComplete: false`) are still not verified.
 - Carried over from 0.4.0-rc.1: launcher PATH behavior measured on Windows only, and Work map redaction limited to the known credential formats.
 - Still open: editing an unrelated part of the README after setup can make reviews WARN (#7).
