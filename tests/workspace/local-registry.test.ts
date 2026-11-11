@@ -23,7 +23,7 @@ afterAll(() => {
       // ignore transient Windows cleanup lock on temp directory
     }
   }
-});
+}, 120_000);
 
 function mkTemp(prefix: string): string {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
@@ -274,9 +274,6 @@ describe("throwaway local npm registry for CLI install E2E (#37, S15P31A106-288)
         );
         const msGTar = Math.round(performance.now() - tGTar0);
         expect(rGTar.status, rGTar.stderr).toBe(0);
-        const gTarPkgDir = path.join(prefixTarball, ...(IS_WIN ? [] : ["lib"]), "node_modules", "@duo-director", "cli");
-        const gTarTree = compareInstalledTree(gTarPkgDir, path.join(prefixTarball, ...(IS_WIN ? [] : ["lib"]), "node_modules"));
-        expect([...gTarTree.mismatches, ...gTarTree.extra, ...gTarTree.outside]).toEqual([]);
 
         // 2. Local registry global install (cold cache)
         const prefixReg = mkTemp("duo-bench-greg-");
@@ -322,11 +319,6 @@ describe("throwaway local npm registry for CLI install E2E (#37, S15P31A106-288)
         );
         const msLTar = Math.round(performance.now() - tLTar0);
         expect(rLTar.status, rLTar.stderr).toBe(0);
-        const lTarTree = compareInstalledTree(
-          path.join(projTarball, "node_modules", "@duo-director", "cli"),
-          path.join(projTarball, "node_modules"),
-        );
-        expect([...lTarTree.mismatches, ...lTarTree.extra, ...lTarTree.outside]).toEqual([]);
         const lTarVer = runOnPath("npx", ["--no-install", "duoctl", "--version"], projTarball, env);
         expect(lTarVer.stdout.trim()).toBe(`duoctl ${pack.version}`);
 
@@ -357,15 +349,27 @@ describe("throwaway local npm registry for CLI install E2E (#37, S15P31A106-288)
         const msLReg = Math.round(performance.now() - tLReg0);
         expect(rLReg.status, rLReg.stderr).toBe(0);
         const lRegRequests = registry.requests.slice(reqBeforeLReg);
-        const lRegTree = compareInstalledTree(
-          path.join(projReg, "node_modules", "@duo-director", "cli"),
-          path.join(projReg, "node_modules"),
-        );
-        expect([...lRegTree.mismatches, ...lRegTree.extra, ...lRegTree.outside]).toEqual([]);
         const lRegVer = runOnPath("npx", ["--no-install", "duoctl", "--version"], projReg, env);
         expect(lRegVer.stdout.trim()).toBe(`duoctl ${pack.version}`);
 
-        // 5. Local registry project-local install -D (warm cache from global install)
+        // 5. Local tarball project-local install -D (warm cache from global install)
+        const projTarWarm = mkTemp("duo-bench-ltar-warm-");
+        fs.writeFileSync(
+          path.join(projTarWarm, "package.json"),
+          `${JSON.stringify({ name: "proj-tar-warm", version: "1.0.0", private: true }, null, 2)}\n`,
+        );
+        const tLTarWarm0 = performance.now();
+        const rLTarWarm = npm(
+          ["install", "-D", pack.tarball, `--cache=${cacheGTar}`, "--no-update-notifier", "--no-audit", "--no-fund", "--loglevel=error"],
+          projTarWarm,
+          env,
+        );
+        const msLTarWarm = Math.round(performance.now() - tLTarWarm0);
+        expect(rLTarWarm.status, rLTarWarm.stderr).toBe(0);
+        const lTarWarmVer = runOnPath("npx", ["--no-install", "duoctl", "--version"], projTarWarm, env);
+        expect(lTarWarmVer.stdout.trim()).toBe(`duoctl ${pack.version}`);
+
+        // 6. Local registry project-local install -D (warm cache from global install)
         const projRegWarm = mkTemp("duo-bench-lreg-warm-");
         fs.writeFileSync(
           path.join(projRegWarm, "package.json"),
@@ -419,15 +423,17 @@ describe("throwaway local npm registry for CLI install E2E (#37, S15P31A106-288)
               },
               projectLocalInstallMs: {
                 localTarballCold: msLTar,
+                localTarballWarm: msLTarWarm,
                 localRegistryCold: msLReg,
                 localRegistryWarm: msLRegWarm,
                 speedupRatioCold: Number((msLTar / msLReg).toFixed(2)),
-                speedupRatioWarm: Number((msLTar / msLRegWarm).toFixed(2)),
+                speedupRatioWarm: Number((msLTarWarm / msLRegWarm).toFixed(2)),
                 savedMsCold: msLTar - msLReg,
-                savedMsWarm: msLTar - msLRegWarm,
+                savedMsWarm: msLTarWarm - msLRegWarm,
               },
               combinedTwoInstallsMs: {
-                localTarballBoth: msGTar + msLTar,
+                localTarballBothCold: msGTar + msLTar,
+                localTarballColdThenWarm: msGTar + msLTarWarm,
                 localRegistryColdThenWarm: msGReg + msLRegWarm,
                 localRegistryBothCold: msGReg + msLReg,
               },

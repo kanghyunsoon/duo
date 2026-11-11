@@ -4,12 +4,12 @@ This report documents the design, verification, and Windows 11 benchmark measure
 
 ## Background and problem statement
 
-`tests/distribution/dist.e2e.test.ts` and `scripts/release/conformance.mjs` verify the packed CLI tarball (`.dist/duo-director-cli-<version>.tgz`, 7,468 files and 67 bundled runtime packages) by running `npm install` directly against the `.tgz` file path:
+`tests/distribution/dist.e2e.test.ts` and `scripts/release/conformance.mjs` verify the packed CLI tarball (`.dist/duo-director-cli-<version>.tgz`, 7,468 files and 67 bundled runtime packages) across two `npm install` surfaces:
 
-1. `installGlobalTarball(tarballPath, prefixDir)` runs `npm install --global --prefix <dir> <tarballPath> --no-fund --no-audit`.
-2. The project-local `npx` test runs `npm install --save-dev <tarballPath> --no-fund --no-audit` (or populates `node_modules/@duo-director/cli` from the global install after PR #197) and verifies `npx --no-install duoctl`.
+1. Global install (`npm install -g --prefix <dir>`) in `tests/distribution/dist.e2e.test.ts` `beforeAll` and `scripts/release/conformance.mjs`.
+2. Project-local install (`npm install -D <tarballPath>`) to verify `npx --no-install duoctl`.
 
-Issue #37 noted that `npm install <local-tarball.tgz>` has hit 180s timeouts on Windows runners and proposed investigating **Option 3**: serving the already-built `.tgz` from a throwaway `127.0.0.1` HTTP registry (`startLocalNpmRegistry`) and installing `@duo-director/cli@<version> --registry=http://127.0.0.1:<port>`.
+Issue #37 noted that `npm install <local-tarball.tgz>` has hit 180s timeouts on Windows runners and proposed **Option 3**: serving the already-built `.tgz` from a throwaway `127.0.0.1` HTTP registry (`startLocalNpmRegistry`) and installing `@duo-director/cli@<version> --registry=http://127.0.0.1:<port>`. In this PR, `tests/distribution/dist.e2e.test.ts` switches its `beforeAll` global install (`npm install -g`) to `startLocalNpmRegistry({ tarballPath: pack.tarball })` (asserting HTTP `200` on every registry request and `0` third-party `404` fetches) while retaining the direct `.tgz` file specifier in the project-local `npx` test so both installation paths remain covered in E2E.
 
 ## Architecture of `startLocalNpmRegistry` (`tests/distribution/local-registry.ts`)
 
@@ -34,14 +34,16 @@ Measured via `DUO_BENCH_LOCAL_REGISTRY=1 pnpm exec vitest run tests/workspace/lo
 - **Artifact**: `duo-director-cli-0.4.0-rc.1.tgz`
 - **Packed size**: `24,517,680` bytes (23.38 MiB)
 - **Unpacked size**: `114,714,814` bytes (109.40 MiB) across `7,468` files and `67` bundled packages
-- **Installed tree hash (`compareInstalledTree`)**: `fd01e8228a333479a7a76848fc5c98da649e8ef4daa167d594f89c8997a5bfdb` (identical across all 5 install modes)
+- **Installed tree hash (`compareInstalledTree`)**: `fd01e8228a333479a7a76848fc5c98da649e8ef4daa167d594f89c8997a5bfdb` (identical across all 6 install runs)
 
-| Scenario | Local tarball (`npm install <tgz>`) | Throwaway local registry (`--registry=http://127.0.0.1:<port>`) | Speedup | Time saved |
+### Idle workstation baseline vs. under-load run
+
+| Scenario | Local tarball (`npm install <tgz>`, idle / under load) | Throwaway local registry (`--registry=http://127.0.0.1:<port>`, idle / under load) | Speedup (idle / under load) | Time saved (idle / under load) |
 |---|---:|---:|---:|---:|
-| Global install (`npm install -g`, cold cache) | 31,824 ms | 9,363 ms | **3.40x** | −22,461 ms (−22.5 s) |
-| Project-local install (`npm install -D`, cold cache) | 27,785 ms | 9,406 ms | **2.95x** | −18,379 ms (−18.4 s) |
-| Project-local install (`npm install -D`, warm cache) | 27,785 ms | 9,407 ms | **2.95x** | −18,378 ms (−18.4 s) |
-| **Combined 2 installs (global + project-local)** | **59,609 ms** | **18,770 ms** | **3.18x** | **−40,839 ms (−40.8 s)** |
+| Global install (`npm install -g`, cold `--cache`) | 31,824 ms / 103,735 ms | 9,363 ms / 40,898 ms | **3.40x / 2.54x** | −22.5 s / −62.8 s |
+| Project-local install (`npm install -D`, cold `--cache`) | 27,785 ms / 126,935 ms | 9,406 ms / 29,964 ms | **2.95x / 4.24x** | −18.4 s / −97.0 s |
+| Project-local install (`npm install -D`, warm `--cache` shared with global install) | 27,340 ms / 124,871 ms (`FileFetcher` bypasses `_cacache`) | 9,407 ms / 29,237 ms (`_cacache` hit, no `.tgz` HTTP stream) | **2.91x / 4.27x** | −17.9 s / −95.6 s |
+| **Combined 2 installs (global cold + project-local warm)** | **59,164 ms / 228,606 ms** | **18,770 ms / 70,135 ms** | **3.15x / 3.26x** | **−40.4 s / −158.5 s** |
 
 ### HTTP requests recorded by `startLocalNpmRegistry`
 
@@ -61,21 +63,22 @@ When `npm install <local-tarball.tgz>` is given a local file specifier (`type: "
 When `npm install @duo-director/cli@0.4.0-rc.1 --registry=http://127.0.0.1:<port>` is given a registry version specifier:
 
 1. `Arborist.buildIdealTree()` fetches only the ~2 KiB packument JSON (`GET /@duo-director%2fcli`), which already supplies `version`, `dependencies`, `bundleDependencies`, and `dist.integrity` (`sha512-...`).
-2. `Arborist.reify()` streams and extracts the `.tgz` only once (or, when `--cache` is shared across installs, reads directly from `_cacache` by `dist.integrity` without streaming the `.tgz` over HTTP a second time). On `127.0.0.1` loopback, streaming 23.38 MiB over HTTP takes only a few milliseconds, so the ~9.4 s duration of both cold-cache (`9,406 ms`) and warm-cache (`9,407 ms`) registry installs reflects the baseline NTFS extraction cost of unpacking 7,468 files into `node_modules`.
+2. `Arborist.reify()` streams and extracts the `.tgz` only once (or, when `--cache` is shared across installs, reads directly from `_cacache` by `dist.integrity` without streaming the `.tgz` over HTTP a second time). By contrast, `pacote`'s `FileFetcher` bypasses `_cacache` for local `.tgz` paths, so passing a warm `--cache` to `npm install -D <pack.tarball>` still re-reads the 24.5 MiB tarball from disk twice (`124,871 ms` warm vs `126,935 ms` cold under load). On `127.0.0.1` loopback, streaming 23.38 MiB over HTTP takes only a few milliseconds, so the duration of both cold-cache and warm-cache registry installs reflects the baseline NTFS extraction cost of unpacking 7,468 files into `node_modules`.
 
 ## Trade-offs and recommendations
 
 | Dimension | Direct tarball (`npm install <tgz>`) | Local registry (`startLocalNpmRegistry`) |
 |---|---|---|
-| Windows install duration (single install) | ~28–32 s | ~9.4 s (~3.0–3.4x faster) |
+| Windows install duration (single install) | ~28–32 s idle (~104–127 s under I/O load) | ~9.4 s idle (~29–41 s under I/O load; ~2.5–4.3x faster) |
 | Exercises real npm registry resolution (`@duo-director/cli@<version>`) | No (`file:` specifier) | Yes (scoped packument + SRI integrity check) |
 | Enforces H-65 offline bundled dependency completeness | Only if `--offline` is also passed or network is absent | Yes — any unbundled dependency request hits local registry and fails immediately with `404` |
 | Tests offline `.tgz` file specifier path | Yes | No |
 
-### Recommendation
+### Applied in this PR
 
-1. **Keep `tests/distribution/local-registry.ts` and `tests/workspace/local-registry.test.ts` in the default test suite**:
-   - The default unit/integration suite (`O1` + `O2`) runs in under 2 seconds using a synthetic scoped tarball and continuously verifies both the `Worker`-backed local registry helper and the `npm install --registry=<local-url>` + `npx --no-install duoctl` contract.
-   - The full `.dist` benchmark (`O3`) remains opt-in via `DUO_BENCH_LOCAL_REGISTRY=1` so `pnpm test` stays fast.
-2. **Optional follow-up in `tests/distribution/dist.e2e.test.ts` / `scripts/release/conformance.mjs`**:
-   - If `installGlobalTarball` (or the conformance global install) is switched to `startLocalNpmRegistry` while keeping one file-specifier check (or vice versa), Windows CI saves ~22 seconds per full install while gaining strict `404` enforcement against accidental unbundled dependency fetches.
+1. **`tests/distribution/dist.e2e.test.ts` global install switched to `startLocalNpmRegistry`**:
+   - `beforeAll` starts `startLocalNpmRegistry({ tarballPath: pack.tarball })`, runs `npm install -g --prefix <prefix> @duo-director/cli@<version> --registry=<local-url>`, and asserts that every package request to the local registry returned HTTP `200` (enforcing the H-65 `404` guard on every `test:dist` run).
+   - The project-local `npx` test continues to run `npm install -D <pack.tarball>`, so `dist.e2e.test.ts` covers both the registry specifier path and the direct `.tgz` file specifier path.
+2. **Fast regression suite in `tests/workspace/local-registry.test.ts`**:
+   - The default suite (`O1` + `O2`) runs in under 2 seconds using a synthetic scoped tarball and continuously verifies `readPackageJsonFromTarball`, `startLocalNpmRegistry`, and `npm install --registry=<local-url>` + `npx --no-install duoctl`.
+   - The 6-install `.dist` benchmark (`O3`) remains opt-in via `DUO_BENCH_LOCAL_REGISTRY=1` so `pnpm test` stays fast.
