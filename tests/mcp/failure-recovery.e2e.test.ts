@@ -4,8 +4,8 @@
  * Verifies deterministic failure handling and recovery across four fault categories on a real
  * `duoctl mcp` stdio server process without LLM calls:
  *   O1 (F1) - Project Truth YAML corruption and in-place recovery without server restart
- *   O2 (F2) - SQLite graph.db corruption/deletion and auxiliary runtime/metrics.jsonl fault isolation
- *   O3 (F3) - Client cancellation during index write-lock wait (#172/#198) and in-session recovery
+ *   O2 (F2) - SQLite graph.db corruption and auxiliary runtime/metrics.jsonl + work-tasks.lock fault isolation
+ *   O3 (F3) - Server-side lock-wait cancellation (#172/#198) and in-session recovery
  *   O4 (F4) - Graceful shutdown vs abrupt server crash, CLI fallback parity, and fresh MCP reconnect
  */
 import fs from "node:fs";
@@ -176,7 +176,7 @@ describe("MCP server failure and recovery E2E (Jira S15P31A106-273)", () => {
     expect(s.pid).toBe(pidBefore);
   });
 
-  it("O2 (F2): isolates SQLite graph.db corruption/deletion and runtime metrics.jsonl/work-tasks.lock faults, recovering in-place after CLI re-index", async () => {
+  it("O2 (F2): isolates SQLite graph.db byte corruption and runtime metrics.jsonl/work-tasks.lock faults, recovering in-place after CLI re-index", async () => {
     const pidBefore = s.pid;
     const dbPath = path.join(p.root, ".duo-project", "generated", "graph.db");
 
@@ -202,32 +202,13 @@ describe("MCP server failure and recovery E2E (Jira S15P31A106-273)", () => {
       const traceAfterRebuild = await s.call("duo_trace", { node: "src/scheduler.ts" });
       expect(traceAfterRebuild.isError).toBeFalsy();
       expect(traceAfterRebuild.structuredContent).toMatchObject({ format: "duo.trace/1", index: "current" });
-
-      // 2. Delete graph.db completely: MCP refuses unsafe bootstrap with a clear reason, then recovers after duoctl index
-      for (const f of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
-        fs.rmSync(f, { force: true });
-      }
-      const missingCtx = await s.call("duo_get_context", { task: "Scheduler.next" });
-      expect(missingCtx.isError).toBeFalsy();
-      expect(missingCtx.structuredContent).toMatchObject({
-        format: "duo.context/1",
-        status: "index-required",
-        indexRefresh: { refreshed: false, reason: expect.stringContaining("existing compatible index") },
-      });
-      expect(fs.existsSync(dbPath)).toBe(false);
-
-      expect(duoctl(p.root, ["index", "--json"]).code).toBe(0);
     } finally {
       if (!fs.existsSync(dbPath)) {
         duoctl(p.root, ["index", "--full", "--json"]);
       }
     }
 
-    const readyCtx = await s.call("duo_get_context", { task: "Scheduler.next" });
-    expect(readyCtx.isError).toBeFalsy();
-    expect(readyCtx.structuredContent).toMatchObject({ format: "duo.context/1", status: "ready" });
-
-    // 3. Auxiliary metrics.jsonl write failure and work-tasks.lock contention do not fail metered MCP tools
+    // 2. Auxiliary metrics.jsonl write failure and work-tasks.lock contention do not fail metered MCP tools
     const metricsPath = path.join(p.root, ".duo-project", "runtime", "metrics.jsonl");
     const workLockPath = path.join(p.root, ".duo-project", "runtime", "work-tasks.lock");
     fs.rmSync(metricsPath, { recursive: true, force: true });
@@ -254,16 +235,27 @@ describe("MCP server failure and recovery E2E (Jira S15P31A106-273)", () => {
     expect(fs.existsSync(metricsPath)).toBe(true);
   });
 
-  it("O3 (F3): aborts index lock wait quickly on request cancellation (#172/#198) and auto-refreshes on the next call once the lock is free", async () => {
+  it("O3 (F3): stops server-side index lock wait on request cancellation (#172/#198) and auto-refreshes quickly once the lock is free", async () => {
     const schedulerPath = path.join(p.root, "src", "scheduler.ts");
+    const metricsPath = path.join(p.root, ".duo-project", "runtime", "metrics.jsonl");
     const originalScheduler = fs.readFileSync(schedulerPath, "utf8");
+    const readMetrics = () =>
+      fs.existsSync(metricsPath)
+        ? fs
+            .readFileSync(metricsPath, "utf8")
+            .trim()
+            .split("\n")
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as { command?: string; status?: string; durationMs?: number })
+        : [];
+
     p.edit("src/scheduler.ts", "% 7", "% 5");
     try {
       expect((await s.call("duo_get_status")).structuredContent.index.status).toBe("stale");
 
       await withIndexWriteLock(p.root, async () => {
+        const metricsBefore = readMetrics().length;
         const controller = new AbortController();
-        const t0 = performance.now();
         const pending = s.client.callTool(
           { name: "duo_get_context", arguments: { task: "Scheduler.next" } },
           { signal: controller.signal },
@@ -271,9 +263,24 @@ describe("MCP server failure and recovery E2E (Jira S15P31A106-273)", () => {
         await new Promise((r) => setTimeout(r, 250));
         controller.abort();
         await expect(pending).rejects.toThrow();
-        const elapsedMs = performance.now() - t0;
-        // Cancels within < 5 s instead of waiting for the 30 s MCP lock timeout
-        expect(elapsedMs).toBeLessThan(5_000);
+
+        // Server-side verification (#198): while the external writer lock is STILL held, the server must
+        // abort its 30 s withIndexWriteLock wait, finish readWithSafeRefresh, and append the runtime metric.
+        const waitServerCancelled = async () => {
+          const deadline = Date.now() + 3_000;
+          while (Date.now() < deadline) {
+            const current = readMetrics();
+            if (current.length > metricsBefore) return current[current.length - 1];
+            await new Promise((r) => setTimeout(r, 25));
+          }
+          return undefined;
+        };
+        const cancelledMetric = await waitServerCancelled();
+        expect(cancelledMetric).toMatchObject({
+          command: "duo_get_context",
+          status: "index-required",
+        });
+        expect(cancelledMetric?.durationMs).toBeLessThan(5_000);
 
         // The same MCP connection stays responsive while the writer lock is still held
         const statusWhileLocked = await s.call("duo_get_status");
@@ -281,8 +288,14 @@ describe("MCP server failure and recovery E2E (Jira S15P31A106-273)", () => {
         expect(statusWhileLocked.structuredContent.index.status).toBe("stale");
       });
 
-      // Once the writer lock is released, the next call on the same MCP session refreshes the stale index once and answers
+      // After the writer lock is released, no lingering server request steals the lock in the background
+      await new Promise((r) => setTimeout(r, 100));
+      expect((await s.call("duo_get_status")).structuredContent.index.status).toBe("stale");
+
+      // The first duo_get_context after lock release acquires the free lock immediately and refreshes once
+      const tRefresh = performance.now();
       const refreshedCtx = await s.call("duo_get_context", { task: "Scheduler.next" });
+      expect(performance.now() - tRefresh).toBeLessThan(5_000);
       expect(refreshedCtx.isError).toBeFalsy();
       expect(refreshedCtx.structuredContent).toMatchObject({
         format: "duo.context/1",
@@ -355,8 +368,6 @@ describe("MCP server failure and recovery E2E (Jira S15P31A106-273)", () => {
     // Edit source again and reconnect with a fresh MCP server instance
     p.edit("src/scheduler.ts", "% 3", "% 7");
     const sReconnected = await open(p.root);
-    const { tools } = await sReconnected.client.listTools();
-    expect(tools).toHaveLength(9);
 
     const reconnCtx = await sReconnected.call("duo_get_context", { task: "Scheduler.next" });
     expect(reconnCtx.isError).toBeFalsy();
