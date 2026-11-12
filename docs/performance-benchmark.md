@@ -303,3 +303,40 @@ compare exit code는 다음과 같다.
 
 저장소 내용은 OS 차이를 없애려고 변형하지 않는다. 외부 저장소는 실행 중에 OS temp로 clone할 뿐 DUO 저장소나 npm package에 넣지 않고, 측정 결과는 Git ignored인 `bench/results/local/`에만 쓴다.
 
+## C202 CLI 시작 경로 재측정 (S15P31A106-290)
+
+2026-11-11에 `next` 기준 commit `117de18`, `@duo-director/cli` 0.4.0-rc.2를 Windows 10.0.26200, Intel Core Ultra 7 155H(22 logical), 메모리 31.5 GiB, Node 24.18.0에서 측정했다. 기준·후보 모두 `pnpm build` 뒤 `pnpm pack:cli`로 만든 packed `dist/duoctl.js`를 실행했다.
+
+선택 gate는 command마다 미측정 warm-up 1회 뒤 5 paired round, build별 warm sample 3회의 중앙값이다. 홀수 round는 A→B, 짝수 round는 B→A이며, B가 4/5 이상 빠르고 round별 `A median - B median`의 중앙값이 50 ms 이상일 때만 유지한다. 출력 JSON 또는 text도 byte-normalized 값이 같아야 한다.
+
+| command | A round median (ms) | B round median (ms) | B 승리 | 차이 중앙값 | 판단 |
+|---|---|---|---:|---:|---|
+| `--version` | 303.9, 297.6, 298.9, 305.4, 304.9 | 92.5, 89.4, 90.8, 90.8, 106.2 | 5/5 | 208.2 ms | 통과 |
+| `--help` | 362.0, 368.6, 375.3, 308.6, 307.5 | 114.7, 114.2, 94.0, 95.6, 92.4 | 5/5 | 247.4 ms | 통과 |
+| `status --json` | 932.9, 971.0, 946.4, 960.5, 943.7 | 918.5, 889.7, 895.8, 899.7, 915.9 | 5/5 | 50.6 ms | 경계(아래) |
+
+`status`는 기준 50 ms에 걸쳐 있어 통과로 주장하지 않는다. 같은 두 artifact로 같은 절차를 한 번 더 실행했을 때 B 승리 5/5, round별 차이 35.6·41.5·46.7·54.0·69.5 ms, 중앙값 46.7 ms로 기준에 못 미쳤다(이 실행은 PC 상태가 달라 A·B 절대값이 모두 약 300 ms 낮았으므로 위 표와 절대값을 비교하지 않는다). 두 실행 모두 방향은 같고 크기는 45~50 ms 수준이다. 변경을 유지하는 근거는 `--version`과 `--help`이며, `status`는 악화가 없다는 확인으로만 쓴다.
+
+command만 동적 import로 옮긴 1차 실험 빌드는 `status`에서 B 승리 1/5, 차이 중앙값이 음수여서 gate에 실패했다(`bench/results/local/cli-startup-ab.json`). `cli.ts`와 command가 workspace package barrel을 통해 같은 module graph를 계속 불러왔기 때문이며, 아래 subpath 분리는 그 결과를 보고 추가한 것이다.
+
+유지한 변경은 선택한 command만 동적 import하고, CLI가 core의 경량 `constants`·`diagnostics`와 integration의 `operations`·`agents`·`mcp`·`http`·`llm` subpath를 직접 쓰게 한 것이다. packed entry의 초기 정적 module graph는 MCP server와 Zod에 닿지 않는다. `status`의 fresh-prefix module profile에서도 `@modelcontextprotocol/server` 8개 파일이 빠졌다.
+
+command chunk는 dispatch 시점에 읽으므로 chunk가 빠진 설치는 그 command를 실행할 때 드러난다. 이 경우 usage 오류가 아니라 `bin.ts`의 incomplete installation 메시지(exit 1)로 보고하며, 배포 E2E가 확인한다. 이 오류 경로는 위 측정 뒤에 추가했고 측정을 다시 하지는 않았다.
+
+MCP는 제품 CLI 인자에 우회 옵션을 추가하지 않고 benchmark 전용 `bench/mcp.mjs --cli <packed-duoctl.js>`로 측정했다. fixture 준비의 `index`와 MCP server 모두 지정한 artifact를 쓴다. A/B 각각 1회 예열 뒤 command와 같은 순서 규칙으로 5 paired round, build별 `single-cold` 3회를 실행했다. initialize round 중앙값의 `A - B`는 118.9, 36.6, 47.9, 12.7, 30.7 ms로 B가 5/5 빨랐지만 차이 중앙값 36.6 ms라 50 ms gate는 통과하지 못했다. 모든 round에서 tool contract가 같고 9개 tool 호출의 오류는 양쪽 모두 0이었다. 따라서 MCP 성능 개선으로 주장하지 않고 회귀가 없다는 근거로만 쓴다.
+
+문법 후보는 fresh process 5회에서 전체 7개 grammar load 중앙 53.5 ms(48.8–58.3 ms), fixture가 실제 쓰는 TypeScript·TSX·JavaScript 3개 중앙 27.6 ms(25.3–32.5 ms)였다. 제거 가능한 중앙값 약 25.9 ms가 50 ms 하한보다 작고, analyzer identity·동기 parse 계약을 바꾸는 비용이 있어 구현하지 않았다.
+
+나머지 후보도 제품 코드를 바꾸지 않았다. cache 경로 symlink 검사 축소는 안전 검사 범위를 바꾸므로 maintainer 결정 없이는 적용하지 않는다. freshness cache 확인 약화는 손상 cache를 current로 오판할 수 있어 기각한다.
+
+재현 명령은 다음과 같다. raw 결과는 Git ignored인 `bench/results/local/cli-startup-ab-{version,help,status}.json`, `mcp-startup-ab.json`, `first-run-modules.json`에 남는다.
+
+```text
+node bench/experiments/cli-startup-ab.mjs --a <baseline>/dist/duoctl.js --b .dist/cli-package/dist/duoctl.js --command version --rounds 5 --runs 3
+node bench/experiments/first-run-modules.mjs --commands version,help,status --iterations 5
+node bench/experiments/mcp-startup-ab.mjs --a <baseline>/dist/duoctl.js --b .dist/cli-package/dist/duoctl.js --rounds 5 --iterations 3
+node bench/mcp.mjs --cli .dist/cli-package/dist/duoctl.js --scenario single-cold --iterations 5 --concurrency 1
+node bench/worker.mjs grammars-all
+node bench/worker.mjs grammar-set typescript,tsx,javascript
+```
+

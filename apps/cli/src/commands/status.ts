@@ -1,6 +1,6 @@
 /** duoctl status (T15): the shared status operation, rendered. Writes nothing. */
 import { describeUnsupportedPattern, loadProjectTruth, parseCompatibleBaseUrl } from "@duo-director/core";
-import { projectStatus } from "@duo-director/integration";
+import { projectStatus } from "@duo-director/integration/operations";
 import { t } from "../messages.js";
 import { EXIT, type Outcome } from "../output.js";
 import { operationFailure, type Env } from "./shared.js";

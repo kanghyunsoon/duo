@@ -15,10 +15,12 @@ const requireValue = (r, what) => {
   return r.value;
 };
 let result;
-if (kind === 'grammar') {
+if (kind === 'grammar' || kind === 'grammar-set') {
   const t = performance.now();
-  const set = requireValue(await analyzer.loadGrammarSet([arg]), 'grammar');
-  result = { kind, grammar: arg, loadMs: performance.now() - t, memory: rss() };
+  const grammarArg = arg ?? root;
+  const grammars = kind === 'grammar' ? [grammarArg] : grammarArg.split(',').filter(Boolean);
+  const set = requireValue(await analyzer.loadGrammarSet(grammars), 'grammar');
+  result = { kind, grammars, loadMs: performance.now() - t, memory: rss() };
   set.dispose?.();
 } else if (kind === 'grammars-all') {
   const t = performance.now();

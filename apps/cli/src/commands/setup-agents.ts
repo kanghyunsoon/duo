@@ -11,7 +11,7 @@
  * Setup connects only the agents named with --agent.
  */
 import { createDiagnostic } from "@duo-director/core";
-import { applyAgentIntegration, planAgentIntegration, verifyAgentIntegration, type AgentId, type AgentIntegrationPlan, type DuoLauncher } from "@duo-director/integration";
+import { applyAgentIntegration, planAgentIntegration, verifyAgentIntegration, type AgentId, type AgentIntegrationPlan, type DuoLauncher } from "@duo-director/integration/agents";
 import { t } from "../messages.js";
 import { VERSION } from "../version.js";
 import { host, renderPlan, renderVerify } from "./install.js";

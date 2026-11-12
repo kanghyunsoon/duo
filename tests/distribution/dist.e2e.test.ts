@@ -46,6 +46,26 @@ async function spawnConfigured(entry: { command: string; args: readonly string[]
   return client;
 }
 
+/** C202: the chunks duoctl.js reaches before a command runs (static imports, and bin's own import of main), and the external modules they name. */
+function initialGraph(dist: string) {
+  const pending = ["duoctl.js"];
+  const chunks = new Set<string>();
+  const external = new Set<string>();
+  while (pending.length > 0) {
+    const file = pending.pop() as string;
+    if (chunks.has(file)) continue;
+    chunks.add(file);
+    const text = fs.readFileSync(path.join(dist, file), "utf8");
+    const specs = [...text.matchAll(/^import\s[^;]*?from\s*"([^"]+)";?$/gmu)].map((match) => match[1] as string);
+    if (file === "duoctl.js") specs.push(...[...text.matchAll(/await import\("([^"]+)"\)/gu)].map((match) => match[1] as string));
+    for (const spec of specs) {
+      if (spec.startsWith("./")) pending.push(spec.slice(2));
+      else external.add(spec);
+    }
+  }
+  return { chunks, external };
+}
+
 beforeAll(() => {
   pack = packReport();
   prefix = tmp("duo-prefix-");
@@ -122,6 +142,11 @@ describe("the packed artifact (npm pack is the oracle)", () => {
     const lazy = ["typescript", "gpt-tokenizer", "@modelcontextprotocol/client", "yaml", "mdast-util-from-markdown", "mdast-util-frontmatter", "micromark-extension-frontmatter"];
     expect(statics.filter((s) => lazy.some((l) => s === l || s.startsWith(`${l}/`)))).toEqual([]);
     expect(statics).toEqual(expect.arrayContaining(["@modelcontextprotocol/server", "zod"]));
+  });
+  it("C202: the initial CLI module graph does not load command-only MCP or schema dependencies", () => {
+    const { chunks, external } = initialGraph(path.join(REPO, ".dist", "cli-package", "dist"));
+    expect(chunks.size).toBeGreaterThan(1);
+    expect([...external].filter((spec) => spec === "@modelcontextprotocol/server" || spec.startsWith("@modelcontextprotocol/server/") || spec === "zod" || spec.startsWith("zod/"))).toEqual([]);
   });
   it("packing again gives the same files, bytes and metadata (deterministic)", () => {
     const out = tmp("duo-pack2-");
@@ -467,6 +492,20 @@ describe("distribution failure messages (last: they damage the temporary install
     expect(text).toContain("tree-sitter-tsx.wasm");
     expect(text).toContain("reinstall the @duo-director/cli package");
     expect(text).not.toMatch(/pnpm/u);
+  });
+
+  it("C202: a missing command chunk is an incomplete installation, not a usage error", () => {
+    const dist = path.join(pkgDir, "dist");
+    const { chunks } = initialGraph(dist);
+    const onDispatch = fs.readdirSync(dist).filter((f) => f.endsWith(".js") && !chunks.has(f));
+    expect(onDispatch.length).toBeGreaterThan(0);
+    for (const f of onDispatch) fs.rmSync(path.join(dist, f));
+    expect(duoctl(tmp("duo-cwd-"), ["--version"]).code).toBe(0);
+    const r = duoctl(tmp("duo-cwd-"), ["status", "--json"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toBe("");
+    expect(r.stderr).toContain("this DUO installation is incomplete");
+    expect(r.stderr).not.toContain("CLI_USAGE_INVALID");
   });
 
   it("a missing runtime dependency is an incomplete installation, reported before anything runs", () => {

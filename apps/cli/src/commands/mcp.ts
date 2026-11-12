@@ -5,7 +5,7 @@
  * command prints nothing there and writes no CLI metric; tool calls meter themselves (surface "mcp").
  */
 import type { Diagnostic } from "@duo-director/core";
-import { resolveMcpRoot, serveDuoMcp } from "@duo-director/integration";
+import { resolveMcpRoot, serveDuoMcp } from "@duo-director/integration/mcp";
 import { VERSION } from "../version.js";
 import { EXIT, failed, type Outcome } from "../output.js";
 import type { Env } from "./shared.js";

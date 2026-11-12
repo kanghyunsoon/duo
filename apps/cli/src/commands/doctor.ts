@@ -5,7 +5,8 @@
  * error (6, ACTION_REQUIRED): warnings, an agent that is not connected and a disabled LLM keep 0.
  */
 import { describeUnsupportedPattern, type UnsupportedDecisionPattern } from "@duo-director/core";
-import { LLMProviderPool, projectDoctor, type DoctorAction, type DoctorCheck, type DoctorPayload } from "@duo-director/integration";
+import { LLMProviderPool } from "@duo-director/integration/llm";
+import { projectDoctor, type DoctorAction, type DoctorCheck, type DoctorPayload } from "@duo-director/integration/operations";
 import { t, type Locale, type MessageKey } from "../messages.js";
 import { columns, padColumns } from "../terminal-width.js";
 import { nodeVersionProblem } from "../node-version.js";

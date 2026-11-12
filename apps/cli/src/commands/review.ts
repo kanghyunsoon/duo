@@ -7,7 +7,7 @@
 import { decisionAuthorityLabel, provenanceLabel, recordReview, renderGapQuestions, reviewLlmMetric, unscopedConstraintIds, type ReviewResult, type Verdict } from "@duo-director/director";
 import { describeUnsupportedPattern, normalizeRepoPath, unsupportedDecisionPatterns, type RepoPath, type UnsupportedDecisionPattern } from "@duo-director/core";
 import { indexRepository } from "@duo-director/graph";
-import { diffEnd, projectReview, withGraphWriter } from "@duo-director/integration";
+import { diffEnd, projectReview, withGraphWriter } from "@duo-director/integration/operations";
 import { t } from "../messages.js";
 import { EXIT, failed, type Outcome } from "../output.js";
 import { diagLines, humanActor, operationFailure, requireProject, usage, withRegistry, type Env } from "./shared.js";

@@ -19,7 +19,8 @@
 import { applyInitPlan, captureAdoptionBaseline, getAdoptionBaselineStatus, planInit, type InitAnswer, type InitApplyResult, type InitPlan } from "@duo-director/director";
 import { createDiagnostic, type Diagnostic } from "@duo-director/core";
 import { indexRepository, inspectIndex, type IndexResult } from "@duo-director/graph";
-import type { AgentId, DoctorPayload } from "@duo-director/integration";
+import type { AgentId } from "@duo-director/integration/agents";
+import type { DoctorPayload } from "@duo-director/integration/operations";
 import { t, type MessageKey } from "../messages.js";
 import { padColumns } from "../terminal-width.js";
 import { EXIT, type Outcome } from "../output.js";
