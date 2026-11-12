@@ -13,7 +13,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { existingProject, type Project } from "../cli/support.js";
-import { codexEntry, compareInstalledTree, dirSize, installedPackages, IS_WIN, isolatedEnv, npm, packReport, recordMetric, REPO, runOnPath, which, type PackReport, type RuntimeTree } from "./support.js";
+import { codexEntry, compareInstalledTree, dirSize, formatNpmFailure, installedPackages, IS_WIN, isolatedEnv, npm, packReport, recordMetric, REPO, runOnPath, which, type PackReport, type RuntimeTree } from "./support.js";
 
 const temps: string[] = [];
 afterAll(() => temps.forEach((t) => fs.rmSync(t, { recursive: true, force: true })));
@@ -51,9 +51,10 @@ beforeAll(() => {
   prefix = tmp("duo-prefix-");
   const t = performance.now();
   const r = npm(["install", "-g", "--prefix", prefix, pack.tarball, "--no-audit", "--no-fund", "--loglevel=error"], prefix, isolatedEnv([]));
+  const elapsedMs = Math.round(performance.now() - t);
   // #37: the global install of the same tarball, to compare with the project-local install phases.
-  console.log(`global install (ms): ${Math.round(performance.now() - t)}`);
-  if (r.status !== 0) throw new Error(`npm install -g failed: ${r.stderr}`);
+  console.log(`global install (ms): ${elapsedMs}`);
+  if (r.status !== 0) throw new Error(formatNpmFailure("npm install -g", r, elapsedMs));
   bin = IS_WIN ? prefix : path.join(prefix, "bin");
   pkgDir = path.join(prefix, ...(IS_WIN ? [] : ["lib"]), "node_modules", "@duo-director", "cli");
   env = isolatedEnv([bin]);
@@ -408,7 +409,7 @@ describe("project-local install (npx --no-install duoctl)", () => {
       const p = project();
       const local = isolatedEnv([]); // no global duoctl on PATH
       const inst = timed("npmInstall", () => npm(["install", "-D", pack.tarball, "--no-audit", "--no-fund", "--loglevel=error"], p.root, local));
-      expect(inst.status, `npm install -D: status ${inst.status}, signal ${inst.signal}, error ${inst.error?.message ?? "none"}, ${phases.npmInstall} ms · stderr: ${inst.stderr}`).toBe(0);
+      expect(inst.status, formatNpmFailure("npm install -D", inst, phases.npmInstall)).toBe(0);
       // The same runtime tree as the global install: inside the package, nothing hoisted into the project (H-65).
       const tree = timed("compareTree", () => compareInstalledTree(path.join(p.root, "node_modules", "@duo-director", "cli"), path.join(p.root, "node_modules")));
       expect([...tree.mismatches, ...tree.extra, ...tree.outside]).toEqual([]);

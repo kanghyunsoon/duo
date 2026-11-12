@@ -8,6 +8,7 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -134,9 +135,55 @@ export function npmCli(tool: "npm" | "npx" = "npm"): [string, string[]] {
   throw new Error(`${tool}-cli.js not found beside ${process.execPath}`);
 }
 
-export function npm(args: readonly string[], cwd: string, env: Record<string, string>): SpawnSyncReturns<string> {
+export interface NpmOptions {
+  readonly timeoutMs?: number;
+  readonly logTailLines?: number;
+}
+
+export type NpmRunResult = SpawnSyncReturns<string> & {
+  /** Tail of npm's debug log (`--logs-dir`), captured when status !== 0 (including spawnSync timeout). */
+  readonly logTail: string;
+};
+
+export function npm(args: readonly string[], cwd: string, env: Record<string, string>, options: NpmOptions = {}): NpmRunResult {
   const [cmd, prefix] = npmCli("npm");
-  return spawnSync(cmd, [...prefix, ...args], { cwd, env, encoding: "utf8", windowsHide: true, timeout: 600_000 });
+  const timeout = options.timeoutMs ?? 600_000;
+  const tailLines = options.logTailLines ?? 40;
+  const logsDir = fs.mkdtempSync(path.join(os.tmpdir(), "duo-npm-logs-"));
+  try {
+    const hasLogsDir = args.some((a) => a === "--logs-dir" || a.startsWith("--logs-dir="));
+    const fullArgs = hasLogsDir ? [...prefix, ...args] : [...prefix, ...args, `--logs-dir=${logsDir}`];
+    const r = spawnSync(cmd, fullArgs, { cwd, env, encoding: "utf8", windowsHide: true, timeout });
+    let logTail = "";
+    if (r.status !== 0) {
+      try {
+        if (fs.existsSync(logsDir)) {
+          const logFiles = fs.readdirSync(logsDir).filter((f) => f.endsWith(".log")).sort(byCodePoint);
+          const lastFile = logFiles.at(-1);
+          if (lastFile !== undefined) {
+            const lines = fs.readFileSync(path.join(logsDir, lastFile), "utf8").trim().split(/\r?\n/u).filter((l) => l !== "");
+            logTail = lines.slice(-tailLines).join("\n");
+          }
+        }
+      } catch (error) {
+        logTail = `(failed to read npm log: ${(error as Error).message})`;
+      }
+    }
+    return { ...r, logTail };
+  } finally {
+    try {
+      fs.rmSync(logsDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    } catch {
+      // Best-effort cleanup: never mask the spawnSync return value if Windows holds a brief handle after SIGTERM.
+    }
+  }
+}
+
+/** Formats a diagnostic message for a failed or timed-out npm invocation (#37). */
+export function formatNpmFailure(label: string, r: NpmRunResult, elapsedMs?: number): string {
+  const timing = elapsedMs === undefined ? "" : `, ${elapsedMs} ms`;
+  const tail = r.logTail === "" ? " (none)" : `\n${r.logTail}`;
+  return `${label}: status ${r.status}, signal ${r.signal}, error ${r.error?.message ?? "none"}${timing} · stderr: ${r.stderr} · npm log tail:${tail}`;
 }
 
 const quote = (a: string) => (/^[A-Za-z0-9_./:=@+-]+$/u.test(a) ? a : `"${a.replaceAll('"', '\\"')}"`);
