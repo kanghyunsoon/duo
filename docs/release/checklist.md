@@ -24,14 +24,14 @@ Prerelease on branch `next`(H-106): 0.4.0-rc.1 이후 `duoctl setup`, MCP index 
 - [x] review: PR #202 kang987654 APPROVED on `d0aa3c4`, [Maintainer 최종 승인](https://github.com/kanghyunsoon/duo/pull/202#issuecomment-6761728895), kang987654 squash merge
 - [x] CI 3 OS: PR #202 `d0aa3c4` success, `next` `117de18` run 42785491529 success
 - [x] tarball 24,518,868 B(unpacked 114,717,957 B), 7,468 files, bundled 67, sha256 `4cdc5f2bdd07993fbf0452249464038366b7da950e52e20085eb6bb40a8ec387`, integrity `sha512-sI8kTCHxsAjCWJIiFxm1VzNhCnDyHjpxJ2EAReL8veZJwVYML4ViGyyW3pruKLlVELKi/Y5L7G74TDnF7L7hBg==`. 두 번의 preflight pack이 같은 bytes
-- [ ] `release:preflight` READY on `next` `117de18`: **BLOCKED**(2026-11-11 Windows 로컬, Codex 실행 환경, 두 번). 그 밖의 항목은 통과: grammar, benchmark smoke, 배포 E2E, conformance 122/0·C209 20/0, upgrade 0.2.0 → RC, 재현성 같음, secret·절대경로 0, license 비허용 0, notice 누락 0, dry-run 7,468 = RC
-- [ ] code blocker `verification-verify`: `pnpm verify`의 UI 서버 test가 `listen EFAULT 127.0.0.1`로 실패(1차 1건, 2차 2건, 나머지 1,859~1,860 passed). 조사 중: 같은 PC에서 Node v24.18.0 `net.listen(0, "127.0.0.1")` 2,000회 중 83회 `EFAULT`, .NET `TcpListener` 2,000회 0회, 실패한 `tests/ui/ui.browser.e2e.test.ts`는 같은 commit에서 단독 3회 8/8 통과. 환경 문제라는 가설은 확정되지 않았다
-- [ ] external blocker `npm-auth`·`npm-scope-access`: npm 로그인 안 됨, `@duo-director` publish 권한 미확인
+- [x] `release:preflight` READY on `next` `117de18`(2026-11-12 11:55 KST, Maintainer의 일반 PowerShell, 재부팅 직후, 절전 방지, `VITEST_MAX_WORKERS=3`): ready·codeReady·externalReady true, blockers 0, releaseChannel prerelease, branch next, upstream origin/next, dry-run tag next. verify 178 files·1,861 passed(13 skipped, 5 todo), grammar, benchmark smoke, 배포 E2E, conformance 122/0·C209 20/0, upgrade 0.2.0 → RC, 재현성 같음, secret·절대경로 0, license 비허용 0, notice 누락 0, artifact audit advisory 0, dry-run 7,468 = RC, integrity = 위 값. 테스트 생략·timeout 증가·소스·release script 변경 없음
+- [x] 이전 BLOCKED(2026-11-11~12, 같은 PC 네 번): UI 서버 test의 `listen EFAULT 127.0.0.1`. 같은 PC에서 Node와 .NET 모두 IPv4 loopback listen이 간헐적으로 실패했고(IPv6 `::1`은 0회), 재부팅 직후 사라졌다가 가동 시간과 nonpaged pool(974 → 1,437 MB)이 늘면 다시 나타났다. 한 번은 실행 중 PC 절전으로 conformance test 3건이 timeout. 제품 결함 근거 없음, 호스트 원인(드라이버)은 특정하지 못함
+- [x] npm: user `gudtnslwkd`, `@duo-director` member(role owner). 0.4.0-rc.2 미게시
 - [x] upgrade 0.3.5 → RC, 0.4.0-rc.1 → RC OK(ts·python·cpp·sparse: 이전 version의 current index가 RC에서 stale, index 한 번 뒤 current, Truth 불변). downgrade RC → 0.4.0-rc.1 OK
 - [x] security: artifact `release:audit` advisory 0, deprecated 0, artifact = lock. dev-only minimatch advisory는 #185(package에 없음)
 - [x] npm: 0.4.0-rc.2 미게시(404), dist-tags `latest` 0.3.5·`next` 0.4.0-rc.1
 - [ ] H-106 기록이 `origin/main`에 반영(별도 승인, `main-stable` 관리자 예외 1회)
-- [ ] 사람의 일반 terminal에서 npm 로그인 뒤 `release:preflight` READY와 `release:authorization` OK
+- [ ] `release:authorization` OK(이 기록이 `origin/main`에 반영된 뒤 `next` `117de18`에서 실행)
 - [ ] npm publish `--tag next`(검증한 tarball 그대로, 별도 최종 게시 승인과 사람의 2FA), tag `v0.4.0-rc.2`, GitHub prerelease, `release:verify-published`
 
 ## 0.3.5 (H-97, 2026-10-28 stable data-safety patch, dist-tag `latest`, `v0.3.5` = `71644c8`)
