@@ -4,7 +4,7 @@
  * printed URL (optional: failure is only a message). The UI reads through the shared operations and
  * writes only Decision confirm/reject. It never indexes, records a Review or touches Git.
  */
-import { openInBrowser, startDuoUiServer } from "@duo-director/integration";
+import { openInBrowser, startDuoUiServer } from "@duo-director/integration/http";
 import { t } from "../messages.js";
 import { VERSION } from "../version.js";
 import { EXIT, failed, type Outcome } from "../output.js";

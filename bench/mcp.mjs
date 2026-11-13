@@ -9,7 +9,7 @@ import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotoc
 import { expectedNames, verifyTools } from "./mcp-contract.mjs";
 
 const workspace = fileURLToPath(new URL("../", import.meta.url));
-const cli = path.join(workspace, "apps", "cli", "dist", "main.js");
+const defaultCli = path.join(workspace, "apps", "cli", "dist", "main.js");
 const fixture = path.join(workspace, "fixtures", "context", "app");
 const smoke = process.argv.includes("--smoke");
 const serverScript = process.env.DUO_MCP_BENCHMARK_SERVER_SCRIPT;
@@ -37,6 +37,11 @@ const usage = (message) => {
   process.stderr.write(`mcp-benchmark: ${message}\n`);
   process.exit(2);
 };
+const cliIndex = process.argv.indexOf("--cli");
+if (cliIndex >= 0 && (process.argv[cliIndex + 1] === undefined || process.argv[cliIndex + 1].startsWith("--"))) {
+  usage("--cli requires a path to a built or packed duoctl entry");
+}
+const cli = path.resolve(workspace, cliIndex < 0 ? defaultCli : process.argv[cliIndex + 1]);
 const iterations = option("--iterations", smoke ? 1 : 10);
 const concurrency = option("--concurrency", smoke ? 2 : 8);
 const timeoutMs = option("--timeout-ms", 30_000);
@@ -264,7 +269,7 @@ try {
   result = {
     format: "duo.mcp-benchmark/1",
     environment: { platform: process.platform, arch: process.arch, node: process.version },
-    configuration: { iterations, concurrency, timeoutMs, ...(only === undefined ? {} : { scenario: only }), warmDefinition: "one unmeasured initialize and tools/list on the same fixture copy before the measured server start" },
+    configuration: { iterations, concurrency, timeoutMs, cli, ...(only === undefined ? {} : { scenario: only }), warmDefinition: "one unmeasured initialize and tools/list on the same fixture copy before the measured server start" },
     toolContract: { names: expectedNames, verified: true },
     scenarios,
   };

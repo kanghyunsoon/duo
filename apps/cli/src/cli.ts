@@ -7,26 +7,11 @@
  * --json prints one envelope { format: "duo.cli.<command>/1", command, ok, exitCode, result, diagnostics }.
  */
 import { parseArgs, type ParseArgsConfig } from "node:util";
-import { packageInfo as analyzer } from "@duo-director/analyzer";
-import { CLI_NAME, createDiagnostic, packageInfo as core, PRODUCT_NAME, SUPPORTED_SCHEMA_VERSIONS, type Diagnostic, type PackageInfo } from "@duo-director/core";
-import { appendRuntimeMetric, packageInfo as director } from "@duo-director/director";
-import { GRAPH_SCHEMA_VERSION, packageInfo as graph } from "@duo-director/graph";
-import { AGENT_IDS, isAgentId, NPX_LAUNCHER, packageInfo as integration, PATH_LAUNCHER } from "@duo-director/integration";
-import { contextCommand } from "./commands/context.js";
-import { decisionCommand } from "./commands/decision.js";
-import { doctorCommand } from "./commands/doctor.js";
-import { graphCommand } from "./commands/graph.js";
-import { indexCommand } from "./commands/index-command.js";
-import { initCommand } from "./commands/init.js";
-import { installCommand } from "./commands/install.js";
-import { mcpCommand } from "./commands/mcp.js";
-import { reviewCommand } from "./commands/review.js";
-import { setupCommand } from "./commands/setup.js";
-import { agentSetupSteps } from "./commands/setup-agents.js";
-import { uiCommand } from "./commands/ui.js";
-import { CliFailure, usage, type Env } from "./commands/shared.js";
-import { statsCommand } from "./commands/stats.js";
-import { statusCommand } from "./commands/status.js";
+import type { Diagnostic } from "@duo-director/core";
+import { CLI_NAME, PRODUCT_NAME } from "@duo-director/core/constants";
+import { createDiagnostic } from "@duo-director/core/diagnostics";
+import { CliFailure } from "./commands/failure.js";
+import type { Env } from "./commands/shared.js";
 import type { Io } from "./io.js";
 import { parseLocale, t } from "./messages.js";
 import { envelope, EXIT, failed, type Outcome } from "./output.js";
@@ -38,8 +23,6 @@ export const COMMANDS = ["setup", "init", "status", "doctor", "index", "context"
 const LATER: Readonly<Record<string, string>> = {};
 /** Commands that append runtime/metrics.jsonl. Read-only commands (status, doctor, trace, impact, stats) write nothing. */
 const METERED = new Set(["setup", "init", "index", "context", "review", "decision", "install"]);
-
-const WORKSPACE: readonly PackageInfo[] = [core, analyzer, graph, director, integration];
 
 type Options = NonNullable<ParseArgsConfig["options"]>;
 const GLOBAL: Options = {
@@ -105,6 +88,8 @@ function parse(argv: readonly string[]) {
 
 const str = (v: unknown) => (typeof v === "string" ? v : undefined);
 const bool = (v: unknown) => v === true;
+const usage = (command: string, message: string): Outcome =>
+  failed(command, EXIT.ERROR, [createDiagnostic("CLI_USAGE_INVALID", message)], [message]);
 
 async function dispatch(env: Env, command: string, positionals: readonly string[], v: Record<string, unknown>): Promise<Outcome> {
   const arg = positionals[1];
@@ -116,7 +101,14 @@ async function dispatch(env: Env, command: string, positionals: readonly string[
       const policy = str(v["baseline-policy"]);
       if (policy !== undefined && policy !== "head" && policy !== "abort") return usage(command, "--baseline-policy must be head or abort");
       const options = { repair: bool(v.repair), answersFromStdin: answers === "-", ...(policy === undefined ? {} : { baselinePolicy: policy as "head" | "abort" }) };
-      if (command === "init") return initCommand(env, options);
+      if (command === "init") {
+        const { initCommand } = await import("./commands/init.js");
+        return initCommand(env, options);
+      }
+      const [{ setupCommand }, { agentSetupSteps }, integration] = await Promise.all([
+        import("./commands/setup.js"), import("./commands/setup-agents.js"), import("@duo-director/integration/agents"),
+      ]);
+      const { AGENT_IDS, isAgentId, NPX_LAUNCHER, PATH_LAUNCHER } = integration;
       const named = (v.agent as string[] | undefined) ?? [];
       const unknown = named.find((a) => !isAgentId(a));
       if (unknown !== undefined) return usage("setup", `unknown agent '${unknown}' (--agent ${AGENT_IDS.join("|")})`);
@@ -125,15 +117,15 @@ async function dispatch(env: Env, command: string, positionals: readonly string[
       const agents = named.filter(isAgentId);
       return setupCommand(env, { ...options, agents, launcher: launcher === "npx" ? "npx" : "path" }, agentSetupSteps([...new Set(agents)], launcher === "npx" ? NPX_LAUNCHER : PATH_LAUNCHER));
     }
-    case "status": return statusCommand(env);
-    case "doctor": return doctorCommand(env);
-    case "index": return indexCommand(env, bool(v.full));
+    case "status": return (await import("./commands/status.js")).statusCommand(env);
+    case "doctor": return (await import("./commands/doctor.js")).doctorCommand(env);
+    case "index": return (await import("./commands/index-command.js")).indexCommand(env, bool(v.full));
     case "context": {
       const task = positionals.slice(1).join(" ").trim();
       if (task === "") return usage("context", "usage: duoctl context <task>");
       const budget = str(v.budget) === undefined ? undefined : Number(v.budget);
       if (budget !== undefined && !Number.isInteger(budget)) return usage("context", "--budget must be an integer");
-      return contextCommand(env, task, { ...(budget === undefined ? {} : { budget }), refresh: bool(v.refresh) });
+      return (await import("./commands/context.js")).contextCommand(env, task, { ...(budget === undefined ? {} : { budget }), refresh: bool(v.refresh) });
     }
     case "review": {
       const failOn = bool(v.strict) ? "warn" : str(v["fail-on"]);
@@ -141,7 +133,7 @@ async function dispatch(env: Env, command: string, positionals: readonly string[
       const budget = str(v.budget) === undefined ? undefined : Number(v.budget);
       if (budget !== undefined && !Number.isInteger(budget)) return usage("review", "--budget must be an integer");
       const from = str(v.from); const to = str(v.to); const files = str(v.files); const task = str(v.task);
-      return reviewCommand(env, {
+      return (await import("./commands/review.js")).reviewCommand(env, {
         staged: bool(v.staged), record: bool(v.record), refresh: bool(v.refresh), semantic: bool(v.semantic),
         ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }), ...(files === undefined ? {} : { files }), ...(task === undefined ? {} : { task }),
         ...(budget === undefined ? {} : { budget }), ...(failOn === undefined ? {} : { failOn }),
@@ -150,19 +142,19 @@ async function dispatch(env: Env, command: string, positionals: readonly string[
     case "trace":
     case "impact":
       if (arg === undefined) return usage(command, `usage: duoctl ${command} <node>`);
-      return graphCommand(env, command, arg, str(v.depth));
-    case "decision": return decisionCommand(env, arg, positionals[2], str(v.reason));
-    case "stats": return statsCommand(env, str(v.last));
-    case "install": return installCommand(env, arg, positionals[2], { ...(str(v.launcher) === undefined ? {} : { launcher: str(v.launcher) as string }), ...(v["with-skill"] === true ? { withSkill: true } : {}) });
+      return (await import("./commands/graph.js")).graphCommand(env, command, arg, str(v.depth));
+    case "decision": return (await import("./commands/decision.js")).decisionCommand(env, arg, positionals[2], str(v.reason));
+    case "stats": return (await import("./commands/stats.js")).statsCommand(env, str(v.last));
+    case "install": return (await import("./commands/install.js")).installCommand(env, arg, positionals[2], { ...(str(v.launcher) === undefined ? {} : { launcher: str(v.launcher) as string }), ...(v["with-skill"] === true ? { withSkill: true } : {}) });
     case "ui":
       if (env.json) return usage("ui", "ui serves a local web console; --json does not apply");
-      return uiCommand(env, { open: bool(v.open), ...(str(v.port) === undefined ? {} : { port: str(v.port) as string }) });
+      return (await import("./commands/ui.js")).uiCommand(env, { open: bool(v.open), ...(str(v.port) === undefined ? {} : { port: str(v.port) as string }) });
     case "mcp":
       // stdout is the MCP protocol: no JSON envelope, no human output on stdout.
       if (env.json) return usage("mcp", "mcp speaks the MCP protocol on stdout; --json does not apply");
       {
         const root = str(v.root); const rootFrom = str(v["root-from"]); const agent = str(v.agent);
-        return mcpCommand(env, { ...(root === undefined ? {} : { root }), ...(rootFrom === undefined ? {} : { rootFrom }), ...(agent === undefined ? {} : { agent }) });
+        return (await import("./commands/mcp.js")).mcpCommand(env, { ...(root === undefined ? {} : { root }), ...(rootFrom === undefined ? {} : { rootFrom }), ...(agent === undefined ? {} : { agent }) });
       }
     default: return failed(command, EXIT.ERROR, [], [t(env.locale, "not-implemented", { command, task: LATER[command] ?? "" })]);
   }
@@ -180,10 +172,16 @@ export async function run(argv: readonly string[], io: Io): Promise<number> {
   const v = parsed.values as Record<string, unknown>;
   const json = bool(v.json);
   if (bool(v.version)) {
-    io.out(json ? JSON.stringify({
-      name: CLI_NAME, version: VERSION, packages: WORKSPACE.map((p) => p.name),
-      graphSchemaVersion: GRAPH_SCHEMA_VERSION, projectSchemaVersions: SUPPORTED_SCHEMA_VERSIONS, node: process.version,
-    }) : `${CLI_NAME} ${VERSION}`);
+    if (!json) io.out(`${CLI_NAME} ${VERSION}`);
+    else {
+      const [analyzer, core, director, graph, integration] = await Promise.all([
+        import("@duo-director/analyzer"), import("@duo-director/core"), import("@duo-director/director"), import("@duo-director/graph"), import("@duo-director/integration"),
+      ]);
+      io.out(JSON.stringify({
+        name: CLI_NAME, version: VERSION, packages: [core, analyzer, graph, director, integration].map((pkg) => pkg.packageInfo.name),
+        graphSchemaVersion: graph.GRAPH_SCHEMA_VERSION, projectSchemaVersions: core.SUPPORTED_SCHEMA_VERSIONS, node: process.version,
+      }));
+    }
     return EXIT.OK;
   }
   if (command === undefined || bool(v.help)) {
@@ -203,12 +201,15 @@ export async function run(argv: readonly string[], io: Io): Promise<number> {
   try {
     outcome = await dispatch(env, command, parsed.positionals, v);
   } catch (error) {
+    // C202: commands load on dispatch. A command chunk that cannot be found is an incomplete installation, which bin.ts reports; it is not a usage error.
+    if ((error as NodeJS.ErrnoException).code === "ERR_MODULE_NOT_FOUND") throw error;
     const diagnostics = error instanceof CliFailure ? error.diagnostics : [createDiagnostic("CLI_USAGE_INVALID", (error as Error).message)];
     outcome = failed(command, EXIT.ERROR, diagnostics, diagnostics.map((d) => `${d.code}: ${d.message}`), null, { status: "failed" });
   }
   // Metrics are a separate, local observation: a failed write warns and never changes the result.
   const extra: Diagnostic[] = [];
   if (outcome.metric !== undefined && METERED.has(command)) {
+    const { appendRuntimeMetric } = await import("@duo-director/director");
     const written = await appendRuntimeMetric(env.root, {
       format: "duo.metric/1", command, exitCode: outcome.exitCode, durationMs: io.now().getTime() - started, at: io.now().toISOString(), ...outcome.metric,
     });

@@ -1,5 +1,5 @@
 /** duoctl trace <node> / duoctl impact <node> (T15): the shared Graph operations, rendered. Read-only. */
-import { projectGraphQuery } from "@duo-director/integration";
+import { projectGraphQuery } from "@duo-director/integration/operations";
 import { t } from "../messages.js";
 import { EXIT, failed, type Outcome } from "../output.js";
 import { operationFailure, usage, type Env } from "./shared.js";

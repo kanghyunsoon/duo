@@ -13,7 +13,7 @@
 import {
   AGENT_IDS, agentIntegrationStatus, applyAgentIntegration, inspectAgentIntegration, isAgentId, launcherDisplay, NPX_LAUNCHER, PATH_LAUNCHER, planAgentIntegration,
   planAgentRemoval, verifyAgentIntegration, type AgentId, type AgentIntegrationPlan, type AgentIntegrationVerification,
-} from "@duo-director/integration";
+} from "@duo-director/integration/agents";
 import { createDiagnostic } from "@duo-director/core";
 import { t } from "../messages.js";
 import { EXIT, failed, type Outcome } from "../output.js";

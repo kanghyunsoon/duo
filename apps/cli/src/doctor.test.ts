@@ -1,4 +1,4 @@
-import type { DoctorAction, DoctorCheck, DoctorCheckId, DoctorPayload } from "@duo-director/integration";
+import type { DoctorAction, DoctorCheck, DoctorCheckId, DoctorPayload } from "@duo-director/integration/operations";
 import { describe, expect, it } from "vitest";
 import { renderDoctor } from "./commands/doctor.js";
 

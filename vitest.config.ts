@@ -5,6 +5,8 @@ import { CONFORMANCE_FILES, DEFER_CONFORMANCE_ENV } from "./vitest.conformance-f
 
 // 테스트는 빌드 없이 소스를 직접 읽는다. @duo-director/* 이름을 각 패키지의 src/index.ts로 연결한다.
 const packages = ["core", "analyzer", "graph", "director", "integration", "ui"];
+const coreSurfaces = ["constants", "diagnostics"];
+const integrationSurfaces = ["agents", "http", "llm", "mcp", "operations"];
 
 // Distribution E2E (packed artifact, npm installs) runs separately: pnpm test:dist.
 // The real OpenAI smoke test is opt-in only: pnpm test:openai-smoke (never in CI).
@@ -33,7 +35,11 @@ const agentLaunchRun = agentLaunch.filter((file) => !(deferConformance && CONFOR
 export default defineConfig({
   resolve: {
     alias: Object.fromEntries(
-      packages.map((p) => [`@duo-director/${p}`, fileURLToPath(new URL(`./packages/${p}/src/index.ts`, import.meta.url))]),
+      [
+        ...coreSurfaces.map((surface) => [`@duo-director/core/${surface}`, fileURLToPath(new URL(`./packages/core/src/${surface}.ts`, import.meta.url))]),
+        ...integrationSurfaces.map((surface) => [`@duo-director/integration/${surface}`, fileURLToPath(new URL(`./packages/integration/src/${surface}/index.ts`, import.meta.url))]),
+        ...packages.map((p) => [`@duo-director/${p}`, fileURLToPath(new URL(`./packages/${p}/src/index.ts`, import.meta.url))]),
+      ],
     ),
   },
   test: {

@@ -4,15 +4,18 @@ import { describe, expect, it } from "vitest";
 
 describe("MCP benchmark smoke", () => {
   it("runs all scenarios and reports every tool", () => {
-    const stdout = execFileSync(process.execPath, [path.resolve("bench/mcp.mjs"), "--smoke"], {
+    const cli = path.resolve("apps/cli/dist/main.js");
+    const stdout = execFileSync(process.execPath, [path.resolve("bench/mcp.mjs"), "--smoke", "--cli", cli], {
       cwd: path.resolve("."), encoding: "utf8", windowsHide: true, timeout: 300_000,
     });
     const result = JSON.parse(stdout) as {
       format: string;
+      configuration: { cli: string };
       toolContract: { names: string[]; verified: boolean };
       scenarios: Record<string, { errorCount: number; latency: Record<string, unknown> }>;
     };
     expect(result.format).toBe("duo.mcp-benchmark/1");
+    expect(result.configuration.cli).toBe(cli);
     expect(result.toolContract).toMatchObject({ verified: true, names: expect.arrayContaining(["duo_get_status", "duo_propose_decision"]) });
     expect(Object.keys(result.scenarios).sort()).toEqual(["concurrent-cold", "concurrent-warm", "single-cold", "single-warm"]);
     for (const scenario of Object.values(result.scenarios)) {

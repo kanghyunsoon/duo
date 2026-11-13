@@ -5,6 +5,9 @@ import { openProjectGraphReader, withProjectGraphWriter, type GraphStore } from 
 import type { Io } from "../io.js";
 import { t, type Locale } from "../messages.js";
 import { EXIT, failed, type Outcome } from "../output.js";
+import { CliFailure } from "./failure.js";
+
+export { CliFailure } from "./failure.js";
 
 export interface Env {
   readonly root: string;
@@ -29,12 +32,6 @@ export async function withRegistry<T>(fn: (registry: AnalyzerRegistry) => Promis
     return await fn(created.value);
   } finally {
     created.value.dispose();
-  }
-}
-
-export class CliFailure extends Error {
-  constructor(readonly diagnostics: readonly Diagnostic[]) {
-    super(diagnostics.map((d) => `${d.code}: ${d.message}`).join("; "));
   }
 }
 

@@ -4,7 +4,7 @@
  */
 import { ambiguityRemediation, redactSecrets, renderContextMarkdown, renderGapQuestions, type SeedAmbiguity } from "@duo-director/director";
 import { indexRepository } from "@duo-director/graph";
-import { projectContext, withGraphWriter } from "@duo-director/integration";
+import { projectContext, withGraphWriter } from "@duo-director/integration/operations";
 import { t, type Locale } from "../messages.js";
 import { EXIT, failed, type Outcome } from "../output.js";
 import { diagLines, operationFailure, requireProject, withRegistry, type Env } from "./shared.js";

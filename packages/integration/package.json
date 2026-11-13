@@ -9,6 +9,31 @@
       "@duo-director/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./agents": {
+      "@duo-director/source": "./src/agents/index.ts",
+      "types": "./dist/agents/index.d.ts",
+      "default": "./dist/agents/index.js"
+    },
+    "./http": {
+      "@duo-director/source": "./src/http/index.ts",
+      "types": "./dist/http/index.d.ts",
+      "default": "./dist/http/index.js"
+    },
+    "./llm": {
+      "@duo-director/source": "./src/llm/index.ts",
+      "types": "./dist/llm/index.d.ts",
+      "default": "./dist/llm/index.js"
+    },
+    "./mcp": {
+      "@duo-director/source": "./src/mcp/index.ts",
+      "types": "./dist/mcp/index.d.ts",
+      "default": "./dist/mcp/index.js"
+    },
+    "./operations": {
+      "@duo-director/source": "./src/operations/index.ts",
+      "types": "./dist/operations/index.d.ts",
+      "default": "./dist/operations/index.js"
     }
   },
   "files": [

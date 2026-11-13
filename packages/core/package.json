@@ -9,6 +9,16 @@
       "@duo-director/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./constants": {
+      "@duo-director/source": "./src/constants.ts",
+      "types": "./dist/constants.d.ts",
+      "default": "./dist/constants.js"
+    },
+    "./diagnostics": {
+      "@duo-director/source": "./src/diagnostics.ts",
+      "types": "./dist/diagnostics.d.ts",
+      "default": "./dist/diagnostics.js"
     }
   },
   "files": [
