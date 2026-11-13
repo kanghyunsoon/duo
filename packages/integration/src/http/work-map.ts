@@ -96,6 +96,9 @@ export interface WorkTask {
   readonly worktreeId?: string;
   readonly identitySource?: "duo" | "manual" | "legacy";
   readonly startedAt?: string;
+  readonly changedFiles?: readonly RepoPath[];
+  readonly referencedFiles?: readonly RepoPath[];
+  readonly providedContext?: { readonly recordedAt: string; readonly items: readonly { readonly ref: string; readonly kind: string; readonly text: string }[] };
   readonly review?: { readonly digest: string; readonly verdict?: string; readonly claimCount: number; readonly observedAt: string };
   readonly updatedAt: string;
   readonly status: "active" | "disconnected" | "completed";
@@ -111,6 +114,9 @@ export interface WorkMapNode {
   readonly worktreeId?: string;
   readonly branch?: string;
   readonly targetRef?: string;
+  readonly changedFiles?: WorkTask["changedFiles"];
+  readonly referencedFiles?: WorkTask["referencedFiles"];
+  readonly providedContext?: WorkTask["providedContext"];
   readonly review?: WorkTask["review"];
   readonly source?: { readonly path: string; readonly startLine?: number };
 }
@@ -317,6 +323,9 @@ export async function projectWorkMap(root: string, selectedId: string | undefine
     ref: t.id, updatedAt: t.updatedAt, status: t.status, branch,
     ...(t.worktreeId === undefined ? {} : { worktreeId: t.worktreeId }),
     ...(t.targetRef === undefined ? {} : { targetRef: t.targetRef }),
+    ...(t.changedFiles === undefined ? {} : { changedFiles: t.changedFiles }),
+    ...(t.referencedFiles === undefined ? {} : { referencedFiles: t.referencedFiles }),
+    ...(t.providedContext === undefined ? {} : { providedContext: t.providedContext }),
     ...(t.review === undefined ? {} : { review: t.review }) }));
   const worktreeNode = `worktree:${currentWorktree}`;
   nodes.push({ id: worktreeNode, type: "worktree", label: `Worktree · ${branch}`, ref: currentWorktree, worktreeId: currentWorktree, branch });

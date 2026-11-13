@@ -67,7 +67,7 @@ describe("the packed artifact (npm pack is the oracle)", () => {
     const owner = (f: string) => tree.packages.some((p) => f.startsWith(`${p.path}/`));
     const own = files.filter((f) => !f.startsWith("node_modules/"));
     const bundled = files.filter((f) => f.startsWith("node_modules/"));
-    const grammar = /^dist\/grammars\/(tree-sitter-(typescript|tsx|javascript|java|c_sharp|cpp|python)\.wasm|LICENSE-tree-sitter-(typescript|javascript|java|c-sharp|cpp|python)|grammars\.json)$|^dist\/ui\/(index\.html|app\.js|app\.css)$/u;
+    const grammar = /^dist\/grammars\/(tree-sitter-(typescript|tsx|javascript|java|c_sharp|cpp|python)\.wasm|LICENSE-tree-sitter-(typescript|javascript|java|c-sharp|cpp|python)|grammars\.json)$|^dist\/ui\/(index\.html|app\.js|app\.css|PretendardVariable\.woff2)$/u;
     for (const f of own) expect(f, f).toMatch(/^(package\.json|README\.md|LICENSE|dist\/THIRD_PARTY_NOTICES\.md|dist\/runtime-tree\.json|dist\/duoctl\.js|dist\/cli-[A-Z0-9]+\.js)$/u.test(f) ? /./u : grammar);
     expect(files).toEqual(expect.arrayContaining(["dist/duoctl.js", "dist/grammars/grammars.json", ...["typescript", "tsx", "javascript", "java", "c_sharp", "cpp", "python"].map((g) => `dist/grammars/tree-sitter-${g}.wasm`)]));
     expect(files).not.toContain("npm-shrinkwrap.json"); // the release lock is a build input (H-65), not shipped
@@ -344,7 +344,7 @@ describe("global install (temporary npm prefix)", () => {
 
   it("duoctl ui (T18.1) from the installed package: bundled assets, loopback only, session cookie, API through the installed operations", async () => {
     const files = pack.files.map((f) => f.path);
-    expect(files).toEqual(expect.arrayContaining(["dist/ui/index.html", "dist/ui/app.js", "dist/ui/app.css"]));
+    expect(files).toEqual(expect.arrayContaining(["dist/ui/index.html", "dist/ui/app.js", "dist/ui/app.css", "dist/ui/PretendardVariable.woff2"]));
     const appJs = fs.readFileSync(path.join(pkgDir, "dist", "ui", "app.js"), "utf8");
     expect(appJs).not.toMatch(/https?:\/\/(?!127\.0\.0\.1|localhost)[a-z0-9.-]+\.(?:com|net|org|io|dev)\/[^"'\s]*\.(?:js|css|woff2?)/iu); // no CDN assets
     const p = project();
@@ -369,6 +369,10 @@ describe("global install (temporary npm prefix)", () => {
       expect(await page.text()).toContain('src="/assets/app.js"');
       expect(page.headers.get("content-security-policy")).toContain("default-src 'none'");
       expect((await fetch(new URL("/assets/app.js", url))).status).toBe(200);
+      const font = await fetch(new URL("/assets/PretendardVariable.woff2", url));
+      expect(font.status).toBe(200);
+      expect(font.headers.get("content-type")).toBe("font/woff2");
+      expect(Buffer.from(await font.arrayBuffer())).toEqual(fs.readFileSync(path.join(pkgDir, "dist", "ui", "PretendardVariable.woff2")));
       const overview = await (await fetch(new URL("/api/overview", url), { headers: { Cookie: cookie } })).json() as { format: string; data: { status: { index: { status: string }; llm: string } } };
       expect(overview).toMatchObject({ format: "duo.ui.overview/1", data: { status: { index: { status: "current" }, llm: "disabled" } } });
       const context = await (await fetch(new URL("/api/session", url), { headers: { Cookie: cookie } })).json() as { data: { csrf: string } };

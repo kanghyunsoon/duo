@@ -1,5 +1,35 @@
 /** Bundled UI messages; no network translation requests. */
 export const ko = {
+  "sidebar.expand": "사이드바 펼치기",
+  "sidebar.collapse": "사이드바 접기",
+
+  "integrated.analysis_files": "분석 파일 {{count}}개",
+  "integrated.provided_context": "에이전트에게 제공된 컨텍스트",
+  "integrated.context_notice": "세션에 전달된 정보입니다. 실제로 읽거나 사용한 기록과는 다릅니다.",
+  "integrated.no_context": "이 세션에 제공된 컨텍스트 기록이 없습니다.",
+  "integrated.recorded_at": "제공 시각 · {{at}}",
+
+  "session.graph": "세션의 변경·참조 파일 그래프",
+  "session.title": "세션 파일",
+  "session.caption": "세션에서 바꾼 파일과 참조한 파일을 확인하세요.",
+  "session.choose": "세션 선택",
+  "session.sessions": "세션",
+  "session.changed": "변경한 파일",
+  "session.referenced": "참조한 파일",
+  "session.no_sessions": "아직 기록된 세션이 없습니다.",
+  "session.no_changes": "기록된 변경 파일이 없습니다.",
+  "session.no_references": "참조 파일 기록이 없습니다.",
+  "session.partial": "일부 기록만 표시되고 있습니다.",
+
+  "design.local_workspace": "로컬 워크스페이스",
+  "design.details": "상세 보기",
+  "design.direction_caption": "프로젝트의 기준을 한눈에",
+  "design.overview_caption": "지금 확인할 것부터",
+  "design.requirements": "요구사항",
+  "design.decisions": "확정 결정",
+  "design.pending": "결정 대기",
+  "design.constraints": "제약 조건",
+
   "app.skip_to_content": "본문으로 건너뛰기",
   "app.duo": "DUO",
   "app.duo_project_direction_console": "DUO <c0>프로젝트 방향 콘솔</c0>",
@@ -215,7 +245,7 @@ export const ko = {
   "search.no_match": "검색 결과가 없습니다.",
   "search.review_records_are_listed_under_review_history": "리뷰 기록은 <c0>리뷰 이력</c0>에서 확인할 수 있습니다.",
   "work.current": "현재 작업",
-  "work.work_map": "작업 맵",
+  "work.work_map": "세션 파일",
   "work.follow_the_work_in_progress_and_the": "진행 중인 작업과 DUO가 연결한 파일, 테스트, 결정을 살펴보세요.",
   "work.agent": "에이전트 <c0/>",
   "work.work_name": "작업 이름 <c0/>",
@@ -262,7 +292,7 @@ export const ko = {
   "text.Overview": "개요",
   "text.Direction": "프로젝트 방향",
   "text.Pending decisions": "결정 대기",
-  "text.Work map": "작업 맵",
+  "text.Work map": "세션 파일",
   "text.Graph": "그래프",
   "text.Analysis coverage": "분석 범위",
   "text.Context": "컨텍스트",
@@ -417,5 +447,5 @@ export const ko = {
   "graph.empty_hint": "시작점으로 요구사항·결정 ID, 파일 경로 또는 심볼을 선택하세요. 탐색기는 전체 그래프 대신 제한된 주변 관계를 표시합니다.",
   "graph.edges_label": "그래프 연결",
   "graph.relations_label": "그래프 관계",
-  "work.stale_hint": "인덱싱 이후 저장소가 변경되었습니다. <c0>duoctl index</c0>를 실행해 관계를 갱신하세요."
+  "work.stale_hint": "인덱싱 이후 저장소가 변경되었습니다. <c0>duoctl index</c0>를 실행해 관계를 갱신하세요.",
 } as const;

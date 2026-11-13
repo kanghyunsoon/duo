@@ -24,7 +24,7 @@ it("recovers the real work map after a network interruption", async () => {
     const page = await context.newPage();
     await page.goto(server.launchUrl);
     await page.goto(server.origin + "/work");
-    await page.getByText("Add a work item to explore its DUO neighbourhood.").waitFor();
+    await page.getByText("No recorded sessions yet.").waitFor();
     const started = Date.now();
     await context.setOffline(true);
     await page.getByText(/Live connection interrupted/).waitFor({ timeout: 15000 });

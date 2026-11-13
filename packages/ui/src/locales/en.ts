@@ -1,5 +1,35 @@
 /** Bundled UI messages; no network translation requests. */
 export const en = {
+  "sidebar.expand": "Expand sidebar",
+  "sidebar.collapse": "Collapse sidebar",
+
+  "integrated.analysis_files": "{{count}} analyzed files",
+  "integrated.provided_context": "Context provided to the agent",
+  "integrated.context_notice": "Information supplied to this session. This does not establish that the agent read or used it.",
+  "integrated.no_context": "No provided context recorded for this session.",
+  "integrated.recorded_at": "Provided · {{at}}",
+
+  "session.graph": "Session changed and referenced files graph",
+  "session.title": "Session files",
+  "session.caption": "Files changed and referenced during each session.",
+  "session.choose": "Choose session",
+  "session.sessions": "Sessions",
+  "session.changed": "Changed files",
+  "session.referenced": "Referenced files",
+  "session.no_sessions": "No recorded sessions yet.",
+  "session.no_changes": "No recorded file changes.",
+  "session.no_references": "No file references recorded.",
+  "session.partial": "Only part of the recorded data is shown.",
+
+  "design.local_workspace": "Local workspace",
+  "design.details": "Details",
+  "design.direction_caption": "Your project, at a glance",
+  "design.overview_caption": "Focus on what matters now",
+  "design.requirements": "Requirements",
+  "design.decisions": "Confirmed decisions",
+  "design.pending": "Pending decisions",
+  "design.constraints": "Constraints",
+
   "app.skip_to_content": "Skip to content",
   "app.duo": "DUO",
   "app.duo_project_direction_console": "DUO <c0>Project Direction Console</c0>",
@@ -215,7 +245,7 @@ export const en = {
   "search.no_match": "No match.",
   "search.review_records_are_listed_under_review_history": "Review records are listed under <c0>Review history</c0>.",
   "work.current": "CURRENT",
-  "work.work_map": "Work map",
+  "work.work_map": "Session files",
   "work.follow_the_work_in_progress_and_the": "Follow the work in progress and the files, tests, and decisions connected by DUO.",
   "work.agent": "Agent <c0/>",
   "work.work_name": "Work name <c0/>",
@@ -262,7 +292,7 @@ export const en = {
   "text.Overview": "Overview",
   "text.Direction": "Direction",
   "text.Pending decisions": "Pending decisions",
-  "text.Work map": "Work map",
+  "text.Work map": "Session files",
   "text.Graph": "Graph",
   "text.Analysis coverage": "Analysis coverage",
   "text.Context": "Context",
@@ -417,5 +447,5 @@ export const en = {
   "graph.empty_hint": "Choose a seed: a Requirement or Decision ID, a file path or a symbol. The explorer shows a bounded neighbourhood, never the whole graph.",
   "graph.edges_label": "Graph edges",
   "graph.relations_label": "Graph relations",
-  "work.stale_hint": "Repository changed since the DUO index. Run <c0>duoctl index</c0> to refresh the relationships."
+  "work.stale_hint": "Repository changed since the DUO index. Run <c0>duoctl index</c0> to refresh the relationships.",
 } as const;
