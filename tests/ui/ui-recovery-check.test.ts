@@ -14,6 +14,7 @@ beforeAll(async () => {
     catch { browser = await chromium.launch({ channel: "msedge", headless: true }); }
   }
   page = await browser.newPage();
+  await page.addInitScript(() => window.localStorage.setItem("duo.ui.language", "en"));
   await page.route("http://duo-test.local/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.startsWith("/api/")) {

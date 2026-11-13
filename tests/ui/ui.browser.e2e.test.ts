@@ -152,6 +152,7 @@ describe("DUO UI in a browser (T18.1)", () => {
     const server = await startDuoUiServer({ root: r.root, version: "e2e", registry, llm: new LLMProviderPool({}) });
     servers.push(server);
     const context = await (browser as Browser).newContext({ viewport: { width: 320, height: 800 }, colorScheme: "light" });
+    await context.addInitScript(() => window.localStorage.setItem("duo.ui.language", "en"));
     const page = await context.newPage();
     await page.goto(server.launchUrl);
     const routes = ["/overview", "/direction", "/decisions", "/work", "/graph?node=RPT-01", "/coverage", "/context", "/review", "/reviews", "/search?q=RPT-01", "/entity/RPT-01", `/reviews/${reviewId}`];
