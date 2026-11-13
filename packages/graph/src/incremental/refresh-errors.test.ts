@@ -46,7 +46,7 @@ it("holds the lock without a journal file next to it (#148 review)", MAKE_REPO_B
   const lock = fs.lstatSync(path.join(repo.root, INDEX_WRITE_LOCK_PATH));
   expect({ size: lock.size, nlink: lock.nlink }).toEqual({ size: 0, nlink: 1 });
 });
-it("stops waiting for the lock when the caller cancels, and runs nothing (#172)", async () => {
+it("stops waiting for the lock when the caller cancels, and runs nothing (#172)", MAKE_REPO_BUDGET, async () => {
   const repo = makeRepo(temps, { ".duo-project/project.yaml": "schema_version: 1\nname: cancel\n", "src/a.ts": "export const a = 1;\n" });
   let release!: () => void;
   const holder = withIndexWriteLock(repo.root, () => new Promise<void>((resolve) => { release = resolve; }));
