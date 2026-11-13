@@ -1,0 +1,51 @@
+name: concurrency-oracle
+
+# Optional, report-only check for #215: the concurrency oracle in bench/concurrency (node:test, not part of
+# pnpm test). It is not a required status check (the next-integration ruleset requires only the three verify jobs),
+# so a failure here is a signal for review, not a merge gate. Promotion to a required check is a separate decision.
+# workflow_dispatch alone would not work: it only runs workflows on the default branch (main).
+on:
+  pull_request:
+    paths:
+      - "packages/*/src/**"
+      - "bench/concurrency/**"
+      - ".github/workflows/concurrency-oracle.yml"
+  push:
+    branches: [next]
+    paths:
+      - "packages/*/src/**"
+      - "bench/concurrency/**"
+      - ".github/workflows/concurrency-oracle.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: concurrency-oracle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  oracle:
+    name: concurrency-oracle (${{ matrix.os }}, node 24)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The oracle imports the built @duo-director/* packages.
+      - run: pnpm build
+      # Scenarios C1–C6b with assertions; a failing scenario fails this job.
+      - name: concurrency oracle tests (C1–C6b)
+        run: node --test bench/concurrency/oracle.test.ts
+      # The classification report; exits 1 when any scenario is a silent inconsistency.
+      - name: concurrency report
+        run: node bench/concurrency/run.mjs
