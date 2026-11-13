@@ -12,13 +12,13 @@ export function initialLanguage(storage?: Pick<Storage, "getItem">): Language {
     const saved = storage?.getItem(LANGUAGE_STORAGE_KEY);
     if (saved === "ko" || saved === "en") return saved;
   } catch { /* Storage can be disabled; translation must still work. */ }
-  return "ko";
+  return "en";
 }
 
 function browserLanguage(): Language {
   if (typeof window === "undefined") return "en";
   try { return initialLanguage(window.localStorage); }
-  catch { return "ko"; }
+  catch { return "en"; }
 }
 
 export const i18n = i18next.createInstance();

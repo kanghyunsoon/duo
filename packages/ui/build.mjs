@@ -54,16 +54,16 @@ const licenses = [...packages.values()].sort((a, b) => (a.name < b.name ? -1 : 1
 fs.writeFileSync(path.join(here, "dist", "licenses.json"), `${JSON.stringify({ format: "duo.ui-licenses/1", packages: licenses }, null, 2)}\n`);
 fs.writeFileSync(path.join(out, "index.html"), [
   "<!doctype html>",
-  '<html lang="ko">',
+  '<html lang="en">',
   "<head>",
   '<meta charset="utf-8">',
   '<meta name="viewport" content="width=device-width, initial-scale=1">',
-  "<title>DUO — 프로젝트 방향 콘솔</title>",
+  "<title>DUO — Project Direction</title>",
   '<link rel="icon" href="data:,">',
   '<link rel="stylesheet" href="/assets/app.css">',
   '<script type="module" src="/assets/app.js"></script>',
   "</head>",
-  '<body><div id="root"></div><noscript>DUO UI를 사용하려면 JavaScript를 활성화하세요. The DUO UI needs JavaScript.</noscript></body>',
+  '<body><div id="root"></div><noscript>The DUO UI needs JavaScript.</noscript></body>',
   "</html>",
   "",
 ].join("\n"));
