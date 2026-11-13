@@ -13,6 +13,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { existingProject, type Project } from "../cli/support.js";
+import { startLocalNpmRegistry } from "./local-registry.js";
 import { codexEntry, compareInstalledTree, dirSize, formatNpmFailure, installedPackages, IS_WIN, isolatedEnv, npm, packReport, recordMetric, REPO, runOnPath, which, type PackReport, type RuntimeTree } from "./support.js";
 
 const temps: string[] = [];
@@ -46,15 +47,23 @@ async function spawnConfigured(entry: { command: string; args: readonly string[]
   return client;
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   pack = packReport();
   prefix = tmp("duo-prefix-");
-  const t = performance.now();
-  const r = npm(["install", "-g", "--prefix", prefix, pack.tarball, "--no-audit", "--no-fund", "--loglevel=error"], prefix, isolatedEnv([]));
-  const elapsedMs = Math.round(performance.now() - t);
-  // #37: the global install of the same tarball, to compare with the project-local install phases.
-  console.log(`global install (ms): ${elapsedMs}`);
-  if (r.status !== 0) throw new Error(formatNpmFailure("npm install -g", r, elapsedMs));
+  const registry = await startLocalNpmRegistry({ tarballPath: pack.tarball });
+  try {
+    const t = performance.now();
+    const r = npm(["install", "-g", "--prefix", prefix, registry.packageSpec, `--registry=${registry.url}`, "--no-audit", "--no-fund", "--loglevel=error"], prefix, isolatedEnv([]));
+    const elapsedMs = Math.round(performance.now() - t);
+    // #37: the global install via the throwaway local registry, to compare with the project-local tarball install phases.
+    console.log(`global install (ms): ${elapsedMs}`);
+    if (r.status !== 0) throw new Error(formatNpmFailure("npm install -g", r, elapsedMs));
+    const pkgRequests = registry.requests.filter((q) => q.url !== "/npm");
+    expect(pkgRequests.length, JSON.stringify(registry.requests)).toBeGreaterThanOrEqual(1);
+    expect(pkgRequests.every((q) => q.statusCode === 200), JSON.stringify(registry.requests)).toBe(true);
+  } finally {
+    await registry.close();
+  }
   bin = IS_WIN ? prefix : path.join(prefix, "bin");
   pkgDir = path.join(prefix, ...(IS_WIN ? [] : ["lib"]), "node_modules", "@duo-director", "cli");
   env = isolatedEnv([bin]);
