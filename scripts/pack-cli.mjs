@@ -134,7 +134,7 @@ fs.writeFileSync(path.join(STAGE, "dist", "grammars", "grammars.json"), `${JSON.
 
 // The local UI (T18.1): the built static assets next to the bundle (dist/ui/), where the server looks first.
 // React is inside app.js; the package gains no runtime dependency. No source maps.
-const UI_ASSETS = ["index.html", "app.js", "app.css"];
+const UI_ASSETS = ["index.html", "app.js", "app.css", "PretendardVariable.woff2"];
 const uiBuilt = path.join(ROOT, "packages", "ui", "dist", "app");
 fs.mkdirSync(path.join(STAGE, "dist", "ui"), { recursive: true });
 for (const f of UI_ASSETS) {

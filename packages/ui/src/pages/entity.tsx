@@ -2,7 +2,6 @@
 import { t } from "../i18n.js";
 import { Trans } from "react-i18next";
 import { Empty, ErrorBox, Label, Loading, Loc, Page, Section, useApi } from "../components.js";
-import { Link } from "../router.js";
 import type { GraphPayload, Location } from "../types.js";
 import { DecisionLabel } from "./direction.js";
 
@@ -34,7 +33,6 @@ function Body(props: { readonly e: EntityData }) {
           {(e.trace.edges ?? []).length === 0 ? <Empty>{t("entity.no_recorded_relation")}</Empty> : (
             <ul>{e.trace.edges?.map((x) => <li key={`${x.from}${x.type}${x.to}`}><code>{x.from}</code> {x.type} <code>{x.to}</code></li>)}</ul>
           )}
-          <p><Link to={`/graph?node=${encodeURIComponent(e.id)}`}>{t("entity.explore_in_the_graph")}</Link></p>
         </Section>
       )}
     </>

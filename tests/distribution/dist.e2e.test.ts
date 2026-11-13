@@ -344,7 +344,7 @@ describe("global install (temporary npm prefix)", () => {
 
   it("duoctl ui (T18.1) from the installed package: bundled assets, loopback only, session cookie, API through the installed operations", async () => {
     const files = pack.files.map((f) => f.path);
-    expect(files).toEqual(expect.arrayContaining(["dist/ui/index.html", "dist/ui/app.js", "dist/ui/app.css"]));
+    expect(files).toEqual(expect.arrayContaining(["dist/ui/index.html", "dist/ui/app.js", "dist/ui/app.css", "dist/ui/PretendardVariable.woff2"]));
     const appJs = fs.readFileSync(path.join(pkgDir, "dist", "ui", "app.js"), "utf8");
     expect(appJs).not.toMatch(/https?:\/\/(?!127\.0\.0\.1|localhost)[a-z0-9.-]+\.(?:com|net|org|io|dev)\/[^"'\s]*\.(?:js|css|woff2?)/iu); // no CDN assets
     const p = project();

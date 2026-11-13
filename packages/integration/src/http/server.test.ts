@@ -323,7 +323,10 @@ describe("session and transport security (T18.1)", () => {
     const js = await get("/assets/app.js");
     expect(js.status).toBe(200);
     expect(js.headers["content-type"]).toMatch(/text\/javascript/u);
-    for (const r of [page, js, await get("/api/overview")]) {
+    const font = await get("/assets/PretendardVariable.woff2");
+    expect(font.status).toBe(200);
+    expect(font.headers["content-type"]).toBe("font/woff2");
+    for (const r of [page, js, font, await get("/api/overview")]) {
       expect(r.headers["content-security-policy"]).toBe(CONTENT_SECURITY_POLICY);
       expect(r.headers["access-control-allow-origin"]).toBeUndefined();
       expect(r.headers["x-content-type-options"]).toBe("nosniff");
