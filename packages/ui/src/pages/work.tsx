@@ -1,4 +1,6 @@
 /** Bounded work map over DUO's existing graph. The JSON is a projection, never source truth. */
+import { i18n, t } from "../i18n.js";
+import { Trans, useTranslation } from "react-i18next";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Background, BackgroundVariant, BaseEdge, Controls, getBezierPath, MiniMap, Position, ReactFlow, useInternalNode, useReactFlow,
   type Edge, type EdgeProps, type Node } from "@xyflow/react";
@@ -96,7 +98,7 @@ function nodeTitle(n: WorkNode): string {
 }
 
 function nodeSubtitle(n: WorkNode): string | undefined {
-  if (n.type === "task") return n.status === "disconnected" ? "Session disconnected" : n.status === "completed" ? "Completed" : "Working now";
+  if (n.type === "task") return n.status === "disconnected" ? t("text.Session disconnected") : n.status === "completed" ? t("text.Completed") : t("text.Working now");
   if (n.type === "worktree") return n.branch;
   const path = n.source?.path;
   if (path === undefined) return n.type;
@@ -164,7 +166,7 @@ function placement(nodes: readonly WorkNode[], edges: readonly WorkEdge[], selec
       ariaRole: "button", domAttributes: { "aria-pressed": false },
       style: { width: n.type === "task" ? 270 : 248 },
       data: { label: <div className="work-node-body" title={n.label}>
-        <div className="work-node-top"><span className="work-node-dot" /><span>{kind === "task" ? "AGENT WORK" : kind.toUpperCase()}</span>{active ? <span className="work-node-live">CURRENT</span> : null}</div>
+        <div className="work-node-top"><span className="work-node-dot" /><span>{kind === "task" ? t("text.AGENT WORK") : kind.toUpperCase()}</span>{active ? <span className="work-node-live">{t("work.current")}</span> : null}</div>
         <div className="work-node-title">{nodeTitle(n)}</div>
         {nodeSubtitle(n) === undefined ? null : <div className="work-node-subtitle">{nodeSubtitle(n)}</div>}
       </div> },
@@ -173,6 +175,8 @@ function placement(nodes: readonly WorkNode[], edges: readonly WorkEdge[], selec
 }
 
 export function WorkPage() {
+  const { i18n: translation } = useTranslation();
+  const language = translation.resolvedLanguage;
   const [selectedTask, setSelectedTask] = useState<string | undefined>();
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectionTouched, setSelectionTouched] = useState(false);
@@ -280,7 +284,7 @@ export function WorkPage() {
   if (selected !== lastFocus.current) { viewport.current = undefined; lastFocus.current = selected; }
   const visibleNodes = useMemo(() => [...new Map([...(map?.nodes ?? []), ...expanded.nodes].map((n) => [n.id, n])).values()], [map, expanded]);
   const visibleEdges = useMemo(() => [...new Map([...(map?.edges ?? []), ...expanded.edges].map((e) => [`${e.from}:${e.type}:${e.to}`, e])).values()], [map, expanded]);
-  const layout = useMemo(() => placement(visibleNodes, visibleEdges, selected, draggedPositions.current), [visibleNodes, visibleEdges, selected]);
+  const layout = useMemo(() => placement(visibleNodes, visibleEdges, selected, draggedPositions.current), [visibleNodes, visibleEdges, selected, language]);
   const preferredNodeId = lastActivatedNode.current;
   const selectedNodeId = preferredNodeId !== undefined && selectedNodeIds.includes(preferredNodeId)
     ? preferredNodeId
@@ -324,7 +328,7 @@ export function WorkPage() {
   const focusPosition = layout.nodes.find((node) => node.id === `task:${selected}`)?.position;
   const initialViewport = viewport.current ?? { x: 90 - (focusPosition?.x ?? 32) * 0.7,
     y: 180 - (focusPosition?.y ?? 32) * 0.7, zoom: 0.7 };
-  const graphKey = `${map?.revision ?? "loading"}:${selected ?? ""}:${expanded.nodes.map((n) => n.id).join(",")}:${expanded.edges.map((e) => `${e.from}:${e.type}:${e.to}`).join(",")}`;
+  const graphKey = `${language}:${map?.revision ?? "loading"}:${selected ?? ""}:${expanded.nodes.map((n) => n.id).join(",")}:${expanded.edges.map((e) => `${e.from}:${e.type}:${e.to}`).join(",")}`;
   const edges = useMemo<Edge[]>(() => visibleEdges.map((e, i) => {
     const tree = layout.treeEdges.has(edgeKey(e));
     return ({
@@ -344,31 +348,31 @@ export function WorkPage() {
     finally { setSaving(false); }
   }
 
-  return <div className="work-page"><Page title="Work map" onRefresh={reload}>
-    <p className="work-intro">Follow the work in progress and the files, tests, and decisions connected by DUO.</p>
-    {verificationFailed ? <p role="status" className="box box-warn">Unable to check for updates. The displayed information may be out of date. Use Refresh to try again.</p>
-      : reconnecting ? <p role="status" className="box box-warn">Live connection interrupted. Reconnecting; updates are still checked periodically.</p> : null}
+  return <div className="work-page"><Page title={t("work.work_map")} onRefresh={reload}>
+    <p className="work-intro">{t("work.follow_the_work_in_progress_and_the")}</p>
+    {verificationFailed ? <p role="status" className="box box-warn">{t("text.Unable to check for updates. The displayed information may be out of date. Use Refresh to try again.")}</p>
+      : reconnecting ? <p role="status" className="box box-warn">{t("text.Live connection interrupted. Reconnecting; updates are still checked periodically.")}</p> : null}
     <form className="form work-form" onSubmit={(e) => { void add(e); }}>
-      <label>Agent <input value={agent} onChange={(e) => setAgent(e.target.value)} maxLength={80} required /></label>
-      <label>Work name <input value={name} onChange={(e) => setName(e.target.value)} maxLength={200} required size={30} /></label>
-      <label>DUO Issue ID (optional) <input value={issueId} onChange={(e) => setIssueId(e.target.value)} placeholder="AUTH-7" size={14} /></label>
-      <button type="submit" disabled={saving}>Add work</button>
+      <label>{t("form.agent")} <input value={agent} onChange={(e) => setAgent(e.target.value)} maxLength={80} required /></label>
+      <label>{t("form.work_name")} <input value={name} onChange={(e) => setName(e.target.value)} maxLength={200} required size={30} /></label>
+      <label>{t("form.issue_id")} <input value={issueId} onChange={(e) => setIssueId(e.target.value)} placeholder="AUTH-7" size={14} /></label>
+      <button type="submit" disabled={saving}>{t("work.add_work")}</button>
     </form>
     {saveError === undefined ? null : <p role="alert" className="box box-error">{saveError}</p>}
     {load.state === "loading" ? <Loading /> : load.state === "error" ? <ErrorBox error={load.error} /> : !map?.nodes.some((n) => n.type === "task")
-      ? <Empty>Add a work item to explore its DUO neighbourhood.</Empty> : <>
+      ? <Empty>{t("work.add_a_work_item_to_explore_its")}</Empty> : <>
         <div className="work-summary" aria-live="polite">
-          <span><strong>{taskCount}</strong> work items</span><span><strong>{contextCount}</strong> context nodes</span><span><strong>{visibleEdges.length}</strong> links</span>
-          <span className={`work-index ${map?.indexStatus === "current" ? "work-index--current" : ""}`}>Index {map?.indexStatus}</span>
-          {map?.truncated || expanded.truncated ? <span>Some relations omitted</span> : null}
+          <span><Trans i18nKey="work.work_items" components={{ c0: <strong />, v1: <>{String((taskCount) ?? "")}</> }} /></span><span><Trans i18nKey="work.context_nodes" components={{ c0: <strong />, v1: <>{String((contextCount) ?? "")}</> }} /></span><span><Trans i18nKey="work.links" components={{ c0: <strong />, v1: <>{String((visibleEdges.length) ?? "")}</> }} /></span>
+          <span className={`work-index ${map?.indexStatus === "current" ? "work-index--current" : ""}`}><Trans i18nKey="work.index" components={{ v0: <>{map?.indexStatus}</> }} /></span>
+          {map?.truncated || expanded.truncated ? <span>{t("work.some_relations_omitted")}</span> : null}
         </div>
-        {map?.indexStatus === "current" ? null : <p className="box box-warn">Repository changed since the DUO index. Run <code>duoctl index</code> to refresh the relationships.</p>}
+        {map?.indexStatus === "current" ? null : <p className="box box-warn"><Trans i18nKey="work.stale_hint" components={{ c0: <code /> }} /></p>}
         <div className="work-layout">
           <div className="work-graph-panel">
-            <div className="work-graph-head"><div><strong>Relationship map</strong><p>Selected work is the tree root. Drag nodes to arrange the map.</p></div>
-              <div className="work-legend"><span className="work-legend-task">Work</span><span className="work-legend-document">Document</span><span className="work-legend-file">Code</span><span className="work-legend-test">Test</span></div>
+            <div className="work-graph-head"><div><strong>{t("work.relationship_map")}</strong><p>{t("work.selected_work_is_the_tree_root_drag")}</p></div>
+              <div className="work-legend"><span className="work-legend-task">{t("work.work")}</span><span className="work-legend-document">{t("work.document")}</span><span className="work-legend-file">{t("work.code")}</span><span className="work-legend-test">{t("work.test")}</span></div>
             </div>
-            <div className="work-canvas" role="region" aria-label="Work and DUO relationship graph"
+            <div className="work-canvas" role="region" aria-label={t("work.work_and_duo_relationship_graph")}
               onKeyDownCapture={(event) => {
                 const target = event.target;
                 const node = target instanceof Element ? target.closest<HTMLElement>(".react-flow__node") : null;
@@ -377,6 +381,15 @@ export function WorkPage() {
                 selectNode(node.dataset.id, event.shiftKey || event.ctrlKey || event.metaKey);
               }}>
             <ReactFlow key={graphKey} defaultNodes={layout.nodes} defaultEdges={edges} edgeTypes={edgeTypes}
+              ariaLabelConfig={{
+                "controls.ariaLabel": t("flow.controls"), "controls.zoomIn.ariaLabel": t("flow.zoom_in"),
+                "controls.zoomOut.ariaLabel": t("flow.zoom_out"), "controls.fitView.ariaLabel": t("flow.fit_view"),
+                "controls.interactive.ariaLabel": t("flow.interactive"), "minimap.ariaLabel": t("flow.minimap"),
+                "handle.ariaLabel": t("flow.handle"), "node.a11yDescription.default": t("flow.node_help"),
+                "node.a11yDescription.keyboardDisabled": t("flow.node_keyboard_help"),
+                "edge.a11yDescription.default": t("flow.edge_help"),
+                "node.a11yDescription.ariaLiveMessage": ({ direction, x, y }) => t("flow.moved", { direction: t(`flow.${direction}`), x, y }),
+              }}
               fitView={visibleNodes.length <= 12} defaultViewport={initialViewport}
               fitViewOptions={{ padding: 0.16, maxZoom: 0.9 }} minZoom={0.08} maxZoom={1.5} nodesConnectable={false}
               zoomOnScroll={false} preventScrolling={false}
@@ -392,32 +405,30 @@ export function WorkPage() {
             </ReactFlow>
             </div>
           </div>
-          <aside className="work-detail" aria-label="Selected node detail">
-            {detail === undefined ? <p className="muted">Select a node to inspect its source and links.</p> : <>
-              <div className="work-detail-kicker">SELECTED {nodeKind(detail).toUpperCase()}</div>
+          <aside className="work-detail" aria-label={t("work.selected_node_detail")}>
+            {detail === undefined ? <p className="muted">{t("work.select_a_node_to_inspect_its_source")}</p> : <>
+              <div className="work-detail-kicker"><Trans i18nKey="work.selected" components={{ v0: <>{nodeKind(detail).toUpperCase()}</> }} /></div>
               <h2>{detail.label}</h2>
               <div className="work-detail-meta">
                 {detail.status === undefined ? null : <span>{detail.status}</span>}
-                {detail.updatedAt === undefined ? null : <span>Observed {new Date(detail.updatedAt).toLocaleString()}</span>}
-                {detail.branch === undefined ? null : <span>Branch {detail.branch}</span>}
+                {detail.updatedAt === undefined ? null : <span><Trans i18nKey="work.observed" components={{ v0: <>{new Date(detail.updatedAt).toLocaleString(i18n.resolvedLanguage === "ko" ? "ko-KR" : "en-US")}</> }} /></span>}
+                {detail.branch === undefined ? null : <span><Trans i18nKey="work.branch" components={{ v0: <>{detail.branch}</> }} /></span>}
               </div>
-              {detail.worktreeId === undefined ? null : <p className="work-detail-path">Worktree <code>{detail.worktreeId}</code></p>}
-              {detail.targetRef === undefined ? null : <p className="work-detail-path">Target <Link to={`/entity/${encodeURIComponent(detail.targetRef)}`}>{detail.targetRef}</Link></p>}
-              {detail.review === undefined ? null : <p className="work-detail-path">Review {detail.review.verdict ?? "unrated"} · {detail.review.claimCount} claims · <code>{detail.review.digest}</code></p>}
-              {detail.source === undefined ? null : <p className="work-detail-path">Source <code>{detail.source.path}{detail.source.startLine === undefined ? "" : `:${detail.source.startLine}`}</code></p>}
-              {detail.ref === undefined || detail.type === "task" ? null : <p><Link to={`/entity/${encodeURIComponent(detail.ref)}`}>Open DUO detail →</Link></p>}
-              <h3>Connections <span>{connections.length}</span></h3>
+              {detail.worktreeId === undefined ? null : <p className="work-detail-path"><Trans i18nKey="work.worktree" components={{ c0: <code />, v1: <>{detail.worktreeId}</> }} /></p>}
+              {detail.targetRef === undefined ? null : <p className="work-detail-path"><Trans i18nKey="work.target" components={{ c0: <Link to={`/entity/${encodeURIComponent(detail.targetRef)}`} children={null} />, v1: <>{detail.targetRef}</> }} /></p>}
+              {detail.review === undefined ? null : <p className="work-detail-path"><Trans i18nKey="work.review_claims" components={{ v0: <>{detail.review.verdict ?? t("text.unrated")}</>, v1: <>{String((detail.review.claimCount) ?? "")}</>, c2: <code />, v3: <>{detail.review.digest}</> }} /></p>}
+              {detail.source === undefined ? null : <p className="work-detail-path"><Trans i18nKey="work.source" components={{ c0: <code />, v1: <>{detail.source.path}</>, v2: <>{detail.source.startLine === undefined ? "" : `:${detail.source.startLine}`}</> }} /></p>}
+              {detail.ref === undefined || detail.type === "task" ? null : <p><Link to={`/entity/${encodeURIComponent(detail.ref)}`}>{t("work.open_duo_detail")}</Link></p>}
+              <h3><Trans i18nKey="work.connections" components={{ c0: <span />, v1: <>{String((connections.length) ?? "")}</> }} /></h3>
               <ul className="work-connections">{connections.map((e, i) => {
                 const other = visibleNodes.find((n) => n.id === (e.from === detail.id ? e.to : e.from));
                 return <li key={i}><button className="work-connection" type="button" onClick={() => {
                   if (other === undefined) return;
                   selectNode(other.id);
-                }}><span>{e.type}</span><strong>{other?.label ?? "Unknown node"}</strong></button></li>;
+                }}><span>{e.type}</span><strong>{other?.label ?? t("text.Unknown node")}</strong></button></li>;
               })}</ul>
               {detail.type === "task" ? null : <div className="actions">
-                <label>Depth <select value={expandDepth} onChange={(e) => setExpandDepth(Number(e.target.value))}>
-                  {[1, 2, 3].map((depth) => <option key={depth} value={depth}>{depth}</option>)}
-                </select></label>
+                <label><Trans i18nKey="work.depth" components={{ c0: <select value={expandDepth} onChange={(e) => setExpandDepth(Number(e.target.value))} />, v1: <>{[1, 2, 3].map((depth) => <option key={depth} value={depth}>{depth}</option>)}</> }} /></label>
                 <button type="button" className="secondary" onClick={() => {
                   void api.get<{ nodes: WorkNode[]; edges: WorkEdge[]; truncated: boolean }>(`/api/work-expand?${q({ node: detail.id, depth: expandDepth })}`)
                     .then((r) => setExpanded((old) => {
@@ -436,7 +447,7 @@ export function WorkPage() {
                         truncated: old.truncated || r.data.truncated || capped };
                     }))
                     .catch((error: unknown) => setSaveError(error instanceof Error ? error.message : String(error)));
-                }}>Expand neighbours</button>
+                }}>{t("work.expand_neighbours")}</button>
               </div>}
               {detail.type !== "task" ? null : <button className="secondary" type="button" onClick={() => {
                 const id = detail.id.slice(5);
@@ -444,7 +455,7 @@ export function WorkPage() {
                   clearNodeSelection();
                   if (selectedTask === undefined) reload(); else setSelectedTask(undefined);
                 });
-              }}>Mark completed</button>}
+              }}>{t("work.mark_completed")}</button>}
             </>}
           </aside>
         </div>

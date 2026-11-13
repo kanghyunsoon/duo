@@ -1,4 +1,6 @@
-import { Empty, ErrorBox, Label, Loading, Loc, Page, Section, TableScroll, useApi } from "../components.js";
+import { t } from "../i18n.js";
+import { Trans } from "react-i18next";
+import { Empty, ErrorBox, Label, Loading, Loc, Page, TableScroll, Section, useApi } from "../components.js";
 import { entityPath, Link } from "../router.js";
 import type { DecisionItem, Direction } from "../types.js";
 
@@ -8,13 +10,13 @@ export function DecisionLabel(props: { readonly label: DecisionItem["label"] }) 
 }
 
 function Decisions(props: { readonly items: readonly DecisionItem[] }) {
-  if (props.items.length === 0) return <Empty>None.</Empty>;
+  if (props.items.length === 0) return <Empty>{t("direction.none")}</Empty>;
   return (
     <TableScroll label="Decisions"><table>
-      <thead><tr><th scope="col">ID</th><th scope="col">State</th><th scope="col">Decision</th><th scope="col">Enforcement</th><th scope="col">Source</th></tr></thead>
+      <thead><tr><th scope="col">{t("direction.id")}</th><th scope="col">{t("direction.state")}</th><th scope="col">{t("direction.decision")}</th><th scope="col">{t("direction.enforcement")}</th><th scope="col">{t("direction.source")}</th></tr></thead>
       <tbody>{props.items.map((d) => (
         <tr key={d.id}>
-          <td><Link to={entityPath(d.id)}>{d.id}</Link></td><td><DecisionLabel label={d.label} />{d.supersededBy === null ? null : <span className="muted"> by {d.supersededBy}</span>}</td>
+          <td><Link to={entityPath(d.id)}>{d.id}</Link></td><td><DecisionLabel label={d.label} />{d.supersededBy === null ? null : <span className="muted"><Trans i18nKey="direction.by" components={{ v0: <>{d.supersededBy}</> }} /></span>}</td>
           <td><strong>{d.title}</strong><br /><span className="muted">{d.question}</span> = {d.answer}</td><td>{d.enforcement ?? "—"}</td><td><Loc location={d.location} /></td>
         </tr>
       ))}</tbody>
@@ -25,7 +27,7 @@ function Decisions(props: { readonly items: readonly DecisionItem[] }) {
 export function DirectionPage() {
   const [load, reload] = useApi<Direction>("/api/direction");
   return (
-    <Page title="Direction" onRefresh={reload} durationMs={load.state === "ok" ? load.durationMs : undefined}>
+    <Page title={t("direction.direction")} onRefresh={reload} durationMs={load.state === "ok" ? load.durationMs : undefined}>
       {load.state === "loading" ? <Loading /> : load.state === "error" ? <ErrorBox error={load.error} /> : <DirectionBody d={load.data} />}
     </Page>
   );
@@ -33,43 +35,43 @@ export function DirectionPage() {
 
 function DirectionBody(props: { readonly d: Direction }) {
   const { d } = props;
-  if (d.requirements === undefined) return <Empty>Not a DUO project yet: run duoctl init.</Empty>;
+  if (d.requirements === undefined) return <Empty>{t("direction.not_a_duo_project_yet_run_duoctl")}</Empty>;
   const by = (label: DecisionItem["label"]) => d.decisions.filter((x) => x.label === label);
   const pending = d.proposals.filter((p) => p.status === "pending").length;
   return (
     <>
-      <Section title="Vision">
-        {d.vision === null ? <Empty>No vision document yet.</Empty> : (
+      <Section title={t("direction.vision")}>
+        {d.vision === null ? <Empty>{t("direction.no_vision_document_yet")}</Empty> : (
           <><p><Label text={d.vision.status.toUpperCase()} tone={d.vision.status === "confirmed" ? "ok" : "info"} /> <Loc location={d.vision.location} /></p><pre className="truth">{d.vision.body.trim()}</pre></>
         )}
       </Section>
-      <Section title="Milestones" count={d.milestones.length}>
-        {d.milestones.length === 0 ? <Empty>No milestones yet.</Empty> : (
+      <Section title={t("direction.milestones")} count={d.milestones.length}>
+        {d.milestones.length === 0 ? <Empty>{t("direction.no_milestones_yet")}</Empty> : (
           <ul>{d.milestones.map((m) => <li key={m.id}><Link to={entityPath(m.id)}>{m.id}</Link> {m.title} <Label text={m.state} tone="muted" />{m.current ? <Label text="current" tone="ok" /> : null} <Loc location={m.location} /></li>)}</ul>
         )}
       </Section>
-      <Section title="Requirements" count={d.requirements.length}>
-        {d.requirements.length === 0 ? <Empty>No confirmed requirements yet. DUO can still analyze repository structure and changes.</Empty> : (
+      <Section title={t("direction.requirements")} count={d.requirements.length}>
+        {d.requirements.length === 0 ? <Empty>{t("direction.no_confirmed_requirements_yet_duo_can_still")}</Empty> : (
           <TableScroll label="Requirements"><table>
-            <thead><tr><th scope="col">ID</th><th scope="col">Title</th><th scope="col">Status</th><th scope="col">Milestone</th><th scope="col">Priority</th><th scope="col">Source</th></tr></thead>
+            <thead><tr><th scope="col">{t("direction.id")}</th><th scope="col">{t("direction.title")}</th><th scope="col">{t("direction.status")}</th><th scope="col">{t("direction.milestone")}</th><th scope="col">{t("direction.priority")}</th><th scope="col">{t("direction.source")}</th></tr></thead>
             <tbody>{d.requirements.map((r) => (
               <tr key={r.id}><td><Link to={entityPath(r.id)}>{r.id}</Link></td><td>{r.title}</td><td>{r.status}</td><td>{r.milestone ?? "—"}</td><td>{r.priority ?? "—"}</td><td><Loc location={r.location} /></td></tr>
             ))}</tbody>
           </table></TableScroll>
         )}
       </Section>
-      <Section title="Constraints" count={d.constraints.length}>
-        {d.constraints.length === 0 ? <Empty>No constraints yet.</Empty> : (
+      <Section title={t("direction.constraints")} count={d.constraints.length}>
+        {d.constraints.length === 0 ? <Empty>{t("direction.no_constraints_yet")}</Empty> : (
           <ul>{d.constraints.map((c) => <li key={c.id}><Link to={entityPath(c.id)}>{c.id}</Link> <Label text={c.state.toUpperCase()} tone={c.state === "confirmed" ? "ok" : "muted"} /> {c.statement} <span className="muted">({c.enforcement})</span> <Loc location={c.location} /></li>)}</ul>
         )}
       </Section>
-      <Section title="Active decisions" count={by("CONFIRMED").length}><Decisions items={by("CONFIRMED")} /></Section>
-      <Section title="Proposed decisions (not confirmed intent)" count={by("PROPOSED").length + pending} open={by("PROPOSED").length + pending > 0}>
+      <Section title={t("direction.active_decisions")} count={by("CONFIRMED").length}><Decisions items={by("CONFIRMED")} /></Section>
+      <Section title={t("direction.proposed_decisions_not_confirmed_intent")} count={by("PROPOSED").length + pending} open={by("PROPOSED").length + pending > 0}>
         <Decisions items={by("PROPOSED")} />
-        {pending === 0 ? null : <p>{pending} proposal(s) wait for a human: <Link to="/decisions">Pending decisions</Link>. A proposal is not a Decision until a human confirms it.</p>}
+        {pending === 0 ? null : <p><Trans i18nKey="direction.proposal_s_wait_for_a_human_pending" components={{ v0: <>{String((pending) ?? "")}</>, c1: <Link to="/decisions" children={null} /> }} /></p>}
       </Section>
-      <Section title="Superseded decisions" count={by("SUPERSEDED").length} open={false}><Decisions items={by("SUPERSEDED")} /></Section>
-      <Section title="Rejected decisions" count={by("REJECTED").length} open={false}><Decisions items={by("REJECTED")} /></Section>
+      <Section title={t("direction.superseded_decisions")} count={by("SUPERSEDED").length} open={false}><Decisions items={by("SUPERSEDED")} /></Section>
+      <Section title={t("direction.rejected_decisions")} count={by("REJECTED").length} open={false}><Decisions items={by("REJECTED")} /></Section>
     </>
   );
 }

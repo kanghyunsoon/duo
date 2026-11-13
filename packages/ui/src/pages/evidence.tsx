@@ -1,4 +1,5 @@
 /** Evidence viewer: the pointer, and only the pointed-at lines (no file browser, no editor). */
+import { message, t } from "../i18n.js";
 import { useState } from "react";
 import { api, q } from "../api.js";
 import { Label } from "../components.js";
@@ -27,10 +28,10 @@ function EvidenceRow(props: { readonly id: string; readonly e: Evidence | undefi
   };
   return (
     <li>
-      <Label text={BASIS[e?.basis ?? ""] ?? e?.basis ?? "?"} tone={e?.basis === "llm" ? "warn" : "info"} /> <code>{props.id}</code> {e?.summary ?? ""}
+      <Label text={message(BASIS[e?.basis ?? ""] ?? e?.basis ?? "?")} tone={e?.basis === "llm" ? "warn" : "info"} /> <code>{props.id}</code> {e?.summary ?? ""}
       {p?.path === undefined ? null : <> · <code className="loc">{p.path}{lines === undefined ? "" : `:${lines[0]}-${lines[1]}`}</code></>}
       {p?.commit === undefined ? null : <> · commit <code>{p.commit.slice(0, 12)}</code></>}
-      {p?.path !== undefined && lines !== undefined && slice === undefined ? <> <button type="button" className="link" onClick={() => void show()}>Show lines</button></> : null}
+      {p?.path !== undefined && lines !== undefined && slice === undefined ? <> <button type="button" className="link" onClick={() => void show()}>{t("evidence.show_lines")}</button></> : null}
       {typeof slice === "string" ? <p className="muted">{slice}</p> : slice === undefined ? null : (
         <pre className="slice">{slice.lines.map((l, i) => `${String(slice.start + i).padStart(5)}  ${l}`).join("\n")}{slice.truncated ? "\n…" : ""}</pre>
       )}

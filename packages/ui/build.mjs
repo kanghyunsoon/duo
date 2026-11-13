@@ -58,7 +58,7 @@ fs.writeFileSync(path.join(out, "index.html"), [
   "<head>",
   '<meta charset="utf-8">',
   '<meta name="viewport" content="width=device-width, initial-scale=1">',
-  "<title>DUO — Project Direction Console</title>",
+  "<title>DUO — Project Direction</title>",
   '<link rel="icon" href="data:,">',
   '<link rel="stylesheet" href="/assets/app.css">',
   '<script type="module" src="/assets/app.js"></script>',
