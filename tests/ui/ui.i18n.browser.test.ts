@@ -70,19 +70,20 @@ it("switches language in place, preserves form input and persists across reloads
   try {
     await mock(page);
     await page.goto(`${origin}/context`);
-    await page.getByRole("heading", { name: "컨텍스트 검사기", exact: true }).waitFor();
-    await page.getByLabel("작업", { exact: true }).fill("AUTH-03 original task");
-    await page.getByLabel("언어", { exact: true }).selectOption("en");
     await page.getByRole("heading", { name: "Context Inspector", exact: true }).waitFor();
-    expect(await page.locator("form textarea").inputValue()).toBe("AUTH-03 original task");
-    expect(await page.locator("html").getAttribute("lang")).toBe("en");
-    expect(await page.title()).toBe("DUO — Project Direction Console");
-    await page.reload();
-    await page.getByRole("heading", { name: "Context Inspector", exact: true }).waitFor();
+    await page.getByLabel("Task", { exact: true }).fill("AUTH-03 original task");
     await page.getByLabel("Language", { exact: true }).selectOption("ko");
     await page.getByRole("heading", { name: "컨텍스트 검사기", exact: true }).waitFor();
+    expect(await page.locator("form textarea").inputValue()).toBe("AUTH-03 original task");
     expect(await page.locator("html").getAttribute("lang")).toBe("ko");
     expect(await page.title()).toBe("DUO — 프로젝트 방향 콘솔");
+    await page.reload();
+    await page.getByRole("heading", { name: "컨텍스트 검사기", exact: true }).waitFor();
+    await page.getByLabel("언어", { exact: true }).selectOption("en");
+    await page.getByRole("heading", { name: "Context Inspector", exact: true }).waitFor();
+    expect(await page.locator("html").getAttribute("lang")).toBe("en");
+    expect(await page.title()).toBe("DUO — Project Direction Console");
+    await page.getByLabel("Language", { exact: true }).selectOption("ko");
     await page.getByRole("navigation").getByRole("link", { name: "결정 대기", exact: true }).click();
     await page.getByRole("button", { name: "확정…", exact: true }).click();
     const dialog = page.getByRole("dialog");
@@ -122,13 +123,13 @@ it("renders every route in both languages with the bundled resources", async (ct
     ] as const;
     for (const [route, korean, english] of routes) {
       await page.goto(`${origin}${route}`);
-      await page.getByRole("heading", { name: korean, exact: true, level: 1 }).waitFor();
-      await page.getByLabel("언어", { exact: true }).selectOption("en");
       await page.getByRole("heading", { name: english, exact: true, level: 1 }).waitFor();
       await page.getByLabel("Language", { exact: true }).selectOption("ko");
       await page.getByRole("heading", { name: korean, exact: true, level: 1 }).waitFor();
+      await page.getByLabel("언어", { exact: true }).selectOption("en");
+      await page.getByRole("heading", { name: english, exact: true, level: 1 }).waitFor();
       if (route === "/work") {
-        await page.getByRole("button", { name: "확대", exact: true }).waitFor();
+        await page.getByRole("button", { name: "Zoom In", exact: true }).waitFor();
         if (process.env.DUO_I18N_SCREENSHOT !== undefined) await page.screenshot({ path: process.env.DUO_I18N_SCREENSHOT, fullPage: true });
       }
     }
@@ -137,7 +138,7 @@ it("renders every route in both languages with the bundled resources", async (ct
   } finally { await page.close(); }
 }, 30_000);
 
-it("keeps Korean usable when browser storage is disabled", async (ctx) => {
+it("keeps the English default and language switching usable when browser storage is disabled", async (ctx) => {
   if (browser === undefined) return ctx.skip();
   const page = await browser.newPage();
   page.setDefaultTimeout(5_000);
@@ -145,8 +146,8 @@ it("keeps Korean usable when browser storage is disabled", async (ctx) => {
     await page.addInitScript(() => Object.defineProperty(window, "localStorage", { get() { throw new Error("Storage disabled"); } }));
     await mock(page);
     await page.goto(`${origin}/search`);
-    await page.getByRole("heading", { name: "검색", exact: true }).waitFor();
-    await page.getByLabel("언어", { exact: true }).selectOption("en");
     await page.getByRole("heading", { name: "Search", exact: true }).waitFor();
+    await page.getByLabel("Language", { exact: true }).selectOption("ko");
+    await page.getByRole("heading", { name: "검색", exact: true }).waitFor();
   } finally { await page.close(); }
 }, 30_000);
