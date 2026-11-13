@@ -67,6 +67,7 @@ async function open(root: string): Promise<{ page: Page; server: DuoUiServer; fo
   const server = await startDuoUiServer({ root, version: "e2e", registry, llm: new LLMProviderPool({}) });
   servers.push(server);
   const context = await (browser as Browser).newContext();
+  await context.addInitScript(() => window.localStorage.setItem("duo.ui.language", "en"));
   contexts.push(context);
   const page = await context.newPage();
   const foreign: string[] = [];

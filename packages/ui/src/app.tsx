@@ -1,5 +1,7 @@
 /** DUO Project Direction Console: navigation and routes. */
 import { Component, type ReactNode } from "react";
+import { changeLanguage, message, t, type Language } from "./i18n.js";
+import { Trans, useTranslation } from "react-i18next";
 import { CoveragePage } from "./pages/coverage.js";
 import { ContextPage } from "./pages/context.js";
 import { DecisionsPage } from "./pages/decisions.js";
@@ -24,7 +26,7 @@ export function route(pathname: string) {
     try { return <EntityPage id={decodeURIComponent(entity[1] as string)} />; }
     catch (error) {
       if (!(error instanceof URIError)) throw error;
-      return <section><h1>Invalid address</h1><p>This address is not valid. Check the link or return to Overview.</p><Link to="/overview">Go to Overview</Link></section>;
+      return <section><h1>{t("text.Invalid address")}</h1><p>{t("text.This address is not valid. Check the link or return to Overview.")}</p><Link to="/overview">{t("text.Go to Overview")}</Link></section>;
     }
   }
   const record = /^\/reviews\/([\w.-]+)$/u.exec(pathname);
@@ -47,7 +49,7 @@ class PageErrorBoundary extends Component<{ readonly children: ReactNode }, { re
   override state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   override render() {
-    if (this.state.failed) return <section role="alert"><h1>Page unavailable</h1><p>Something went wrong displaying this page. Try again or go to Overview.</p><button type="button" onClick={() => this.setState({ failed: false })}>Try again</button> <Link to="/overview">Go to Overview</Link></section>;
+    if (this.state.failed) return <section role="alert"><h1>{t("text.Page unavailable")}</h1><p>{t("text.Something went wrong displaying this page. Try again or go to Overview.")}</p><button type="button" onClick={() => this.setState({ failed: false })}>{t("text.Try again")}</button> <Link to="/overview">{t("text.Go to Overview")}</Link></section>;
     return this.props.children;
   }
 }
@@ -55,15 +57,22 @@ class PageErrorBoundary extends Component<{ readonly children: ReactNode }, { re
 function RouteContent(props: { readonly pathname: string }) { return route(props.pathname); }
 
 export function App() {
+  const { i18n } = useTranslation();
   const path = usePath();
   const pathname = path.split("?")[0] ?? "/";
   return (
     <div className="layout">
-      <a href="#main" className="skip">Skip to content</a>
-      <nav aria-label="DUO">
-        <p className="brand">DUO <span className="muted small">Project Direction Console</span></p>
-        <ul>{NAV.map(([to, label]) => <li key={to}><Link to={to} current={pathname === to || (to === "/overview" && pathname === "/")}>{label}</Link></li>)}</ul>
-        <p className="muted small">Local only. Project Truth changes require human Decision actions; work activity is local runtime data.</p>
+      <a href="#main" className="skip">{t("app.skip_to_content")}</a>
+      <nav aria-label={t("app.duo")}>
+        <p className="brand"><Trans i18nKey="app.duo_project_direction_console" components={{ c0: <span className="muted small" /> }} /></p>
+        <label className="language-picker">{t("app.language")}
+          <select aria-label={t("app.language")} value={i18n.resolvedLanguage ?? "ko"} onChange={(e) => { void changeLanguage(e.target.value as Language); }}>
+            <option value="ko" lang="ko">한국어</option>
+            <option value="en" lang="en">English</option>
+          </select>
+        </label>
+        <ul>{NAV.map(([to, label]) => <li key={to}><Link to={to} current={pathname === to || (to === "/overview" && pathname === "/")}>{message(label)}</Link></li>)}</ul>
+        <p className="muted small">{t("app.local_only_project_truth_changes_require_human")}</p>
       </nav>
       <main id="main" tabIndex={-1}><PageErrorBoundary key={path}><RouteContent pathname={pathname} /></PageErrorBoundary></main>
     </div>

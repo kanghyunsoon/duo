@@ -4,6 +4,7 @@
  * them equal; the UI imports core types only, so it keeps this copy). The API payload keeps decisionAuthority
  * as Project Truth has it; "current authority" means confirmed and not superseded, the rules' own test.
  */
+import { message } from "./i18n.js";
 import type { DecisionAuthority } from "./types.js";
 
 export const AUTHORITY_TEXT = {
@@ -12,8 +13,8 @@ export const AUTHORITY_TEXT = {
 
 export function authorityParts(a: DecisionAuthority): string[] {
   return [
-    a.active ? AUTHORITY_TEXT.current : a.state === "superseded" ? AUTHORITY_TEXT.superseded : AUTHORITY_TEXT.inactive.replace("{state}", a.state),
-    ...(a.supersedes === null ? [] : [AUTHORITY_TEXT.supersedes.replace("{id}", a.supersedes)]),
-    ...(a.supersededBy === null ? [] : [AUTHORITY_TEXT.supersededBy.replace("{id}", a.supersededBy)]),
+    a.active ? message(AUTHORITY_TEXT.current) : a.state === "superseded" ? message(AUTHORITY_TEXT.superseded) : message(AUTHORITY_TEXT.inactive).replace("{state}", a.state),
+    ...(a.supersedes === null ? [] : [message(AUTHORITY_TEXT.supersedes).replace("{id}", a.supersedes)]),
+    ...(a.supersededBy === null ? [] : [message(AUTHORITY_TEXT.supersededBy).replace("{id}", a.supersededBy)]),
   ];
 }
