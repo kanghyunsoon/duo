@@ -24,7 +24,7 @@ erDiagram
     DECISION }o--o{ REQUIREMENT : "GOVERNS"
     DECISION }o--o{ ISSUE : "GOVERNS"
     DECISION |o--o| DECISION : "SUPERSEDES (new to old)"
-    PROPOSAL |o--o| DECISION : "confirm 시 생성"
+    DECISION |o--o| PROPOSAL : "proposal (확정한 원본 Proposal)"
 
     PROJECT {
         string id PK "project:root"
@@ -55,16 +55,16 @@ erDiagram
         string id PK "dec:D-004 / CON-001 / ADR-005"
         string decisionKind "decision | constraint"
         string title
-        string state "proposed | confirmed | superseded | rejected"
+        string state "proposed | confirmed | superseded | rejected (Constraint: draft | confirmed | retired)"
         string enforcement "warn | block"
         string forbids "paths, imported_paths, importer_paths 등"
         string supersedes FK "dec:*"
+        string proposal FK "P-* (Proposal에서 확정됐을 때)"
     }
     PROPOSAL {
         string id PK "P-012"
-        string state "proposed | rejected (확정되면 Decision 생성)"
+        string state "proposed | rejected (확정되면 파일이 지워지고 Decision.proposal에 ID가 남음)"
         string proposedBy "agent 감사용 라벨(인증 아님)"
-        string decisionId FK "확정 뒤 dec:*"
     }
 ```
 
@@ -74,7 +74,8 @@ erDiagram
 | Milestone | `milestones/*.yaml`, `*.md` | 사람 |
 | Requirement | `specs/*.md` | 사람 |
 | Issue | `milestones/*.yaml`, `*.md` | 사람 |
-| Decision | `decisions/D-###.yaml`·`*.md`, `intent/constraints.yaml` | **사람의 confirm으로만** 생성 |
+| Decision | `decisions/D-###.yaml`·`*.md` | **사람의 confirm으로만** 생성. Proposal에서 확정되면 `proposal` 필드에 원본 ID를 남김 |
+| Constraint | `intent/constraints.yaml` | 사람(`init`/`setup` 답변 또는 파일 편집). Graph에서는 `decision` 노드(`decisionKind: constraint`), 상태는 `draft \| confirmed \| retired` |
 | Proposal | `decisions/proposals/P-*.yaml` | Agent(MCP `duo_propose_decision`) 또는 사람. Graph 노드가 아님 |
 
 ## 2. 개념 ERD — 코드 영역과 연결
