@@ -1,4 +1,6 @@
 /** Shared presentational pieces. Status is always text (never color alone); no scores anywhere. */
+import { message, t } from "./i18n.js";
+import { Trans } from "react-i18next";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { api, ApiError } from "./api.js";
 import { PROVENANCE_BADGES } from "./provenance.js";
@@ -24,7 +26,7 @@ export function useApi<T>(path: string | undefined): [Load<T>, () => void] {
 }
 
 export function Loading() {
-  return <p role="status" className="muted">Loading…</p>;
+  return <p role="status" className="muted">{t("components.loading")}</p>;
 }
 
 export function ErrorBox(props: { readonly error: Error }) {
@@ -32,9 +34,9 @@ export function ErrorBox(props: { readonly error: Error }) {
   const session = e instanceof ApiError && e.status === 401;
   return (
     <div role="alert" className="box box-error">
-      <strong>{session ? "No UI session" : "Request failed"}</strong>
-      <p>{session ? "Open the URL printed by duoctl ui (the session is valid for one server run)." : e.message}</p>
-      {e instanceof ApiError ? <p className="muted">{e.code} · HTTP {e.status}</p> : null}
+      <strong>{session ? t("text.No UI session") : t("text.Request failed")}</strong>
+      <p>{session ? t("text.Open the URL printed by duoctl ui (the session is valid for one server run).") : e.message}</p>
+      {e instanceof ApiError ? <p className="muted"><Trans i18nKey="components.http" components={{ v0: <>{e.code}</>, v1: <>{String((e.status) ?? "")}</> }} /></p> : null}
     </div>
   );
 }
@@ -44,8 +46,8 @@ export function Page(props: { readonly title: string; readonly children: ReactNo
     <section aria-labelledby="page-title">
       <header className="page-head">
         <h1 id="page-title">{props.title}</h1>
-        {props.onRefresh === undefined ? null : <button type="button" onClick={props.onRefresh}>Refresh</button>}
-        {props.durationMs === undefined ? null : <span className="muted small">{props.durationMs} ms</span>}
+        {props.onRefresh === undefined ? null : <button type="button" onClick={props.onRefresh}>{t("components.refresh")}</button>}
+        {props.durationMs === undefined ? null : <span className="muted small" aria-label={t("components.server_time")}><Trans i18nKey="components.ms" components={{ v0: <>{String((props.durationMs) ?? "")}</> }} /></span>}
       </header>
       {props.children}
     </section>
@@ -62,7 +64,7 @@ export function Section(props: { readonly title: string; readonly children: Reac
 }
 
 export function TableScroll(props: { readonly label: string; readonly children: ReactNode }) {
-  return <div className="table-scroll" role="region" aria-label={props.label} tabIndex={0}>{props.children}</div>;
+  return <div className="table-scroll" role="region" aria-label={message(props.label)} tabIndex={0}>{props.children}</div>;
 }
 
 export function Empty(props: { readonly children: ReactNode }) {
@@ -77,17 +79,17 @@ export function Verdict(props: { readonly verdict: string | undefined | null }) 
 
 /** CONFIRMED, PROPOSED, SUPERSEDED, REJECTED, pending, … as text badges. */
 export function Label(props: { readonly text: string; readonly tone?: "ok" | "info" | "warn" | "muted" | "block" }) {
-  return <span className={`badge tone-${props.tone ?? "info"}`}>{props.text}</span>;
+  return <span className={`badge tone-${props.tone ?? "info"}`}>{message(props.text)}</span>;
 }
 
 export function Provenance(props: { readonly value: string | undefined }) {
   if (props.value === undefined) return null;
   const p = PROVENANCE_BADGES[props.value] ?? { text: props.value, tone: "info" as const, help: "" };
-  return <span className={`badge tone-${p.tone}`} title={p.help}>{p.text}</span>;
+  return <span className={`badge tone-${p.tone}`} title={message(p.help)}>{message(p.text)}</span>;
 }
 
 export function Level(props: { readonly level: string }) {
-  const text = props.level === "L0" ? "L0 · file-level analysis" : props.level === "L1" ? "L1 · structural" : props.level === "L2" ? "L2 · partial semantics" : props.level;
+  const text = props.level === "L0" ? t("text.L0 · file-level analysis") : props.level === "L1" ? t("text.L1 · structural") : props.level === "L2" ? t("text.L2 · partial semantics") : props.level;
   return <span className={`badge level level-${props.level.toLowerCase()}`}>{text}</span>;
 }
 

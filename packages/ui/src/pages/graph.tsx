@@ -2,6 +2,8 @@
  * Graph explorer (T18.1): a bounded relationship explorer over the existing trace and impact
  * primitives (seed, depth 1-3, server limits). Never the whole graph; no graph library (C203).
  */
+import { t } from "../i18n.js";
+import { Trans } from "react-i18next";
 import { useState } from "react";
 import { q } from "../api.js";
 import { Empty, ErrorBox, Label, Loading, Page, TableScroll, useApi } from "../components.js";
@@ -21,14 +23,14 @@ export function GraphPage() {
   const go = (n: string, k = kind, d = depth) => navigate(`/graph?${q({ node: n, kind: k, depth: d })}`);
   const [load, reload] = useApi<GraphPayload>(node === "" ? undefined : `/api/graph?${q({ node, kind, depth })}`);
   return (
-    <Page title="Graph" onRefresh={node === "" ? undefined : reload} durationMs={load.state === "ok" ? load.durationMs : undefined}>
+    <Page title={t("graph.graph")} onRefresh={node === "" ? undefined : reload} durationMs={load.state === "ok" ? load.durationMs : undefined}>
       <form className="form" onSubmit={(e) => { e.preventDefault(); if (draft.trim() !== "") go(draft.trim()); }}>
-        <label>Seed <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="AUTH-03, src/a.ts, Class.method, sym:…" size={40} /></label>
-        <label>View <select value={kind} onChange={(e) => node !== "" && go(node, e.target.value as "trace" | "impact")}><option value="trace">trace (relations)</option><option value="impact">impact (what may be affected)</option></select></label>
-        <label>Depth <select value={depth} onChange={(e) => node !== "" && go(node, kind, Number(e.target.value))}>{[1, 2, 3].map((d) => <option key={d} value={d}>{d}</option>)}</select></label>
-        <button type="submit">Explore</button>
+        <label>{t("form.seed")} <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="AUTH-03, src/a.ts, Class.method, sym:…" size={40} /></label>
+        <label>{t("form.view")} <select value={kind} onChange={(e) => node !== "" && go(node, e.target.value as "trace" | "impact")}><option value="trace">{t("graph.trace")}</option><option value="impact">{t("graph.impact")}</option></select></label>
+        <label>{t("form.depth")} <select value={depth} onChange={(e) => node !== "" && go(node, kind, Number(e.target.value))}>{[1, 2, 3].map((d) => <option key={d} value={d}>{d}</option>)}</select></label>
+        <button type="submit">{t("graph.explore")}</button>
       </form>
-      {node === "" ? <Empty>Choose a seed: a Requirement or Decision ID, a file path or a symbol. The explorer shows a bounded neighbourhood, never the whole graph.</Empty>
+      {node === "" ? <Empty>{t("graph.empty_hint")}</Empty>
         : load.state === "loading" ? <Loading /> : load.state === "error" ? <ErrorBox error={load.error} /> : <GraphView g={load.data} go={(n) => { setDraft(n); go(n); }} />}
     </Page>
   );
@@ -36,13 +38,13 @@ export function GraphPage() {
 
 function NodeLink(props: { readonly id: string; readonly go: (id: string) => void }) {
   return (
-    <span className="node"><button type="button" className="link" onClick={() => props.go(props.id)} title="explore from here">{props.id}</button> <Link to={entityPath(props.id)} className="small">detail</Link></span>
+    <span className="node"><button type="button" className="link" onClick={() => props.go(props.id)} title={t("graph.explore_from_here")}>{props.id}</button> <Link to={entityPath(props.id)} className="small">{t("graph.detail")}</Link></span>
   );
 }
 
 function GraphView(props: { readonly g: GraphPayload; readonly go: (id: string) => void }) {
   const { g } = props;
-  if (g.status === "not-found") return <Empty>No such node in the graph.</Empty>;
+  if (g.status === "not-found") return <Empty>{t("graph.no_such_node_in_the_graph")}</Empty>;
   if (g.status !== "found") return <p role="alert" className="box box-error">{g.status}</p>;
   return (
     <>
@@ -50,8 +52,8 @@ function GraphView(props: { readonly g: GraphPayload; readonly go: (id: string) 
       {g.nodes !== undefined ? (
         <div className="graph-columns">
           {[...new Set(g.nodes.map((n) => n.depth))].sort().map((d) => (
-            <section key={d} aria-label={`depth ${d}`}>
-              <h2>{d === 0 ? "Seed" : `Depth ${d}`}</h2>
+            <section key={d} aria-label={t("graph.depth_label", { depth: d })}>
+              <h2>{d === 0 ? t("context.seeds") : t("graph.depth_label", { depth: d })}</h2>
               <ul>{g.nodes?.filter((n) => n.depth === d).sort((a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type) || a.id.localeCompare(b.id)).map((n) => (
                 <li key={n.id}><Label text={n.type} tone="muted" /> <NodeLink id={n.id} go={props.go} /></li>
               ))}</ul>
@@ -60,18 +62,17 @@ function GraphView(props: { readonly g: GraphPayload; readonly go: (id: string) 
         </div>
       ) : null}
       {g.edges === undefined ? null : (
-        <details className="section"><summary><h2>Edges ({g.edges.length})</h2></summary>
-          <TableScroll label="Graph edges">
-          <table><thead><tr><th scope="col">From</th><th scope="col">Edge</th><th scope="col">To</th></tr></thead>
+        <details className="section"><summary><h2><Trans i18nKey="graph.edges" components={{ v0: <>{String((g.edges.length) ?? "")}</> }} /></h2></summary>
+          <TableScroll label={t("graph.edges_label")}><table><thead><tr><th scope="col">{t("graph.from")}</th><th scope="col">{t("graph.edge")}</th><th scope="col">{t("graph.to")}</th></tr></thead>
             <tbody>{g.edges.map((e) => <tr key={`${e.from} ${e.type} ${e.to}`}><td><code>{e.from}</code></td><td>{e.type}</td><td><code>{e.to}</code></td></tr>)}</tbody></table>
           </TableScroll>
         </details>
       )}
       {g.items === undefined ? null : (
         <>
-          {g.items.length === 0 ? <Empty>No recorded relation reaches another node.</Empty> : (
-            <TableScroll label="Graph relations"><table><thead><tr><th scope="col">Relation</th><th scope="col">Depth</th><th scope="col">Node</th><th scope="col">Via</th></tr></thead>
-              <tbody>{g.items.map((i) => <tr key={i.id}><td>{i.relation}</td><td>{i.depth}</td><td><NodeLink id={i.id} go={props.go} /></td><td>{i.via.edge} from <code>{i.via.from}</code></td></tr>)}</tbody></table></TableScroll>
+          {g.items.length === 0 ? <Empty>{t("graph.no_recorded_relation_reaches_another_node")}</Empty> : (
+            <TableScroll label={t("graph.relations_label")}><table><thead><tr><th scope="col">{t("graph.relation")}</th><th scope="col">{t("graph.depth_2")}</th><th scope="col">{t("graph.node")}</th><th scope="col">{t("graph.via")}</th></tr></thead>
+              <tbody>{g.items.map((i) => <tr key={i.id}><td>{i.relation}</td><td>{i.depth}</td><td><NodeLink id={i.id} go={props.go} /></td><td><Trans i18nKey="graph.from_2" components={{ v0: <>{i.via.edge}</>, c1: <code />, v2: <>{i.via.from}</> }} /></td></tr>)}</tbody></table></TableScroll>
           )}
           {g.notice === undefined ? null : <p className="muted small">{g.notice}</p>}
           {(g.limitations ?? []).length === 0 ? null : <ul className="muted small">{g.limitations?.map((l) => <li key={l.code}>{l.message}</li>)}</ul>}
