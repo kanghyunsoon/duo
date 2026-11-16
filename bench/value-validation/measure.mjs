@@ -68,6 +68,7 @@ export function agentSummary(runs) {
   return Object.fromEntries(Object.entries(by).map(([c, rs]) => {
     const col = (f) => rs.map(f);
     const wall = col((r) => r.wallSeconds);
+    const stopped = col((r) => typeof r.oracle?.askedHuman === "boolean" ? Number(r.oracle.askedHuman) : null);
     return [c, {
       runs: rs.length, completed: rs.filter((r) => r.status === "completed").length,
       medianWallSeconds: medianAll(wall), totalWallSeconds: sumAll(wall),
@@ -75,10 +76,10 @@ export function agentSummary(runs) {
       contextPacketTokens: sumAll(col((r) => r.duo?.contextTokens)),
       violationsLeft: rs.filter((r) => r.oracle?.violations > 0).length, needsHumanReview: rs.filter((r) => r.oracle?.needsReview === true).length,
       testsPassing: rs.filter((r) => r.tests?.ok === true).length, checkRuns: sumAll(col((r) => r.events?.checkRuns)), reworkCycles: sumAll(col((r) => r.events?.reworkCycles)),
-      stoppedToAsk: rs.filter((r) => r.oracle?.askedHuman === true).length, proposals: sumAll(col((r) => r.events?.proposals)),
+      stoppedToAsk: sumAll(stopped), proposals: sumAll(col((r) => r.events?.proposals)),
       measuredRuns: {
         wallSeconds: countMeasured(wall), inputTokens: countMeasured(col((r) => r.usage?.input)), cachedInputTokens: countMeasured(col((r) => r.usage?.cached)),
-        outputTokens: countMeasured(col((r) => r.usage?.output)), contextPacketTokens: countMeasured(col((r) => r.duo?.contextTokens)),
+        outputTokens: countMeasured(col((r) => r.usage?.output)), contextPacketTokens: countMeasured(col((r) => r.duo?.contextTokens)), stoppedToAsk: countMeasured(stopped),
       },
     }];
   }));

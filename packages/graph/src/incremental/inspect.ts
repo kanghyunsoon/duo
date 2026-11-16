@@ -186,6 +186,10 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
   const truthChanged = changes.filter((c) => c.path.startsWith(STATE_PREFIX) && c.status !== "UNCHANGED").map((c) => c.path);
   // Builder relation rules changed since the state was written (T24.5): Truth and annotation relations are made again.
   const relationRulesChanged = previous !== undefined && previous.relationRulesVersion !== RELATION_RULES_VERSION;
+  // The analyzer registry changed (an analyzer added, removed or changed) although no indexed file needs re-analysis,
+  // for example a TS/JS analyzer change in a Python repository. The next index run rewrites the state with the new
+  // identities, so the index is not current until then (RC.2 upgrade check; same rule as relationRulesVersion).
+  const registryChanged = previous !== undefined && previous.analyzerRegistryDigest !== analyzerRegistryDigest;
   // A state or blob OID change with the same content is UNCHANGED for compareFingerprints but still rewrites the File payload or the state.
   const fingerprintsIdentical = changes.every((c) => c.status === "UNCHANGED" && sameFingerprint(c.previous, c.current));
   const parse = [...analysis].filter(([, f]) => f !== "fresh").map(([p]) => p).sort(compareUtf8);
@@ -196,7 +200,7 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
     status = fullRebuildReason === "no-state" || options.graph.readMeta(INDEX_STATE_TOKEN_KEY) === undefined ? "missing" : "incompatible";
   } else {
     const idle = fingerprintsIdentical && parse.length === 0 && moduleList.length === 0 && callList.length === 0 && !wouldRecomputeHistory
-      && !repositoryMoved && signals.changedConfigs.size === 0 && !relationRulesChanged;
+      && !repositoryMoved && signals.changedConfigs.size === 0 && !relationRulesChanged && !registryChanged;
     status = idle ? "current" : "stale";
   }
   const freshness: InspectFreshnessRecord[] = changes.map((c) => {

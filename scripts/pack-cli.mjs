@@ -30,6 +30,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { trackedChanges } from "./ci/tracked-changes.mjs";
 
 const ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const args = process.argv.slice(2);
@@ -255,6 +256,8 @@ const manifest = {
   ...(cli.repository === undefined ? {} : { repository: cli.repository }),
   ...(cli.homepage === undefined ? {} : { homepage: cli.homepage }),
   ...(cli.bugs === undefined ? {} : { bugs: cli.bugs }),
+  // MCP Registry ownership check: the published package.json must carry the server.json name (T178).
+  ...(cli.mcpName === undefined ? {} : { mcpName: cli.mcpName }),
   type: "module",
   bin: { duoctl: "dist/duoctl.js" },
   // npm-packlist adds README, LICENSE, package.json and the bundled dependencies (node_modules/) by itself.
@@ -354,8 +357,12 @@ for (const f of fs.readdirSync(STAGE, { recursive: true, withFileTypes: true }))
   const abs = path.join(f.parentPath, f.name);
   files[path.relative(STAGE, abs).replaceAll("\\", "/")] = sha256(abs);
 }
+const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8", windowsHide: true }).trim();
+// #171: whether the tree had tracked changes when this tarball was packed. A later revert does not make the tarball
+// that commit's build; scripts/ci/check-packed-artifact.mjs refuses reuse unless this is false.
+const dirty = trackedChanges(ROOT).length > 0;
 const report = {
-  name: packed.name, version: packed.version, tarball: path.join(OUT, packed.filename), size: packed.size, unpackedSize: packed.unpackedSize,
+  name: packed.name, version: packed.version, commit, dirty, tarball: path.join(OUT, packed.filename), size: packed.size, unpackedSize: packed.unpackedSize,
   integrity: packed.integrity, entryCount: packed.entryCount, files: packed.files.map((f) => ({ path: f.path, size: f.size })).sort((a, b) => (a.path < b.path ? -1 : 1)),
   sha256: files, dependencies: sortedDeps,
   runtimeTree: runtimeTree === undefined ? null : { file: "dist/runtime-tree.json", delivery: runtimeTree.delivery, packages: runtimeTree.packages.length, files: bundledFiles.length, treeHash: runtimeTree.treeHash, lockSha256: runtimeTree.lock.sha256 },

@@ -4,7 +4,7 @@
  */
 import { useState } from "react";
 import { q } from "../api.js";
-import { Empty, ErrorBox, Label, Loading, Page, useApi } from "../components.js";
+import { Empty, ErrorBox, Label, Loading, Page, TableScroll, useApi } from "../components.js";
 import { entityPath, Link, navigate, usePath } from "../router.js";
 import type { GraphPayload } from "../types.js";
 import { IndexState } from "./overview.js";
@@ -61,15 +61,17 @@ function GraphView(props: { readonly g: GraphPayload; readonly go: (id: string) 
       ) : null}
       {g.edges === undefined ? null : (
         <details className="section"><summary><h2>Edges ({g.edges.length})</h2></summary>
+          <TableScroll label="Graph edges">
           <table><thead><tr><th scope="col">From</th><th scope="col">Edge</th><th scope="col">To</th></tr></thead>
             <tbody>{g.edges.map((e) => <tr key={`${e.from} ${e.type} ${e.to}`}><td><code>{e.from}</code></td><td>{e.type}</td><td><code>{e.to}</code></td></tr>)}</tbody></table>
+          </TableScroll>
         </details>
       )}
       {g.items === undefined ? null : (
         <>
           {g.items.length === 0 ? <Empty>No recorded relation reaches another node.</Empty> : (
-            <table><thead><tr><th scope="col">Relation</th><th scope="col">Depth</th><th scope="col">Node</th><th scope="col">Via</th></tr></thead>
-              <tbody>{g.items.map((i) => <tr key={i.id}><td>{i.relation}</td><td>{i.depth}</td><td><NodeLink id={i.id} go={props.go} /></td><td>{i.via.edge} from <code>{i.via.from}</code></td></tr>)}</tbody></table>
+            <TableScroll label="Graph relations"><table><thead><tr><th scope="col">Relation</th><th scope="col">Depth</th><th scope="col">Node</th><th scope="col">Via</th></tr></thead>
+              <tbody>{g.items.map((i) => <tr key={i.id}><td>{i.relation}</td><td>{i.depth}</td><td><NodeLink id={i.id} go={props.go} /></td><td>{i.via.edge} from <code>{i.via.from}</code></td></tr>)}</tbody></table></TableScroll>
           )}
           {g.notice === undefined ? null : <p className="muted small">{g.notice}</p>}
           {(g.limitations ?? []).length === 0 ? null : <ul className="muted small">{g.limitations?.map((l) => <li key={l.code}>{l.message}</li>)}</ul>}

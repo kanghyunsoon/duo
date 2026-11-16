@@ -57,6 +57,7 @@ export const codexAdapter: AgentIntegrationAdapter = {
   id: "codex",
   mcpTarget: ".codex/config.toml",
   bridgeTarget: "AGENTS.md",
+  skillTarget: ".agents/skills/duo/SKILL.md",
   projectTrustRequired: true,
   approvalRequired: false,
   plannedEntry: (launcher) => ({ command: launcher.command, args: [...launcher.argsPrefix, "mcp", "--root-from", "git-cwd", "--agent", "codex"] }),
@@ -83,10 +84,10 @@ export const codexAdapter: AgentIntegrationAdapter = {
     const check = parse(next);
     return check.ok && exactly(entryOf(check.value), planned) ? next : undefined;
   },
-  remove(text) {
+  remove(text, keepFile = false) {
     const next = removeBlock(text, CODEX_MARKERS);
     if (next === undefined) return undefined;
-    return next.trim() === "" ? null : next;
+    return !keepFile && next.trim() === "" ? null : next;
   },
   readEntry(text) {
     const parsed = parse(text);

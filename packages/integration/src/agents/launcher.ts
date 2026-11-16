@@ -19,6 +19,27 @@ export interface HostEnvironment {
 
 export const currentHost = (): HostEnvironment => ({ env: process.env, platform: process.platform });
 
+/** Approximate the agent PATH only for measured runners; never change the caller's environment (#40). */
+export function effectiveLauncherHost(launcher: DuoLauncher, host: HostEnvironment): HostEnvironment {
+  const env = host.env;
+  const value = (name: string) => env[host.platform === "win32" ? Object.keys(env).find((k) => k.toLowerCase() === name) ?? name : name];
+  const command = value("npm_command");
+  const runner = command === "exec" || command === "run"
+    || (Boolean(value("npm_lifecycle_event")) && /(?:^|[\\/])yarn\.js$/u.test(value("npm_execpath") ?? ""));
+  if (launcher.kind !== "path" || !runner) return host;
+  const key = Object.keys(env).find((k) => host.platform === "win32" ? k.toUpperCase() === "PATH" : k === "PATH");
+  if (key === undefined) return host;
+  const api = host.platform === "win32" ? path.win32 : path.posix;
+  const injectedBin = host.platform === "win32" ? /(?:^|[\\/])node_modules[\\/]\.bin[\\/]*$/iu : /(?:^|\/)node_modules\/\.bin\/*$/u;
+  const effective = pathValue(host).split(host.platform === "win32" ? ";" : ":")
+    .filter((dir) => !injectedBin.test(api.normalize(dir))).join(host.platform === "win32" ? ";" : ":");
+  // shortcut: also drops user-added node_modules/.bin entries; prefix-only filtering needs per-runner evidence (Yarn mixes in non-bin dirs).
+  // shortcut: pnpm dlx has none of these markers; extend only after recording distinguishing runner evidence.
+  const nextEnv = { ...env, [key]: effective };
+  if (host.platform === "win32") for (const k of Object.keys(nextEnv)) if (k.toUpperCase() === "PATH") nextEnv[k] = effective;
+  return { ...host, env: nextEnv };
+}
+
 const BARE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 const WINDOWS_EXTS = [".exe", ".cmd", ".bat", ".com", ".ps1"];
 
@@ -93,7 +114,7 @@ export function checkLauncher(root: string, launcher: DuoLauncher, host: HostEnv
   }
   const resolved = findOnPath(command, host);
   if (resolved === undefined) {
-    diagnostics.push(createDiagnostic("AGENT_LAUNCHER_UNAVAILABLE", `"${command}" is not on PATH, so the agent could not start DUO; install duoctl or choose another launcher`));
+    diagnostics.push(createDiagnostic("AGENT_LAUNCHER_UNAVAILABLE", `"${command}" is not on PATH, so the agent could not start DUO; install duoctl on the agent PATH or reinstall with --launcher npx for a project-local DUO`));
   }
   let localBin: string | undefined;
   if (launcher.kind === "npx") {

@@ -86,6 +86,11 @@ export interface ModuleReferenceSyntax {
   readonly system?: true;
   /** Python relative import depth (the number of leading dots). */
   readonly relativeLevel?: number;
+  /**
+   * TS/JS import() whose argument is not a literal (a variable, an expression, a template literal with
+   * substitutions; #50 L2a). The specifier is "" and the expression is not kept: it is never resolved.
+   */
+  readonly computed?: true;
 }
 
 /**

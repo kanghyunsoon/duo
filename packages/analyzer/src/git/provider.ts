@@ -25,6 +25,9 @@ const EMPTY_TREE: Readonly<Record<GitObjectFormat, string>> = {
   sha256: "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321",
 };
 
+/** Characters of pathspecs per pathsExist command (#187): well under the Windows command-line limit. */
+const PATHSPEC_BUDGET = 8_000;
+
 /** Flags that pin diff output regardless of the user's diff.* configuration. */
 const DIFF_FLAGS = [
   "--no-color", "--no-ext-diff", "--no-textconv", "--no-abbrev", "-M", "--diff-algorithm=myers", "--indent-heuristic",
@@ -45,6 +48,12 @@ export interface GitProvider {
   blobProvenance(paths?: readonly RepoPath[]): Promise<ParseResult<GitBlobProvenance[]>>;
   /** Blob bytes at HEAD, in the index, or at a commit (e.g. the Decision Lock baseline). */
   readBlob(source: GitBlobSource, file: RepoPath): Promise<ParseResult<Uint8Array>>;
+  /**
+   * Which of paths name a file (a blob entry) at HEAD, in the index, or at a commit (#187). It reads trees or the index
+   * only, never blob contents, so it answers in a partial clone (`--filter=blob:none`) without fetching. A directory or
+   * submodule entry is not a file. A failure (a commit or tree that cannot be read) is an error, not an empty set.
+   */
+  pathsExist(source: GitBlobSource, paths: readonly RepoPath[]): Promise<ParseResult<ReadonlySet<RepoPath>>>;
   /** Most recent commits reachable from a revision (default HEAD), newest first. Empty when unborn. */
   listCommits(options?: { readonly maxCommits?: number; readonly from?: string }): Promise<ParseResult<GitCommit[]>>;
 }
@@ -269,6 +278,48 @@ class Provider implements GitProvider {
     const r = await runGitBytes(this.root, ["cat-file", "blob", spec]);
     if (!r.ok) return failure([createDiagnostic("GIT_OBJECT_NOT_FOUND", `No blob for "${file}" at ${JSON.stringify(source)}`, { path: file })]);
     return success(new Uint8Array(r.value));
+  }
+
+  async pathsExist(source: GitBlobSource, paths: readonly RepoPath[]): Promise<ParseResult<ReadonlySet<RepoPath>>> {
+    if (paths.length === 0) return success(new Set<RepoPath>());
+    // A path Git cannot match as written (a backslash, "..", a trailing "/") cannot be shown absent: refuse the request.
+    const odd = paths.find((p) => this.toPath(p) === undefined);
+    if (odd !== undefined) return failure([createDiagnostic("GIT_REQUEST_INVALID", `${JSON.stringify(odd)} is not a portable repository path`)]);
+    let commit: string | undefined;
+    if (source !== "INDEX") {
+      const resolved = await this.resolveCommit(source === "HEAD" ? "HEAD" : source.commit);
+      if (resolved.value === undefined) return failure(resolved.diagnostics);
+      commit = resolved.value;
+    }
+    const wanted = new Set<string>(paths);
+    const found = new Set<RepoPath>();
+    // Batches keep each command line short (Windows limits it to about 32K characters).
+    for (let start = 0; start < paths.length;) {
+      const batch: RepoPath[] = [];
+      for (let length = 0; start < paths.length && (batch.length === 0 || length + (paths[start]?.length ?? 0) < PATHSPEC_BUDGET); start++) {
+        const p = paths[start] as RepoPath;
+        batch.push(p);
+        length += p.length + 1;
+      }
+      let r: GitResult<string>;
+      try {
+        r = commit === undefined
+          ? await this.git("ls-files", ["--literal-pathspecs", "ls-files", "-s", "-z", "--", ...batch])
+          // Not recursive: each path is matched exactly; a directory shows as a tree entry, which is not a file.
+          : await this.git("ls-tree", ["--literal-pathspecs", "ls-tree", "-z", "--full-tree", commit, "--", ...batch]);
+      } catch (error) {
+        r = { ok: false, message: (error as Error).message }; // e.g. spawn ENAMETOOLONG: an error, never an empty set
+      }
+      if (!r.ok) return failure([gitFailed(commit === undefined ? "git ls-files" : "git ls-tree", r)]);
+      try {
+        // ls-files lists the files under a directory path too: keep the requested paths only. An unmerged entry exists.
+        const listed = commit === undefined ? parseLsFilesStage(r.value, this.toPath) : parseLsTree(r.value, this.toPath);
+        for (const p of listed.keys()) if (wanted.has(p)) found.add(p);
+      } catch (error) {
+        return failure([createDiagnostic("GIT_OUTPUT_UNEXPECTED", (error as Error).message)]);
+      }
+    }
+    return success(found);
   }
 
   async listCommits(options: { readonly maxCommits?: number; readonly from?: string } = {}): Promise<ParseResult<GitCommit[]>> {

@@ -27,6 +27,7 @@ import { projectContext } from "../operations/context.js";
 import { projectGraphQuery } from "../operations/graph.js";
 import { diffEnd, projectReview } from "../operations/review.js";
 import { searchEvidence } from "../operations/search.js";
+import { projectDecisionDetail, projectDecisionList } from "./decisions.js";
 import { projectDirection, projectEntity, projectOverview, projectProposals, projectReviewHistory } from "./projection.js";
 import { projectProposalPreview } from "./preview.js";
 import { addWorkTask, completeWorkTask, expandWorkNode, listWorkTasks, projectWorkMap, workMapRevision } from "./work-map.js";
@@ -133,6 +134,8 @@ const text = (max: number) => z.string().trim().min(1).max(max);
 // eslint-disable-next-line no-control-regex -- control characters are refused on purpose
 const endpoint = z.string().min(1).max(256).refine((v) => !v.startsWith("-") && !/[\u0000-\u001f\u007f\s]/u.test(v), "HEAD, INDEX, WORKTREE or a commit / branch name");
 const PROPOSAL_ID = /^P-[A-Za-z0-9-]{1,64}$/u;
+/** A Truth definition ID (D-001, or a Markdown Decision ID): letters, digits, dot, dash, underscore. */
+const DEFINITION_ID = /^[A-Za-z][A-Za-z0-9._-]{0,127}$/u;
 const SCHEMAS = {
   context: z.strictObject({ task: text(20_000), budget: z.number().int().min(MIN_BUDGET).max(MAX_BUDGET).optional() }),
   review: z.strictObject({ task: text(20_000).optional(), from: endpoint.optional(), to: endpoint.optional(), includeSemanticAssist: z.boolean().optional() }),
@@ -142,6 +145,7 @@ const SCHEMAS = {
   graph: z.strictObject({ node: text(4096), kind: z.enum(["trace", "impact"]).default("trace"), depth: z.coerce.number().int().min(1).max(3).default(1) }),
   search: z.strictObject({ q: text(200), limit: z.coerce.number().int().min(1).max(50).default(20) }),
   source: z.strictObject({ path: text(4096), start: z.coerce.number().int().min(1), end: z.coerce.number().int().min(1) }),
+  decisions: z.strictObject({ state: z.enum(["proposed", "confirmed", "superseded", "rejected"]).optional(), q: text(200).optional() }),
   workMap: z.strictObject({ selected: z.union([z.string().uuid(), z.string().regex(/^[0-9a-f]{32}$/u)]).optional() }),
   workExpand: z.strictObject({ node: text(4096), depth: z.coerce.number().int().min(1).max(3).default(1) }),
   workTask: z.strictObject({ agent: text(80), name: text(200), issueId: z.string().regex(DEFINITION_ID_PATTERN).optional() }),
@@ -194,10 +198,21 @@ export async function startDuoUiServer(options: DuoUiServerOptions): Promise<Duo
     const only = (m: "GET" | "POST") => {
       if (method !== m) throw new HttpError(405, "UI_METHOD_NOT_ALLOWED", `${method} is not allowed on /api/${route}`);
     };
+    // #77: the Decision detail and preview routes take no query, and the Decision list refuses a repeated name
+    // instead of keeping its last value. Checked after the method, so Host, session, Origin/CSRF and 405 keep their
+    // order. The messages are fixed and never echo a name or value.
+    const noQuery = () => {
+      if ([...url.searchParams.keys()].length > 0) throw new HttpError(400, "UI_REQUEST_INVALID", "this route takes no query parameters");
+    };
+    const noRepeatedQuery = () => {
+      const names = [...url.searchParams.keys()];
+      if (new Set(names).size !== names.length) throw new HttpError(400, "UI_REQUEST_INVALID", "a query parameter is repeated");
+    };
     const confirmMatch = /^proposals\/([^/]+)\/(confirm|reject)$/u.exec(route);
     const previewMatch = /^proposals\/([^/]+)\/preview$/u.exec(route);
     if (previewMatch !== null) {
       only("GET");
+      noQuery();
       let id: string;
       try {
         id = decodeURIComponent(previewMatch[1] as string);
@@ -234,6 +249,19 @@ export async function startDuoUiServer(options: DuoUiServerOptions): Promise<Duo
       if (id.length > 4096) throw new HttpError(400, "UI_REQUEST_INVALID", "ID too long");
       return { name: "entity", body: data(await projectEntity(root, id, shared)) };
     }
+    const decisionMatch = /^decisions\/([^/]+)$/u.exec(route);
+    if (decisionMatch !== null) {
+      only("GET");
+      noQuery();
+      let id: string;
+      try {
+        id = decodeURIComponent(decisionMatch[1] as string);
+      } catch {
+        throw new HttpError(400, "UI_REQUEST_INVALID", "not a Decision ID");
+      }
+      if (!DEFINITION_ID.test(id)) throw new HttpError(400, "UI_REQUEST_INVALID", "not a Decision ID");
+      return { name: "decision-detail", body: data(await projectDecisionDetail(root, id)) };
+    }
     const recordMatch = /^reviews\/(review-[0-9a-f]{16})$/u.exec(route);
     if (recordMatch !== null) {
       only("GET");
@@ -247,6 +275,12 @@ export async function startDuoUiServer(options: DuoUiServerOptions): Promise<Duo
       case "overview": only("GET"); return { name: "overview", body: data(await projectOverview(root, shared)) };
       case "direction": only("GET"); return { name: "direction", body: data(await projectDirection(root)) };
       case "proposals": only("GET"); return { name: "proposals", body: data(await projectProposals(root)) };
+      case "decisions": {
+        only("GET");
+        noRepeatedQuery();
+        const q = parse(SCHEMAS.decisions, query);
+        return { name: "decisions", body: data(await projectDecisionList(root, { ...(q.state === undefined ? {} : { state: q.state }), ...(q.q === undefined ? {} : { q: q.q }) })) };
+      }
       case "reviews": only("GET"); return { name: "reviews", body: data(await projectReviewHistory(root)) };
       case "graph": {
         only("GET");

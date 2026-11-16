@@ -17,10 +17,11 @@ import {
   canonicalSourceText, compareSourceHash, compareUtf8, compileRepoPattern, externalSourceSlice, fileRef, isRemoteSourcePath, nodeId,
   normalizeRepoPath, parseNodeId, readSourceFile, STATE_DIR_NAME, type Diagnostic, type ProjectTruth, type RepoPath, type SourceRef,
 } from "@duo-director/core";
-import type { GraphReader } from "@duo-director/graph";
+import { readIndexedModuleReferences, type GraphReader } from "@duo-director/graph";
 import { wildcard } from "../relevance/policy.js";
 import { isActive } from "../review/claims.js";
-import { dependencyNames } from "../review/rules.js";
+import { importedNames, ReexportOrigins } from "../review/reexport-origin.js";
+import { dependencyNames, importerFilter } from "../review/rules.js";
 import { declaredReferenceParts, dependencyOffending, sourceOffending, violationKey } from "./key.js";
 import type { BaselineFinding, BaselineRule } from "./types.js";
 
@@ -106,15 +107,42 @@ export async function headBaselineFindings(input: HeadFindingsInput): Promise<{ 
 
   // H-72: forbids.imported_paths over the Graph's File→File IMPORTS from HEAD files that equal HEAD (type-only
   // included). Exact only when no path diverges; the caller records the rule as evaluated only for a clean tree.
+  // forbids.importer_paths (#47) narrows the importing files exactly as review does, so the keys stay the same.
   const importing = decisions.filter((d) => (d.forbids.importedPaths?.length ?? 0) > 0)
-    .map((d) => ({ d, match: (d.forbids.importedPaths ?? []).flatMap((p) => compileRepoPattern(p) ?? []) }));
+    .map((d) => ({ d, match: (d.forbids.importedPaths ?? []).flatMap((p) => compileRepoPattern(p) ?? []), importer: importerFilter(d) }));
   if (importing.length > 0) {
     for (const f of headFiles.filter((p) => !input.divergent.has(p))) {
       for (const e of input.graph.adjacentEdges([fileRef(f)], { direction: "outgoing", types: ["IMPORTS"], limit: 10_000 }).edges) {
         const to = parseNodeId(e.to);
         if (to?.type !== "file" || !inHead.has(to.path)) continue;
-        for (const { d, match } of importing) {
-          if (match.some((m) => m(to.path))) add("decision-forbids-import", d.id, `import:${nodeId(fileRef(f))}->${nodeId(fileRef(to.path))}`, { path: f, enforced: d.enforcement === "block" });
+        for (const { d, match, importer } of importing) {
+          if (importer(f) && match.some((m) => m(to.path))) add("decision-forbids-import", d.id, `import:${nodeId(fileRef(f))}->${nodeId(fileRef(to.path))}`, { path: f, enforced: d.enforcement === "block" });
+        }
+      }
+    }
+    // H-98 (6): re-export origins, traced as review does (#49 Stage 2), from the indexed references of HEAD
+    // files that equal HEAD. A pair found here has the same key as a direct import of the origin. The caller
+    // records decision-forbids-import-origin as evaluated only for a clean tree.
+    const files = headFiles.filter((p) => !input.divergent.has(p));
+    const indexed = await readIndexedModuleReferences(input.root, files);
+    const starts = files.flatMap((f, i) => {
+      const r = indexed[i];
+      if (r?.status !== "ok") return [];
+      return r.references.flatMap((ref) => {
+        const target = ref.target;
+        if (target === undefined) return [];
+        const decisions = importing.filter(({ match, importer }) => importer(f) && !match.some((m) => m(target)));
+        return decisions.length === 0 ? [] : [{ f, ref, target, decisions }];
+      });
+    });
+    const origins = new ReexportOrigins(input.root, (p) => input.divergent.has(p));
+    await origins.load(starts.map((s) => s.target));
+    for (const s of starts) {
+      const traced = origins.trace(s.target, importedNames(s.ref));
+      if (traced.status !== "exact") continue;
+      for (const o of traced.origins) {
+        for (const { d, match } of s.decisions) {
+          if (inHead.has(o.file) && match.some((m) => m(o.file))) add("decision-forbids-import", d.id, `import:${nodeId(fileRef(s.f))}->${nodeId(fileRef(o.file))}`, { path: s.f, enforced: d.enforcement === "block" });
         }
       }
     }

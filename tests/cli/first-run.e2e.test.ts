@@ -61,6 +61,30 @@ describe("first-run guidance (0.1.1)", () => {
     expect(duoctl(root, ["status", "--json"], undefined, env).json().result.index.status).toBe("stale"); // status did not index
   });
 
+  it("#175: status names a history-only stale index (empty commit) and not a file change; --json is unchanged", () => {
+    const root = repo();
+    expect(duoctl(root, [...INIT, "--json"], "[]", env).code).toBe(0);
+    const git = (...a: string[]) => execFileSync("git", a, { cwd: root, env: gitEnv, windowsHide: true, stdio: "pipe" });
+    git("add", "-A");
+    git("commit", "-qm", "adopt DUO");
+    expect(duoctl(root, ["index"], undefined, env).code).toBe(0);
+    expect(text(duoctl(root, ["status"], undefined, env))).toMatch(/Index: current/u);
+
+    git("commit", "--allow-empty", "-qm", "move HEAD only");
+    const human = duoctl(root, ["status"], undefined, env);
+    expect(human.code).toBe(0);
+    expect(human.stdout).toMatch(/Index: stale \(Git history moved since the last index; no file changed\)\r?\n\s+Run duoctl index/u);
+    expect(text(duoctl(root, ["status", "--locale", "ko"], undefined, env))).toContain("Git history만 바뀌었고 바뀐 파일은 없음");
+    const json = duoctl(root, ["status", "--json"], undefined, env).json().result.index;
+    expect(json).toMatchObject({ status: "stale", fullRebuildReason: null, changes: { files: 0 }, wouldRebuild: { history: true, parse: 0 } });
+
+    // Control: a changed file is a different reason, so the history-only note is not shown.
+    fs.appendFileSync(path.join(root, "src", "tasks.ts"), "export const sub = (a: number, b: number) => a - b;\n");
+    const changed = text(duoctl(root, ["status"], undefined, env));
+    expect(changed).toMatch(/Index: stale\r?\n/u);
+    expect(changed).not.toContain("Git history moved");
+  });
+
   it("C214: without an initial commit init still fails with exit 1 and says to commit first, then run init again", () => {
     const human = duoctl(repo({ commit: false, file: false }), INIT, "[]", env);
     expect(human.code).toBe(1);

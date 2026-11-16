@@ -28,7 +28,7 @@ export { HISTORY_WINDOW, MAX_ISSUE_COMMITS, summarizeHistory } from "./build/his
 export { codeFileOf, edgeRow, edgeScope, nodeRow, nodeScope, scopeDigests, TRUTH_SCOPE } from "./build/scope.js";
 export { collectGraphFacts, type CollectOptions } from "./build/collect.js";
 export { checkGraph, dumpGraph, type GraphCheckOptions } from "./check.js";
-export { GRAPH_DB_FILE_PATH, indexRepository, isResolutionConfigFile, openProjectGraphReader, openProjectGraphStore, type IndexOptions } from "./incremental/indexer.js";
+export { GRAPH_DB_FILE_PATH, indexRepository, isResolutionConfigFile, openProjectGraphReader, openProjectGraphStore, withProjectGraphWriter, type IndexOptions } from "./incremental/indexer.js";
 export { inspectIndex, type AnalysisCoverage, type IndexInspection, type IndexStatus, type InspectFreshnessRecord, type InspectOptions } from "./incremental/inspect.js";
 export {
   createLanguageModuleResolver, CPP_INCLUDE_RESOLUTION_VERSION, discoverPythonRoots, MODULE_RESOLUTION_VERSION, PYTHON_RESOLUTION_VERSION, resolveCppInclude, resolvePython,
@@ -42,6 +42,8 @@ export {
   GRAPH_REVISION_KEY, INDEX_STATE_FILE_PATH, INDEX_STATE_TOKEN_KEY, readIndexState, type IndexedFileState, type IndexState,
 } from "./incremental/state.js";
 export { ANALYSIS_CACHE_DIR } from "./incremental/analysis-cache.js";
+export { INDEX_WRITE_LOCK_PATH, withIndexWriteLock, type IndexWriteLockOptions } from "./incremental/write-lock.js";
+export { refreshIndexIfSafe, type RefreshIndexOptions, type RefreshIndexResult } from "./incremental/refresh.js";
 export { readIndexedModuleReferences, type IndexedModuleReference, type IndexedModuleReferences } from "./incremental/references.js";
 export { applyGraphDiff, diffScopes, type GraphDiff } from "./incremental/diff.js";
 export { impact, impactSeedsOfFiles, type ImpactItem, type ImpactOptions, type ImpactRelation, type ImpactResult } from "./query/impact.js";

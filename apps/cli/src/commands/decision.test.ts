@@ -21,3 +21,14 @@ describe("informed confirm preview: forbids scope (T40 N3)", () => {
     expect(lines.some((l) => l.includes("Forbids scope"))).toBe(false);
   });
 });
+
+describe("informed confirm preview: literal brackets (H-104 Q3)", () => {
+  it("says that [ and ] are literal when a governs or forbids path pattern has one, and only then", () => {
+    const preview = (candidate: Record<string, unknown>, L: "en" | "ko" = "en") =>
+      previewLines(L, { ...base, candidate: { title: "t", question: "q", answer: "a", ...candidate } } as unknown as ConfirmPreview, "confirm");
+    expect(preview({ forbids: { paths: ["app/[id]/**"] } })).toContainEqual(expect.stringMatching(/^ {2}Brackets +"\[" and "\]" are literal characters: app\/\[id\]\/\*\* matches a directory named \[id\]/u));
+    expect(preview({ governs: { paths: ["app/[id]/page.tsx"] } }).some((l) => l.trimStart().startsWith("Brackets "))).toBe(true);
+    expect(preview({ forbids: { imported_paths: ["src/[legacy]/db.ts"] } }, "ko").join("\n")).toContain("문자 그대로");
+    expect(preview({ governs: { paths: ["src/ui/**"] }, forbids: { symbols: ["[x]"] } }).some((l) => l.includes("Brackets"))).toBe(false);
+  });
+});

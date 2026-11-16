@@ -1,4 +1,4 @@
-import { Command, Empty, ErrorBox, Level, Loading, Page, useApi } from "../components.js";
+import { Command, Empty, ErrorBox, Level, Loading, Page, TableScroll, useApi } from "../components.js";
 import { isOverview, type Overview, type OverviewResponse } from "../types.js";
 
 /** Analysis coverage (T18.0 facts): L0 is the normal file-level fallback, never shown as an error. */
@@ -18,7 +18,7 @@ export function CoverageTable(props: { readonly analysis: NonNullable<Overview["
   return (
     <>
       <p>{a.files.total} indexed files · {a.files.structural} with structural analysis · {a.files.fileOnly} file-level only</p>
-      <table>
+      <TableScroll label="Analysis coverage"><table>
         <thead><tr>{["Language", "Level", "Files", "Analyzer", "Symbols", "Tests", "Imports", "Calls", "Type resolution"].map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead>
         <tbody>
           {a.languages.map((l) => (
@@ -30,7 +30,7 @@ export function CoverageTable(props: { readonly analysis: NonNullable<Overview["
             </td></tr>
           )}
         </tbody>
-      </table>
+      </table></TableScroll>
       <p className="muted small">Limitations follow from these values: "syntactic" imports do not link files, "syntactic" calls have no CALLS edges, "partial" resolves only what syntax makes certain. A missing edge is not proof that a relation does not exist.</p>
     </>
   );

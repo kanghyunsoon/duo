@@ -45,7 +45,7 @@ export function Page(props: { readonly title: string; readonly children: ReactNo
       <header className="page-head">
         <h1 id="page-title">{props.title}</h1>
         {props.onRefresh === undefined ? null : <button type="button" onClick={props.onRefresh}>Refresh</button>}
-        {props.durationMs === undefined ? null : <span className="muted small" aria-label="server time">{props.durationMs} ms</span>}
+        {props.durationMs === undefined ? null : <span className="muted small">{props.durationMs} ms</span>}
       </header>
       {props.children}
     </section>
@@ -59,6 +59,10 @@ export function Section(props: { readonly title: string; readonly children: Reac
       <div className="section-body">{props.children}</div>
     </details>
   );
+}
+
+export function TableScroll(props: { readonly label: string; readonly children: ReactNode }) {
+  return <div className="table-scroll" role="region" aria-label={props.label} tabIndex={0}>{props.children}</div>;
 }
 
 export function Empty(props: { readonly children: ReactNode }) {
