@@ -136,7 +136,7 @@ main:has(.work-page) { max-width: none; min-width: 0; }
 html[lang="ko"] { word-break: keep-all; overflow-wrap: anywhere; }
 
 /* Shared visual language: Apple HIG hierarchy, grouped surfaces and disclosure. */
-:root { color-scheme: light; --bg:#f2f2f7; --panel:#fff; --fg:#1c1c1e; --muted:#68686f; --line:#e5e5ea; --accent:#007aff; --ok:#248244; --warn:#956000; --block:#c92a27; --info:#3269ad; font:15px/1.6 Pretendard,-apple-system,BlinkMacSystemFont,sans-serif; font-synthesis:none; }
+:root { color-scheme: light; --bg:#f2f2f7; --panel:#fff; --fg:#1c1c1e; --muted:#5f5f66; --line:#e5e5ea; --accent:#005bbb; --ok:#17682f; --warn:#956000; --block:#c92a27; --info:#285b99; font:15px/1.6 Pretendard,-apple-system,BlinkMacSystemFont,sans-serif; font-synthesis:none; }
 body { -webkit-font-smoothing:antialiased; }
 .layout { grid-template-columns:244px minmax(0,1fr); }
 nav { position:sticky; top:0; height:100dvh; display:flex; flex-direction:column; padding:34px 18px 22px; background:#f8f8fae8; backdrop-filter:blur(24px); border-right:1px solid #dedee5; }
@@ -163,6 +163,7 @@ h3 { font-size:15px; }
 a { text-underline-offset:3px; }
 .section { margin:14px 0; border:1px solid #e7e7ed; border-radius:17px; box-shadow:0 2px 8px #17172f03; overflow:hidden; }
 .section > summary { display:flex; align-items:center; min-height:62px; padding:17px 22px; list-style:none; gap:12px; }
+.section > summary:focus-visible { outline-offset:-3px; }
 .section > summary::-webkit-details-marker { display:none; }
 .section > summary::after { content:'›'; color:#8e8e93; font-size:24px; line-height:1; margin-left:auto; transition:transform .15s; }
 .section[open] > summary::after { transform:rotate(90deg); }

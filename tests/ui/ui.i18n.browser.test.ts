@@ -70,6 +70,7 @@ it("switches language in place, preserves form input and persists across reloads
   try {
     await mock(page);
     await page.goto(`${origin}/search`);
+    await page.getByLabel("Language", { exact: true }).selectOption("ko");
     await page.getByRole("heading", { name: "검색", exact: true }).waitFor();
     await page.getByLabel("검색어", { exact: true }).fill("AUTH-03 original task");
     await page.getByLabel("언어", { exact: true }).selectOption("en");
@@ -92,7 +93,7 @@ it("switches language in place, preserves form input and persists across reloads
     await dialog.getByRole("textbox").fill("P-001");
     expect(await confirm.isEnabled()).toBe(true);
     await dialog.getByRole("button", { name: "취소", exact: true }).click();
-    await page.getByRole("navigation").getByRole("link", { name: "세션 파일", exact: true }).click();
+    await page.goto(`${origin}/session-preview`);
     await page.locator(".session-graph-heading").filter({hasText:"변경한 파일"}).waitFor();
     await page.getByLabel("언어", { exact: true }).selectOption("en");
     await page.locator(".session-graph-heading").filter({hasText:"Changed files"}).waitFor();
@@ -113,11 +114,13 @@ it("renders every route in both languages with the bundled resources", async (ct
   page.on("request", (request) => { if (!request.url().startsWith(origin)) external.push(request.url()); });
   try {
     await mock(page);
+    await page.goto(`${origin}/search`);
+    await page.getByLabel("Language", { exact: true }).selectOption("ko");
     const routes = [
       ["/overview", "개요", "Overview"], ["/direction", "프로젝트 방향", "Direction"],
-      ["/decisions", "결정 대기", "Pending decisions"], ["/work", "세션 파일", "Session files"],
-      ["/graph?node=REQ-001", "세션 파일", "Session files"], ["/coverage", "개요", "Overview"],
-      ["/context", "세션 파일", "Session files"], ["/review", "리뷰", "Review"],
+      ["/decisions", "결정 대기", "Pending decisions"], ["/work", "작업 맵", "Work map"],
+      ["/graph?node=REQ-001", "그래프", "Graph"], ["/coverage", "개요", "Overview"],
+      ["/context", "컨텍스트 검사기", "Context Inspector"], ["/review", "리뷰", "Review"],
       ["/reviews", "리뷰 이력", "Review history"], ["/search?q=hello", "검색", "Search"],
       ["/entity/REQ-001", "REQ-001", "REQ-001"], ["/reviews/review-1", "리뷰 review-1", "Review review-1"],
     ] as const;
@@ -138,7 +141,7 @@ it("renders every route in both languages with the bundled resources", async (ct
   } finally { await page.close(); }
 }, 30_000);
 
-it("keeps Korean usable when browser storage is disabled", async (ctx) => {
+it("keeps English usable when browser storage is disabled", async (ctx) => {
   if (browser === undefined) return ctx.skip();
   const page = await browser.newPage();
   page.setDefaultTimeout(5_000);
@@ -146,9 +149,9 @@ it("keeps Korean usable when browser storage is disabled", async (ctx) => {
     await page.addInitScript(() => Object.defineProperty(window, "localStorage", { get() { throw new Error("Storage disabled"); } }));
     await mock(page);
     await page.goto(`${origin}/search`);
-    await page.getByRole("heading", { name: "검색", exact: true }).waitFor();
-    await page.getByLabel("언어", { exact: true }).selectOption("en");
     await page.getByRole("heading", { name: "Search", exact: true }).waitFor();
+    await page.getByLabel("Language", { exact: true }).selectOption("ko");
+    await page.getByRole("heading", { name: "검색", exact: true }).waitFor();
   } finally { await page.close(); }
 }, 30_000);
 
@@ -158,15 +161,16 @@ it("keeps sidebar navigation available when collapsed and persists the preferenc
   const page=await browser.newPage();
   try {
     await mock(page); await page.goto(`${origin}/search`);
+    await page.getByLabel("Language",{exact:true}).selectOption("ko");
     await page.getByRole("button",{name:"사이드바 접기",exact:true}).click();
     expect(await page.locator(".layout").getAttribute("class")).toContain("sidebar-collapsed");
-    await page.getByRole("navigation").getByRole("link",{name:"세션 파일",exact:true}).click();
-    await page.getByRole("heading",{name:"세션 파일",exact:true,level:1}).waitFor();
+    await page.getByRole("navigation").getByRole("link",{name:"작업 맵",exact:true}).click();
+    await page.getByRole("heading",{name:"작업 맵",exact:true,level:1}).waitFor();
     await page.reload();
     await page.getByRole("button",{name:"사이드바 펼치기",exact:true}).waitFor();
     expect(await page.getByRole("navigation").getByRole("link",{name:"분석 범위",exact:true}).count()).toBe(0);
-    expect(await page.getByRole("navigation").getByRole("link",{name:"컨텍스트",exact:true}).count()).toBe(0);
-    expect(await page.getByRole("navigation").getByRole("link",{name:"그래프",exact:true}).count()).toBe(0);
+    expect(await page.getByRole("navigation").getByRole("link",{name:"컨텍스트",exact:true}).count()).toBe(1);
+    expect(await page.getByRole("navigation").getByRole("link",{name:"그래프",exact:true}).count()).toBe(1);
     await page.getByRole("button",{name:"사이드바 펼치기",exact:true}).click();
     await page.getByLabel("언어",{exact:true}).waitFor();
   } finally {await page.close();}
@@ -182,7 +186,8 @@ it("uses explicit session file records and keeps supplied context separate", asy
         {id:"task:1",type:"task",label:"[Codex] Recorded work",status:"active",changedFiles:["src/changed.ts","src/changed.ts"],referencedFiles:["docs/reference.md"],providedContext:{recordedAt:"2026-11-13T00:00:00Z",items:[{ref:"src/supplied.ts",kind:"file",text:"Supplied but not proven read"}]}},
         {id:"file:unrelated",type:"file",label:"src/unrelated.ts",source:{path:"src/unrelated.ts"}}],
       edges:[{from:"task:1",to:"file:unrelated",type:"RELATED",source:"context"}],truncated:false}}}));
-    await page.goto(`${origin}/work`);
+    await page.goto(`${origin}/session-preview`);
+    await page.getByLabel("Language",{exact:true}).selectOption("ko");
     await page.locator(".session-file-node").first().waitFor();
     expect(await page.locator(".session-file-node").count()).toBe(2);
     expect(await page.locator(".react-flow__edge").count()).toBe(2);

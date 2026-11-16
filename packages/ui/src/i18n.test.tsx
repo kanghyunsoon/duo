@@ -26,11 +26,11 @@ describe("UI localization", () => {
     }
   });
 
-  it("defaults to Korean and handles unsupported or unavailable storage", () => {
-    expect(initialLanguage()).toBe("ko");
+  it("defaults to English and handles unsupported or unavailable storage", () => {
+    expect(initialLanguage()).toBe("en");
     expect(initialLanguage({ getItem: (key) => key === LANGUAGE_STORAGE_KEY ? "en" : null })).toBe("en");
-    expect(initialLanguage({ getItem: () => "fr" })).toBe("ko");
-    expect(initialLanguage({ getItem: () => { throw new Error("Storage disabled"); } })).toBe("ko");
+    expect(initialLanguage({ getItem: () => "fr" })).toBe("en");
+    expect(initialLanguage({ getItem: () => { throw new Error("Storage disabled"); } })).toBe("en");
   });
 
   it("translates decision safeguards while preserving and escaping the exact candidate", async () => {

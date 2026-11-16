@@ -13,6 +13,6 @@ https://developer.apple.com/design/human-interface-guidelines/layout
 DUO uses web components; native Apple components and SF Symbols are not bundled.
 The local font asset is approximately 2.0 MB. No font CDN requests are made.
 
-The standalone Graph navigation and explorer are removed. Legacy `/graph` bookmarks render Session files. Session files retains its graph with only changed and explicitly referenced file connections. Entity details retain direct relation information without an explorer link.
+The production Work map and Graph explorer remain available. The experimental `/session-preview` page shows only explicitly recorded changed and referenced file connections and is labeled as a preview.
 
-Analysis coverage is a collapsed detail in Overview, with an always-visible indexed file count. The standalone Context navigation is removed; session details display recorded provided context in a collapsed section, separate from referenced files. Legacy `/coverage` opens Overview and `/context` opens Session files. Provided context is optional recorded session data; the UI does not compile new context or infer that delivered information was read. The demo supplies simulated records. Production capture of these records is not yet wired.
+Analysis coverage is a collapsed detail in Overview, with an always-visible indexed file count; legacy `/coverage` opens Overview. The Context compiler remains available at `/context`. The session preview displays optional recorded provided context separately from referenced files and does not infer that delivered information was read. The demo supplies simulated records. Production capture of these records is not yet wired.

@@ -98,11 +98,22 @@ afterAll(async () => {
 });
 
 describe("DUO UI in a browser (T18.1)", () => {
+  it("keeps primary actions and selected navigation readable in the light theme", async (ctx) => {
+    if (browser === undefined) return ctx.skip();
+    const r = repo("review/app"); await r.index();
+    const { page, server } = await open(r.root);
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto(`${server.origin}/review`);
+    await page.getByRole("button", { name: "Review changes", exact: true }).waitFor();
+    const result = await new AxeBuilder({ page }).include('nav a[aria-current="page"]').include("main button").withRules(["color-contrast"]).analyze();
+    expect(result.violations).toEqual([]);
+  });
+
   it("adds a session and shows only changed/reference file categories", async (ctx) => {
     if (browser === undefined) return ctx.skip();
     const r = repo("review/app"); await r.index();
     const { page, server, errors } = await open(r.root);
-    await page.goto(`${server.origin}/work`);
+    await page.goto(`${server.origin}/session-preview`);
     await page.getByText("No recorded sessions yet.", {exact:true}).waitFor();
     await page.locator(".session-add > summary").click();
     await page.getByLabel("Work name", {exact:true}).fill("Refresh flow");
@@ -220,7 +231,7 @@ describe("DUO UI in a browser (T18.1)", () => {
   it("shows a newly recorded session and completes it without reloading", async (ctx) => {
     if (browser === undefined) return ctx.skip();
     const r=repo("review/app"); const {page,server,errors}=await open(r.root);
-    await page.goto(`${server.origin}/work`); await page.getByText("No recorded sessions yet.",{exact:true}).waitFor();
+    await page.goto(`${server.origin}/session-preview`); await page.getByText("No recorded sessions yet.",{exact:true}).waitFor();
     touchWorkTask(r.root,"Codex","Live session",new Date(),{duoSessionId:"live-session"});
     await page.getByRole("heading",{name:"[Codex] Live session",exact:true}).waitFor({timeout:30000});
     await page.getByRole("button",{name:"Mark completed",exact:true}).click();
