@@ -19,6 +19,7 @@ DUO는 SDD(Specification-Driven Development)로 개발한다. 구현은 이 문�
 | [10-security.md](10-security.md) | 신뢰 모델, 위협, 대응 |
 | [11-testing-strategy.md](11-testing-strategy.md) | 테스트 계층, fixture, 필수 검증, E2E |
 | [12-roadmap.md](12-roadmap.md) | Milestone(M0~M4)과 MVP 이후 |
+| [design/README.md](design/README.md) | 설계 산출물: ERD(Project Truth·Code Graph·SQLite 물리 스키마)와 Local UI 화면 와이어프레임 6종 |
 | [language-support.md](language-support.md) | Analysis Level(L0~L3), AnalyzerCapabilities, 언어별 지원·한계, stack·build output 판별, grammar (T18.0) |
 | [validation/issue-104-file-ownership.md](validation/issue-104-file-ownership.md) | #104(H-94): Agent 설정 파일 소유권 기록(`existedBefore`·`preSha256`·`postSha256`), 원본 바이트 복원, 손상·누락 기록의 안전 보존과 회귀 검증 |
 | [roadmap/issue-40-launcher-verification-design.md](roadmap/issue-40-launcher-verification-design.md) | Issue #40-1~3 draft: settled D1/D2 policy, measured runner evidence, effective PATH and version warning, compatibility and remaining validation |
