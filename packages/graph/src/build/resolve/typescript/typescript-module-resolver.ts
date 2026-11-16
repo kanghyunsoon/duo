@@ -97,13 +97,16 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     const cached = configs.get(file);
     if (cached !== undefined) return cached;
     // readConfigFile reports syntax errors; readJsonConfigFile + parse also records the extends chain.
-    const read = api.readConfigFile(file, readFile);
+    // Both get the "/" form: TypeScript names the JSON source file with it, and a "\" path fails its assertion (#205).
+    const read = api.readConfigFile(posix(file), readFile);
     const repoPath = toRepoPath(file);
     const own: Diagnostic[] = [];
     if (repoPath !== undefined) diagnosticsByConfig.set(repoPath, own);
     const report = (d: ts.Diagnostic) => {
       if (d.category !== api.DiagnosticCategory.Error) return;
       const diagnostic = createDiagnostic("TSCONFIG_INVALID", `${repoPath ?? file}: ${api.flattenDiagnosticMessageText(d.messageText, " ")}`, repoPath === undefined ? undefined : { path: repoPath });
+      // The message has no position, so the same error at two places would print as two identical lines.
+      if (own.some((o) => o.message === diagnostic.message)) return;
       diagnostics.push(diagnostic);
       own.push(diagnostic);
     };

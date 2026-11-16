@@ -141,6 +141,14 @@
 | Downgrade | 0.4.0-rc.1·0.3.x는 `importer_paths`가 없으면 같은 Truth를 읽고 위 경우에 이전 판정을 낸다. 0.4.0-rc.1·0.3.4에는 소유권 기록이 없고 #104가 있다. 0.3.5는 skill 대상이 든 기록을 invalid로 보고 지우지 않는다. 0.3 Truth의 floor는 그대로 0.2.2 |
 | Known limitation | #160 Stage 2 미완료(snapshot을 직접 분석하지 않고 판정 입력이 다르면 `REVIEW_SNAPSHOT_MISMATCH`), #151 Stage B 미포함(Git이 무시하거나 `index.exclude`가 뺀 `tsconfig.json`·`jsconfig.json`을 index 뒤에 만들면 index가 stale이 되지 않고 MCP 자동 갱신도 일어나지 않는다. `duoctl index`를 실행하면 #192(Stage A)로 다시 해석된다), 30초는 현재 측정에 근거한 초기값, 실제 agent 승인 UX·Claude Code의 skill 작업 중 로딩·접근성 수동 검증(#73·#101) 미완료, rc.1의 launcher·redaction 한계와 #7(README 무관 수정의 WARN) 그대로, Windows에서 가장 가까운 `tsconfig.json`·`jsconfig.json`에 JSON 문법 오류가 있으면 `TSCONFIG_INVALID` 대신 index가 TypeScript `Debug Failure`로 실패(#205, 0.4.0-rc.1·0.3.5에도 있음) |
 
+## 0.4.0-rc.2 이후 `next` 변경 (미출시)
+
+다음 release에 들어갈 `next`의 변경. release 때 그 version 절로 옮긴다.
+
+| 분류 | 내용 |
+|---|---|
+| Behavior correction | JSON 문법 오류가 있는 가장 가까운 `tsconfig.json`·`jsconfig.json`(#205): Windows에서 `duoctl init`·`duoctl index`가 TypeScript `Debug Failure`로 실패하던 것(CLI `CLI_USAGE_INVALID`, exit 1)을 고쳐, 의미 오류만 있는 config처럼 index를 끝내고 그 config의 `TSCONFIG_INVALID`(warning)를 index state에 남긴다. 다른 OS는 이전에도 같았다. 같은 config에서 위치만 다른 같은 문장의 오류는 메시지에 위치가 없어 한 번만 남긴다. 해석 결과·graph·index-state 형식·`duo.*/1` 그대로 |
+
 ## 0.3.3 변경 분류 (T78, H-87)
 
 0.3.2 → 0.3.3. UX·안정성 patch(H-87). 새 규칙과 새 검사 종류, dependency 변경, 형식 major 변경은 없다. review의 verdict·claim·evidence·gap, context, Decision 결과는 0.3.2와 같다(T77에서 같은 저장소·같은 변경으로 나란히 확인).
