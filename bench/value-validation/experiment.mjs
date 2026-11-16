@@ -3,6 +3,7 @@
 // anything else in the directory is read for reuse or written. Any difference fails without touching existing files;
 // a different experiment needs a new --out directory. Nothing here migrates, rewrites or deletes earlier results.
 import crypto from "node:crypto";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -30,11 +31,47 @@ export function taskDigest(tasks) {
 /** Digest of the fixture definition and generator source; line endings are normalized so a checkout's EOL does not count. */
 export const fixtureDigest = (source) => sha256(source.replace(/\r\n/gu, "\n"));
 
-export function experimentIdentity({ dryRun, model, seed, timeoutMin, reps, tasks, conditions }, { taskDefinitions, fixtureVersion, fixtureSource, duoVersion }) {
+/**
+ * Digest of the code that runs, measures and judges a run (#74 review): file name and content, sorted by name, line
+ * endings normalized. A fix in the oracle or the measurement then cannot pool its runs with runs judged by older code.
+ */
+export function harnessDigest(sources) {
+  return sha256(canonicalJson(Object.keys(sources).sort().map((name) => [name, sources[name].replace(/\r\n/gu, "\n")])));
+}
+
+export function experimentIdentity({ dryRun, model, seed, timeoutMin, reps, tasks, conditions }, { taskDefinitions, fixtureVersion, fixtureSource, duoVersion, harnessSources, codexVersion }) {
   return {
     mode: dryRun ? "dry-run" : "real", model: model ?? null, seed, timeoutMin, reps, tasks: [...tasks], conditions: [...conditions],
     fixtureVersion, fixtureDigest: fixtureDigest(fixtureSource), duoVersion: conditions.includes("C") ? duoVersion : null, taskDigest: taskDigest(taskDefinitions),
+    harnessDigest: harnessDigest(harnessSources), codexVersion: dryRun ? null : codexVersion,
   };
+}
+
+/** Unknown and repeated task or condition IDs (#74 review: --tasks T1,T1 would schedule, pay for and record a run twice). */
+export function selectionProblems({ tasks, conditions }, knownTasks, knownConditions = ["A", "B", "C"]) {
+  const repeated = (ids) => [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+  const p = [];
+  const unknown = [...tasks.filter((id) => !knownTasks.includes(id)), ...conditions.filter((c) => !knownConditions.includes(c))];
+  if (unknown.length > 0) p.push("unknown task or condition: " + unknown.join(", "));
+  if (repeated(tasks).length > 0) p.push("task listed more than once: " + repeated(tasks).join(", "));
+  if (repeated(conditions).length > 0) p.push("condition listed more than once: " + repeated(conditions).join(", "));
+  return p;
+}
+
+/** Run IDs that a schedule contains more than once; a second run with the same ID would replace the first one's files. */
+export function repeatedRunIds(plan) {
+  const ids = plan.map((r) => r.id);
+  return [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+}
+
+/** Creates a run directory that must not exist yet: a run is never rerun into, or replaces, an existing directory. */
+export function claimRunDir(dir) {
+  fs.mkdirSync(path.dirname(dir), { recursive: true });
+  try { fs.mkdirSync(dir); }
+  catch (error) {
+    if (error.code === "EEXIST") throw new Error(dir + " already exists; a run is never started again in the same directory. Nothing in it was changed.", { cause: error });
+    throw error;
+  }
 }
 
 const show = (v) => { const s = canonicalJson(v); return s.length > 80 ? s.slice(0, 77) + "..." : s; };
@@ -50,6 +87,7 @@ export function openExperiment(out, identity) {
   if (!fs.existsSync(file)) {
     const found = RESULT_ENTRIES.filter((e) => fs.existsSync(path.join(out, e)));
     if (found.length > 0) throw fail(out, "holds results (" + found.join(", ") + ") but no experiment.json, so the settings they were made with cannot be checked.");
+    // agent.mjs has already created out; this keeps openExperiment usable on its own (as the tests use it).
     fs.mkdirSync(out, { recursive: true });
     fs.writeFileSync(file, JSON.stringify({ format: EXPERIMENT_FORMAT, createdAt: new Date().toISOString(), identity }, null, 2) + "\n", { flag: "wx" });
     return { created: true };
@@ -70,7 +108,8 @@ export function openExperiment(out, identity) {
 
 /**
  * Checks runs.json and the run directories against the plan before anything is resumed. Returns the recorded runs and
- * the IDs to skip. A run directory without a record is an interrupted run: it is reported, not deleted or rerun.
+ * the IDs to skip. A planned run's directory without a record is an interrupted run: it is reported, not deleted or
+ * rerun. Other entries in runs/ (a stray .DS_Store, notes) are returned as ignored, not treated as runs (#74 review).
  */
 export function checkResults(out, plan, identity) {
   const file = path.join(out, "runs.json");
@@ -91,21 +130,39 @@ export function checkResults(out, plan, identity) {
     if ((r?.model ?? null) !== identity.model) problems.push(r?.id + " was run with model " + show(r?.model ?? null));
   }
   const runsDir = path.join(out, "runs");
-  const interrupted = fs.existsSync(runsDir) ? fs.readdirSync(runsDir).filter((id) => !seen.has(id)).sort() : [];
+  const entries = fs.existsSync(runsDir) ? fs.readdirSync(runsDir, { withFileTypes: true }) : [];
+  const isRun = (e) => e.isDirectory() && planned.has(e.name);
+  const interrupted = entries.filter((e) => isRun(e) && !seen.has(e.name)).map((e) => e.name).sort();
+  const ignored = entries.filter((e) => !isRun(e)).map((e) => e.name).sort();
   if (interrupted.length > 0) problems.push("interrupted (a run directory without a record in runs.json): " + interrupted.join(", ") + ". Keep or move these directories deliberately; they are not rerun or deleted automatically");
   if (problems.length > 0) throw fail(out, "runs.json does not match this experiment:\n  " + problems.join("\n  "));
-  return { results, done: seen };
+  return { results, done: seen, ignored };
+}
+
+/**
+ * HEAD and every working-tree change of a cached template, untracked files included (#74 review): runs copy the whole
+ * directory, so an added file would reach every later run. Ignored paths (node_modules/, .duo-project/generated/) stay
+ * out. --no-optional-locks: checking a template never rewrites its .git/index.
+ */
+export function templateState(root) {
+  const run = (args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  let head = "unreadable"; let changes = "unreadable";
+  try {
+    head = run(["rev-parse", "HEAD"]);
+    changes = run(["--no-optional-locks", "status", "--porcelain", "--untracked-files=all"]);
+  } catch { /* reported as a HEAD or change mismatch */ }
+  return { head, changes };
 }
 
 /** Problems with a cached template before it is reused (empty when it can be reused). */
-export function templateProblems(info, { condition, fixtureVersion, duoVersion, head, trackedChanges }) {
+export function templateProblems(info, { condition, fixtureVersion, duoVersion, head, changes }) {
   if (info === null || typeof info !== "object") return ["template " + condition + " has no readable metadata"];
   const p = [];
   if (info.condition !== condition) p.push("template " + condition + " metadata is for condition " + show(info.condition));
   if (info.fixture !== fixtureVersion) p.push("template " + condition + " was built from fixture " + show(info.fixture) + ", not " + fixtureVersion);
   if (condition === "C" && info.duoVersion !== duoVersion) p.push("template C was built with DUO " + show(info.duoVersion ?? null) + ", not " + duoVersion);
   if (info.adoption !== head) p.push("template " + condition + " HEAD is " + head + ", not its recorded adoption commit " + show(info.adoption));
-  if (trackedChanges !== "") p.push("template " + condition + " has uncommitted changes to tracked files");
+  if (changes !== "") p.push("template " + condition + " has uncommitted changes or untracked files: " + changes.split("\n").slice(0, 5).join("; "));
   return p;
 }
 

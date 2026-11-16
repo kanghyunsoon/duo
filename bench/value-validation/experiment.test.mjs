@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { canonicalJson, experimentIdentity, fixtureDigest, openExperiment, taskDigest, templateProblems } from "./experiment.mjs";
+import { canonicalJson, claimRunDir, experimentIdentity, fixtureDigest, harnessDigest, openExperiment, repeatedRunIds, selectionProblems, taskDigest, templateProblems } from "./experiment.mjs";
 import { TASKS } from "./tasks.mjs";
 
 const AGENT = fileURLToPath(new URL("./agent.mjs", import.meta.url));
@@ -70,10 +70,36 @@ describe("experiment identity (#67)", () => {
   });
 
   it("records the DUO version only for an experiment with condition C, and the mode", () => {
-    const ctx = { taskDefinitions: [task], fixtureVersion: "f/1", fixtureSource: "s", duoVersion: "0.3.3" };
+    const ctx = { taskDefinitions: [task], fixtureVersion: "f/1", fixtureSource: "s", duoVersion: "0.3.3", harnessSources: { "agent.mjs": "x" }, codexVersion: "codex-cli 1.0.0" };
     const opts = { dryRun: true, seed: 1, timeoutMin: 20, reps: 1, tasks: ["T9"] };
-    expect(experimentIdentity({ ...opts, conditions: ["A"] }, ctx)).toMatchObject({ mode: "dry-run", model: null, duoVersion: null });
-    expect(experimentIdentity({ ...opts, dryRun: false, model: "m", conditions: ["A", "C"] }, ctx)).toMatchObject({ mode: "real", model: "m", duoVersion: "0.3.3" });
+    expect(experimentIdentity({ ...opts, conditions: ["A"] }, ctx)).toMatchObject({ mode: "dry-run", model: null, duoVersion: null, codexVersion: null });
+    expect(experimentIdentity({ ...opts, dryRun: false, model: "m", conditions: ["A", "C"] }, ctx)).toMatchObject({ mode: "real", model: "m", duoVersion: "0.3.3", codexVersion: "codex-cli 1.0.0" });
+  });
+
+  it("harnessDigest follows the code that runs and judges runs, not file order or line endings (#74 review)", () => {
+    const d = harnessDigest({ "oracle.mjs": "a\n", "agent.mjs": "b\n" });
+    expect(harnessDigest({ "agent.mjs": "b\r\n", "oracle.mjs": "a\r\n" })).toBe(d);
+    expect(harnessDigest({ "oracle.mjs": "a2\n", "agent.mjs": "b\n" })).not.toBe(d);
+    expect(harnessDigest({ "oracle.mjs": "a\n", "agent.mjs": "b\n", "process.mjs": "c\n" })).not.toBe(d);
+  });
+
+  it("repeated task, condition or run IDs are found before a run is scheduled (#74 review)", () => {
+    const known = ["T1", "T2"];
+    expect(selectionProblems({ tasks: ["T1", "T2"], conditions: ["A", "B"] }, known)).toEqual([]);
+    expect(selectionProblems({ tasks: ["T1", "T1"], conditions: ["A"] }, known)).toEqual(["task listed more than once: T1"]);
+    expect(selectionProblems({ tasks: ["T1"], conditions: ["A", "A"] }, known)).toEqual(["condition listed more than once: A"]);
+    expect(selectionProblems({ tasks: ["T9"], conditions: ["D"] }, known)).toEqual(["unknown task or condition: T9, D"]);
+    expect(repeatedRunIds([{ id: "T1-A-r1" }, { id: "T1-B-r1" }, { id: "T1-A-r1" }])).toEqual(["T1-A-r1"]);
+  });
+
+  it("a run directory that already exists is never reused or replaced", () => {
+    const dir = fs.mkdtempSync(path.join(tmp, "claim-"));
+    const run = path.join(dir, "runs", "T1-A-r1");
+    claimRunDir(run);
+    fs.writeFileSync(path.join(run, "session-1.events.jsonl"), "paid output\n");
+    const before = tree(dir);
+    expect(() => claimRunDir(run)).toThrow(/already exists; a run is never started again in the same directory/u);
+    expect(tree(dir)).toEqual(before);
   });
 
   it("dry-run results are never reused by a real run, and nothing is written", () => {
@@ -84,15 +110,16 @@ describe("experiment identity (#67)", () => {
     expect(tree(dir)).toEqual(before);
   });
 
-  it("a cached template is checked for condition, fixture, DUO version (C), adoption commit and tracked changes", () => {
+  it("a cached template is checked for condition, fixture, DUO version (C), adoption commit and working-tree changes", () => {
     const ok = { condition: "C", fixture: "f/1", duoVersion: "0.3.3", adoption: "abc" };
-    const want = { condition: "C", fixtureVersion: "f/1", duoVersion: "0.3.3", head: "abc", trackedChanges: "" };
+    const want = { condition: "C", fixtureVersion: "f/1", duoVersion: "0.3.3", head: "abc", changes: "" };
     expect(templateProblems(ok, want)).toEqual([]);
     expect(templateProblems({ ...ok, duoVersion: "0.3.2" }, want).join()).toMatch(/built with DUO "0\.3\.2"/u);
     expect(templateProblems({ ...ok, duoVersion: undefined }, want).join()).toMatch(/built with DUO null/u);
     expect(templateProblems({ ...ok, fixture: "f/0" }, want).join()).toMatch(/fixture "f\/0"/u);
     expect(templateProblems(ok, { ...want, head: "def" }).join()).toMatch(/HEAD is def/u);
-    expect(templateProblems(ok, { ...want, trackedChanges: " M src/a.js" }).join()).toMatch(/uncommitted changes/u);
+    expect(templateProblems(ok, { ...want, changes: " M src/a.js" }).join()).toMatch(/uncommitted changes or untracked files: {2}M src\/a\.js/u);
+    expect(templateProblems(ok, { ...want, changes: "?? src/ui/debug.js" }).join()).toMatch(/\?\? src\/ui\/debug\.js/u);
     expect(templateProblems(null, want)).toHaveLength(1);
     expect(templateProblems(ok, { ...want, condition: "A" }).join()).toMatch(/template A metadata is for condition "C"/u);
   });
@@ -130,6 +157,7 @@ describe("agent.mjs resume (#67, dry runs only)", () => {
     ["fixtureVersion", "value-validation-01/0", /fixtureVersion: "value-validation-01\/0" \(saved\)/u],
     ["duoVersion", "0.3.2", /duoVersion: "0\.3\.2" \(saved\) -> null/u],
     ["mode", "real", /mode: "real" \(saved\) -> "dry-run"/u],
+    ["harnessDigest", "sha256:0000", /harnessDigest: "sha256:0000" \(saved\)/u],
   ])("a saved %s that differs from the current definitions is refused", { timeout: 120_000 }, (field, value, pattern) => {
     const dir = copy();
     const f = path.join(dir, "experiment.json");
@@ -160,13 +188,65 @@ describe("agent.mjs resume (#67, dry runs only)", () => {
 
     const edited = copy();
     fs.appendFileSync(path.join(edited, "templates", "A", "README.md"), "edited\n");
-    expectRefused(edited, {}, /template A has uncommitted changes to tracked files/u);
+    expectRefused(edited, {}, /template A has uncommitted changes or untracked files: +M README\.md/u);
 
     const committed = copy();
     const root = path.join(committed, "templates", "A");
     fs.appendFileSync(path.join(root, "README.md"), "edited\n");
     for (const g of [["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "edit"]]) spawnSync("git", g, { cwd: root });
     expectRefused(committed, {}, /template A HEAD is [0-9a-f]{40}, not its recorded adoption commit/u);
+  });
+
+  it("an untracked file added to a cached template is refused; an ignored one is not (#74 review)", { timeout: 120_000 }, () => {
+    const added = copy();
+    fs.mkdirSync(path.join(added, "templates", "A", "src", "ui"), { recursive: true });
+    fs.writeFileSync(path.join(added, "templates", "A", "src", "ui", "debug.js"), "import \"../db/legacy-db.js\";\n");
+    expectRefused(added, {}, /template A has uncommitted changes or untracked files: \?\? src\/ui\/debug\.js/u);
+
+    const ignored = copy();
+    fs.mkdirSync(path.join(ignored, "templates", "A", "node_modules", "x"), { recursive: true });
+    fs.writeFileSync(path.join(ignored, "templates", "A", "node_modules", "x", "index.js"), "\n");
+    const before = tree(ignored);
+    const r = agent(ignored);
+    expect(r.status, r.stderr).toBe(0);
+    expect(tree(ignored)).toEqual(before);
+  });
+
+  it.each([["--tasks", { "--tasks": "T1,T1" }, /task listed more than once: T1/u], ["--conditions", { "--conditions": "A,A" }, /condition listed more than once: A/u]])("a repeated ID in %s is refused before anything is written", { timeout: 120_000 }, (_name, change, pattern) => {
+    const fresh = path.join(tmp, "fresh-" + ++counter);
+    const r = agent(fresh, change);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(pattern);
+    expect(fs.readdirSync(fresh)).toEqual([]);
+    const dir = copy();
+    const before = tree(dir);
+    const again = agent(dir, change);
+    expect(again.stderr).toMatch(pattern);
+    expect(tree(dir)).toEqual(before);
+  });
+
+  it("a stray file in runs/ is listed, not treated as an interrupted run (#74 review)", { timeout: 120_000 }, () => {
+    const dir = copy();
+    fs.writeFileSync(path.join(dir, "runs", ".DS_Store"), "x");
+    fs.mkdirSync(path.join(dir, "runs", "notes"));
+    const before = tree(dir);
+    const r = agent(dir);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("not runs of this experiment (left as they are): .DS_Store, notes");
+    expect(tree(dir)).toEqual(before);
+  });
+
+  it("a template whose earlier build did not finish is rebuilt with the same settings (#74 review)", { timeout: 120_000 }, () => {
+    const dir = copy();
+    fs.rmSync(path.join(dir, "templates", "A"), { recursive: true, force: true });
+    fs.rmSync(path.join(dir, "templates", "A.json"));
+    fs.mkdirSync(path.join(dir, "templates", ".A.building", ".git"), { recursive: true });
+    const runs = readJson(path.join(dir, "runs.json"));
+    const r = agent(dir);
+    expect(r.status, r.stderr).toBe(0);
+    expect(fs.existsSync(path.join(dir, "templates", ".A.building"))).toBe(false);
+    expect(readJson(path.join(dir, "templates", "A.json")).condition).toBe("A");
+    expect(readJson(path.join(dir, "runs.json"))).toEqual(runs);
   });
 
   it("an interrupted run (directory without a record) is reported, kept and not rerun", { timeout: 120_000 }, () => {

@@ -16,7 +16,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { CASES } from "./cases.mjs";
-import { checkResults, experimentIdentity, openExperiment, RESULTS_FORMAT, templateError, templateProblems } from "./experiment.mjs";
+import { checkResults, claimRunDir, experimentIdentity, openExperiment, repeatedRunIds, RESULTS_FORMAT, selectionProblems, templateError, templateProblems, templateState } from "./experiment.mjs";
 import { FIXTURE_VERSION, generate, git } from "./fixture.mjs";
 import { readEvents, sumAll } from "./measure.mjs";
 import { judge } from "./oracle.mjs";
@@ -50,29 +50,28 @@ const sh = (cmd, args, cwd, env) => spawnSync(cmd, args, { cwd, env: env ?? proc
 /**
  * Templates with their timed setup (condition C also installs DUO's Codex integration). B and C install ESLint once.
  * Issue #67: every cached template is checked first (fixture version, DUO version for C, HEAD = recorded adoption commit,
- * no changed tracked file); only then are missing ones built, so a mismatch writes nothing.
+ * no changed tracked or untracked file); only then are missing ones built, so a mismatch writes nothing. A template is
+ * built in templates/.<c>.building and moved into place when complete, so a failed build (for example npm install on a
+ * network error) can be retried with the same settings (#74 review).
  */
 async function templates() {
   const dir = path.join(out, "templates"); const info = {};
   const problems = [];
   for (const c of opts.conditions) {
     const root = path.join(dir, c);
-    if (!fs.existsSync(path.join(root, ".git"))) continue;
+    if (!fs.existsSync(root)) continue;
     let meta = null;
     try { meta = JSON.parse(fs.readFileSync(path.join(dir, c + ".json"), "utf8")); } catch { /* reported below */ }
-    let head = "unreadable"; let trackedChanges = "unreadable";
-    try {
-      head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-      // --no-optional-locks: status must not refresh .git/index, so checking a template never rewrites it.
-      trackedChanges = execFileSync("git", ["--no-optional-locks", "status", "--porcelain", "--untracked-files=no"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-    } catch { /* reported as a HEAD or change mismatch */ }
-    const p = templateProblems(meta, { condition: c, fixtureVersion: FIXTURE_VERSION, duoVersion: DUO_VERSION, head, trackedChanges });
+    const { head, changes } = templateState(root);
+    const p = templateProblems(meta, { condition: c, fixtureVersion: FIXTURE_VERSION, duoVersion: DUO_VERSION, head, changes });
     if (p.length > 0) problems.push(...p); else info[c] = meta;
   }
   if (problems.length > 0) throw templateError(out, problems);
   for (const c of opts.conditions) {
     if (info[c] !== undefined) continue;
-    const root = path.join(dir, c);
+    const final = path.join(dir, c);
+    const root = path.join(dir, "." + c + ".building");
+    fs.rmSync(root, { recursive: true, force: true }); // an incomplete earlier build: never a result, never copied by a run
     const g = await generate(root, c, { duoctl: opts.duoctl, core: opts.core });
     if (c !== "A") {
       const t = performance.now(); const r = sh("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"], root); if (r.status !== 0) throw new Error("npm install " + c + ": " + r.stderr); g.setup.push({ step: "npm install (ESLint)", ms: Math.round(performance.now() - t) });
@@ -81,6 +80,7 @@ async function templates() {
       g.adoption = git(root, "rev-parse", "HEAD").trim();
     }
     if (c === "C") g.duoVersion = DUO_VERSION;
+    fs.renameSync(root, final);
     info[c] = g; fs.writeFileSync(path.join(dir, c + ".json"), JSON.stringify(g, null, 2));
   }
   return info;
@@ -132,6 +132,18 @@ function contextTokens(repo) {
   return fs.readFileSync(f, "utf8").split(/\r?\n/u).flatMap((l) => { try { const m = JSON.parse(l); return typeof m.contextTokens === "number" ? [m.contextTokens] : []; } catch { return []; } }).reduce((p, q) => p + q, 0);
 }
 
+/** The code that runs, measures and judges runs; its digest is part of the experiment identity (#74 review). */
+const HARNESS_FILES = ["agent.mjs", "experiment.mjs", "measure.mjs", "oracle.mjs", "process.mjs"];
+function harnessSources() {
+  return Object.fromEntries(HARNESS_FILES.flatMap((f) => { const u = new URL("./" + f, import.meta.url); return fs.existsSync(u) ? [[f, fs.readFileSync(u, "utf8")]] : []; }));
+}
+/** A real run records the Codex CLI it used; a different CLI version is a different experiment (#74 review). */
+function codexVersion() {
+  const r = sh(opts.codex, ["--version"]);
+  if (r.status !== 0) throw new Error("cannot read the Codex CLI version (" + opts.codex + " --version): " + String(r.stderr || r.error?.message || "").trim());
+  return String(r.stdout).trim();
+}
+
 /** The protocol's duo_version: condition C uses this public package in both places DUO runs (templates and the agent's PATH). */
 const DUO_VERSION = "0.3.3";
 function checkDuoctl(env) {
@@ -148,17 +160,21 @@ async function main() {
   if (opts.selftest) return selftest();
   if (!opts.dryRun && (opts.model === undefined || !flag("--i-understand-this-uses-codex"))) throw new Error("real runs need --model <model> and --i-understand-this-uses-codex (they use the runner's Codex quota); use --dry-run to check the setup");
   // Issue #67: the experiment identity is checked (or recorded, in a new directory) before anything else is read or written.
-  const unknown = [...opts.tasks.filter((id) => !TASKS.some((t) => t.id === id)), ...opts.conditions.filter((c) => !["A", "B", "C"].includes(c))];
-  if (unknown.length > 0) throw new Error("unknown task or condition: " + unknown.join(", "));
+  // Unknown or repeated IDs are refused before anything is written: a repeated ID would run, pay for and record a run twice.
+  const selection = selectionProblems(opts, TASKS.map((t) => t.id));
+  if (selection.length > 0) throw new Error(selection.join("; "));
+  const plan = schedule(opts);
+  if (repeatedRunIds(plan).length > 0) throw new Error("the schedule repeats run " + repeatedRunIds(plan).join(", "));
   const identity = experimentIdentity(opts, {
     taskDefinitions: opts.tasks.map((id) => TASKS.find((t) => t.id === id)), fixtureVersion: FIXTURE_VERSION,
     fixtureSource: fs.readFileSync(new URL("./fixture.mjs", import.meta.url), "utf8"), duoVersion: DUO_VERSION,
+    harnessSources: harnessSources(), codexVersion: opts.dryRun ? null : codexVersion(),
   });
   openExperiment(out, identity);
   const env = { ...process.env, PATH: (opts.duoctlBin ? opts.duoctlBin + path.delimiter : "") + process.env.PATH };
   const duoctl = opts.conditions.includes("C") ? checkDuoctl(env) : null;
-  const plan = schedule(opts);
   const checked = checkResults(out, plan, identity);
+  if (checked.ignored.length > 0) console.log("runs/ also holds entries that are not runs of this experiment (left as they are): " + checked.ignored.join(", "));
   const info = await templates();
   fs.writeFileSync(path.join(out, "schedule.json"), JSON.stringify({ seed: opts.seed, model: opts.model ?? null, timeoutMin: opts.timeoutMin, duoctl, runs: plan }, null, 2));
   const resultsFile = path.join(out, "runs.json");
@@ -168,7 +184,7 @@ async function main() {
     if (done.has(run.id)) continue;
     const task = TASKS.find((t) => t.id === run.task);
     const dir = path.join(out, "runs", run.id); const repo = path.join(dir, "repo");
-    fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
+    claimRunDir(dir);
     fs.cpSync(path.join(out, "templates", run.condition), repo, { recursive: true });
     const adoption = info[run.condition].adoption;
     const sessions = [task.prompt, ...(task.handoff === undefined ? [] : [task.handoff])];
@@ -193,7 +209,7 @@ async function main() {
       humanReview: task.category === 4 || judge(repo, adoption).needsReview ? "required" : "not-required",
     });
     record.oracle.askedHuman = task.category === 4 ? null : undefined; // set by the person who reads the final message
-    results.runs.push(record);
+    results.runs.push(record); done.add(run.id);
     fs.writeFileSync(resultsFile, JSON.stringify(results, null, 2));
     console.log(run.id, record.status, record.wallSeconds ?? "-", "s · violations", record.oracle.violations, "· tests", record.tests === null ? "n/a" : record.tests.ok);
   }
