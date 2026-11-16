@@ -7,9 +7,12 @@
 // process this harness spawned, and only while that root is still running (a finished PID can be reused).
 // POSIX: the child is a process-group leader (detached); a timeout sends SIGTERM to that group, then SIGKILL after a grace
 // period. A group ID is not reused while any member is alive.
-// The session ends when the child's stdio closes. Descendants inherit stdio, so "close" means the tree is gone. If it
-// does not close within the deadline the result says terminated: false, and the caller must stop instead of starting the
-// next run.
+// On POSIX the session ends when the whole process group is gone, not when the root's stdio closes: a descendant can
+// ignore SIGTERM and have stdio of its own, so the root closing proves nothing about it (#69 review). The SIGKILL step
+// stays pending until the group has ended. If the root exits on its own and members of its group are still running, they
+// are stopped the same way and the result says lingering: true. On Windows the session ends when the root's stdio closes.
+// If the group (or tree) has not ended within the deadline the result says terminated: false, and the caller must stop
+// instead of starting the next run.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -80,6 +83,16 @@ export function killProcessTree(child, signal = "SIGTERM") {
   catch (error) { return error.code === "ESRCH" ? { ok: true, skipped: "group-gone" } : { ok: false, error: String(error.message ?? error) }; }
 }
 
+/**
+ * POSIX: does process group pgid still have a member? kill(-pgid, 0) also finds a zombie member that nobody has reaped
+ * yet, so this can only err towards "still running" (the caller then waits or reports terminated: false), never towards
+ * "ended" while a member runs.
+ */
+export function groupRunning(pgid) {
+  try { process.kill(-pgid, 0); return true; }
+  catch (error) { return error.code === "EPERM"; }
+}
+
 const active = new Set();
 /** On POSIX the child has its own process group, so Ctrl+C on the harness no longer reaches it; stop it explicitly. */
 export function installSignalCleanup() {
@@ -92,10 +105,12 @@ export function installSignalCleanup() {
 
 /**
  * Starts command + args. result resolves after the child's stdio has closed, or after closeDeadlineMs past a timeout:
- * { exit, signal, timedOut, terminated, killAttempts, wallMs, pid, spawnError? }. timedOut is set by the timer only.
- * terminated is null without a timeout, true when the tree ended after it, false when it did not end in time.
+ * { exit, signal, timedOut, terminated, lingering?, killAttempts, wallMs, pid, spawnError? }. On POSIX it also waits until
+ * the child's process group is gone. timedOut is set by the timer only. terminated is null when nothing had to be stopped,
+ * true when the tree (POSIX: the whole group) ended after it was stopped, false when it did not end in time. lingering is
+ * true when the root exited on its own and left members of its group running (POSIX), which are then stopped.
  */
-export function startProcess(command, args, { cwd, env = process.env, input, timeoutMs, killGraceMs = 5_000, closeDeadlineMs = 20_000, killTree = killProcessTree } = {}) {
+export function startProcess(command, args, { cwd, env = process.env, input, timeoutMs, killGraceMs = 5_000, closeDeadlineMs = 20_000, killTree = killProcessTree, isGroupRunning = groupRunning } = {}) {
   const plan = spawnPlan(command, args, { env, cwd });
   const t0 = performance.now();
   const child = spawn(plan.file, plan.args, { cwd, env, windowsHide: true, ...plan.options });
@@ -104,25 +119,26 @@ export function startProcess(command, args, { cwd, env = process.env, input, tim
   let timedOut = false;
   let stopping = false;
   let settled = false;
+  let lingering = false;
+  let closed; // the root's exit code and signal, once its stdio has closed
   let spawnError;
   const killAttempts = [];
   const timers = [];
   let settle;
   const result = new Promise((resolve) => {
-    settle = (closed, code = child.exitCode, sig = child.signalCode) => {
+    settle = (ended, code = closed?.code ?? child.exitCode, sig = closed?.sig ?? child.signalCode) => {
       if (settled) return;
       settled = true;
       for (const t of timers) clearTimeout(t);
       active.delete(child);
-      if (!closed) { child.stdout?.destroy(); child.stderr?.destroy(); }
+      if (!ended) { child.stdout?.destroy(); child.stderr?.destroy(); }
       resolve({
-        exit: code, signal: sig, timedOut, terminated: stopping ? closed : null, wallMs: Math.round(performance.now() - t0), pid: child.pid ?? null,
+        exit: code, signal: sig, timedOut, terminated: stopping ? ended : null, ...(lingering ? { lingering: true } : {}), wallMs: Math.round(performance.now() - t0), pid: child.pid ?? null,
         ...(killAttempts.length === 0 ? {} : { killAttempts }), ...(spawnError === undefined ? {} : { spawnError: String(spawnError.message ?? spawnError) }),
       });
     };
   });
   child.once("error", (error) => { spawnError ??= error; if (child.pid === undefined) settle(true, null, null); });
-  child.once("close", (code, sig) => settle(true, code, sig));
   const stop = () => {
     if (settled) return { ok: true, skipped: "already-exited" };
     if (stopping) return { ok: true, skipped: "already-stopping" };
@@ -133,6 +149,22 @@ export function startProcess(command, args, { cwd, env = process.env, input, tim
     timers.push(setTimeout(() => settle(false), closeDeadlineMs));
     return first;
   };
+  // POSIX: poll the group until it is gone; the SIGKILL and deadline timers stay armed meanwhile.
+  const watchGroup = () => {
+    const poll = () => {
+      if (settled) return;
+      if (!isGroupRunning(child.pid)) settle(true);
+      else timers.push(setTimeout(poll, 50));
+    };
+    poll();
+  };
+  child.once("close", (code, sig) => {
+    closed = { code, sig };
+    if (IS_WIN || child.pid === undefined) return settle(true, code, sig);
+    if (!stopping && isGroupRunning(child.pid)) { lingering = true; stop(); }
+    if (stopping) watchGroup();
+    else settle(true, code, sig);
+  });
   if (timeoutMs !== undefined) timers.push(setTimeout(() => { if (!settled) { timedOut = true; stop(); } }, timeoutMs));
   if (input !== undefined) child.stdin?.end(input);
   return { child, result, terminate: stop };

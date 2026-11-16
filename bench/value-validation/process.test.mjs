@@ -22,6 +22,22 @@ const FIXTURE = [
   "  fs.renameSync(rest[0] + \".tmp\", rest[0]);",
   "  setInterval(() => {}, 1000);",
   "} else if (mode === \"sleep\") setInterval(() => {}, 1000);",
+  // #69 review: a same-group descendant that ignores SIGTERM and does not share the root's stdio.
+  "else if (mode === \"stubborn\") {",
+  "  process.on(\"SIGTERM\", () => {});",
+  "  fs.writeFileSync(rest[0], String(process.pid));",
+  "  setInterval(() => {}, 1000);",
+  "} else if (mode === \"stubborn-tree\" || mode === \"orphan\") {",
+  "  const child = spawn(process.execPath, [process.argv[1], \"stubborn\", rest[0] + \".ready\"], { stdio: \"ignore\" });",
+  "  const wait = setInterval(() => {",
+  "    if (!fs.existsSync(rest[0] + \".ready\")) return;",
+  "    clearInterval(wait);",
+  "    fs.writeFileSync(rest[0] + \".tmp\", JSON.stringify({ parent: process.pid, grandchild: child.pid }));",
+  "    fs.renameSync(rest[0] + \".tmp\", rest[0]);",
+  "    if (mode === \"orphan\") { child.unref(); process.exit(0); }",
+  "    setInterval(() => {}, 1000);",
+  "  }, 20);",
+  "}",
   "",
 ].join("\n");
 
@@ -129,6 +145,61 @@ describe("Value Validation agent process control (#66)", () => {
     // The real tree kill still works on the same root.
     expect(killProcessTree(child, "SIGKILL")).toMatchObject({ ok: true });
     await waitFor(() => (alive(pids.parent) || alive(pids.grandchild) ? undefined : true));
+  });
+
+  // #69 review (strdeok, P1): the root closing its stdio must not end the session while a descendant still runs.
+  it("a timeout stops a descendant that ignores SIGTERM and has stdio of its own", { timeout: 60_000 }, async () => {
+    const file = pidFile();
+    const signals = [];
+    const spy = (child, signal) => { signals.push(signal); return killProcessTree(child, signal); };
+    const { result } = startProcess("fake-agent", ["stubborn-tree", file], { env, cwd: dir, timeoutMs: 4_000, killGraceMs: 1_000, killTree: spy });
+    const pids = await waitFor(() => readPids(file));
+    expect(alive(pids.parent) && alive(pids.grandchild)).toBe(true);
+    const r = await result;
+    expect(r).toMatchObject({ timedOut: true, terminated: true });
+    // Checked at once: the descendant ended before the result resolved, so the next run cannot overlap it.
+    expect(alive(pids.grandchild)).toBe(false);
+    expect(alive(pids.parent)).toBe(false);
+    // POSIX: SIGTERM ended only the root; the SIGKILL step stayed armed after the root closed. Windows: taskkill /T /F.
+    expect(signals).toEqual(IS_WIN ? ["SIGTERM"] : ["SIGTERM", "SIGKILL"]);
+  });
+
+  it.skipIf(IS_WIN)("POSIX: a group that outlives its closed root is reported as terminated: false", { timeout: 60_000 }, async () => {
+    const file = pidFile();
+    // SIGTERM reaches the group (the root dies, the descendant ignores it); SIGKILL is made to fail.
+    const termOnly = (child, signal) => (signal === "SIGTERM" ? killProcessTree(child, signal) : { ok: false, error: "simulated SIGKILL failure" });
+    const { child, result } = startProcess("fake-agent", ["stubborn-tree", file], { env, cwd: dir, timeoutMs: 3_000, killGraceMs: 500, closeDeadlineMs: 3_000, killTree: termOnly });
+    const pids = await waitFor(() => readPids(file));
+    const r = await result;
+    expect(r).toMatchObject({ timedOut: true, terminated: false });
+    expect(r.killAttempts).toEqual([{ ok: true }, { ok: false, error: "simulated SIGKILL failure" }]);
+    expect(alive(pids.parent)).toBe(false);
+    expect(alive(pids.grandchild)).toBe(true);
+    expect(killProcessTree(child, "SIGKILL")).toMatchObject({ ok: true });
+    await waitFor(() => (alive(pids.grandchild) ? undefined : true));
+  });
+
+  it.skipIf(IS_WIN)("POSIX: a root that exits on its own and leaves its group running is stopped before the result resolves", { timeout: 60_000 }, async () => {
+    const file = pidFile();
+    const { result } = startProcess("fake-agent", ["orphan", file], { env, cwd: dir, timeoutMs: 30_000, killGraceMs: 1_000 });
+    const r = await result;
+    const pids = readPids(file);
+    expect(pids).toBeDefined();
+    expect(r).toMatchObject({ exit: 0, timedOut: false, lingering: true, terminated: true });
+    expect(r.killAttempts?.length).toBeGreaterThanOrEqual(1);
+    expect(alive(pids.grandchild)).toBe(false);
+  });
+
+  it.skipIf(IS_WIN)("POSIX: a lingering group that cannot be stopped is terminated: false, so the harness stops", { timeout: 60_000 }, async () => {
+    const file = pidFile();
+    const failing = () => ({ ok: false, error: "simulated kill failure" });
+    const { child, result } = startProcess("fake-agent", ["orphan", file], { env, cwd: dir, timeoutMs: 30_000, killGraceMs: 500, closeDeadlineMs: 1_500, killTree: failing });
+    const r = await result;
+    const pids = readPids(file);
+    expect(r).toMatchObject({ exit: 0, timedOut: false, lingering: true, terminated: false });
+    expect(alive(pids.grandchild)).toBe(true);
+    expect(killProcessTree(child, "SIGKILL")).toMatchObject({ ok: true });
+    await waitFor(() => (alive(pids.grandchild) ? undefined : true));
   });
 
   it("terminating a process that already exited is a no-op", { timeout: 60_000 }, async () => {

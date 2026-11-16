@@ -79,7 +79,7 @@ function session(v, inst, root, i) {
     const { child: p, result } = startProcess("codex", args, { cwd: root, env, input: PROMPT, timeoutMs: timeoutMin * 60_000 });
     const log = fs.createWriteStream(base + ".events.jsonl");
     p.stdout.on("data", (d) => { log.write(d); buf += d; if (firstDuoMs === null && /"server":"duo-director"|"tool":"duo_/u.test(buf)) firstDuoMs = Math.round(performance.now() - t); });
-    result.then(({ exit: code, timedOut, terminated, killAttempts, pid, spawnError }) => {
+    result.then(({ exit: code, timedOut, terminated, lingering, killAttempts, pid, spawnError }) => {
       log.end();
       const ev = { mcp: [], cli: 0, usage: { input: 0, cached: 0, output: 0 } };
       for (const line of buf.split(/\r?\n/u)) { let e; try { e = JSON.parse(line); } catch { continue; }
@@ -88,7 +88,7 @@ function session(v, inst, root, i) {
         if (it.type === "mcp_tool_call" && (it.server === "duo-director" || /^duo_/u.test(it.tool ?? ""))) ev.mcp.push({ tool: it.tool, status: it.status, error: it.error ?? null });
         if (it.type === "command_execution" && /duoctl/u.test(it.command ?? "")) ev.cli++; }
       const first = ev.mcp[0];
-      resolve({ version: v, run: i, exit: code, timedOut, ...(timedOut ? { terminated, killAttempts, pid } : {}), ...(spawnError === undefined ? {} : { spawnError }), wallSeconds: Math.round((performance.now() - t) / 100) / 10, found: ev.mcp.length > 0, firstCallOk: first === undefined ? null : first.status === "completed" && first.error === null, firstTool: first?.tool ?? null, duoMcpCalls: ev.mcp.length, cliFallback: ev.mcp.length === 0 && ev.cli > 0, firstDuoEventMs: firstDuoMs, usage: ev.usage });
+      resolve({ version: v, run: i, exit: code, timedOut, ...(terminated === null ? {} : { terminated, killAttempts, pid }), ...(lingering ? { lingering: true } : {}), ...(spawnError === undefined ? {} : { spawnError }), wallSeconds: Math.round((performance.now() - t) / 100) / 10, found: ev.mcp.length > 0, firstCallOk: first === undefined ? null : first.status === "completed" && first.error === null, firstTool: first?.tool ?? null, duoMcpCalls: ev.mcp.length, cliFallback: ev.mcp.length === 0 && ev.cli > 0, firstDuoEventMs: firstDuoMs, usage: ev.usage });
     });
   });
 }
@@ -104,7 +104,7 @@ if (!dryRun) {
   for (let i = 1; i <= runs; i++) for (const v of i % 2 === 1 ? versions : [...versions].reverse()) {
     const s = await session(v, inst[v], roots[v], i); report.sessions.push(s);
     fs.writeFileSync(path.join(out, "discovery.json"), JSON.stringify(report, null, 2));
-    if (s.timedOut && s.terminated !== true) throw new Error(v + " run " + i + " did not stop after the " + timeoutMin + "-minute timeout (root PID " + s.pid + "); stopped before the next session. End that process tree, then rerun.");
+    if (s.terminated === false) throw new Error(v + " run " + i + " did not stop " + (s.timedOut ? "after the " + timeoutMin + "-minute timeout" : "after its root exited (lingering processes)") + " (root PID " + s.pid + "); stopped before the next session. End that process tree, then rerun.");
     console.log(v, i, s.found ? "found " + s.firstTool + (s.firstCallOk ? " ok" : " FAILED") : s.cliFallback ? "cli fallback" : "none", s.wallSeconds + "s");
   }
   report.summary = Object.fromEntries(versions.map((v) => { const s = report.sessions.filter((x) => x.version === v); return [v, { sessions: s.length, found: s.filter((x) => x.found).length, firstCallOk: s.filter((x) => x.firstCallOk === true).length, cliFallback: s.filter((x) => x.cliFallback).length, none: s.filter((x) => !x.found && !x.cliFallback).length, timedOut: s.filter((x) => x.timedOut).length }]; }));

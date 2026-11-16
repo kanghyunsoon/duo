@@ -84,7 +84,7 @@ function runCodex(repo, prompt, files, env) {
       const done = () => {
         if (settled) return; settled = true;
         resolve({
-          exit: p.exit, wallSeconds, timedOut: p.timedOut, ...(p.timedOut ? { terminated: p.terminated, killAttempts: p.killAttempts, pid: p.pid } : {}),
+          exit: p.exit, wallSeconds, timedOut: p.timedOut, ...(p.terminated === null ? {} : { terminated: p.terminated, killAttempts: p.killAttempts, pid: p.pid }), ...(p.lingering ? { lingering: true } : {}),
           ...(p.spawnError === undefined ? {} : { spawnError: p.spawnError }), ...(logError === undefined ? {} : { logError: String(logError.message ?? logError) }),
         });
       };
@@ -149,11 +149,12 @@ async function main() {
       if (opts.dryRun) { record.sessions.push({ dryRun: true, command: [opts.codex, "exec", "--json", "-s", "workspace-write", "-C", repo, "-m", "<model>", "-"].join(" ") }); continue; }
       const r = await runCodex(repo, prompt, files, env);
       record.sessions.push({ ...r, events: readEvents(files.events) });
-      if (r.timedOut && r.terminated !== true) {
+      // terminated is false whenever the end of the session is not confirmed: after a timeout, or after a root that left its group running.
+      if (r.terminated === false) {
         // The session may still be running: record it and stop, so no later run overlaps it or shares its quota.
         Object.assign(record, { status: "kill-failed", wallSeconds: null, usage: null });
         results.runs.push(record); fs.writeFileSync(resultsFile, JSON.stringify(results, null, 2));
-        throw new Error(run.id + " session " + (i + 1) + " did not stop after the " + opts.timeoutMin + "-minute timeout (root PID " + r.pid + "); stopped before the next run. End that process tree, then resume.");
+        throw new Error(run.id + " session " + (i + 1) + " did not stop " + (r.timedOut ? "after the " + opts.timeoutMin + "-minute timeout" : "after its root exited (lingering processes)") + " (root PID " + r.pid + "); stopped before the next run. End that process tree, then resume.");
       }
     }
     const evs = record.sessions.map((s) => s.events).filter((e) => e !== undefined);
