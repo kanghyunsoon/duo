@@ -2,7 +2,7 @@
 /**
  * Issue #34 ([AGT-02]): Local, LLM-free concurrency stress runner for DUO.
  *
- * Executes Scenarios C1 through C5 against temporary repositories, compares each concurrent run
+ * Executes Scenarios C1 through C6 against temporary repositories, compares each concurrent run
  * against a sequential baseline using `bench/concurrency/oracle.mjs`, cleans up all temporary
  * repositories/worktrees on all three OSes, and prints a structured findings report.
  *
@@ -15,6 +15,8 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import {
+  runScenarioConcurrentAutoIndexRecovery,
+  runScenarioConcurrentAutoIndexRecoveryContention,
   runScenarioConcurrentContextAndReview,
   runScenarioConcurrentDecisionProposals,
   runScenarioConcurrentGitWorktrees,
@@ -53,6 +55,16 @@ export async function runAllConcurrencyScenarios() {
       id: "C5",
       description: "2 agents concurrently indexing, proposing, and compiling context in Git worktrees",
       run: () => runScenarioConcurrentGitWorktrees(),
+    },
+    {
+      id: "C6a",
+      description: "6 agents concurrently triggering automatic index recovery across source edit & history move",
+      run: () => runScenarioConcurrentAutoIndexRecovery({ workerCount: 6 }),
+    },
+    {
+      id: "C6b",
+      description: "4 workers attempting automatic index recovery under active index-writer.lock contention + post-release recovery",
+      run: () => runScenarioConcurrentAutoIndexRecoveryContention({ workerCount: 4, lockTimeoutMs: 40 }),
     },
   ];
 

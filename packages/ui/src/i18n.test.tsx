@@ -18,8 +18,8 @@ describe("UI localization", () => {
   });
   it("keeps both catalogs complete and preserves component/interpolation placeholders", () => {
     expect(Object.keys(ko).sort()).toEqual(Object.keys(en).sort());
-    const placeholders = (value: string) => [...value.matchAll(/<\/?([a-z]\d+)\s*\/?\s*>|\{\{([^}]+)\}\}/gu)]
-      .map((match) => match[1] ?? match[2]).sort();
+    const placeholders = (value: string) => [...value.matchAll(/<\/?([a-z]\d+)\s*\/?\s*>|\{\{([^}]+)\}\}|(?<!\{)\{([^{}]+)\}(?!\})/gu)]
+      .map((match) => match[1] ?? match[2] ?? match[3]).sort();
     for (const key of Object.keys(en) as (keyof typeof en)[]) {
       expect(ko[key].trim(), key).not.toBe("");
       expect(placeholders(ko[key]), key).toEqual(placeholders(en[key]));
@@ -29,6 +29,7 @@ describe("UI localization", () => {
   it("defaults to English and handles unsupported or unavailable storage", () => {
     expect(initialLanguage()).toBe("en");
     expect(initialLanguage({ getItem: (key) => key === LANGUAGE_STORAGE_KEY ? "en" : null })).toBe("en");
+    expect(initialLanguage({ getItem: (key) => key === LANGUAGE_STORAGE_KEY ? "ko" : null })).toBe("ko");
     expect(initialLanguage({ getItem: () => "fr" })).toBe("en");
     expect(initialLanguage({ getItem: () => { throw new Error("Storage disabled"); } })).toBe("en");
   });

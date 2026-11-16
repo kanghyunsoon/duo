@@ -16,9 +16,9 @@ When multiple coding agents (e.g. Claude Code, Codex, Cursor) or parallel CLI/MC
 
 | File | Role | Uses LLM |
 | :--- | :--- | :---: |
-| [oracle.mjs](oracle.mjs) | Captures deterministic repository snapshots (`captureRepoSnapshot`), evaluates the 3-tier concurrency oracle (`evaluateConcurrencyOracle`), and implements Scenarios C1–C5 with full temporary directory cleanup | no |
-| [run.mjs](run.mjs) | CLI stress runner executing Scenarios C1–C5 and printing a Markdown findings table or JSON report (`--json`, `--output <path>`) | no |
-| [oracle.test.ts](oracle.test.ts) | Unit tests for the 3-tier oracle classification rules and integration tests for Scenarios C1, C1b, C2, C3, C4, and C5 | no |
+| [oracle.mjs](oracle.mjs) | Captures deterministic repository snapshots (`captureRepoSnapshot`), evaluates the 3-tier concurrency oracle (`evaluateConcurrencyOracle`), and implements Scenarios C1–C6 with full temporary directory cleanup | no |
+| [run.mjs](run.mjs) | CLI stress runner executing Scenarios C1–C6 and printing a Markdown findings table or JSON report (`--json`, `--output <path>`) | no |
+| [oracle.test.ts](oracle.test.ts) | Unit tests for the 3-tier oracle classification rules (including T180 `index-writer.lock` and fingerprint invariants) and integration tests for Scenarios C1, C1b, C2, C3, C4, C5, C6a, and C6b | no |
 
 ## Reproduce
 
@@ -47,14 +47,17 @@ Measured locally on Node `v24.18.0` (`win32 x64`):
 | **C1** | 6 agents concurrently proposing Decisions (`DecisionService.propose`) | 6 | 6 | 0 | `safe` | — | 100% match |
 | **C1b** | 3 agents proposing while `decisions.lock` is held past `lockTimeoutMs` | 3 | 0 | 3 | `explicit-error` | `DECISION_LOCK_BUSY` | 100% match |
 | **C2a** | 4 workers concurrently indexing a cold repository (`indexRepository`) | 4 | 4 | 0 | `safe` | — | 100% match |
-| **C2b** | 4 workers concurrently running incremental index after source edit | 4 | >= 1 (varies) | >= 1 (varies) | `explicit-error` | `GRAPH_WRITE_REFUSED` | 100% match |
+| **C2b** | 4 workers concurrently running incremental index after source edit | 4 | 4 (or >= 1 under contention) | 0 (or >= 1) | `safe` / `explicit-error` | — / `GRAPH_WRITE_REFUSED` | 100% match |
 | **C3** | 6 agents concurrently calling `projectContext` and `projectReview` on active diff | 6 | 6 | 0 | `safe` | — | 100% match |
 | **C4** | 6 MCP sessions concurrently updating Work-Map activity (`work-tasks.lock`) | 6 | 6 | 0 | `safe` | — | 100% match |
 | **C5** | 2 agents concurrently proposing, indexing, and compiling context in Git worktrees | 2 | 2 | 0 | `safe` | — | 100% match |
+| **C6a** | 6 agents concurrently triggering automatic index recovery across source edit & history move | 12 (2×6) | 12 | 0 | `safe` | — | 100% match |
+| **C6b** | 4 workers attempting automatic index recovery under active `index-writer.lock` contention + post-release recovery | 4 | 0 (then 4) | 4 (then 0) | `explicit-error` (then `safe`) | `GRAPH_WRITE_REFUSED` | 100% match |
 
 ## Architectural Observations
 
 1. **Decision Proposals (`C1`, `C1b`)**: `DecisionService` serializes mutations through `.duo-project/runtime/locks/decisions.lock` (`createExclusive` spin-wait with dead-PID recovery) and writes proposal YAML files exclusively (`wx`). Concurrent proposals allocate contiguous IDs (`P-001`..`P-006`) without lost updates (`safe`). When lock contention exceeds `lockTimeoutMs`, callers receive `DECISION_LOCK_BUSY` (`explicit-error`) without partial writes.
-2. **Graph Indexing (`C2a`, `C2b`)**: `indexRepository` uses SQLite WAL mode with `BEGIN IMMEDIATE` and checks `tx.readMeta(INDEX_STATE_TOKEN_KEY) !== previous.token` inside the write transaction. During concurrent incremental indexing (`C2b`), at least one writer commits; writers that read the stale `previous.token` before the first commit are refused with `GRAPH_WRITE_REFUSED` (`explicit-error`), while a worker that reads the state after a commit succeeds. The succeeded/refused split varies by run (e.g. `1/3` or `2/2`), while the classification and the invariant (no lost write, winning graph equal to the sequential baseline) hold on every run.
+2. **Graph Indexing & Persistent OS Lock (`C2a`, `C2b`, T180)**: `indexRepository` serializes writers through the OS-level SQLite file lock on `.duo-project/generated/index-writer.lock` (`withIndexWriteLock`), which remains on disk as a 0-byte regular file after connection close, and also guards `tx.readMeta(INDEX_STATE_TOKEN_KEY) !== previous.token` inside `BEGIN IMMEDIATE`. Every completed index run keeps `graph.db` (`index_state_token`), `index-state.json` (`token`), and `fingerprints.json` in 3-way agreement.
 3. **Concurrent Read / Review & MCP Work-Map (`C3`, `C4`)**: Parallel `projectContext` and `projectReview` calls over a dirty working tree return identical seed counts, verdicts, and claim counts as sequential execution (`safe`). Concurrent MCP tool invocations (`duo_get_context`, `duo_review_changes`) serialize `.duo-project/runtime/work-tasks.json` updates via `.duo-project/runtime/work-tasks.lock` and atomic `.tmp` file renames (`safe`).
 4. **Separate Git Worktrees (`C5`)**: Because each Git worktree maintains its own working tree and `.duo-project/` state directory while sharing the underlying Git object database, concurrent agents operating in separate worktrees (`git worktree add`) do not contend on `.duo-project/` locks or SQLite files (`safe`).
+5. **Automatic Stale-Index Recovery (`C6a`, `C6b`, Issue #4 / T179–T182)**: When the index becomes `stale` (either from a tracked source edit or a history-only `HEAD` move), concurrent MCP reads (`duo_get_context`, `duo_review_changes`) and `refreshIndexIfSafe` calls serialize on `.duo-project/generated/index-writer.lock`. Exactly one worker rebuilds the index (`refreshed: true`) per stale round while the remaining workers observe the newly current index (`refreshed: false`) and return fresh context/review payloads matching the sequential baseline (`safe`). If another writer holds `index-writer.lock` past `lockTimeoutMs`, `refreshIndexIfSafe` refuses with `GRAPH_WRITE_REFUSED` (`Index lock timeout`) and MCP callers stay `index-required` without corrupting the existing graph (`explicit-error`), recovering cleanly once the lock is released.
