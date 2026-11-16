@@ -37,7 +37,8 @@ export type ModuleResolution =
       readonly configPath?: RepoPath;
     }
   | { readonly status: "external"; readonly reason: "package" | "builtin" | "outside-repository" | "system-include" | "include-path" }
-  | { readonly status: "unresolved"; readonly reason: "not-found" | "not-indexed" }
+  /** computed-specifier: a TS/JS import() with no static specifier (#50 L2a); no file is guessed. */
+  | { readonly status: "unresolved"; readonly reason: "not-found" | "not-indexed" | "computed-specifier" }
   | { readonly status: "ambiguous"; readonly candidates: readonly RepoPath[] }
   | { readonly status: "unsupported"; readonly reason: string };
 
@@ -55,6 +56,12 @@ export interface ModuleResolver {
    * tsconfig.json/jsconfig.json and the files it extends (inside the repository). Empty without a config.
    */
   configFiles(fromPath: RepoPath): readonly RepoPath[];
+  /**
+   * The nearest tsconfig.json/jsconfig.json of fromPath (the first entry of configFiles), found by existence only: no
+   * config is parsed. Lets an incremental build check cheaply that a stored result was resolved with the config that
+   * applies now (#151). Undefined without a config, or for a language without config files.
+   */
+  nearestConfig?(fromPath: RepoPath): RepoPath | undefined;
   /**
    * Problems of one config file (the nearest config of some file), recorded when it was read.
    * Undefined when it was not read in this run, unless load is set (reading a config is cheap and

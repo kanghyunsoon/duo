@@ -25,6 +25,7 @@ import { declarationLinks, type DeclarationLink } from "./declaration-links.js";
 import { isEdgeEndpointAllowed } from "./endpoints.js";
 import { ExportIndex, type ExportLookup } from "./exports.js";
 import { payloadProblem } from "./payload.js";
+import { TS_LANGUAGES } from "./resolve/languages.js";
 import type { ModuleResolution, ModuleResolutionStatus } from "./resolve/module-resolver.js";
 import type {
   CallResolution, CallResolutionFreshness, CallResolutionStatus, EdgeCategory, FileResolution, GraphBuildInput, GraphBuildPlan, GraphBuildStats,
@@ -484,7 +485,8 @@ class Builder {
       const previous = this.memo?.previous.get(path);
       let results: readonly ModuleResolution[];
       let configFiles: readonly RepoPath[];
-      if (previous !== undefined && this.memo?.reusableModules.has(path) === true && previous.modules.length === refs.length) {
+      if (previous !== undefined && this.memo?.reusableModules.has(path) === true && previous.modules.length === refs.length
+        && this.sameConfigChain(path, ctx, previous.configFiles)) {
         results = previous.modules;
         configFiles = previous.configFiles;
         this.work.modulesReused += refs.length;
@@ -497,6 +499,20 @@ class Builder {
       this.moduleResults.set(path, new Map(refs.map((ref, i) => [ref, results[i] as ModuleResolution] as const)));
       this.resolution.set(path, { modules: results, calls: [], exportDependencies: [], configFiles });
     }
+  }
+
+  /**
+   * #151: a stored TypeScript/JavaScript result is reused only if the nearest tsconfig/jsconfig of the file now is the
+   * one it was resolved with (the head of its stored config chain). A config that Git ignores or index.exclude leaves
+   * out of the scan, created after an index, is not a changed file, so the Indexer allows reuse; without this check,
+   * unchanged importers kept the resolution from before the config while re-resolved files used it. A changed config
+   * or extended file is already stale-config in the Indexer. The lookup is by existence only, memoized per directory,
+   * and parses no config. Python and C++ keep the Indexer's decision.
+   */
+  private sameConfigChain(path: RepoPath, ctx: FileContext, stored: readonly RepoPath[]): boolean {
+    const nearest = this.input.moduleResolver.nearestConfig;
+    if (nearest === undefined || !TS_LANGUAGES.has(ctx.analysis.language)) return true;
+    return nearest.call(this.input.moduleResolver, path) === stored[0];
   }
 
   private sameModules(path: RepoPath): boolean {

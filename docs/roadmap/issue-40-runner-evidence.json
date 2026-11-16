@@ -1,0 +1,110 @@
+{
+  "date": "2026-10-23",
+  "platform": "win32",
+  "versions": {
+    "node": "24.18.0",
+    "npm": "12.0.1",
+    "pnpm": "11.25.0",
+    "yarn": "1.22.22"
+  },
+  "method": "Independent fresh PowerShell process per runner; local tarball probe; no LLM. User/fixture paths replaced with placeholders. Inherited PATH suffix verified identical, omitted below. null means unset.",
+  "baseline_markers": {
+    "npm_command": null,
+    "npm_execpath": null,
+    "npm_lifecycle_event": null
+  },
+  "runs": [
+    {
+      "runner": "npx",
+      "npm_command": "exec",
+      "npm_execpath": "<USER>\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js",
+      "npm_lifecycle_event": "npx",
+      "PATH_added_in_order": [
+        "<FIXTURE>\\project\\node_modules\\.bin",
+        "<FIXTURE>\\project\\node_modules\\.bin",
+        "<FIXTURE>\\node_modules\\.bin",
+        "<USER>\\Documents\\ChatGPT\\DUO\\node_modules\\.bin",
+        "<USER>\\Documents\\ChatGPT\\node_modules\\.bin",
+        "<USER>\\Documents\\node_modules\\.bin",
+        "<USER>\\node_modules\\.bin",
+        "C:\\Users\\node_modules\\.bin",
+        "C:\\node_modules\\.bin",
+        "<USER>\\AppData\\Roaming\\npm\\node_modules\\npm\\node_modules\\@npmcli\\run-script\\lib\\node-gyp-bin"
+      ],
+      "PATH_tail": "unchanged inherited PATH"
+    },
+    {
+      "runner": "npm-exec",
+      "npm_command": "exec",
+      "npm_execpath": "<USER>\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js",
+      "npm_lifecycle_event": "npx",
+      "PATH_added_in_order": [
+        "<FIXTURE>\\project\\node_modules\\.bin",
+        "<FIXTURE>\\project\\node_modules\\.bin",
+        "<FIXTURE>\\node_modules\\.bin",
+        "<USER>\\Documents\\ChatGPT\\DUO\\node_modules\\.bin",
+        "<USER>\\Documents\\ChatGPT\\node_modules\\.bin",
+        "<USER>\\Documents\\node_modules\\.bin",
+        "<USER>\\node_modules\\.bin",
+        "C:\\Users\\node_modules\\.bin",
+        "C:\\node_modules\\.bin",
+        "<USER>\\AppData\\Roaming\\npm\\node_modules\\npm\\node_modules\\@npmcli\\run-script\\lib\\node-gyp-bin"
+      ],
+      "PATH_tail": "unchanged inherited PATH"
+    },
+    {
+      "runner": "npm-run",
+      "npm_command": "run",
+      "npm_execpath": "<USER>\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js",
+      "npm_lifecycle_event": "probe",
+      "PATH_added_in_order": [
+        "<FIXTURE>\\project\\node_modules\\.bin",
+        "<FIXTURE>\\node_modules\\.bin",
+        "<USER>\\Documents\\ChatGPT\\DUO\\node_modules\\.bin",
+        "<USER>\\Documents\\ChatGPT\\node_modules\\.bin",
+        "<USER>\\Documents\\node_modules\\.bin",
+        "<USER>\\node_modules\\.bin",
+        "C:\\Users\\node_modules\\.bin",
+        "C:\\node_modules\\.bin",
+        "<USER>\\AppData\\Roaming\\npm\\node_modules\\npm\\node_modules\\@npmcli\\run-script\\lib\\node-gyp-bin"
+      ],
+      "PATH_tail": "unchanged inherited PATH"
+    },
+    {
+      "runner": "pnpm-exec",
+      "npm_command": "exec",
+      "npm_execpath": null,
+      "npm_lifecycle_event": null,
+      "PATH_added_in_order": [
+        "./node_modules/.bin"
+      ],
+      "PATH_tail": "unchanged inherited PATH"
+    },
+    {
+      "runner": "pnpm-dlx",
+      "npm_command": null,
+      "npm_execpath": null,
+      "npm_lifecycle_event": null,
+      "PATH_added_in_order": [
+        "<USER>\\AppData\\Local\\pnpm-cache\\dlx\\2729cfe50973265835ddffc211a75ba8\\mvkgt7i7-vek\\node_modules\\.bin"
+      ],
+      "PATH_tail": "unchanged inherited PATH"
+    },
+    {
+      "runner": "yarn-run",
+      "npm_command": null,
+      "npm_execpath": "<FIXTURE>\\tools\\node_modules\\yarn\\bin\\yarn.js",
+      "npm_lifecycle_event": "probe",
+      "PATH_added_in_order": [
+        "<USER>\\AppData\\Local\\Temp\\yarn--1792729420552-0.9190721469097111",
+        "<FIXTURE>\\project\\node_modules\\.bin",
+        "<USER>\\AppData\\Local\\Yarn\\Data\\link\\node_modules\\.bin",
+        "<USER>\\AppData\\Local\\Yarn\\bin",
+        "C:\\Program Files\\libexec\\lib\\node_modules\\npm\\bin\\node-gyp-bin",
+        "C:\\Program Files\\lib\\node_modules\\npm\\bin\\node-gyp-bin",
+        "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\node-gyp-bin"
+      ],
+      "PATH_tail": "unchanged inherited PATH"
+    }
+  ]
+}

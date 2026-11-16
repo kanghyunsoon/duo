@@ -17,7 +17,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  compareFingerprints, createDefaultAnalyzerRegistry, fingerprintRepositoryFiles, openGitProvider, probeWorkTree, scanRepository, writeFingerprintFile,
+  compareFingerprints, computeContentHash, createDefaultAnalyzerRegistry, fingerprintRepositoryFiles, openGitProvider, probeWorkTree, scanRepository, writeFingerprintFile,
   type AnalyzerRegistry, type FileFingerprint, type GitRepositoryState,
 } from "@duo-director/analyzer";
 import {
@@ -43,6 +43,8 @@ import {
   type IndexedFileState, type IndexState,
 } from "./state.js";
 import type { AnalysisFreshness, FileFreshnessRecord, IndexMetrics, IndexResult, ModuleResolutionFreshness } from "./types.js";
+import { finishIndexWriteLease, useIndexWriteLease, withIndexWriteLock, type IndexWriteLease, type IndexWriteLockOptions } from "./write-lock.js";
+import { readIndexState } from "./state.js";
 
 export { isResolutionConfigFile } from "./assess.js";
 
@@ -52,13 +54,17 @@ export const GRAPH_DB_FILE_PATH = `${STATE_DIR_NAME}/generated/graph.db`;
  * Opens the project's graph database (.duo-project/generated/graph.db), creating the directory. A
  * database of another graph_schema_version is generated data and is recreated (ADR-002).
  */
-export function openProjectGraphStore(root: string): GraphOpenResult {
+export function openProjectGraphStore(root: string, options: { readonly existingOnly?: boolean } = {}): GraphOpenResult {
   const rootDir = path.resolve(root);
   const allowed = checkWriteBoundary(rootDir, GRAPH_DB_FILE_PATH, "regenerable");
   if (allowed.value === undefined) return { diagnostics: allowed.diagnostics, regenerable: false };
   const file = path.join(rootDir, allowed.value.path);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  return openNodeSqliteGraphStore({ path: file, onUnsupportedSchema: "recreate" });
+  for (const relative of [STATE_DIR_NAME, `${STATE_DIR_NAME}/generated`, GRAPH_DB_FILE_PATH]) {
+    const entry = path.join(rootDir, relative);
+    if (fs.existsSync(entry) && fs.lstatSync(entry).isSymbolicLink()) return { diagnostics: [createDiagnostic("GRAPH_WRITE_REFUSED", `Graph write refused: symlink ${relative}`)], regenerable: false };
+  }
+  if (!options.existingOnly) fs.mkdirSync(path.dirname(file), { recursive: true });
+  return openNodeSqliteGraphStore({ path: file, onUnsupportedSchema: options.existingOnly ? "fail" : "recreate", ...options });
 }
 
 /**
@@ -72,7 +78,11 @@ export function openProjectGraphReader(root: string): GraphOpenResult {
   return openNodeSqliteGraphStore({ path: file, readOnly: true });
 }
 
-export interface IndexOptions {
+export interface IndexOptions extends IndexWriteLockOptions {
+  /** Internal capability supplied by an outer index writer. */
+  readonly writeLease?: IndexWriteLease;
+  /** Recovery must use this existing state and may never fall back to a full rebuild. */
+  readonly expectedToken?: string;
   readonly store: GraphStore;
   /** Analyzers; default: the TypeScript/JavaScript registry (disposed after the run). */
   readonly registry?: AnalyzerRegistry;
@@ -82,12 +92,56 @@ export interface IndexOptions {
   readonly historyWindow?: number;
   /** Optional observation only; never enters persisted state or the deterministic result. */
   readonly onPhase?: (name: string, milliseconds: number) => void;
+  /**
+   * Recovery only (refreshIndexIfSafe): receives a check that every resolver input this run read, including
+   * configuration lookups that found no file, still reads the same. Recovery calls it again before it
+   * reports success; the explicit index does not (F3 scope, T182).
+   */
+  readonly onResolverInputs?: (unchanged: () => boolean) => void;
 }
 
 /** Digest of a scope without rows (the Project Truth scope always has the Project node, so this is a fallback). */
 const EMPTY_DIGEST = `sha256:${"0".repeat(64)}`;
 
 export async function indexRepository(root: string, options: IndexOptions): Promise<ParseResult<IndexResult>> {
+  const lease = options.writeLease ?? writerLeases.get(options.store);
+  if (lease === undefined) {
+    const outer = await withIndexWriteLock(root, (owned) => indexRepository(root, { ...options, writeLease: owned }), options);
+    return outer.value ?? failure(outer.diagnostics);
+  }
+  const locked = await useIndexWriteLease(root, lease, () => indexUnderLock(root, options));
+  return locked.value ?? failure(locked.diagnostics);
+}
+
+const writerLeases = new WeakMap<GraphStore, IndexWriteLease>();
+/** All application writer entry points acquire the lock before opening/recreating SQLite. */
+export async function withProjectGraphWriter<T>(root: string, fn: (store: GraphStore) => Promise<T>): Promise<ParseResult<{ result: T }>> {
+  const result = await withIndexWriteLock(root, async (lease): Promise<ParseResult<{ result: T }>> => {
+    const opened = openProjectGraphStore(root);
+    if (opened.value === undefined) return failure(opened.diagnostics);
+    writerLeases.set(opened.value, lease);
+    try { return success({ result: await fn(opened.value) }); } finally {
+      await finishIndexWriteLease(lease);
+      writerLeases.delete(opened.value);
+      opened.value.close();
+    }
+  });
+  return result.value ?? failure(result.diagnostics);
+}
+
+async function indexUnderLock(root: string, options: IndexOptions): Promise<ParseResult<IndexResult>> {
+  const databasePath = path.join(path.resolve(root), GRAPH_DB_FILE_PATH);
+  let databaseIdentity: fs.Stats | undefined;
+  if (options.expectedToken !== undefined) {
+    try { databaseIdentity = fs.statSync(databasePath); } catch { return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: existing graph disappeared")]); }
+  }
+  const sameDatabase = () => {
+    if (databaseIdentity === undefined) return true;
+    try {
+      const now = fs.statSync(databasePath);
+      return now.dev === databaseIdentity.dev && now.ino === databaseIdentity.ino;
+    } catch { return false; }
+  };
   let phaseStart = performance.now();
   const phase = (name: string): void => { const now = performance.now(); options.onPhase?.(name, now - phaseStart); phaseStart = now; };
   const rootDir = path.resolve(root);
@@ -100,9 +154,21 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   diagnostics.push(...loaded.diagnostics);
   if (loaded.value === undefined) return failure(diagnostics);
   const { truth, trace } = loaded.value;
+  const truthSignature = JSON.stringify(truth);
+  // Stability guard (T180): the run's own facts (Truth, scan fingerprints, Git state, the configuration
+  // files the resolver read) are the snapshot. Before a write they are read again once; a scope change in
+  // project.yaml is a Truth change. A run that writes nothing needs no check.
+  const scope = { include: truth.config.index.include, exclude: truth.config.index.exclude };
+  // Configuration files the previous run resolved with, as they are now (T180 guard input).
+  const recordedConfigs = new Map(Object.keys(readIndexState(root).state?.configs ?? {}).map((c) => [c, hashOnDisk(rootDir, c as RepoPath)] as const));
+  const moved = () => failure<IndexResult>([createDiagnostic("GRAPH_WRITE_REFUSED", "Index inputs changed during indexing; run again on a stable repository")]);
   phase("truth");
   // One work-tree prefix query for this run, shared by the scan and the Git provider (T25.1).
   const workTree = probeWorkTree(rootDir);
+  // Git state is read once, before the scan (T180), and used for the whole run; a write first checks
+  // that it, the scan and the fingerprints are still the same (sameScanAndGit).
+  const git = await openGitProvider(rootDir, { workTree });
+  const repoState = git.value === undefined ? undefined : await git.value.repositoryState();
   const scan = await scanRepository(rootDir, { include: truth.config.index.include, exclude: truth.config.index.exclude, workTree });
   diagnostics.push(...scan.diagnostics);
   if (scan.diagnostics.some((d) => d.severity === "error")) return failure(diagnostics);
@@ -110,12 +176,16 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   const fingerprinted = await fingerprintRepositoryFiles(rootDir, scan.files);
   diagnostics.push(...fingerprinted.diagnostics);
   const current: readonly FileFingerprint[] = fingerprinted.fingerprints;
+  if (fingerprinted.diagnostics.some((d) => d.severity === "error")) return failure(diagnostics);
   phase("fingerprint");
 
   // ---- previous state: any doubt means a full rebuild ----
   const loadedState = loadPreviousState(rootDir, store, window, options.full === true);
   diagnostics.push(...loadedState.diagnostics);
   const { previous, fullRebuildReason } = loadedState;
+  if (options.expectedToken !== undefined && (previous?.token !== options.expectedToken || options.full === true)) {
+    return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: existing index changed or requires a full rebuild")]);
+  }
   phase("state");
   const mode = previous === undefined ? "full" : "incremental";
   const prevFiles = new Map((previous?.files ?? []).map((f) => [f.path, f] as const));
@@ -186,6 +256,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
       }
       changedFiles.add(f.path);
       const content = fs.readFileSync(path.join(rootDir, f.path));
+      if (computeContentHash(content, f.fingerprintMode).contentHash !== f.contentHash) return moved();
       analyzed++;
       const started = performance.now();
       const r = analyzer.analyze({ path: f.path, content });
@@ -210,9 +281,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   phase("analysis");
 
   // ---- Git: the history window is recomputed whole when HEAD moves ----
-  const git = await openGitProvider(rootDir, { workTree });
   diagnostics.push(...git.diagnostics);
-  const repoState = git.value === undefined ? undefined : await git.value.repositoryState();
   diagnostics.push(...(repoState?.diagnostics ?? []));
   const gitState: GitRepositoryState | undefined = repoState?.value;
   let history: HistorySummary | undefined;
@@ -221,7 +290,7 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
     const kept = previous?.history;
     if (kept !== undefined && kept.headOid === gitState.headOid && kept.shallow === gitState.shallow) history = kept.summary;
     else {
-      const commits = await git.value.listCommits({ maxCommits: window });
+      const commits = await git.value.listCommits({ maxCommits: window, from: gitState.headOid });
       diagnostics.push(...commits.diagnostics);
       history = commits.value === undefined ? undefined : summarizeHistory(commits.value, window);
       historyRecomputed = true;
@@ -231,7 +300,16 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
 
   // ---- module resolution reuse (config scope, file set, versions) ----
   const indexedFiles = new Set(current.map((f) => f.path).filter((p) => !p.startsWith(STATE_PREFIX)));
-  const resolver = createLanguageModuleResolver({ root: rootDir, indexedFiles });
+  const consumed = new Map<string, { value: string | undefined; read: () => string | undefined }>();
+  let consumedChanged = false;
+  const resolver = createLanguageModuleResolver({ root: rootDir, indexedFiles, readInput: (file, read) => {
+    const value = read();
+    const previous = consumed.get(file);
+    if (previous !== undefined && previous.value !== value) consumedChanged = true;
+    else consumed.set(file, { value, read });
+    return value;
+  } });
+  options.onResolverInputs?.(() => !consumedChanged && [...consumed.values()].every((input) => input.read() === input.value));
   const signals = resolutionSignals(rootDir, changes, previous);
   const moduleFreshness = new Map<RepoPath, ModuleResolutionFreshness>();
   const previousResolution = new Map<RepoPath, FileResolution>();
@@ -252,14 +330,20 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   };
 
   // ---- plan (the full builder) ----
+  let sourceTextChanged = false;
+  const fingerprintOf = new Map(current.map((f) => [f.path as string, f] as const));
   const plan = buildGraphPlan({
     truth, trace, files: current, analyses, failedAnalyses,
     sourceText: (p) => {
       const known = texts.get(p);
       if (known !== undefined) return known;
       try {
-        return fs.readFileSync(path.join(rootDir, p), "utf8");
+        const content = fs.readFileSync(path.join(rootDir, p));
+        const f = fingerprintOf.get(p);
+        if (f === undefined || computeContentHash(content, f.fingerprintMode).contentHash !== f.contentHash) sourceTextChanged = true;
+        return content.toString("utf8");
       } catch {
+        sourceTextChanged = true;
         return undefined;
       }
     },
@@ -323,10 +407,23 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   const changedScopes = new Set([...new Set([...before.keys(), ...after.keys()])].filter((s) => before.get(s) !== after.get(s)));
 
   // ---- write: graph + token in one transaction, then the state file ----
+  const unchanged = previous !== undefined && changedScopes.size === 0 && previous.token === state.token;
+  if (!unchanged) {
+    // The asynchronous rescan comes first; everything after it, up to the commit, is synchronous, so no
+    // check can be overtaken by a change the rescan was waiting through (T181 review).
+    const stable = await sameScanAndGit(rootDir, scope, { fingerprints: current, typeChanges: scan.typeChanges, git: gitState })
+      && sameDatabase() && !sourceTextChanged && !consumedChanged
+      && [...consumed.values()].every((input) => input.read() === input.value)
+      && [...recordedConfigs].every(([c, h]) => hashOnDisk(rootDir, c as RepoPath) === h)
+      && JSON.stringify(loadProjectTruth(rootDir).value?.truth) === truthSignature;
+    if (!stable) return moved();
+  }
+  if (options.expectedToken !== undefined && (readIndexState(rootDir).state?.token !== options.expectedToken || store.readMeta(INDEX_STATE_TOKEN_KEY) !== options.expectedToken)) {
+    return failure([createDiagnostic("GRAPH_WRITE_REFUSED", "Safe index refresh refused: index state changed before commit")]);
+  }
   let revision = Number(store.readMeta(GRAPH_REVISION_KEY) ?? "0");
   if (!Number.isSafeInteger(revision)) revision = 0;
   const counts = store.counts();
-  const unchanged = previous !== undefined && changedScopes.size === 0 && previous.token === state.token;
   let diff: GraphDiff | undefined;
   if (!unchanged) {
     try {
@@ -350,8 +447,11 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
     }
     if (previous === undefined || graphChanged(diff)) revision++;
     // After the commit. If this fails the token no longer matches and the next run rebuilds.
-    diagnostics.push(...writeIndexState(rootDir, state).diagnostics.map((d) => ({ ...d, severity: "warning" as const })));
-    diagnostics.push(...writeFingerprintFile(rootDir, current).diagnostics.map((d) => ({ ...d, severity: "warning" as const })));
+    const savedState = writeIndexState(rootDir, state);
+    const savedFingerprint = writeFingerprintFile(rootDir, current);
+    const sidecarDiagnostics = [...savedState.diagnostics, ...savedFingerprint.diagnostics];
+    diagnostics.push(...(options.expectedToken === undefined ? sidecarDiagnostics.map((d) => ({ ...d, severity: "warning" as const })) : sidecarDiagnostics));
+    if (options.expectedToken !== undefined && (savedState.value === undefined || savedFingerprint.value === undefined)) return failure(diagnostics);
     pruneAnalysisCache(rootDir, cacheKeys);
   }
   phase("write");
@@ -395,6 +495,41 @@ export async function indexRepository(root: string, options: IndexOptions): Prom
   });
   phase("report");
   return success({ mode, ...(fullRebuildReason === undefined ? {} : { fullRebuildReason }), metrics, freshness, stats: plan.stats, graphRevision: revision }, canonicalDiagnostics(diagnostics));
+}
+
+/** What a scan of the configured scope saw: fingerprints, type changes and the Git state. */
+export interface ScanSnapshot {
+  readonly fingerprints: readonly FileFingerprint[];
+  readonly typeChanges: unknown;
+  readonly git: GitRepositoryState | undefined;
+}
+
+export interface IndexScope { readonly include: readonly string[]; readonly exclude: readonly string[] }
+
+/** Scans the configured scope and reads the Git state; undefined when either cannot be read. */
+export async function takeScanSnapshot(rootDir: string, scope: IndexScope): Promise<ScanSnapshot | undefined> {
+  const workTree = probeWorkTree(rootDir);
+  const scan = await scanRepository(rootDir, { include: scope.include, exclude: scope.exclude, workTree });
+  if (scan.diagnostics.some((d) => d.severity === "error")) return undefined;
+  const fingerprinted = await fingerprintRepositoryFiles(rootDir, scan.files);
+  if (fingerprinted.diagnostics.some((d) => d.severity === "error")) return undefined;
+  const git = await openGitProvider(rootDir, { workTree });
+  const state = git.value === undefined ? undefined : await git.value.repositoryState();
+  if (state?.value === undefined || state.diagnostics.some((d) => d.severity === "error")) return undefined;
+  return { fingerprints: fingerprinted.fingerprints, typeChanges: scan.typeChanges, git: state.value };
+}
+
+/**
+ * The scope scanned again, its fingerprints and the Git state equal `expected` (T180 guard, one pass).
+ * A Git state that cannot be read, now or in `expected`, never counts as unchanged (T181 review).
+ */
+export async function sameScanAndGit(rootDir: string, scope: IndexScope, expected: ScanSnapshot): Promise<boolean> {
+  if (expected.git === undefined) return false;
+  const now = await takeScanSnapshot(rootDir, scope);
+  if (now === undefined || JSON.stringify(now.typeChanges) !== JSON.stringify(expected.typeChanges)) return false;
+  const key = (f: FileFingerprint) => JSON.stringify([f.path, f.state, f.fingerprintMode, f.contentHash, f.size, f.gitBlobOid ?? null]);
+  if (now.fingerprints.length !== expected.fingerprints.length || now.fingerprints.some((f, i) => key(f) !== key(expected.fingerprints[i] as FileFingerprint))) return false;
+  return JSON.stringify(now.git) === JSON.stringify(expected.git);
 }
 
 function graphChanged(diff: GraphDiff | undefined): boolean {

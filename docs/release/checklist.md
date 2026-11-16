@@ -4,6 +4,8 @@
 
 ## 명령
 
+MCP Registry 메타데이터(`server.json`, `mcpName`)와 등록 절차: [mcp-registry.md](mcp-registry.md). Version을 올릴 때 `server.json`도 함께 고친다. Registry 등록은 별도 승인이다.
+
 | 명령 | 내용 | network |
 |---|---|---|
 | `pnpm release:lock` | build-time release lock `apps/cli/npm-shrinkwrap.json` 재생성(의존성·version 변경 시, H-65). 기존 lock을 seed로 써서 바뀌어야 하는 항목만 다시 고른다. diff를 검토해 커밋 | 필요 |

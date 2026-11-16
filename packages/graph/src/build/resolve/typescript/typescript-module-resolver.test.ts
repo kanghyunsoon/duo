@@ -111,4 +111,15 @@ describe("TypeScriptModuleResolver on TypeScript 6 (contract fixed here; upgrade
     resolver.resolve({ fromPath: "a.ts" as RepoPath, specifier: "./b", kind: "import" });
     expect(resolver.diagnostics.map((d) => d.code)).toContain("TSCONFIG_INVALID");
   });
+
+  it("reports a tsconfig with a JSON syntax error instead of throwing (#205)", () => {
+    const { resolver } = project({ "tsconfig.json": "{ not json", "src/a.ts": "", "src/b.ts": "" });
+    expect(resolver.resolve({ fromPath: "src/a.ts" as RepoPath, specifier: "./b", kind: "import" })).toMatchObject({ status: "resolved", path: "src/b.ts" });
+    // On Windows this threw "Debug Failure" before the fix; CI on three OSes is the check.
+    const invalid = resolver.diagnostics.filter((d) => d.code === "TSCONFIG_INVALID");
+    expect(invalid.map((d) => d.message)).toContain("tsconfig.json: ',' expected.");
+    expect(invalid.every((d) => d.source?.path === "tsconfig.json")).toBe(true);
+    // TypeScript reports "Property assignment expected." at two positions; the message has no position, so it is listed once.
+    expect(new Set(invalid.map((d) => d.message)).size).toBe(invalid.length);
+  });
 });

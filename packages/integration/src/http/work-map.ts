@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { definitionRef, fileRef, guardWrite, nodeId, parseNodeId, STATE_DIR_NAME, symlinkOnPath, type RepoPath } from "@duo-director/core";
+import { redactSecrets } from "@duo-director/director";
 import { GRAPH_REVISION_KEY, inspectIndex, traverse } from "@duo-director/graph";
 import { projectContext } from "../operations/context.js";
 import { withGraphReader, type OperationOptions } from "../operations/common.js";
@@ -16,6 +17,23 @@ const MAX_NODES = 120;
 const MAX_TASK_NODES = 60;
 const EXPANSION_NODE_LIMITS = { 1: 8, 2: 16, 3: 24 } as const;
 const indexStatusCache = new Map<string, { key: string; status: string }>();
+
+/**
+ * #84: task names and agent labels are display text. Known credential formats (the Context Packet redaction set) are
+ * replaced before they reach work-tasks.json, the work-map cache or the UI. The MCP task key is still the hash of the
+ * unredacted task text, so session matching does not change.
+ */
+const redactLabel = (text: string): string => redactSecrets(text).text;
+
+/** True when a stored task file still needs a rewrite: a v1 array, or a name or agent label that redaction would change. */
+function needsRewrite(raw: unknown): boolean {
+  if (Array.isArray(raw)) return true;
+  const rows = typeof raw === "object" && raw !== null && "tasks" in raw && Array.isArray(raw.tasks) ? raw.tasks as unknown[] : [];
+  return rows.some((row) => typeof row === "object" && row !== null && (["name", "agent"] as const).some((field) => {
+    const value = (row as Record<string, unknown>)[field];
+    return typeof value === "string" && redactLabel(value) !== value;
+  }));
+}
 
 /** Small freshness token: task data, indexed graph revision and working-tree file metadata. */
 async function workMapRevisions(root: string): Promise<{ revision: string; sourceRevision: string }> {
@@ -158,17 +176,21 @@ function readTasks(root: string): WorkTask[] {
   const tasks = rows.filter((x): x is WorkTask => typeof x === "object" && x !== null &&
     typeof x.id === "string" && typeof x.agent === "string" && typeof x.name === "string" &&
     typeof x.updatedAt === "string" && (x.status === "active" || x.status === "disconnected" || x.status === "completed"))
-    .map((task) => ({ ...task, identitySource: task.identitySource ?? "legacy" }));
+    .map((task) => ({ ...task, agent: redactLabel(task.agent), name: redactLabel(task.name), identitySource: task.identitySource ?? "legacy" }));
   return tasks;
 }
 
+/**
+ * Tasks for the map. A v1 array is migrated, and a file written before #84 that still holds a credential in a name or
+ * agent label is rewritten with the redacted labels, under the task lock. IDs, task keys and status are kept.
+ */
 export function listWorkTasks(root: string): WorkTask[] {
   const raw = readJson(root, TASKS);
-  if (!Array.isArray(raw)) return readTasks(root);
+  if (!needsRewrite(raw)) return readTasks(root);
   return withTaskLock(root, () => {
     const latest = readJson(root, TASKS);
     const tasks = readTasks(root);
-    if (Array.isArray(latest)) saveTasks(root, tasks);
+    if (needsRewrite(latest)) saveTasks(root, tasks);
     return tasks;
   });
 }
@@ -206,7 +228,7 @@ function saveTasks(root: string, tasks: WorkTask[]): void {
 export function addWorkTask(root: string, input: { agent: string; name: string; issueId?: string }, now: Date): WorkTask {
   return withTaskLock(root, () => {
     const tasks = readTasks(root);
-    const task: WorkTask = { id: randomUUID(), agent: input.agent, name: input.name,
+    const task: WorkTask = { id: randomUUID(), agent: redactLabel(input.agent), name: redactLabel(input.name),
       ...(input.issueId === undefined ? {} : { issueId: input.issueId, targetRef: nodeId(definitionRef("issue", input.issueId)) }),
       identitySource: "manual", worktreeId: worktreeId(root), startedAt: now.toISOString(), updatedAt: now.toISOString(), status: "active" };
     saveTasks(root, [...tasks, task]);
@@ -218,9 +240,11 @@ export function addWorkTask(root: string, input: { agent: string; name: string; 
 export function touchWorkTask(root: string, agent: string, taskText: string, now: Date,
   identity?: { readonly duoSessionId: string; readonly targetRef?: string }, lockWaitMs = 5000): WorkTask | undefined {
   const normalizedTask = taskText.replace(/\r\n?/gu, "\n").trim();
-  const name = normalizedTask.split("\n")[0]?.trim().slice(0, 200);
+  // Redact the whole first line before cutting it to 200 characters, so a credential across the cut is not left partly visible.
+  const firstLine = normalizedTask.split("\n")[0]?.trim();
+  const name = firstLine === undefined ? undefined : redactLabel(firstLine).slice(0, 200);
   if (name === undefined || name === "") return undefined;
-  const safeAgent = agent.trim().slice(0, 80) || "Agent";
+  const safeAgent = redactLabel(agent.trim()).slice(0, 80) || "Agent";
   return withTaskLock(root, () => {
     const tasks = readTasks(root);
     const taskKey = identity === undefined ? undefined

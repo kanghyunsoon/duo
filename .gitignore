@@ -10,3 +10,4 @@ Thumbs.db
 .env.*
 /tmp/
 /bench/results/local/
+/.duo-a11y-runs/

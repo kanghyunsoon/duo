@@ -19,6 +19,8 @@ export interface OpenNodeSqliteGraphStoreOptions {
   /** File path, or ":memory:". */
   readonly path: string;
   readonly readOnly?: boolean;
+  /** Open an existing compatible graph only; never initialize or recreate generated state. */
+  readonly existingOnly?: boolean;
   /** How long a writer waits for the lock before BUSY. Default 5000 ms. */
   readonly busyTimeoutMs?: number;
   /**
@@ -318,6 +320,7 @@ export function openNodeSqliteGraphStore(options: OpenNodeSqliteGraphStoreOption
   const fail = (diagnostic: Diagnostic, regenerable = false): GraphOpenResult => ({ diagnostics: [diagnostic], regenerable });
   let db: DatabaseSync | undefined;
   try {
+    if (options.existingOnly && !fs.existsSync(options.path)) return fail(createDiagnostic("GRAPH_OPEN_FAILED", "Existing graph database is missing", source));
     db = new DatabaseSync(options.path, { readOnly: options.readOnly ?? false, enableForeignKeyConstraints: true });
     db.exec(`PRAGMA busy_timeout = ${Math.max(0, Math.trunc(options.busyTimeoutMs ?? 5000))}`);
     db.exec("PRAGMA foreign_keys = ON");
@@ -329,7 +332,7 @@ export function openNodeSqliteGraphStore(options: OpenNodeSqliteGraphStoreOption
         `graph_schema_version ${state.found} is not supported (expected ${GRAPH_SCHEMA_VERSION})${state.duoGraph ? "; the graph database is generated data and can be rebuilt" : ""}`,
         source,
       );
-      if (!state.duoGraph || options.onUnsupportedSchema !== "recreate" || options.path === ":memory:" || options.readOnly) {
+      if (!state.duoGraph || options.onUnsupportedSchema !== "recreate" || options.path === ":memory:" || options.readOnly || options.existingOnly) {
         db.close();
         return fail(diagnostic, state.duoGraph);
       }
@@ -339,7 +342,7 @@ export function openNodeSqliteGraphStore(options: OpenNodeSqliteGraphStoreOption
       return { ...reopened, diagnostics: [withSeverity(diagnostic, "warning"), ...reopened.diagnostics] };
     }
     if (state.kind === "empty") {
-      if (options.readOnly) {
+      if (options.readOnly || options.existingOnly) {
         db.close();
         return fail(createDiagnostic("GRAPH_OPEN_FAILED", "Graph database is empty and was opened read-only", source));
       }

@@ -1,7 +1,7 @@
 /**
  * duoctl install (TASK-017): connects a coding agent to this DUO project.
  *
- *   duoctl install <codex|claude-code> [--launcher path|npx]   plan → confirm → apply → verify
+ *   duoctl install <codex|claude-code> [--launcher path|npx] [--with-skill]   plan → confirm → apply → verify
  *   duoctl install status [agent]                              read-only
  *   duoctl install remove <agent>                              plan → confirm → apply
  *
@@ -17,21 +17,25 @@ import {
 import { createDiagnostic } from "@duo-director/core";
 import { t } from "../messages.js";
 import { EXIT, failed, type Outcome } from "../output.js";
+import { VERSION } from "../version.js";
 import { diagLines, interactive, usage, type Env } from "./shared.js";
 
 export interface InstallOptions {
   readonly launcher?: string;
+  /** Opt-in project skill (S15P31A106-358): Codex was observed loading it; Claude Code is not verified yet. */
+  readonly withSkill?: boolean;
 }
 
-const host = (env: Env) => ({ env: env.io.env, platform: process.platform });
+export const host = (env: Env) => ({ env: env.io.env, platform: process.platform });
 
-function renderPlan(env: Env, plan: AgentIntegrationPlan): string[] {
+export function renderPlan(env: Env, plan: AgentIntegrationPlan): string[] {
   const L = env.locale;
   const out = [
     t(L, "install.plan", { operation: plan.operation, agent: plan.agent, create: plan.willCreate.length, modify: plan.willModify.length, delete: plan.willDelete.length, unchanged: plan.unchanged.length }),
     t(L, "install.mcp", { target: plan.mcp.target, status: plan.mcp.status, action: plan.mcp.action }),
     t(L, "install.bridge", { target: plan.bridge.target, status: plan.bridge.status, action: plan.bridge.action }),
   ];
+  if (plan.skill !== undefined) out.push(t(L, "install.skill", { target: plan.skill.target, status: plan.skill.status, action: plan.skill.action }));
   if (plan.operation === "install") out.push(t(L, "install.launcher", { command: launcherDisplay(plan.launcher), state: plan.requirements.duoctlAvailable ? "found" : "not found" }));
   for (const p of plan.willCreate) out.push(t(L, "install.file", { action: "create", path: p }));
   for (const p of plan.willModify) out.push(t(L, "install.file", { action: "modify", path: p }));
@@ -42,12 +46,13 @@ function renderPlan(env: Env, plan: AgentIntegrationPlan): string[] {
   return out;
 }
 
-function renderVerify(env: Env, v: AgentIntegrationVerification): string[] {
+export function renderVerify(env: Env, v: AgentIntegrationVerification): string[] {
   const L = env.locale;
   return [
     t(L, "install.verify", { result: v.ok ? "ok" : "failed" }),
     t(L, "install.launcher", { command: [v.launcher.command, ...v.launcher.argsPrefix].join(" "), state: [v.launcher.resolved, v.launcher.localBin, v.launcher.version === undefined ? undefined : `duoctl ${v.launcher.version}`].filter((x) => x !== undefined).join(" · ") || "not found" }),
     ...v.checks.map((c) => t(L, "install.check", { mark: c.ok ? "✓" : "✗", name: c.name, detail: c.detail === undefined ? "" : ` · ${c.detail}` })),
+    ...(v.warnings ?? []).map((w) => t(L, "install.version-mismatch", { cliVersion: w.cliVersion, serverVersion: w.serverVersion, resolved: w.resolved, agent: v.agent })),
     ...v.nextActions.map((a) => t(L, "install.next", { action: a })),
   ];
 }
@@ -92,7 +97,7 @@ export async function installCommand(env: Env, sub: string | undefined, arg: str
     const human = renderPlan(env, plan);
     const step = await confirmAndApply(env, "install", plan, human);
     if (step.outcome !== undefined) return step.outcome;
-    if (plan.noop) human.push(t(env.locale, "install.unchanged"));
+    if (plan.noop) human.push(t(env.locale, "install.remove-unchanged", { agent: arg }));
     return { command: "install", exitCode: EXIT.OK, result: { plan, ...(step.applied === undefined ? {} : { apply: step.applied }) }, diagnostics: [], human, metric: { status: plan.noop ? "unchanged" : "removed", agent: arg } };
   }
   if (!isAgentId(sub)) return usage("install", `unknown agent '${sub}' (${agents})`);
@@ -100,12 +105,12 @@ export async function installCommand(env: Env, sub: string | undefined, arg: str
   const agent: AgentId = sub;
   if (options.launcher !== undefined && options.launcher !== "path" && options.launcher !== "npx") return usage("install", "--launcher must be path (duoctl on PATH) or npx (project-local)");
   const launcher = options.launcher === "npx" ? NPX_LAUNCHER : PATH_LAUNCHER;
-  const plan = planAgentIntegration(env.root, agent, { launcher, host: host(env) });
+  const plan = planAgentIntegration(env.root, agent, { launcher, host: host(env), ...(options.withSkill === true ? { withSkill: true } : {}) });
   const human = renderPlan(env, plan);
   const step = await confirmAndApply(env, "install", plan, human);
   if (step.outcome !== undefined) return step.outcome;
   if (plan.noop) human.push(t(env.locale, "install.unchanged"));
-  const verify = await verifyAgentIntegration(env.root, agent, { host: host(env) });
+  const verify = await verifyAgentIntegration(env.root, agent, { host: host(env), cliVersion: VERSION });
   human.push(...renderVerify(env, verify));
   const status = !verify.ok ? "verify-failed" : plan.noop ? "unchanged" : "installed";
   return {

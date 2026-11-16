@@ -2947,6 +2947,20 @@
             "endLine": 12,
             "endColumn": 29
           }
+        },
+        {
+          "specifier": "./t",
+          "kind": "dynamic-import",
+          "typeOnly": false,
+          "bindings": [],
+          "reexports": [],
+          "location": {
+            "path": "modules.ts",
+            "startLine": 14,
+            "startColumn": 15,
+            "endLine": 14,
+            "endColumn": 28
+          }
         }
       ],
       "exports": [

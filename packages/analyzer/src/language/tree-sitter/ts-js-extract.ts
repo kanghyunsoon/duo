@@ -658,12 +658,15 @@ class Extractor {
     if (fn === null) return;
     const args = node.childForFieldName("arguments");
     const only = args?.type === "arguments" && args.namedChildren.length === 1 ? args.namedChildren[0] : undefined;
+    // #50 L2b: a template literal without substitutions is the same specifier as the string literal.
+    const literal = literalText(only);
     if (fn.type === "import") {
-      if (only?.type === "string") this.module(node, only, "dynamic-import", false, []);
+      if (literal !== undefined) this.moduleText(node, literal, "dynamic-import", false, []);
+      else this.computedImport(node, args);
       return;
     }
-    if (fn.type === "identifier" && fn.text === "require" && only?.type === "string") {
-      this.module(node, only, "require", false, this.requireBindings(node));
+    if (fn.type === "identifier" && fn.text === "require" && literal !== undefined) {
+      this.moduleText(node, literal, "require", false, this.requireBindings(node));
       return;
     }
     let kind: CallSiteKind | undefined;
@@ -686,8 +689,23 @@ class Extractor {
     });
   }
 
+  /**
+   * #50 L2a: an import() whose first argument is not a literal is a reference with no static specifier, so
+   * review can say it was not checked. The expression is not kept (it can carry anything). Literal
+   * arguments, including a template literal without substitutions (#50 L2b), are module references.
+   */
+  private computedImport(node: Node, args: Node | null): void {
+    const first = args?.type === "arguments" ? args.namedChildren.find((c) => c.type !== "comment") : undefined;
+    if (first === undefined || first.type === "spread_element" || first.type === "string" || literalText(first) !== undefined) return;
+    this.moduleReferences.push({ specifier: "", kind: "dynamic-import", typeOnly: false, bindings: [], reexports: [], syntax: { computed: true }, location: location(this.path, node) });
+  }
+
   private module(statement: Node, specifier: Node, kind: ModuleReferenceKind, typeOnly: boolean, bindings: ImportBinding[], reexports: ReExportBinding[] = []): void {
-    this.moduleReferences.push({ specifier: stringValue(specifier), kind, typeOnly, bindings, reexports, location: location(this.path, statement) });
+    this.moduleText(statement, stringValue(specifier), kind, typeOnly, bindings, reexports);
+  }
+
+  private moduleText(statement: Node, specifier: string, kind: ModuleReferenceKind, typeOnly: boolean, bindings: ImportBinding[], reexports: ReExportBinding[] = []): void {
+    this.moduleReferences.push({ specifier, kind, typeOnly, bindings, reexports, location: location(this.path, statement) });
   }
 
   private reportErrors(): void {

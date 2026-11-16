@@ -26,16 +26,21 @@ async function send<T>(method: "GET" | "POST", path: string, body?: unknown): Pr
     headers["X-Duo-CSRF"] = csrf;
   }
   const res = await fetch(path, { method, headers, credentials: "same-origin", ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-  let envelope: Envelope<T> | undefined;
+  let value: unknown;
   try {
-    envelope = (await res.json()) as Envelope<T>;
+    value = await res.json();
   } catch {
-    envelope = undefined;
+    value = undefined;
   }
-  if (!res.ok || envelope === undefined || !envelope.ok) {
-    throw new ApiError(res.status, envelope?.error?.code ?? "UI_TRANSPORT", envelope?.error?.message ?? `HTTP ${res.status}`);
+  const envelope = typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  if (!res.ok || envelope?.ok === false) {
+    const error = typeof envelope?.error === "object" && envelope.error !== null ? envelope.error as Record<string, unknown> : undefined;
+    throw new ApiError(res.status, typeof error?.code === "string" ? error.code : "UI_TRANSPORT", typeof error?.message === "string" ? error.message : `HTTP ${res.status}`);
   }
-  return envelope;
+  if (envelope === undefined || envelope.ok !== true || typeof envelope.format !== "string" || typeof envelope.data !== "object" || envelope.data === null || Array.isArray(envelope.data)) {
+    throw new ApiError(res.status, "UI_INVALID_RESPONSE", "The server response could not be read. Please try again.");
+  }
+  return envelope as unknown as Envelope<T>;
 }
 
 export const api = {

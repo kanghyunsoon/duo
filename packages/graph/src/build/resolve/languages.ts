@@ -22,7 +22,8 @@ export const CPP_INCLUDE_RESOLUTION_VERSION = "1";
 /** Every resolver's version: a change recomputes stored module results (not the parse). */
 export const MODULE_RESOLUTION_VERSION = `typescript=${TYPESCRIPT_MODULE_RESOLUTION_VERSION};python=${PYTHON_RESOLUTION_VERSION};cpp=${CPP_INCLUDE_RESOLUTION_VERSION}`;
 
-const TS_LANGUAGES = new Set(["typescript", "tsx", "javascript"]);
+/** Languages the TypeScript resolver handles; their ModuleResolver.configFiles is the tsconfig/jsconfig chain. */
+export const TS_LANGUAGES: ReadonlySet<string> = new Set(["typescript", "tsx", "javascript"]);
 
 const posix = nodePath.posix;
 
@@ -38,26 +39,32 @@ export function resolveCppInclude(request: ModuleResolutionRequest, files: Reado
 export interface LanguageResolverOptions {
   readonly root: string;
   readonly indexedFiles: ReadonlySet<RepoPath>;
+  readonly readInput?: (file: string, read: () => string | undefined) => string | undefined;
 }
 
 const TS_EXTENSION = /\.(?:[cm]?tsx?|[cm]?jsx?)$/iu;
 const PY_EXTENSION = /\.py$/u;
 
 export function createLanguageModuleResolver(options: LanguageResolverOptions): ModuleResolver {
-  const ts = createTypeScriptModuleResolver({ root: options.root, indexedFiles: options.indexedFiles });
+  const ts = createTypeScriptModuleResolver(options);
   const files = options.indexedFiles as ReadonlySet<string>;
   const isTs = (r: { readonly language?: string }) => r.language === undefined || TS_LANGUAGES.has(r.language);
   // Python source roots: discovered once, on the first Python request, from the indexed files and in-repository metadata.
   let python: PythonRoots | undefined;
-  const pythonRoots = () => (python ??= discoverPythonRoots(files, (p) => readSourceFile(options.root, p).value));
+  const pythonRoots = () => (python ??= discoverPythonRoots(files, (p) => {
+    const read = () => readSourceFile(options.root, p).value;
+    return options.readInput === undefined ? read() : options.readInput(nodePath.join(options.root, p), read);
+  }));
   return {
     version: MODULE_RESOLUTION_VERSION,
     get diagnostics() { return ts.diagnostics; },
     // TypeScript/JavaScript files depend on tsconfig/jsconfig; Python files on the project metadata that decided the roots
     // (a changed pyproject.toml or setup.cfg re-resolves them; added or removed files already do).
     configFiles: (fromPath) => (TS_EXTENSION.test(fromPath) ? ts.configFiles(fromPath) : PY_EXTENSION.test(fromPath) ? pythonRoots().metadata : []),
+    nearestConfig: (fromPath) => (TS_EXTENSION.test(fromPath) ? ts.nearestConfig?.(fromPath) : undefined),
     configDiagnostics: (configPath, opts) => (isPythonMetadataFile(configPath) ? [] : ts.configDiagnostics(configPath, opts)),
     resolve(request) {
+      if (request.syntax?.computed === true) return { status: "unresolved", reason: "computed-specifier" };
       if (isTs(request)) return ts.resolve(request);
       if (request.language === "python") return resolvePython(request, files, pythonRoots());
       if (request.language === "cpp") return resolveCppInclude(request, files, request.syntax?.system === true);

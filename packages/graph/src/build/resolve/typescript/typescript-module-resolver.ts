@@ -15,6 +15,13 @@ export interface TypeScriptModuleResolverOptions {
   readonly root: string;
   /** Indexed repository files (File Nodes). Anything else inside the repository is "not-indexed". */
   readonly indexedFiles: ReadonlySet<RepoPath>;
+  /** Optional input observer for a bounded index operation (including absent config lookups). */
+  readonly readInput?: (file: string, read: () => string | undefined) => string | undefined;
+  /**
+   * Optional observer of the directories module resolution checks (#163 review). TypeScript does not look up the
+   * files of a directory it finds missing, so a caller that records lookups also needs the missing directories.
+   */
+  readonly observeDirectory?: (directory: string, exists: boolean) => void;
 }
 
 interface Config {
@@ -62,10 +69,17 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
   const configs = new Map<string, Config>();
   const nearest = new Map<string, Config | undefined>();
   const results = new Map<string, ModuleResolution>();
+  const readFile = (f: string): string | undefined => options.readInput === undefined ? api.sys.readFile(f) : options.readInput(f, () => api.sys.readFile(f));
+  const fileExists = (f: string): boolean => { if (options.readInput !== undefined) readFile(f); return api.sys.fileExists(f); };
+  const configHost = { ...api.sys, readFile, fileExists };
   const host: ts.ModuleResolutionHost = {
-    fileExists: (f) => api.sys.fileExists(f),
-    readFile: (f) => api.sys.readFile(f),
-    directoryExists: (d) => api.sys.directoryExists(d),
+    fileExists,
+    readFile,
+    directoryExists: (d) => {
+      const exists = api.sys.directoryExists(d);
+      options.observeDirectory?.(d, exists);
+      return exists;
+    },
     realpath: (p) => (api.sys.realpath === undefined ? p : api.sys.realpath(p)),
     getCurrentDirectory: () => root,
     getDirectories: (d) => api.sys.getDirectories(d),
@@ -83,20 +97,23 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     const cached = configs.get(file);
     if (cached !== undefined) return cached;
     // readConfigFile reports syntax errors; readJsonConfigFile + parse also records the extends chain.
-    const read = api.readConfigFile(file, (f) => api.sys.readFile(f));
+    // Both get the "/" form: TypeScript names the JSON source file with it, and a "\" path fails its assertion (#205).
+    const read = api.readConfigFile(posix(file), readFile);
     const repoPath = toRepoPath(file);
     const own: Diagnostic[] = [];
     if (repoPath !== undefined) diagnosticsByConfig.set(repoPath, own);
     const report = (d: ts.Diagnostic) => {
       if (d.category !== api.DiagnosticCategory.Error) return;
       const diagnostic = createDiagnostic("TSCONFIG_INVALID", `${repoPath ?? file}: ${api.flattenDiagnosticMessageText(d.messageText, " ")}`, repoPath === undefined ? undefined : { path: repoPath });
+      // The message has no position, so the same error at two places would print as two identical lines.
+      if (own.some((o) => o.message === diagnostic.message)) return;
       diagnostics.push(diagnostic);
       own.push(diagnostic);
     };
     if (read.error !== undefined) report(read.error);
-    const source = api.readJsonConfigFile(posix(file), (f) => api.sys.readFile(f));
+    const source = api.readJsonConfigFile(posix(file), readFile);
     const parsed = api.parseJsonSourceFileConfigFileContent(
-      source, api.sys, nodePath.dirname(file), isJs ? { allowJs: true } : undefined, posix(file),
+      source, configHost, nodePath.dirname(file), isJs ? { allowJs: true } : undefined, posix(file),
     );
     // "No inputs were found" (18003) only concerns compilation, not resolution.
     parsed.errors.filter((d) => d.code !== 18003).forEach(report);
@@ -118,8 +135,8 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     let found: Config | undefined;
     const ts1 = nodePath.join(dir, "tsconfig.json");
     const js1 = nodePath.join(dir, "jsconfig.json");
-    if (api.sys.fileExists(ts1)) found = loadConfig(ts1, false);
-    else if (api.sys.fileExists(js1)) found = loadConfig(js1, true);
+    if (fileExists(ts1)) found = loadConfig(ts1, false);
+    else if (fileExists(js1)) found = loadConfig(js1, true);
     else if (nodePath.resolve(dir) !== root) {
       const parent = nodePath.dirname(dir);
       found = parent === dir ? undefined : configFor(parent);
@@ -128,6 +145,27 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     return found;
   };
   const noConfig: Config = { key: "", options: NO_CONFIG_OPTIONS, cache: api.createModuleResolutionCache(root, (f) => f, NO_CONFIG_OPTIONS), files: [] };
+
+  /**
+   * The nearest config path by existence only (#151), memoized per directory. The same lookup order as configFor; no
+   * config is parsed and a missing file is not read. A config that is found is read once, so the run's input check
+   * (readInput) sees it.
+   */
+  const nearestPaths = new Map<string, RepoPath | undefined>();
+  const nearestPathFor = (dir: string): RepoPath | undefined => {
+    if (nearestPaths.has(dir)) return nearestPaths.get(dir);
+    let found: RepoPath | undefined;
+    const candidate = [nodePath.join(dir, "tsconfig.json"), nodePath.join(dir, "jsconfig.json")].find((f) => api.sys.fileExists(f));
+    if (candidate !== undefined) {
+      readFile(candidate);
+      found = toRepoPath(candidate);
+    } else if (nodePath.resolve(dir) !== root) {
+      const parent = nodePath.dirname(dir);
+      found = parent === dir ? undefined : nearestPathFor(parent);
+    }
+    nearestPaths.set(dir, found);
+    return found;
+  };
 
   const resolveUncached = (request: ModuleResolutionRequest): ModuleResolution => {
     const { specifier } = request;
@@ -164,6 +202,9 @@ export function createTypeScriptModuleResolver(options: TypeScriptModuleResolver
     diagnostics,
     configFiles(fromPath) {
       return configFor(nodePath.dirname(nodePath.join(root, fromPath)))?.files ?? [];
+    },
+    nearestConfig(fromPath) {
+      return nearestPathFor(nodePath.dirname(nodePath.join(root, fromPath)));
     },
     configDiagnostics(configPath, opts) {
       const known = diagnosticsByConfig.get(configPath);

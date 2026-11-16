@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import type { RepoPath } from "@duo-director/core";
@@ -200,6 +201,43 @@ describe("provenance", () => {
     expect(Buffer.from(await value(git.readBlob("INDEX", p("a.txt")))).toString()).toBe("staged\n");
     expect(Buffer.from(await value(git.readBlob({ commit: C1 }, p("a.txt")))).toString()).toBe("one\ntwo\nthree\n");
     expect((await git.readBlob("HEAD", p("missing.txt"))).diagnostics.map((d) => d.code)).toEqual(["GIT_OBJECT_NOT_FOUND"]);
+  });
+
+  it("lists which paths are files at HEAD, in the index and at a commit, without reading blobs (#187)", async () => {
+    const repo = historyRepo();
+    repo.write("dir/new.txt", "staged\n");
+    repo.add("dir/new.txt");
+    const git = await provider(repo);
+    const ask = [p("a.txt"), p("한글 #1.md"), p("dir"), p("dir/new.txt"), p("missing.txt")];
+    expect([...await value(git.pathsExist("HEAD", ask))].sort()).toEqual(["a.txt", "한글 #1.md"]);
+    expect([...await value(git.pathsExist({ commit: C1 }, ask))]).toEqual(["a.txt"]);
+    // A directory path is not a file, and ls-files' files under it are not requested paths.
+    expect([...await value(git.pathsExist("INDEX", ask))].sort()).toEqual(["a.txt", "dir/new.txt", "한글 #1.md"]);
+    expect([...await value(git.pathsExist("HEAD", []))]).toEqual([]);
+    const unknown = await git.pathsExist({ commit: "0".repeat(40) }, [p("a.txt")]);
+    expect(unknown.value).toBeUndefined();
+    expect(unknown.diagnostics.map((d) => d.code)).toEqual(["GIT_REVISION_NOT_FOUND"]);
+    // A path Git cannot match as written is refused, not reported absent (a backslash is a name character on POSIX).
+    const odd = await git.pathsExist("HEAD", [p("a.txt"), p("dir\\new.txt")]);
+    expect(odd.value).toBeUndefined();
+    expect(odd.diagnostics.map((d) => d.code)).toEqual(["GIT_REQUEST_INVALID"]);
+    // Long requests are split into short command lines and still answer every path.
+    const many = [...Array.from({ length: 400 }, (_, i) => p(`${"x".repeat(80)}/${i}.txt`)), p("a.txt")];
+    expect([...await value(git.pathsExist("HEAD", many))]).toEqual(["a.txt"]);
+  });
+
+  it("answers in a partial clone whose blobs cannot be fetched, where readBlob cannot (#187)", async () => {
+    const repo = historyRepo();
+    repo.git("config", "uploadpack.allowFilter", "true");
+    const clone = makeTempDir("duo-partial-");
+    fs.rmSync(clone, { recursive: true, force: true });
+    execFileSync("git", ["clone", "-q", "--filter=blob:none", `file://${repo.root.replace(/\\/gu, "/")}`, clone], { windowsHide: true, stdio: "ignore" });
+    // a.txt at C1 was replaced in C2, so its blob is not local; make the lazy fetch fail.
+    execFileSync("git", ["remote", "set-url", "origin", path.join(makeTempDir("duo-gone-"), "missing.git")], { cwd: clone, windowsHide: true });
+    const r = await openGitProvider(clone);
+    if (r.value === undefined) throw new Error(JSON.stringify(r.diagnostics));
+    expect((await r.value.readBlob({ commit: C1 }, p("a.txt"))).value).toBeUndefined();
+    expect([...await value(r.value.pathsExist({ commit: C1 }, [p("a.txt"), p("missing.txt")]))]).toEqual(["a.txt"]);
   });
 
   it("does not modify the repository", async () => {

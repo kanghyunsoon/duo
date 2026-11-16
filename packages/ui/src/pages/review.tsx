@@ -1,7 +1,7 @@
 /** Review screen (T18.1): the Review service as it is. Never indexes, never records. */
 import { useState } from "react";
 import { api } from "../api.js";
-import { Command, Empty, ErrorBox, Label, Page, Provenance, Section, Verdict } from "../components.js";
+import { Command, Empty, ErrorBox, Label, Page, Provenance, Section, TableScroll, Verdict } from "../components.js";
 import { authorityParts } from "../authority.js";
 import { GapList } from "./context.js";
 import { EvidenceList } from "./evidence.js";
@@ -13,11 +13,11 @@ export function ClaimTable(props: { readonly claims: readonly Claim[]; readonly 
   const [open, setOpen] = useState<string | undefined>();
   if (props.claims.length === 0) return <Empty>No claims.</Empty>;
   return (
-    <table>
+    <TableScroll label="Review claims"><table>
       <thead><tr><th scope="col">Alignment</th><th scope="col">Rule</th><th scope="col">Subject</th><th scope="col">Reason</th><th scope="col">Provenance</th><th scope="col">Evidence</th></tr></thead>
       <tbody>{props.claims.map((c) => (
         <tr key={c.id}>
-          <td><Label text={c.alignment} tone={c.alignment === "ALIGNED" ? "ok" : c.alignment === "CONFLICT" ? (c.blockEligible ? "block" : "warn") : "info"} />{c.blockEligible ? <Label text="blocking" tone="block" /> : null}{c.drift ? <Label text="drift" tone="warn" /> : null}</td>
+          <td><Label text={c.alignment} tone={c.alignment === "ALIGNED" ? "ok" : c.alignment === "CONFLICT" ? (c.blockEligible ? "block" : "warn") : "info"} />{c.blockEligible ? <Label text="blocking" tone="block" /> : null}{c.drift ? <Label text="drift" tone="warn" /> : null}{c.informational === true ? <Label text="information" tone="info" /> : null}</td>
           <td>{c.rule}</td><td><code>{c.subject.id}</code>{c.decisionAuthority === undefined ? null : <div className="muted small">{authorityParts(c.decisionAuthority).join(" · ")}</div>}</td>
           <td>{c.reason}{c.observed === undefined ? null : <div className="muted small">{c.observed}</div>}</td>
           <td><Provenance value={c.provenance} /></td>
@@ -27,7 +27,7 @@ export function ClaimTable(props: { readonly claims: readonly Claim[]; readonly 
           </td>
         </tr>
       ))}</tbody>
-    </table>
+    </table></TableScroll>
   );
 }
 

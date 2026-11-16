@@ -1,19 +1,22 @@
+/// <reference lib="dom" />
+
 /**
  * T18.1 browser E2E: the real local server and the bundled UI in a headless browser (the installed
  * pinned Playwright Chromium in CI, or installed Chrome/Edge locally). Skipped locally without a browser.
  */
 import { execFileSync } from "node:child_process";
+import { AxeBuilder } from "@axe-core/playwright";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDefaultAnalyzerRegistry, type AnalyzerRegistry } from "@duo-director/analyzer";
 import { createDecisionService, definitionRef, nodeId } from "@duo-director/core";
-import { captureAdoptionBaseline } from "@duo-director/director";
+import { captureAdoptionBaseline, recordReview, reviewChanges } from "@duo-director/director";
 import { indexRepository, openProjectGraphStore } from "@duo-director/graph";
 import { LLMProviderPool, startDuoUiServer, type DuoUiServer } from "@duo-director/integration";
 import { completeWorkTask, recordWorkReview, touchWorkTask } from "../../packages/integration/src/http/work-map.js";
-import { chromium, type Browser, type Page } from "playwright-core";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 300_000 });
@@ -21,6 +24,7 @@ const FIXTURES = fileURLToPath(new URL("../../fixtures/", import.meta.url));
 const gitEnv = { ...process.env, GIT_AUTHOR_NAME: "Dev", GIT_AUTHOR_EMAIL: "dev@duo.invalid", GIT_COMMITTER_NAME: "Dev", GIT_COMMITTER_EMAIL: "dev@duo.invalid" };
 const temps: string[] = [];
 const servers: DuoUiServer[] = [];
+const contexts: BrowserContext[] = [];
 let registry: AnalyzerRegistry;
 let browser: Browser | undefined;
 
@@ -62,7 +66,9 @@ function repo(fixture: string, extra: (root: string) => void = () => {}) {
 async function open(root: string): Promise<{ page: Page; server: DuoUiServer; foreign: string[]; errors: string[] }> {
   const server = await startDuoUiServer({ root, version: "e2e", registry, llm: new LLMProviderPool({}) });
   servers.push(server);
-  const page = await (browser as Browser).newPage();
+  const context = await (browser as Browser).newContext();
+  contexts.push(context);
+  const page = await context.newPage();
   const foreign: string[] = [];
   const errors: string[] = [];
   page.on("request", (r) => { if (!r.url().startsWith(server.origin)) foreign.push(r.url()); });
@@ -84,8 +90,10 @@ beforeAll(async () => {
 afterAll(async () => {
   await browser?.close();
   for (const s of servers) await s.close();
+  await Promise.all(servers.map((s) => s.closed));
+  await new Promise<void>((resolve) => setImmediate(resolve));
   registry?.dispose();
-  temps.forEach((t) => fs.rmSync(t, { recursive: true, force: true }));
+  await Promise.all(temps.map((t) => fs.promises.rm(t, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 })));
 });
 
 describe("DUO UI in a browser (T18.1)", () => {
@@ -105,8 +113,203 @@ describe("DUO UI in a browser (T18.1)", () => {
     const nodes = page.locator(".react-flow__node");
     const count = await nodes.count();
     expect(count).toBeGreaterThan(1);
+    const graph = page.locator(".work-canvas");
+    expect(await graph.count()).toBe(1);
+    expect(await graph.getAttribute("role")).toBe("region");
+    expect(await graph.getAttribute("aria-label")).toBe("Work and DUO relationship graph");
+    const taskNode = page.getByRole("button", { name: /\[Codex\] Refresh flow/u });
+    expect(await taskNode.count()).toBe(1);
+    expect(await taskNode.getAttribute("aria-pressed")).toBe("true");
+    const accessibleNode = page.getByRole("button", { name: /\[Codex\] Refresh flow/u }).first();
+    expect(await accessibleNode.getAttribute("role")).toBe("button");
+    expect(["true", "false"]).toContain(await accessibleNode.getAttribute("aria-pressed"));
+    const accessibility = await new AxeBuilder({ page }).withRules(["nested-interactive"]).analyze();
+    expect(accessibility.violations).toEqual([]);
     expect(await page.getByText("Loading…").count()).toBe(0);
     expect(errors).toEqual([]);
+  });
+
+  it("keeps mobile pages and Decision dialogs within the viewport", async (ctx) => {
+    if (browser === undefined) return ctx.skip();
+    const r = repo("review/app");
+    const service = createDecisionService({ root: r.root });
+    const proposalId = (await service.propose({ kind: "agent", name: "codex" }, {
+      title: `Mobile layout ${"identifier".repeat(12)}`, question: "mobile_layout", answer: `private/path/${"x".repeat(160)}`,
+    })).value?.proposalId;
+    if (proposalId === undefined) throw new Error("Could not create mobile layout proposal");
+    await r.index();
+    const graph = openProjectGraphStore(r.root).value;
+    if (graph === undefined) throw new Error("Could not open graph for mobile layout fixture");
+    let reviewId: string;
+    try {
+      const review = await reviewChanges(r.root, { task: "RPT-01", diff: { from: "HEAD", to: "WORKTREE" } }, { graph, registry });
+      if (review.value === undefined) throw new Error("Could not create mobile review fixture");
+      const recorded = await recordReview(review.value.result, { root: r.root, actor: { kind: "human", name: "Mobile layout" }, clock: () => new Date("2026-10-22T00:00:00.000Z") });
+      if (recorded.value?.id === undefined) throw new Error("Could not persist mobile review fixture");
+      reviewId = recorded.value.id;
+    } finally { graph.close(); }
+    const server = await startDuoUiServer({ root: r.root, version: "e2e", registry, llm: new LLMProviderPool({}) });
+    servers.push(server);
+    const context = await (browser as Browser).newContext({ viewport: { width: 320, height: 800 }, colorScheme: "light" });
+    const page = await context.newPage();
+    await page.goto(server.launchUrl);
+    const routes = ["/overview", "/direction", "/decisions", "/work", "/graph?node=RPT-01", "/coverage", "/context", "/review", "/reviews", "/search?q=RPT-01", "/entity/RPT-01", `/reviews/${reviewId}`];
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.setViewportSize({ width: 320, height: 800 });
+      await page.emulateMedia({ colorScheme });
+      for (const route of routes) {
+        await page.goto(`${server.origin}${route}`);
+        await page.getByRole("heading", { level: 1 }).waitFor();
+        await page.waitForFunction(() => !document.body.innerText.includes("Loading…"));
+        const width = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth, inner: window.innerWidth,
+          rootWidths: [document.documentElement, document.body, document.querySelector(".layout"), document.querySelector("main")].map((element) => element === null ? null : `${element.tagName}.${String(element.className)} ${element.getBoundingClientRect().width} rect ${element.scrollWidth}/${element.clientWidth}`),
+          offenders: [...document.querySelectorAll<HTMLElement>("body *")].map((element) => ({ element, rect: element.getBoundingClientRect() }))
+            .filter(({ rect }) => rect.right > window.innerWidth + 1 || rect.left < -1)
+            .sort((a, b) => b.rect.right - a.rect.right).slice(0, 8)
+            .map(({ element, rect }) => `${element.tagName.toLowerCase()}.${String(element.className).slice(0, 50)} ${Math.round(rect.left)}..${Math.round(rect.right)} (${element.scrollWidth}/${element.clientWidth})`) }));
+        expect(width.scroll, `${colorScheme} ${route} document width ${JSON.stringify(width)}`).toBeLessThanOrEqual(width.client);
+      }
+
+      await page.goto(`${server.origin}/decisions`);
+      await page.getByRole("heading", { name: "Pending decisions", level: 1 }).waitFor();
+      await page.waitForFunction(() => !document.body.innerText.includes("Loading…"));
+      const card = page.getByRole("article").filter({ hasText: proposalId });
+      expect(await card.count(), `${colorScheme} proposal card: ${(await page.locator("body").innerText()).slice(-700)}`).toBe(1);
+      await card.getByRole("button", { name: "Confirm…" }).click();
+      const confirm = page.getByRole("dialog", { name: `Confirm ${proposalId}?` });
+      await confirm.waitFor();
+      const confirmWidth = await page.evaluate(() => ({ document: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth,
+        dialog: document.querySelector("dialog[open]")?.getBoundingClientRect().width ?? 0 }));
+      expect(confirmWidth.document, `${colorScheme} confirm document width`).toBeLessThanOrEqual(confirmWidth.viewport);
+      expect(confirmWidth.dialog, `${colorScheme} confirm dialog width`).toBeLessThanOrEqual(288);
+      await confirm.getByRole("button", { name: "Cancel" }).click();
+
+      await card.getByRole("button", { name: "Reject…" }).click();
+      const reject = page.getByRole("dialog", { name: `Reject ${proposalId}?` });
+      await reject.waitFor();
+      await reject.getByLabel("Reason (optional)").fill(`private/path/${"y".repeat(160)}`);
+      const rejectWidth = await page.evaluate(() => ({ document: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth,
+        dialog: document.querySelector("dialog[open]")?.getBoundingClientRect().width ?? 0 }));
+      expect(rejectWidth.document, `${colorScheme} reject document width`).toBeLessThanOrEqual(rejectWidth.viewport);
+      expect(rejectWidth.dialog, `${colorScheme} reject dialog width`).toBeLessThanOrEqual(288);
+      await reject.getByRole("button", { name: "Cancel" }).click();
+
+      await page.setViewportSize({ width: 1280, height: 800 });
+      for (const route of routes) {
+        await page.goto(`${server.origin}${route}`);
+        await page.getByRole("heading", { level: 1 }).waitFor();
+        await page.waitForFunction(() => !document.body.innerText.includes("Loading…"));
+        const desktopWidth = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
+        expect(desktopWidth.scroll, `${colorScheme} 1280px ${route} document width`).toBeLessThanOrEqual(desktopWidth.client);
+      }
+    }
+
+    await page.goto(`${server.origin}/decisions`);
+    await page.getByRole("heading", { name: "Pending decisions", level: 1 }).waitFor();
+    await page.getByRole("article").filter({ hasText: proposalId }).getByRole("button", { name: "Confirm…" }).click();
+    const desktopDialogWidth = await page.locator("dialog[open]").evaluate((dialog) => dialog.getBoundingClientRect().width);
+    expect(desktopDialogWidth).toBeLessThanOrEqual(720);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
+    await context.close();
+  });
+
+  it("keeps Work map keyboard selection, detail and refresh state synchronized", async (ctx) => {
+    if (browser === undefined) return ctx.skip();
+    const r = repo("review/app");
+    const first = touchWorkTask(r.root, "Codex", "Keyboard task Alpha", new Date("2026-10-22T00:00:00.000Z"), { duoSessionId: "keyboard-alpha" });
+    const second = touchWorkTask(r.root, "Codex", "Keyboard task Beta", new Date("2026-10-22T00:00:01.000Z"), { duoSessionId: "keyboard-beta" });
+    if (first === undefined || second === undefined) throw new Error("Could not create Work map keyboard fixtures");
+    const { page, server, errors } = await open(r.root);
+    await page.goto(`${server.origin}/work`);
+    const nodes = page.locator(".react-flow__node");
+    await nodes.first().waitFor();
+    const taskA = nodes.filter({ hasText: "Keyboard task Alpha" });
+    const taskB = nodes.filter({ hasText: "Keyboard task Beta" });
+    const worktree = nodes.filter({ hasText: "Worktree ·" }).first();
+    const taskAId = await taskA.getAttribute("data-id");
+    const taskBId = await taskB.getAttribute("data-id");
+    const worktreeId = await worktree.getAttribute("data-id");
+    expect(taskAId).toBeTruthy();
+    expect(taskBId).toBeTruthy();
+    expect(worktreeId).toBeTruthy();
+    const detail = page.locator(".work-detail h2");
+    const taskATitle = "[Codex] Keyboard task Alpha";
+    const taskBTitle = "[Codex] Keyboard task Beta";
+    const worktreeTitle = await worktree.locator(".work-node-title").textContent();
+    const expectDetail = async (title: string) => {
+      const started = Date.now();
+      const observed: { ms: number; title: string | null }[] = [];
+      try {
+        await expect.poll(async () => {
+          const current = await detail.evaluateAll(([heading]) => heading?.textContent?.trim() ?? null);
+          if (observed.at(-1)?.title !== current) observed.push({ ms: Date.now() - started, title: current });
+          return current;
+        }, { timeout: 30_000, interval: 100 }).toBe(title);
+      } catch {
+        const panel = page.locator(".work-detail");
+        throw new Error(`Work map detail did not update: ${JSON.stringify({ expected: title, waitedMs: Date.now() - started, observed, panelCount: await panel.count(), body: (await page.locator("body").textContent())?.slice(-500), selected: await page.locator(".react-flow__node.selected").evaluateAll((elements) => elements.map((element) => element.getAttribute("data-id"))), errors })}`);
+      }
+    };
+    const isSelected = async (locator: typeof taskA) => locator.evaluate((node) => node.classList.contains("selected"));
+    await expectDetail(taskBTitle);
+
+    await page.getByLabel("Agent").focus();
+    let reachedWorktree = false;
+    for (let index = 0; index < 24; index++) {
+      reachedWorktree = await worktree.evaluate((node) => node === document.activeElement);
+      if (reachedWorktree) break;
+      await page.keyboard.press("Tab");
+    }
+    expect(reachedWorktree).toBe(true);
+    await expectDetail(taskBTitle);
+    await page.keyboard.press("Enter");
+    await expectDetail(worktreeTitle ?? "");
+    await page.waitForFunction((id) => [...document.querySelectorAll<HTMLElement>(".react-flow__node")]
+      .some((node) => node.dataset.id === id && node.classList.contains("selected")), worktreeId);
+
+    await taskA.evaluate((node) => (node as HTMLElement).focus());
+    await page.keyboard.press("Space");
+    await expectDetail(taskATitle);
+    await taskB.click();
+    await expectDetail(taskBTitle);
+    await worktree.click();
+    await expectDetail(worktreeTitle ?? "");
+    await page.locator(".work-connection").filter({ hasText: "Keyboard task Alpha" }).click();
+    await expectDetail(taskATitle);
+
+    await taskA.click();
+    await worktree.click({ modifiers: ["Shift"] });
+    await page.waitForFunction((id) => [...document.querySelectorAll<HTMLElement>(".react-flow__node")]
+      .some((node) => node.dataset.id === id && node.classList.contains("selected")), worktreeId);
+    const selectedIdsAfterMulti = await page.locator(".react-flow__node.selected").evaluateAll((elements) => elements.map((element) => element.getAttribute("data-id")));
+    expect(selectedIdsAfterMulti).toEqual(expect.arrayContaining([taskAId, worktreeId]));
+    expect(await isSelected(taskA)).toBe(true);
+    expect(await isSelected(worktree)).toBe(true);
+    await expectDetail(worktreeTitle ?? "");
+    await worktree.click({ modifiers: ["Shift"] });
+    await page.waitForFunction((id) => [...document.querySelectorAll<HTMLElement>(".react-flow__node")]
+      .some((node) => node.dataset.id === id && node.classList.contains("selected")), taskAId);
+    expect(await isSelected(worktree)).toBe(false);
+    await expectDetail(taskATitle);
+
+    await page.locator(".work-canvas").click({ position: { x: 8, y: 8 } });
+    await page.getByText("Select a node to inspect its source and links.").waitFor();
+    await taskA.click();
+    await expectDetail(taskATitle);
+    recordWorkReview(r.root, "keyboard-alpha", first.id, { digest: "keyboard-refresh", verdict: "PASS", claimCount: 2 }, new Date("2026-10-22T00:00:02.000Z"));
+    await page.getByRole("button", { name: "Refresh" }).click();
+    await expectDetail(taskATitle);
+    await page.getByText("Review PASS · 2 claims · keyboard-refresh").waitFor();
+    expect(await isSelected(taskA)).toBe(true);
+
+    completeWorkTask(r.root, first.id, new Date("2026-10-22T00:00:03.000Z"));
+    await page.getByRole("button", { name: "Refresh" }).click();
+    await page.waitForFunction((id) => ![...document.querySelectorAll<HTMLElement>(".react-flow__node")]
+      .some((node) => node.dataset.id === id), taskAId);
+    await page.getByText("Select a node to inspect its source and links.").waitFor();
+    expect(await page.locator(".react-flow__node").filter({ hasText: "Keyboard task Beta" }).count()).toBe(1);
+    expect(errors).toEqual([]);
+    await page.close();
   });
 
   it("shows live agent work, review, file changes and completion without refreshing", async (ctx) => {
@@ -208,6 +411,45 @@ describe("DUO UI in a browser (T18.1)", () => {
       revisionResponses: revisionResponses.length,
       maxMapDurationMs: Math.max(...mapResponses.map((r) => r.durationMs ?? 0)),
       maxRevisionDurationMs: Math.max(...revisionResponses.map((r) => r.durationMs ?? 0)) })}`);
+  });
+
+  it("supports keyboard skip navigation and native decision-dialog focus handling", async (ctx) => {
+    if (browser === undefined) return ctx.skip();
+    const r = repo("review/app");
+    const service = createDecisionService({ root: r.root });
+    const proposalId = (await service.propose(
+      { kind: "agent", name: "codex" },
+      { title: "Keyboard audit proposal", question: "keyboard_audit", answer: "test the dialog" },
+    )).value?.proposalId ?? "";
+    expect(proposalId).not.toBe("");
+    await r.index();
+    const { page, server, errors } = await open(r.root);
+
+    // The skip link takes keyboard users directly to the page's focusable main landmark.
+    const skip = page.getByRole("link", { name: "Skip to content" });
+    await skip.focus();
+    await page.keyboard.press("Enter");
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("main");
+
+    // Normal navigation remains operable with Enter and exposes the destination as a real URL.
+    const decisions = page.getByRole("navigation").getByRole("link", { name: "Pending decisions", exact: true });
+    await decisions.focus();
+    await page.keyboard.press("Enter");
+    await page.waitForURL(`${server.origin}/decisions`);
+
+    const card = page.getByRole("article").filter({ hasText: proposalId });
+    const confirm = card.getByRole("button", { name: "Confirm…" });
+    await confirm.focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: `Confirm ${proposalId}?` });
+    await dialog.waitFor();
+    expect(await page.evaluate(() => document.activeElement?.getAttribute("aria-describedby"))).toBe(`c-${proposalId}`);
+
+    // Escape closes the modal without an action and returns keyboard focus to its trigger.
+    await page.keyboard.press("Escape");
+    expect(await dialog.isVisible()).toBe(false);
+    expect(await page.evaluate(() => document.activeElement?.textContent)).toBe("Confirm…");
+    expect(errors).toEqual([]);
   });
 
   it("overview, direction, context, review, confirm and reject, stale index and a deep link", async (ctx) => {

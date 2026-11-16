@@ -1,5 +1,5 @@
 /** Human-recorded Review history (.duo-project/reviews/): pointers only, the semantic supplement apart. */
-import { Empty, ErrorBox, Label, Loading, Page, Provenance, Section, useApi, Verdict } from "../components.js";
+import { Empty, ErrorBox, Label, Loading, Page, Provenance, Section, TableScroll, useApi, Verdict } from "../components.js";
 import { Link } from "../router.js";
 
 interface Rec {
@@ -23,13 +23,13 @@ export function ReviewsPage() {
         <>
           {load.data.problems?.length ? <div role="alert" className="box box-error">{load.data.problems.map((p) => <p key={p.message}>{p.code}: {p.message}</p>)}</div> : null}
           {load.data.records === undefined || load.data.records.length === 0 ? <Empty>No recorded reviews yet.</Empty> : (
-            <table>
+            <TableScroll label="Review history"><table>
               <thead><tr><th scope="col">Review</th><th scope="col">Verdict</th><th scope="col">Diff</th><th scope="col">Claims</th><th scope="col">Recorded</th></tr></thead>
               <tbody>{load.data.records.map((r) => (
                 <tr key={r.id}><td><Link to={`/reviews/${r.id}`}>{r.id}</Link>{r.assist === undefined ? null : <> <Label text="+ semantic supplement" tone="muted" /></>}</td><td><Verdict verdict={r.body.review?.verdict} /></td>
                   <td><code>{(r.body.diff?.identity ?? "").slice(0, 19)}</code> {r.body.diff?.from} → {r.body.diff?.to}</td><td>{r.body.claims?.length ?? 0}</td><td>{r.recorded?.at ?? ""} {r.recorded?.by ?? ""}</td></tr>
               ))}</tbody>
-            </table>
+            </table></TableScroll>
           )}
         </>
       )}
@@ -54,13 +54,13 @@ function RecordBody(props: { readonly r: Rec }) {
       <h2 className="verdict-line">Recorded verdict: <Verdict verdict={r.body.review?.verdict} /></h2>
       <p className="muted small">{r.path} · diff <code>{r.body.diff?.identity}</code> {r.body.diff?.from} → {r.body.diff?.to} · recorded {r.recorded?.at ?? ""} by {r.recorded?.by ?? ""}</p>
       <Section title="Claims" count={r.body.claims?.length ?? 0}>
-        <table>
+        <TableScroll label="Review claims"><table>
           <thead><tr><th scope="col">Alignment</th><th scope="col">Rule</th><th scope="col">Subject</th><th scope="col">Reason</th><th scope="col">Provenance</th><th scope="col">Evidence pointers</th></tr></thead>
           <tbody>{(r.body.claims ?? []).map((c) => (
             <tr key={c.id}><td><Label text={c.alignment} tone={c.alignment === "ALIGNED" ? "ok" : "info"} />{c.blockEligible ? <Label text="blocking" tone="block" /> : null}</td><td>{c.rule}</td><td><code>{c.subject.id}</code></td><td>{c.reason}</td><td><Provenance value={c.provenance} /></td>
               <td><ul className="evidence">{c.evidenceIds.map((id) => { const e = ev.get(id); return <li key={id}>{e?.basis ?? "?"} {e?.pointer?.path ?? ""}{e?.pointer?.lines === undefined ? "" : `:${e.pointer.lines[0]}-${e.pointer.lines[1]}`}{e?.pointer?.commit === undefined ? "" : ` @${e.pointer.commit.slice(0, 12)}`}</li>; })}</ul></td></tr>
           ))}</tbody>
-        </table>
+        </table></TableScroll>
       </Section>
       <Section title="Gap summary" count={r.body.gaps?.gaps?.length ?? 0}>
         {r.body.gaps === null || r.body.gaps === undefined ? <Empty>None recorded.</Empty> : <ul>{(r.body.gaps.gaps ?? []).map((g) => <li key={g.id}><Label text={g.action.toUpperCase()} tone="info" /> {g.kind}</li>)}</ul>}

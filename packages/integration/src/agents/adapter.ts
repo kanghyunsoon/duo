@@ -20,6 +20,8 @@ export interface AgentIntegrationAdapter {
   readonly mcpTarget: string;
   /** Repository-relative bridge file. */
   readonly bridgeTarget: string;
+  /** Repository-relative project skill file, written only with --with-skill. */
+  readonly skillTarget: string;
   readonly projectTrustRequired: boolean;
   readonly approvalRequired: boolean;
   /** The entry DUO writes for this launcher (portable: no absolute repository path). */
@@ -28,8 +30,8 @@ export interface AgentIntegrationAdapter {
   inspect(text: string | undefined, planned: McpLaunchEntry): McpInspection;
   /** The configuration with the planned entry; only called when inspect allows a write. Undefined when it cannot be merged. */
   write(text: string | undefined, planned: McpLaunchEntry): string | undefined;
-  /** The configuration without the DUO entry: null means the file held only DUO content (delete it); undefined means nothing DUO-managed to remove. */
-  remove(text: string): string | null | undefined;
+  /** Without the DUO entry: null is a DUO-only file; keepFile retains it when creation is not proven. Undefined means nothing managed to remove. */
+  remove(text: string, keepFile?: boolean): string | null | undefined;
   /** The configured duo-director launch, for verification. */
   readEntry(text: string): McpLaunchEntry | undefined;
   launchEnvironment(root: string): LaunchEnvironment;

@@ -12,7 +12,8 @@
 import { performance } from "node:perf_hooks";
 import { openGitProvider, type AnalyzerRegistry } from "@duo-director/analyzer";
 import {
-  canonicalDiagnostics, canonicalSourceText, compareUtf8, fileRef, loadProjectTruth, readSourceFile, requireCompleteTruth, sha256Text, stableJson, STATE_DIR_NAME, success,
+  canonicalDiagnostics, canonicalSourceText, compareUtf8, fileRef, loadProjectTruth, nodeId, parseNodeId, readSourceFile, requireCompleteTruth, sha256Text, stableJson, STATE_DIR_NAME, success,
+  describeUnsupportedPattern, unsupportedDecisionPatterns,
   type Diagnostic, type EvidenceBasis, type ParseResult, type ProjectTruth,
 } from "@duo-director/core";
 import type { GitDiffEnd, GitProvider } from "@duo-director/analyzer";
@@ -55,8 +56,19 @@ export interface ReviewOptions {
   readonly tokenCounts?: TokenCountMemo;
 }
 
+/**
+ * H-91 (#58 Fix B): the file that owns a Symbol or Test the task seeds select directly is in scope too, so
+ * another edit in that file is in the task's context. Only the seeds: the owner files of nodes reached through
+ * CALLS/IMPORTS neighbours or listed in omittedCandidates are not added, and the packet itself is unchanged.
+ */
+const seedOwnerFiles = (p: ContextPacket): string[] =>
+  p.seeds.flatMap((s) => {
+    const ref = parseNodeId(s.id);
+    return ref?.type === "symbol" || ref?.type === "test" ? [nodeId(fileRef(ref.path))] : [];
+  });
+
 const packetScopeIds = (p: ContextPacket | undefined): ReadonlySet<string> =>
-  new Set(p === undefined ? [] : [...p.intent.requirements, ...p.intent.constraints, ...p.decisions.active, ...p.code, ...p.tests, ...p.issues].map((i) => i.id).concat(p.omittedCandidates.map((o) => o.id)));
+  new Set(p === undefined ? [] : [...p.intent.requirements, ...p.intent.constraints, ...p.decisions.active, ...p.code, ...p.tests, ...p.issues].map((i) => i.id).concat(p.omittedCandidates.map((o) => o.id), seedOwnerFiles(p)));
 
 /** Documentation and data files: no structural analysis is expected, so they are no limitation. */
 const DATA_FILE = /\.(?:md|markdown|mdx|txt|rst|adoc|json|jsonc|json5|ya?ml|toml|lock|ini|cfg|conf|properties|xml|csv|tsv|svg|env\.example)$|(?:^|\/)(?:\.gitignore|\.gitattributes|\.editorconfig|\.npmrc|LICENSE|NOTICE)$/iu;
@@ -96,6 +108,19 @@ function unscopedConstraintLimitation(truth: Pick<ProjectTruth, "constraints">):
   const ids = unscopedConstraintIds(truth);
   if (ids.length === 0) return [];
   return [{ code: "constraints-unscoped", message: `${ids.length} confirmed constraint(s) (${ids.join(", ")}) have no match scope, so context and review do not use them. Constraints are never checked deterministically; a rule DUO should check needs a confirmed Decision with forbids.` }];
+}
+
+/**
+ * H-104 (#165, additive): name each confirmed Decision pattern with unsupported syntax (Decision, field, pattern). Its legacy
+ * matching still applies, so it can still produce a claim or a BLOCK: "**" inside a segment acts like "*" within that segment,
+ * braces and a leading "!" match only names that contain those characters, and an extglob group is literal except
+ * for a "*" or "?" before it, which is still a wildcard. The limitation is not a verdict input and
+ * removes no claim.
+ */
+function unsupportedPatternLimitation(truth: Pick<ProjectTruth, "decisions">): ReviewLimitation[] {
+  const list = unsupportedDecisionPatterns(truth);
+  if (list.length === 0) return [];
+  return [{ code: "decision-patterns-unsupported", message: `${list.length} confirmed Decision pattern(s) use unsupported syntax: ${list.map(describeUnsupportedPattern).join(", ")}. Supersede the Decision with supported patterns.` }];
 }
 
 const zeroMetrics = {
@@ -223,11 +248,16 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
     ...(adoption.baseline === undefined ? {} : { baselineKeys: new Set(adoption.baseline.findings.map((f) => f.key)) }),
     ...(adoption.baseline === undefined ? {} : { baselineStructuralLanguages: new Set(adoption.baseline.analysis?.structuralLanguages ?? PRE_T18_STRUCTURAL_LANGUAGES) }),
     ...(adoption.baseline?.evaluatedRules === undefined ? {} : { baselineEvaluatedRules: new Set<string>(adoption.baseline.evaluatedRules) }),
-    ...(adoption.baseline === undefined ? {} : { baselineRecordedAt: adoption.baseline.recorded.at }),
+    ...(adoption.baseline === undefined ? {} : { baselineRecordedAt: adoption.baseline.recorded.at, baselineHeadOid: adoption.baseline.git.headOid }),
+    ...(options.registry === undefined ? {} : { registry: options.registry }),
+    ...(snapshot.value.divergent.size === 0 ? {} : { snapshotDivergence: snapshot.value.divergent }),
   };
   const integrity = await decisionIntegrity(ctx);
   const forbids = await decisionForbids(ctx);
   const imports = await decisionForbidsImport(ctx);
+  // H-103 (#160): a differing file outside the diff that the import rule read to decide is a verdict input like a
+  // changed path (H-82): no verdict, the paths, the same failure. Other differing files stay a limitation.
+  if (imports.snapshotInputs.length > 0) return { diagnostics: [snapshotMismatch(request.diff.to, diff.value.to, imports.snapshotInputs)] };
   const drift = await externalSourceDrift(ctx);
   const additions = unlinkedAdditions(ctx);
   const conflicted = new Set([...forbids, ...imports.claims].map((c) => c.subject.id));
@@ -267,6 +297,7 @@ export async function reviewChanges(root: string, request: ReviewRequest, option
       ...imports.limitations,
       ...outsideLimitation(diff.value.to, snapshot.value.outside),
       ...unscopedConstraintLimitation(truth),
+      ...unsupportedPatternLimitation(truth),
       ...(adoption.status === "incompatible" ? [{ code: "adoption-baseline-unusable", message: "The Adoption Baseline cannot be used (" + (adoption.reason ?? "unreadable") + "); violations are not told apart from pre-existing ones." }] : []),
     ],
     semanticAssist: semantic.assist,

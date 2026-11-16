@@ -38,6 +38,9 @@ export type McpEntryStatus = "not-configured" | "already-configured" | "drifted"
 
 export type BridgeStatus = "absent" | "current" | "outdated" | "malformed";
 
+/** Project skill file: absent, DUO's current text, an older DUO text DUO created, or someone else's file. */
+export type SkillStatus = "absent" | "current" | "outdated" | "foreign";
+
 export type IntegrationStatus = "not-configured" | "configured" | "drifted" | "conflict";
 
 export type FileAction = "create" | "modify" | "delete" | "none" | "blocked";
@@ -81,6 +84,12 @@ export interface AgentIntegrationPlan {
     readonly plannedBlock?: string;
     readonly action: FileAction;
   };
+  /** Present only when --with-skill is requested or a DUO skill is involved (S15P31A106-358). */
+  readonly skill?: {
+    readonly target: string;
+    readonly status: SkillStatus;
+    readonly action: FileAction;
+  };
   readonly requirements: {
     readonly duoctlAvailable: boolean;
     /** Codex reads project .codex/config.toml only in a trusted project; DUO never changes trust. */
@@ -117,11 +126,21 @@ export interface VerifyCheck {
   readonly detail?: string;
 }
 
+export interface LauncherVersionMismatchWarning {
+  readonly code: "launcher-version-mismatch";
+  readonly cliVersion: string;
+  readonly serverVersion: string;
+  readonly resolved: string;
+  readonly nextActions: readonly string[];
+}
+
 export interface AgentIntegrationVerification {
   readonly format: "duo.agent-integration-verify/1";
   readonly agent: AgentId;
   readonly ok: boolean;
   readonly checks: readonly VerifyCheck[];
+  /** Additive facts only: warnings never override a failing check. */
+  readonly warnings?: readonly LauncherVersionMismatchWarning[];
   /** Launcher provenance: what the configuration starts on this machine, and the version that answered. */
   readonly launcher: {
     readonly kind: DuoLauncher["kind"];

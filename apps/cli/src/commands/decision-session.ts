@@ -18,6 +18,7 @@ import { createDecisionService, createDiagnostic, listDecisionProposals, planCon
 import { t, type Locale } from "../messages.js";
 import { EXIT, failed, type Outcome } from "../output.js";
 import { previewLines } from "./decision-preview.js";
+import { decisionGuidance } from "./decision-guidance.js";
 import { diagLines, humanActor, type Env } from "./shared.js";
 
 export type Selection =
@@ -78,11 +79,19 @@ interface SessionResult {
 export async function reviewPendingCommand(env: Env, project: LoadedProject): Promise<Outcome> {
   const L: Locale = env.locale;
   if (!env.io.isTTY || env.nonInteractive) {
-    return failed("decision", EXIT.ERROR, [createDiagnostic("CLI_TTY_REQUIRED", t("en", "decision.tty"))], [t(L, "decision.tty")]);
+    const diagnostics = [createDiagnostic("CLI_TTY_REQUIRED", t("en", "decision.tty"))];
+    return failed("decision", EXIT.ERROR, diagnostics, [t(L, "decision.tty"), ...decisionGuidance(L, diagnostics, { action: "review-pending", isTTY: env.io.isTTY, nonInteractive: env.nonInteractive })]);
   }
   const pendingIds = listDecisionProposals(project.truth).filter((e) => e.status === "pending").map((e) => e.id);
   const service = createDecisionService({ root: env.root, clock: () => env.io.now() });
   const res: SessionResult = { mode: "cancel", reviewed: [], selected: [], confirmed: [], skipped: [], failed: [], pending: [] };
+  const shownGuidance = new Set<string>();
+  const failureLines = (id: string, diagnostics: readonly Diagnostic[]) => {
+    const guidance = decisionGuidance(L, diagnostics, { action: "review-pending", isTTY: env.io.isTTY, nonInteractive: env.nonInteractive });
+    const fresh = guidance.filter((line) => !shownGuidance.has(line));
+    guidance.forEach((line) => shownGuidance.add(line));
+    return [t(L, "decision.session.failed-item", { id }), ...diagLines(diagnostics), ...fresh];
+  };
   const outcome = (exitCode: number, human: string[], diagnostics: readonly Diagnostic[] = [], status?: string): Outcome => {
     const confirmedIds = new Set(res.confirmed.map((c) => c.proposalId));
     res.pending = res.reviewed.filter((id) => !confirmedIds.has(id));
@@ -95,7 +104,7 @@ export async function reviewPendingCommand(env: Env, project: LoadedProject): Pr
   const reviewed = new Map<string, ConfirmPreview>();
   for (const id of pendingIds) {
     const p = await service.previewConfirm(id);
-    if (p.value === undefined) return failed("decision", EXIT.ERROR, p.diagnostics, diagLines(p.diagnostics), null, { status: "failed" });
+    if (p.value === undefined) return failed("decision", EXIT.ERROR, p.diagnostics, [...diagLines(p.diagnostics), ...decisionGuidance(L, p.diagnostics, { action: "review-pending", isTTY: env.io.isTTY, nonInteractive: env.nonInteractive })], null, { status: "failed" });
     reviewed.set(id, p.value);
   }
   res.reviewed = [...pendingIds];
@@ -123,7 +132,7 @@ export async function reviewPendingCommand(env: Env, project: LoadedProject): Pr
       const p = await service.previewConfirm(id);
       if (p.value === undefined) {
         res.failed.push({ proposalId: id, diagnostics: p.diagnostics.map((d) => d.code) });
-        return outcome(EXIT.ERROR, [...diagLines(p.diagnostics), t(L, "decision.session.stopped")], p.diagnostics);
+        return outcome(EXIT.ERROR, [...diagLines(p.diagnostics), ...decisionGuidance(L, p.diagnostics, { action: "review-pending", isTTY: env.io.isTTY, nonInteractive: env.nonInteractive }), t(L, "decision.session.stopped")], p.diagnostics);
       }
       const rows = changedRows(previewLines(L, reviewed.get(id) as ConfirmPreview, "confirm"), previewLines(L, p.value, "confirm"));
       if (p.value.digest !== reviewed.get(id)?.digest) {
@@ -137,7 +146,7 @@ export async function reviewPendingCommand(env: Env, project: LoadedProject): Pr
       const r = await service.confirm(actor, id, { expectedDigest: p.value.digest });
       if (r.value === undefined) {
         res.failed.push({ proposalId: id, diagnostics: r.diagnostics.map((d) => d.code) });
-        for (const line of [t(L, "decision.session.failed-item", { id }), ...diagLines(r.diagnostics)]) env.io.err(line);
+        for (const line of failureLines(id, r.diagnostics)) env.io.err(line);
         continue;
       }
       res.confirmed.push({ proposalId: id, decisionId: r.value.decisionId, path: r.value.path });
@@ -151,7 +160,7 @@ export async function reviewPendingCommand(env: Env, project: LoadedProject): Pr
   const selected = sel.kind === "all" ? [...pendingIds] : [...sel.ids];
   res.selected = selected;
   const plan = await planConfirmSession({ root: env.root }, selected.map((id) => ({ id, digest: (reviewed.get(id) as ConfirmPreview).digest })));
-  if (plan.value === undefined) return outcome(EXIT.ERROR, [...diagLines(plan.diagnostics), t(L, "decision.session.nothing")], plan.diagnostics, "failed");
+  if (plan.value === undefined) return outcome(EXIT.ERROR, [...diagLines(plan.diagnostics), ...decisionGuidance(L, plan.diagnostics, { action: "review-pending", isTTY: env.io.isTTY, nonInteractive: env.nonInteractive }), t(L, "decision.session.nothing")], plan.diagnostics, "failed");
   env.io.err(t(L, "decision.session.plan"));
   for (const item of plan.value.items) env.io.err(t(L, "decision.session.plan-item", { id: item.id, decision: item.preview.expectedDecisionId }));
   for (const item of plan.value.items.filter((x) => x.changedFromReview)) {
@@ -167,7 +176,7 @@ export async function reviewPendingCommand(env: Env, project: LoadedProject): Pr
     const r = await service.confirm(actor, item.id, { expectedDigest: item.preview.digest });
     if (r.value === undefined) {
       res.failed.push({ proposalId: item.id, diagnostics: r.diagnostics.map((d) => d.code) });
-      for (const line of [t(L, "decision.session.failed-item", { id: item.id }), ...diagLines(r.diagnostics)]) env.io.err(line);
+      for (const line of failureLines(item.id, r.diagnostics)) env.io.err(line);
       continue;
     }
     res.confirmed.push({ proposalId: item.id, decisionId: r.value.decisionId, path: r.value.path });

@@ -23,7 +23,7 @@ import { disconnectWorkSession } from "../http/work-map.js";
 export const MCP_INSTRUCTIONS = [
   "DUO holds this repository's confirmed project direction (Project Truth).",
   "Call duo_get_context before substantial implementation and duo_review_changes after changes.",
-  "Tools never index: on index-required, run `duoctl index` and call again.",
+  "Context and review refresh a stale index once when it is safe and say so; on index-required, run `duoctl index` and call again.",
   "Pending proposals and surfaced gaps are not confirmed decisions or instructions.",
   "Agents can only propose decisions (duo_propose_decision); a human confirms or rejects.",
 ].join(" ");

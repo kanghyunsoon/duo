@@ -51,6 +51,7 @@ export const claudeCodeAdapter: AgentIntegrationAdapter = {
   id: "claude-code",
   mcpTarget: ".mcp.json",
   bridgeTarget: "CLAUDE.md",
+  skillTarget: ".claude/skills/duo/SKILL.md",
   projectTrustRequired: false,
   approvalRequired: true,
   plannedEntry: (launcher) => ({ type: "stdio", command: launcher.command, args: [...launcher.argsPrefix, "mcp", "--root-from", "env:CLAUDE_PROJECT_DIR", "--agent", "claude-code"] }),
@@ -70,14 +71,14 @@ export const claudeCodeAdapter: AgentIntegrationAdapter = {
     const servers = { ...((base.value.mcpServers as Json | undefined) ?? {}), [SERVER_NAME]: planned(want) };
     return serialize({ ...base.value, mcpServers: servers }, text);
   },
-  remove(text) {
+  remove(text, keepFile = false) {
     const parsed = parse(text);
     if (!parsed.ok) return undefined;
     const servers = parsed.value.mcpServers as Json | undefined;
     if (servers === undefined || !(SERVER_NAME in servers) || !isDuoLaunch(servers[SERVER_NAME])) return undefined;
     const rest = Object.fromEntries(Object.entries(servers).filter(([k]) => k !== SERVER_NAME));
     const next: Json = { ...parsed.value, mcpServers: rest };
-    if (Object.keys(rest).length === 0 && Object.keys(next).length === 1) return null;
+    if (!keepFile && Object.keys(rest).length === 0 && Object.keys(next).length === 1) return null;
     return serialize(next, text);
   },
   readEntry(text) {

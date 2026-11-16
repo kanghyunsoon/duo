@@ -3,6 +3,7 @@
  * Raw node:http is used so the tests can send any Host, Origin and headers.
  */
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -189,6 +190,93 @@ describe("work map projection", () => {
     expect((await post("/api/work-task-complete", { id: task.id })).status).toBe(200);
     const after = (await get("/api/work-map")).json().data as { nodes: { type: string }[] };
     expect(after.nodes.some((n) => n.type === "task")).toBe(false);
+  });
+
+  describe("#84: credentials never reach the task file, the map cache or the UI", () => {
+    // Key-shaped canaries in the Context Packet redaction formats. Not real credentials.
+    const KEY = "sk-proj-DUO84CANARY0123456789abcdef";
+    const GH = "ghp_DUO84CANARY0123456789abcdefABCDEFGHIJ";
+    const taskFile = () => path.join(root, ".duo-project", "runtime", "work-tasks.json");
+    const mapCache = () => path.join(root, ".duo-project", "cache", "work-map.json");
+    const stored = () => fs.readFileSync(taskFile(), "utf8");
+
+    it("redacts an MCP task name and agent label but keeps the session task key of the full text", () => {
+      const session = "redact-session-84";
+      const text = `deploy with OPENAI_API_KEY=${KEY}\nsecond line`;
+      const first = touchWorkTask(root, `Codex ${GH}`, text, new Date("2026-10-24T00:00:00Z"), { duoSessionId: session });
+      expect(first?.name).toBe("deploy with OPENAI_API_KEY=[REDACTED]");
+      expect(first?.agent).toBe("Codex [REDACTED]");
+      expect(first?.taskKey).toBe(createHash("sha256").update(`${session}\0${text}`).digest("hex"));
+      const again = touchWorkTask(root, `Codex ${GH}`, text, new Date("2026-10-24T00:00:01Z"), { duoSessionId: session });
+      expect(again?.id).toBe(first?.id);
+      const otherKey = touchWorkTask(root, `Codex ${GH}`, `deploy with OPENAI_API_KEY=${KEY}X\nsecond line`, new Date("2026-10-24T00:00:02Z"), { duoSessionId: session });
+      expect(otherKey?.id).not.toBe(first?.id);
+      expect(otherKey?.name).toBe(first?.name);
+      expect(stored()).not.toContain("DUO84CANARY");
+      for (const t of [first, otherKey]) if (t !== undefined) completeWorkTask(root, t.id, new Date("2026-10-24T00:00:03Z"));
+      expect(stored()).not.toContain("DUO84CANARY");
+    });
+
+    it("redacts the whole first line before the 200-character cut", () => {
+      const task = touchWorkTask(root, "Codex", `${"x".repeat(190)} ${KEY}`, new Date("2026-10-24T00:01:00Z"), { duoSessionId: "redact-cut-84" });
+      expect(task?.name).toBe(`${"x".repeat(190)} [REDACTED]`.slice(0, 200));
+      expect(task?.name).not.toContain("sk-proj");
+      if (task !== undefined) completeWorkTask(root, task.id, new Date("2026-10-24T00:01:01Z"));
+    });
+
+    it("does not copy the credential into the lock-timeout error", () => {
+      const lock = path.join(root, ".duo-project", "runtime", "work-tasks.lock");
+      fs.writeFileSync(lock, "held", "utf8");
+      try {
+        let message = "";
+        try { touchWorkTask(root, "Codex", `lock probe ${KEY}`, new Date(), { duoSessionId: "redact-lock-84" }, 50); }
+        catch (error) { message = `${String(error)} ${String((error as Error).cause ?? "")}`; }
+        expect(message).toMatch(/Timed out waiting for work task lock/u);
+        expect(message).not.toContain("DUO84CANARY");
+      } finally { fs.rmSync(lock, { force: true }); }
+    });
+
+    it("rewrites a task file written before #84 with redacted labels and the same IDs, keys and status", async () => {
+      const previous = fs.existsSync(taskFile()) ? fs.readFileSync(taskFile(), "utf8") : undefined;
+      const old = { format: "duo.work-tasks/2", tasks: [
+        { id: "pre-84-active", agent: `Codex ${GH}`, name: `rotate ${KEY} today`, identitySource: "duo", duoSessionId: "pre-84", taskKey: "k".repeat(64),
+          startedAt: "2026-10-23T00:00:00Z", updatedAt: "2026-10-24T09:00:00Z", status: "active" },
+        { id: "pre-84-disconnected", agent: "Codex", name: `old ${KEY}`, identitySource: "duo", duoSessionId: "pre-84b",
+          updatedAt: "2026-10-23T09:00:00Z", status: "disconnected" },
+      ] };
+      try {
+        fs.writeFileSync(taskFile(), JSON.stringify(old), "utf8");
+        const tasks = listWorkTasks(root);
+        expect(tasks.map((t) => [t.id, t.name, t.agent, t.status, t.taskKey])).toEqual([
+          ["pre-84-active", "rotate [REDACTED] today", "Codex [REDACTED]", "active", "k".repeat(64)],
+          ["pre-84-disconnected", "old [REDACTED]", "Codex", "disconnected", undefined],
+        ]);
+        expect(stored()).not.toContain("DUO84CANARY");
+        expect(JSON.parse(stored())).toMatchObject({ format: "duo.work-tasks/2", tasks: [{ id: "pre-84-active", taskKey: "k".repeat(64) }, { id: "pre-84-disconnected" }] });
+        const response = await get("/api/work-map");
+        expect(response.status).toBe(200);
+        expect(response.body).not.toContain("DUO84CANARY");
+        expect((response.json().data as { nodes: { id: string; label: string }[] }).nodes).toEqual(
+          expect.arrayContaining([expect.objectContaining({ id: "task:pre-84-active", label: "[Codex [REDACTED]] rotate [REDACTED] today" })]));
+        expect(fs.readFileSync(mapCache(), "utf8")).not.toContain("DUO84CANARY");
+      } finally {
+        if (previous === undefined) fs.rmSync(taskFile(), { force: true }); else fs.writeFileSync(taskFile(), previous, "utf8");
+      }
+    });
+
+    it("redacts a manual UI task in the response, the task file and the map", async () => {
+      const created = await post("/api/work-tasks", { agent: "Codex", name: `check ${KEY}` });
+      expect(created.status).toBe(200);
+      expect(created.body).not.toContain("DUO84CANARY");
+      const task = created.json().data.task as { id: string; name: string };
+      expect(task.name).toBe("check [REDACTED]");
+      expect(stored()).not.toContain("DUO84CANARY");
+      const map = await get(`/api/work-map?selected=${task.id}`);
+      expect(map.body).not.toContain("DUO84CANARY");
+      expect(fs.readFileSync(mapCache(), "utf8")).not.toContain("DUO84CANARY");
+      expect((await post("/api/work-task-complete", { id: task.id })).status).toBe(200);
+      expect(stored()).not.toContain("DUO84CANARY");
+    });
   });
 
   it("focuses the most recently updated active work when none is selected", async () => {

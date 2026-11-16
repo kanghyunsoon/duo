@@ -1,4 +1,4 @@
-import { Empty, ErrorBox, Label, Loading, Loc, Page, Section, useApi } from "../components.js";
+import { Empty, ErrorBox, Label, Loading, Loc, Page, Section, TableScroll, useApi } from "../components.js";
 import { entityPath, Link } from "../router.js";
 import type { DecisionItem, Direction } from "../types.js";
 
@@ -10,7 +10,7 @@ export function DecisionLabel(props: { readonly label: DecisionItem["label"] }) 
 function Decisions(props: { readonly items: readonly DecisionItem[] }) {
   if (props.items.length === 0) return <Empty>None.</Empty>;
   return (
-    <table>
+    <TableScroll label="Decisions"><table>
       <thead><tr><th scope="col">ID</th><th scope="col">State</th><th scope="col">Decision</th><th scope="col">Enforcement</th><th scope="col">Source</th></tr></thead>
       <tbody>{props.items.map((d) => (
         <tr key={d.id}>
@@ -18,7 +18,7 @@ function Decisions(props: { readonly items: readonly DecisionItem[] }) {
           <td><strong>{d.title}</strong><br /><span className="muted">{d.question}</span> = {d.answer}</td><td>{d.enforcement ?? "—"}</td><td><Loc location={d.location} /></td>
         </tr>
       ))}</tbody>
-    </table>
+    </table></TableScroll>
   );
 }
 
@@ -50,12 +50,12 @@ function DirectionBody(props: { readonly d: Direction }) {
       </Section>
       <Section title="Requirements" count={d.requirements.length}>
         {d.requirements.length === 0 ? <Empty>No confirmed requirements yet. DUO can still analyze repository structure and changes.</Empty> : (
-          <table>
+          <TableScroll label="Requirements"><table>
             <thead><tr><th scope="col">ID</th><th scope="col">Title</th><th scope="col">Status</th><th scope="col">Milestone</th><th scope="col">Priority</th><th scope="col">Source</th></tr></thead>
             <tbody>{d.requirements.map((r) => (
               <tr key={r.id}><td><Link to={entityPath(r.id)}>{r.id}</Link></td><td>{r.title}</td><td>{r.status}</td><td>{r.milestone ?? "—"}</td><td>{r.priority ?? "—"}</td><td><Loc location={r.location} /></td></tr>
             ))}</tbody>
-          </table>
+          </table></TableScroll>
         )}
       </Section>
       <Section title="Constraints" count={d.constraints.length}>

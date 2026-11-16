@@ -12,6 +12,7 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 
 | 명령 | 설명 | 주요 옵션 | 서비스 | 쓰기 |
 |---|---|---|---|---|
+| `duoctl setup` | 처음 설정을 한 명령으로(T183, H-102): 질문 → 계획 → 한 번 확인 → Truth → Index → Baseline → (agent 단계) → doctor 요약 | `--yes`, `--non-interactive`, `--answers -`, `--baseline-policy head\|abort`, `--repair`, `--agent codex\|claude-code`(반복), `--launcher path\|npx` | init·install·doctor와 같은 service(planInit, applyInitPlan, indexRepository, captureAdoptionBaseline, planAgentIntegration, applyAgentIntegration, verifyAgentIntegration, projectDoctor) | 확인 뒤에만 init·install과 같음 |
 | `duoctl init` | 기존 저장소 adoption: plan → Truth → Index → Baseline | `--yes`, `--non-interactive`, `--answers -`, `--baseline-policy head\|abort`, `--repair` | director InitService, graph Indexer, director Adoption | Truth, generated, reviews/adoption-* |
 | `duoctl status` | 초기화 여부, Truth 개수, index freshness(변경 파일, 분석 stale, module resolution, call 재계산 후보, full rebuild 이유), adoption baseline, pending decision, LLM 상태 | | core loader, graph inspectIndex, director baseline status, core listDecisionProposals | 없음 |
 | `duoctl doctor` | 설정 전체 진단(T26.1): runtime, Git(저장소, 최상위, 첫 commit, 작업 트리), Project Truth, adoption baseline, index freshness, 분석 수준, Agent 연결(설정, launcher, MCP launch, tool 목록), 선택 LLM. 다음 행동 1~3개 | | integration `projectDoctor`(openGitProvider, loadProjectTruth, inspectStateDirectory, getAdoptionBaselineStatus, inspectIndex, inspectAgentIntegration, verifyAgentIntegration, LLMProviderPool) | 없음 |
@@ -23,14 +24,14 @@ CLI(`apps/cli`)는 얇은 orchestration 계층이다. 인자 파싱, 질문, 출
 | `duoctl decision list\|confirm <id>\|reject <id>\|review-pending` | proposal 목록, 확정, 거절, pending 전부를 한 session에서 검토하고 고른 것만 확정 | `--reason <text>`(reject) | core DecisionService, listDecisionProposals | decisions/ |
 | `duoctl stats` | runtime/metrics.jsonl 요약 | `--last <n>` | director readRuntimeMetrics | 없음 |
 | `duoctl mcp` | duo-director MCP 서버를 stdio로 실행(한 저장소, [06](06-mcp-interface.md)) | `--root <path>` 또는 `--root-from git-cwd\|env:<NAME>`(결과는 Git top level이어야 함), `--agent <label>` | integration `resolveMcpRoot`, `serveDuoMcp` | Tool이 쓰는 것만(metrics, proposals) |
-| `duoctl install <codex\|claude-code>` | Agent 연결: plan → 확인 → apply → verify([06 Agent integration](06-mcp-interface.md#agent-integration-duoctl-install)) | `--launcher path\|npx`, `--yes`, `--non-interactive`, `--json` | integration `planAgentIntegration`, `applyAgentIntegration`, `verifyAgentIntegration` | `.codex/config.toml`+`AGENTS.md` 또는 `.mcp.json`+`CLAUDE.md`, 백업(runtime/backup) |
+| `duoctl install <codex\|claude-code>` | Agent 연결: plan → 확인 → apply → verify([06 Agent integration](06-mcp-interface.md#agent-integration-duoctl-install)) | `--launcher path\|npx`, `--with-skill`, `--yes`, `--non-interactive`, `--json` | integration `planAgentIntegration`, `applyAgentIntegration`, `verifyAgentIntegration` | `.codex/config.toml`+`AGENTS.md` 또는 `.mcp.json`+`CLAUDE.md`(`--with-skill`이면 `.agents/skills/duo/SKILL.md` 또는 `.claude/skills/duo/SKILL.md`도), 백업(runtime/backup) |
 | `duoctl install status [agent]` | Agent별 not-configured / configured / drifted / conflict | | integration `inspectAgentIntegration` | 없음 |
 | `duoctl install remove <agent>` | DUO MCP 항목과 DUO bridge 블록만 제거 | `--yes` | integration `planAgentRemoval`, `applyAgentIntegration` | 같은 파일들 |
 | `duoctl ui [--port N] [--open]` | TASK-018 | | | 127.0.0.1에서 번들 UI와 versioned API 실행, 실제 URL 출력. `--open`은 선택 사항 |
 
 - `<node>`는 node ID(`sym:src/a.ts#A.b`), 정의 ID(`AUTH-03`), RepoPath, 유일한 qualified Symbol 이름을 받는다.
 - `review` 기본 diff는 HEAD → WORKTREE, `--staged`는 HEAD → INDEX다. `--from`/`--to`는 `HEAD`, `INDEX`, `WORKTREE` 또는 commit·branch 이름이며 해석은 Git provider가 한다. CLI는 diff parser를 갖지 않는다.
-- **Reviewed snapshot(H-82, C264)**: index와 Project Truth는 working tree를 기술한다. 그래서 `--staged`나 `--to <commit>`은 diff의 바뀐 경로와 Project Truth 파일(`.duo-project/`의 generated·cache·runtime·reviews 제외)이 reviewed side와 working tree에서 같을 때만 verdict를 낸다. 다르면 `REVIEW_SNAPSHOT_MISMATCH`(경로와 해결 방법)로 verdict 없이 1이다. DUO는 stage·stash·checkout·파일 수정을 하지 않는다(staged 내용을 남기고 unstaged 변경을 stash하거나 reviewed commit을 checkout하는 일은 사람이 한다). diff 밖 파일만 다르면 판정하고 limitation `reviewed-side-context-from-working-tree`를 남긴다. 기본 working tree review는 그대로다.
+- **Reviewed snapshot(H-82, C264)**: index와 Project Truth는 working tree를 기술한다. 그래서 `--staged`나 `--to <commit>`은 diff의 바뀐 경로와 Project Truth 파일(`.duo-project/`의 generated·cache·runtime·reviews 제외)이 reviewed side와 working tree에서 같을 때만 verdict를 낸다. 다르면 `REVIEW_SNAPSHOT_MISMATCH`(경로와 해결 방법)로 verdict 없이 1이다. DUO는 stage·stash·checkout·파일 수정을 하지 않는다(staged 내용을 남기고 unstaged 변경을 stash하거나 reviewed commit을 checkout하는 일은 사람이 한다). diff 밖 파일만 다르면 판정하고 limitation `reviewed-side-context-from-working-tree`를 남긴다. diff 밖 파일 중 금지 import 판정이 읽은 파일(해석 대상·후보, importer에 적용되는 resolver 설정의 해석 관련 필드, re-export 추적이 읽은 module)이 다르면 그 경로로 같은 `REVIEW_SNAPSHOT_MISMATCH`다(H-103, #160). Stage 1은 re-export하는 module의 내용 차이를 줄 단위로 가리지 않으므로, 주석처럼 판정과 무관한 줄만 바꾼 barrel도 이 실패를 낸다. 기본 working tree review는 그대로다.
 - **필수 분석(H-82, C265)**: review Context(seed나 task가 있을 때)와 task Context 컴파일이 실패하면 `REVIEW_ANALYSIS_INCOMPLETE`와 원인 진단(예: `CONTEXT_REQUEST_INVALID`)으로 verdict 없이 1이다. PASS도 ASK도 만들지 않고, `--fail-on`과 관계없이 1이며, `--record`는 Review Record를 쓰지 않는다. MCP는 `isError`, UI는 실패로 보인다. 큰 변경은 `--budget`을 늘리거나 `--files`로 나눈다.
 - `--run-tests`와 `--no-llm`(T00 초안)은 구현하지 않았다: 테스트 실행은 CLI가 프로세스를 띄워야 하고(C134), LLM은 기본이 꺼져 있어 `--no-llm`이 필요 없다. 반대로 `duoctl review --semantic`(T12B)이 선택적 의미 보조를 명시적으로 켠다. `duoctl review`는 계속 결정적 판정만 한다.
 - `init --reindex`(T00 초안)는 두지 않는다. Index는 `duoctl index`, clean rebuild는 `duoctl index --full`이다(C133).
@@ -54,7 +55,7 @@ Operational failure와 Review verdict를 섞지 않는다. Verdict는 `--fail-on
 | 3 | review ASK 이상이고 `--fail-on ask\|warn` |
 | 4 | review BLOCK이고 `--fail-on block\|ask\|warn` |
 | 5 | .duo-project 없음(NOT_INITIALIZED) |
-| 6 | 조치 필요: index-required(context, review), adoption policy 필요, ABORT_AND_CLEAN, partial의 repair, install의 conflict·launcher 없음·확인 필요(비대화형에서 `--yes` 없음), doctor의 error check(초기화 전 포함: doctor는 5를 쓰지 않는다) |
+| 6 | 조치 필요: index-required(context, review), adoption policy 필요, ABORT_AND_CLEAN, partial의 repair, install의 conflict·launcher 없음·확인 필요(비대화형에서 `--yes` 없음), setup의 첫 commit 없음·agent 단계 blocker·확인 필요, doctor의 error check(초기화 전 포함: doctor는 5를 쓰지 않는다) |
 
 install은 init 전이면 5(`AGENT_NOT_INITIALIZED`), verify 실패면 1이다.
 
@@ -70,6 +71,7 @@ Existing project → duoctl 설치(PATH) → duoctl init → duoctl install code
 - `--yes`는 계획한 파일 변경만 승인한다. 같은 이름의 다른 MCP 서버, 읽을 수 없는 설정, 깨진 bridge marker, launcher 가로채기 파일, Codex trust, Claude Code approval은 넘어가지 않는다.
 - apply 뒤 verify가 생성된 설정의 command로 DUO 서버를 직접 띄워 확인한다. index가 stale이면 install은 성공하고 다음 조치로 `duoctl index`를 보인다.
 - 두 번 실행하면 `unchanged`. install은 init, index, git add, commit을 하지 않는다. 바뀐 파일을 알려줄 뿐이다.
+- `--with-skill`(선택, S15P31A106-358, #8): DUO 도구에 닿는 방법(지연·중첩된 `duo-director` 도구를 이름으로 불러오기, 잠시 뒤 다시 확인, CLI fallback)만 담은 project skill을 함께 쓴다. Codex는 `.agents/skills/duo/SKILL.md`, Claude Code는 `.claude/skills/duo/SKILL.md`. 두 Agent가 이 skill을 목록에 올리는 것은 로그인 없이 확인했다(#134). 실제 Codex 세션에서 skill 이름을 언급하지 않은 작업의 본문 읽기와 `$duo` 명시 호출의 본문 주입을 관찰했다. Claude Code의 작업 중 로딩은 아직 미검증이다([증거](https://github.com/kanghyunsoon/duo/pull/146#issuecomment-6624786106), [Maintainer 확인](https://github.com/kanghyunsoon/duo/pull/146#issuecomment-6647239742)). 이는 본문 로딩의 관찰이며 skill만으로 도구 호출이 일어났거나 discovery가 개선됐다는 증거는 아니다. 기본 install은 skill을 쓰지 않으며 bridge 블록은 그대로다. 같은 경로에 DUO가 쓰지 않은 skill이 있으면 덮어쓰지 않고 `AGENT_INTEGRATION_CONFLICT`로 멈춘다. skill 파일도 H-94 소유권 기록을 따른다: `install remove`는 DUO가 만들고 그 뒤 바뀌지 않은 skill만 지우고, 설치 전부터 있던 것과 사용자가 고친 것은 이유를 경고하며 남긴다. 기록된 skill 경로가 일반 파일이 아니게 되면(symlink, 디렉터리) `--with-skill` 없는 install과 `duoctl setup`은 그 경로와 소유권 기록을 건드리지 않고 경고만 남긴 채 MCP 설정과 bridge를 고친다. `--with-skill`은 그 경로를 여전히 충돌로 보고 쓰지 않는다.
 - metrics: `{ command: "install", status, agent }`(경로와 설정 내용 없음).
 
 ## Existing Project Adoption
@@ -83,6 +85,37 @@ Existing Repository → Install DUO → Observe Repository → Bootstrap Minimal
 
 - Truth는 sparse여도 정상이다: Requirement·Decision·Constraint 0개, Milestone 없음이 init 실패가 아니다(Code Graph는 풍부, Intent Graph는 희소). Human Truth는 사용하면서 쌓이고, 부족한 intent는 Knowledge Gap과 Review가 필요한 때 surface/ask한다. 가짜 Requirement·Decision·Milestone을 만들지 않는다.
 - Adoption Baseline은 "DUO 도입 전부터 있던 상태 vs 도입 뒤 변화"를 가르는 provenance다. 기존 코드가 옳다거나 기술 부채를 승인한다는 뜻이 아니다([03 Adoption Baseline](03-data-model.md#adoption-baseline-t141)).
+
+## duoctl setup
+
+`duoctl setup`(T183, [H-102](conflicts.md))은 처음 설정을 한 흐름으로 묶는다. 설계와 실패 표는 [0.4.0-t183-one-command-setup.md](roadmap/0.4.0-t183-one-command-setup.md)에 있다.
+
+```text
+$ duoctl setup
+Repository ok · orbit-tasks · typescript · 36 files · branch main
+Use the suggestion? [y/N] y        (Truth 질문: init과 같다)
+Setup plan (nothing is written before you confirm):
+  Truth      create 5 files in .duo-project: ...
+  Index      build the index in .duo-project/generated (regenerable)
+  Baseline   capture the adoption baseline at HEAD 2f3355d5f46b
+  Agents     none selected; add --agent codex or --agent claude-code to connect one in this setup (or run duoctl install later)
+Apply this setup? [y/N] y
+Truth      ok · 5 files
+Index      ok · full (no-state) · 41 files
+Baseline   ok · 2f3355d5f46b · 0 pre-existing findings
+DUO setup finished.
+(doctor 요약)
+DUO does not commit. Review and commit the files it created when you are ready; the commit moves HEAD, so run duoctl index afterwards.
+```
+
+- 확인 전에는 저장소에 아무것도 쓰지 않는다. 질문(Truth 질문, dirty tree 정책)을 먼저 받고, 만들 파일·index·baseline·agent 단계 전체를 보인 뒤 한 번 묻는다. 비대화형은 `--yes`가 있어야 적용한다(없으면 6, `status: "confirmation-required"`). `--yes`의 의미는 init과 같다: Truth 질문에 답하거나 dirty 정책을 고르거나 충돌·trust·approval을 넘기지 않는다.
+- 쓰기 전 거부: Git 저장소 아님(1), baseline이 필요한데 첫 commit 없음(6, `ADOPTION_HEAD_REQUIRED`, 질문 전), partial `.duo-project`(6, `--repair`), 충돌하는 `.duo-project`(1), 읽을 수 없는 baseline(1), agent 단계 blocker(6), 정책 없는 dirty tree(6), 취소(1).
+- 확인 뒤 한 단계가 실패하면 그 앞에서 쓴 것(특히 Project Truth)을 지우지 않고 `resume`을 알린다. JSON과 일반 출력은 같은 명령을 쓰며, 선택한 모든 `--agent`의 순서와 `--launcher npx`, 미완료 dirty baseline의 `--baseline-policy head`를 보존한다. `--yes`는 넣지 않으므로 남은 쓰기는 재실행 때도 한 번 확인받아야 한다(비대화형이면 확인 없이 쓰지 않고 6). 다시 실행하면 첫 미완료 단계부터 잇는다. init이 baseline에서 멈춘 저장소(C214)도 첫 commit 뒤 setup으로 잇는다.
+- 다시 실행하면 Truth, baseline, 사용자 파일을 바꾸지 않고 묻지도 않는다(`status: "unchanged"`). 이미 초기화된 project의 stale index는 `duoctl index`처럼 확인 없이 갱신한다.
+- `--agent`로 고른 agent의 파일이 이미 있어도 MCP 검증은 다시 한다. 실패하면 `failed`, 종료 코드 1과 `resume`을 반환한다. 통과하면 `steps.agents.<id>.status`는 `ok`이며 `remaining`에 trust/approval 안내가 포함된다. 현재 index에서 검증만 하는 실행은 파일이나 metric을 쓰지 않고 확인도 묻지 않는다.
+- Agent 연결(Jira -319): `--agent codex`·`--agent claude-code`로 고른 agent만 연결한다(함께 지정 가능, `--launcher`는 install과 같다). 고르지 않으면 기존 agent 설정 파일이 있어도 연결하지 않는다. 계획은 install과 같은 `planAgentIntegration`이며 Truth를 이 setup이 만들 예정이어도 충돌·launcher 문제를 확인 전에 blocker로 보인다(6, 쓰기 0). 확인 뒤 `applyAgentIntegration`(실패하면 자기가 쓴 파일을 되돌린다, H-94)과 MCP launch 검증을 하고, 검증이 실패하면 Truth와 agent 파일을 남긴 채 `resume`을 알린다. Codex trust와 Claude Code approval은 "Left for you outside DUO"에만 적고 DUO가 대신하지 않는다.
+- `--json` result: `{ status, applied, steps: { repository, truth, index, baseline, agents }, plan?, apply?, index?, baseline?, agents?, resume?, remaining, doctor? }`. `applied`는 이 실행이 쓰기를 시작했는지다. 적용 뒤 doctor에 error check가 있으면 종료 코드 6이지만 `applied: true`, `status` `set-up`·`unchanged`, `doctor.overall: "action-required"`로 쓰기 전 거부(`applied: false`)와 구분된다.
+- metrics: `{ command: "setup", status }`. `runtime/metrics.jsonl`도 쓰기이므로 적용을 시작한 실행만 남긴다. 거부, 취소, 확인 누락, 확인 전 오류는 초기화된 project에서도 metric을 남기지 않는다(다른 명령은 초기화된 project에서 매 실행 metric을 남긴다).
 
 ## duoctl init
 
@@ -134,7 +167,11 @@ Pending decisions: 0
 LLM: disabled
 ```
 
+바뀐 파일 없이 Git history만 움직여 index가 stale이면(빈 commit 등, #175) `Index` 줄이 `Index: stale (Git history moved since the last index; no file changed)`로 그 이유를 보인다. 사람 출력만이고 `duo.status/1`, index 상태, 종료 코드는 그대로다.
+
 match 범위가 없는 confirmed Constraint가 있으면 `Truth` 줄 아래에 `Constraints not checked: CON-001, CON-002. …` 줄을 보인다(#14). JSON은 `truth.unscopedConstraints`(additive, 없으면 빈 배열)이고 MCP `duo_get_status` text 요약에도 같은 ID가 붙는다. doctor는 `truth.project` facts에 `unscopedConstraints`를 더하고 그 check 아래에 같은 안내를 한 줄 보인다. check 상태(`ok`)와 종료 코드는 바뀌지 않는다. review는 limitation `constraints-unscoped`와 그 아래 ID 줄을 보인다.
+
+confirmed Decision의 path pattern이 지원하지 않는 문법(중괄호, extglob 그룹, 앞의 `!`, 세그먼트 안 `**`)이면(H-104, #165) status는 `Decision patterns with unsupported syntax: D-001 forbids.paths "…". …` 줄을 보이고, JSON은 `truth.unsupportedPatterns`(additive, `{decision, field, pattern, reason}`, 없으면 빈 배열)이며 MCP `duo_get_status` text 요약에도 붙는다. doctor `truth.project`는 `warning`·`unsupported-patterns`(facts `unsupportedPatterns`, action `supersede-decision`)이고 overall이 `warnings`라 종료 코드는 0이다. Project Truth를 쓰는 다음 check는 그대로 돈다. review는 limitation `decision-patterns-unsupported`와 그 아래 줄을 보인다. Decision 파일과 lock은 바뀌지 않는다. confirm preview는 pattern에 `[`·`]`가 있으면 `Brackets` 줄로 문자 그대로임을 알린다.
 
 `LLM` 줄은 disabled, configured, unavailable과 provider·model, unavailable이면 이유(예: `LLM: unavailable · openai-responses gpt-… · OPENAI_API_KEY is not set`)를 보인다. `openai-compatible`은 transport와 endpoint의 origin(`scheme://host[:port]`, path 없음)을 더한다(예: `LLM: configured · openai-compatible m-1 · chat-completions · https://gateway.example`, T27.1, 사람 출력만). 설정과 환경만 보고 네트워크를 쓰지 않는다. key 값은 보이지 않는다.
 
@@ -187,7 +224,7 @@ Next
 - 종료 코드: error check가 없으면 0, 있으면 6(`ACTION_REQUIRED`), doctor 자체의 예기치 않은 실패는 1. 연결하지 않은 Agent, `llm.provider: none`, stale index(warning)는 0이다.
 - Index: stale은 warning(context·review가 `index-required`를 반환), missing·incompatible은 error. 셋 다 다음 행동은 `duoctl index`. index 검사(`inspectIndex`)는 한 번이고 분석 수준은 그 결과의 coverage다(index가 missing이어도 보인다).
 - 작업 트리 변경은 오류가 아니다. adoption 전이면 init이 `--baseline-policy head|abort`를 묻는다고, adoption 뒤면 review가 HEAD와 비교한다고 설명한다. 첫 commit이 없으면 commit 다음에 init을 안내한다.
-- Agent: 연결하지 않은 Agent는 `info`이고, 둘 다 연결하지 않았으면 다음 행동 하나에 두 명령을 함께 보인다(기본 추천 없음). 연결된 Agent는 install verify와 같은 방식으로 설정 parse, 계획한 항목, bridge 블록, launcher를 확인하고 설정의 command로 MCP 서버를 띄워 initialize → tools/list까지 확인한 뒤 닫는다(`duo_get_status`는 부르지 않음). 기대 tool은 이 build의 `MCP_TOOLS` 이름 목록이다. drifted는 warning(`duoctl install <agent>`, npx launcher면 `--launcher npx`), conflict·launcher 없음·launch 실패·tool 불일치는 error다. Codex trust와 Claude Code 승인은 DUO가 확인할 수 없으므로 안내만 한다.
+- Agent: 연결하지 않은 Agent는 `info`이고, 둘 다 연결하지 않았으면 다음 행동 하나에 두 명령을 함께 보인다(기본 추천 없음). 연결된 Agent는 install verify와 같은 방식으로 설정 parse, 계획한 항목, bridge 블록, launcher를 확인하고 설정의 command로 MCP 서버를 띄워 initialize → tools/list까지 확인한 뒤 닫는다(`duo_get_status`는 부르지 않음). 기대 tool은 이 build의 `MCP_TOOLS` 이름 목록이다. drifted는 warning(`duoctl install <agent>`, npx launcher면 `--launcher npx`), conflict·launcher 없음·launch 실패·tool 불일치는 error다. 모든 검사를 통과했지만 실행 중인 duoctl과 시작된 MCP 서버의 버전이 알려진 비어 있지 않은 문자열로 서로 다르면 warning `version-mismatch`다(#40-4). facts에 `cliVersion`, `serverVersion`, `resolved`가 더해지고 행동 `align-launcher`는 `resolved` 위치의 DUO 업데이트 또는 `duoctl install <agent> --launcher npx`를 안내한다. 이 경고는 기존 error를 가리지 않고 종료 코드를 바꾸지 않는다(0). Codex trust와 Claude Code 승인은 DUO가 확인할 수 없으므로 안내만 한다.
 - LLM: `none`은 정상(info)이고 key 안내를 하지 않는다. provider를 설정했을 때만 설정과 credential 환경 변수의 존재를 본다(`configured` 또는 warning: `credential-missing`, `model-missing`, `base-url-unsupported`, `base-url-env`, `custom-headers-env`). 값, 환경 변수 목록, provider 호출은 없다. LLM 행동은 다음 행동 목록에 넣지 않는다.
 - 다음 행동: error·warning check의 행동을 check 순서(Git → Truth → baseline → index → Agent)로 모으고, init이 있으면 index를 뺀다(init이 index한다). 최대 3개.
 - Secret: facts와 params의 모든 문자열(Agent 설정 파일의 parse 오류, MCP 서버 stderr 마지막 두 줄 포함)은 Context와 같은 `redactSecrets`를 거친다.
@@ -308,3 +345,7 @@ DUO 실행 파일 설치, 저장소 초기화, Agent 연결은 서로 다른 단
 | global 설치 | package 70개, 약 83.8 MB(대부분 `typescript`, `gpt-tokenizer`) | package 70개, 약 93.6 MB; T12B: 71개, 약 113.5 MB(`openai` 7.23.0 약 20 MB, tarball 1,250,899 B) |
 
 0.2.1(H-65): tarball 24,333,166 B, unpacked 114,025,940 B, 7,468 files(bundled `node_modules/` 67 package, 7,443 files). global 설치의 디스크 사용량은 0.2.0과 거의 같다(Windows, npm 11: 0.2.0 registry 설치 7,481 files 113,917,442 B, bundled 방식 7,479 files 113,876,352 B). 다운로드만 커진다.
+
+### Launcher 검증 보정 (#40-2/40-3, 미출시)
+
+측정한 runner 환경의 기본 `path` launcher는 주입된 `node_modules/.bin`을 제외한 같은 PATH로 plan·lookup·MCP probe를 수행한다. launcher가 없으면 성공으로 표시하지 않고 `--launcher npx`를 안내한다(plan 차단은 exit 6, 적용 후 verify 실패는 exit 1). 실행 CLI와 MCP 서버 버전이 알려진 비어 있지 않은 문자열로 서로 다르면 JSON의 선택적 `verify.warnings`에 `launcher-version-mismatch`, 두 버전, 해석된 경로, 두 해결 방법을 추가하고 사람이 읽는 en/ko 출력에도 표시한다. 경고만으로 기존 성공/종료 코드를 바꾸지 않으며 기존 MCP 실패를 가리지 않는다. 빈 버전은 unknown이고 정확한 문자열만 비교한다. 지원 runner와 pnpm dlx 등 남은 범위는 [설계 및 실측 기록](roadmap/issue-40-launcher-verification-design.md)을 따른다.

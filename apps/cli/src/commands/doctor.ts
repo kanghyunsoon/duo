@@ -4,8 +4,10 @@
  * IDs and reason codes; the --json result is the duo.doctor/1 payload. Exit 0 unless a check is an
  * error (6, ACTION_REQUIRED): warnings, an agent that is not connected and a disabled LLM keep 0.
  */
+import { describeUnsupportedPattern, type UnsupportedDecisionPattern } from "@duo-director/core";
 import { LLMProviderPool, projectDoctor, type DoctorAction, type DoctorCheck, type DoctorPayload } from "@duo-director/integration";
 import { t, type Locale, type MessageKey } from "../messages.js";
+import { columns, padColumns } from "../terminal-width.js";
 import { nodeVersionProblem } from "../node-version.js";
 import { EXIT, type Outcome } from "../output.js";
 import { NODE_ENGINE, VERSION } from "../version.js";
@@ -23,6 +25,8 @@ function params(c: DoctorCheck): Params {
   if (Array.isArray(f.codes)) out.codes = (f.codes as string[]).join(", ");
   if (Array.isArray(f.failed)) out.failed = (f.failed as string[]).join(", ");
   if (Array.isArray(f.problems)) out.problems = (f.problems as { code: string; path?: string }[]).map((p) => (p.path === undefined ? p.code : p.code + " (" + p.path + ")")).join(", ");
+  // H-104 (#165): confirmed Decision patterns that have unsupported syntax.
+  if (Array.isArray(f.unsupportedPatterns)) out.patterns = (f.unsupportedPatterns as UnsupportedDecisionPattern[]).map(describeUnsupportedPattern).join(", ");
   if (Array.isArray(f.conflicts)) out.paths = (f.conflicts as { path: string }[]).map((p) => p.path).join(", ");
   if (AGENT_NAMES[c.id] !== undefined) out.agent = AGENT_NAMES[c.id] as string;
   return out;
@@ -54,7 +58,7 @@ function actionLine(L: Locale, a: DoctorAction): string {
 export function renderDoctor(L: Locale, d: DoctorPayload): string[] {
   const status = (c: DoctorCheck) => t(L, ("doctor.status." + c.status) as MessageKey);
   const width = Math.max(...(["ok", "info", "warning", "error"] as const).map((s) => columns(t(L, ("doctor.status." + s) as MessageKey)))) + 2;
-  const pad = (s: string) => s + " ".repeat(Math.max(1, width - columns(s)));
+  const pad = (s: string) => padColumns(s, width);
   const out = [t(L, "doctor.title", { overall: t(L, ("doctor.overall." + d.overall) as MessageKey) })];
   for (const g of GROUPS) {
     // Skipped checks are listed once at the end: they wait for an earlier step, they are not problems of their own.
@@ -68,7 +72,7 @@ export function renderDoctor(L: Locale, d: DoctorPayload): string[] {
       // #14: a note only; the check stays ok and the exit code does not change.
       const unscoped = c.id === "truth.project" && Array.isArray(c.facts.unscopedConstraints) ? (c.facts.unscopedConstraints as string[]) : [];
       if (unscoped.length > 0) out.push(indent + t(L, "doctor.truth.constraints-unchecked", { ids: unscoped.join(", ") }));
-      if (c.group === "agents" && c.status === "ok" && typeof c.facts.humanStep === "string") out.push(indent + t(L, ("doctor.agent.human." + c.facts.humanStep) as MessageKey));
+      if (c.group === "agents" && (c.status === "ok" || c.reason === "version-mismatch") && typeof c.facts.humanStep === "string") out.push(indent + t(L, ("doctor.agent.human." + c.facts.humanStep) as MessageKey));
       for (const a of c.actions) out.push(indent + "→ " + actionLine(L, a));
     }
   }
@@ -80,19 +84,17 @@ export function renderDoctor(L: Locale, d: DoctorPayload): string[] {
   return out;
 }
 
-/** Terminal columns of a label: Hangul and other wide characters take two. */
-function columns(s: string): number {
-  let n = 0;
-  for (const ch of s) n += /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/u.test(ch) ? 2 : 1;
-  return n;
-}
-
-export async function doctorCommand(env: Env): Promise<Outcome> {
-  const payload = await projectDoctor(env.root, {
+/** The shared doctor operation for this CLI environment (also the closing check of duoctl setup, T183). */
+export async function doctorPayload(env: Env): Promise<DoctorPayload> {
+  return projectDoctor(env.root, {
     runtime: { duoctl: VERSION, node: process.version, engine: NODE_ENGINE, supported: nodeVersionProblem(process.version, NODE_ENGINE) === undefined },
     host: { env: env.io.env, platform: process.platform },
     llm: new LLMProviderPool(env.io.env),
   });
+}
+
+export async function doctorCommand(env: Env): Promise<Outcome> {
+  const payload = await doctorPayload(env);
   return {
     command: "doctor", exitCode: payload.overall === "action-required" ? EXIT.ACTION_REQUIRED : EXIT.OK,
     result: payload, diagnostics: [], human: renderDoctor(env.locale, payload),
