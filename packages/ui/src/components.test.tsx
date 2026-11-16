@@ -111,7 +111,8 @@ describe("UI components (T18.1)", () => {
     expect(html(route("/entity/AUTH-03"))).toContain("AUTH-03");
     expect(html(route("/decisions"))).toContain("Pending decisions");
     expect(html(route("/coverage"))).toContain("Overview");
-    expect(html(route("/context"))).toContain("Session files");
-    expect(html(route("/graph"))).toContain("Session files");
+    expect(html(route("/context"))).toContain("Context Inspector");
+    expect(html(route("/graph"))).toContain("Graph");
+    expect(html(route("/session-preview"))).toContain("Session files");
   });
 });
