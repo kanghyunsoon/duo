@@ -1,6 +1,6 @@
 # UI 국제화
 
-DUO UI는 `i18next`와 `react-i18next`를 사용하며 한국어를 기본으로 표시합니다. 사이드바의 언어 선택에서 한국어와 영어를 전환할 수 있습니다. 선택은 브라우저 `localStorage`의 `duo.ui.language`에 저장하며, 저장소 접근이 차단된 환경에서도 현재 페이지의 언어 전환은 동작합니다.
+DUO UI는 `i18next`와 `react-i18next`를 사용하며 첫 방문 시 영어를 기본으로 표시합니다. 사이드바의 언어 선택에서 한국어와 영어를 전환할 수 있습니다. 선택은 브라우저 `localStorage`의 `duo.ui.language`에 저장되어 새로고침 후에도 유지되며, 저장소 접근이 차단된 환경에서도 현재 페이지의 언어 전환은 동작합니다.
 
 번역 리소스는 `packages/ui/src/locales/ko.ts`와 `en.ts`에 있습니다. 두 언어 모두 앱 번들에 포함하므로 번역을 위한 외부 요청은 없습니다. 영어를 fallback으로 사용하고, 언어 변경 시 문서의 `lang`과 제목도 갱신합니다. 브라우저가 없는 렌더링 환경은 기존 CLI 용어 비교를 위해 영어로 초기화합니다.
 
@@ -24,4 +24,4 @@ node packages/ui/build.mjs
 pnpm exec vitest run packages/ui/src tests/ui/ui.i18n.browser.test.ts tests/ui/authority-labels.test.ts tests/ui/forbids-scope.test.ts tests/ui/provenance-labels.test.ts
 ```
 
-번역 키·보간 일치, 결정 보호 문구, 원문 보존, 한국어 기본 표시, 언어 전환과 저장, 입력 유지, ID 재입력 조건, 작업 맵 갱신을 검사합니다. 브라우저 검사는 CI의 Chromium 또는 로컬 Chrome/Edge를 사용합니다. 기존 브라우저·접근성 검사는 영어를 명시적으로 선택합니다. 이 검증은 전체 수동 접근성 검사를 대체하지 않습니다.
+번역 키·보간 일치, 결정 보호 문구, 원문 보존, 영어 기본 표시, 언어 전환과 저장, 입력 유지, ID 재입력 조건, 작업 맵 갱신을 검사합니다. 브라우저 검사는 CI의 Chromium 또는 로컬 Chrome/Edge를 사용합니다. 기존 브라우저·접근성 검사는 영어를 명시적으로 선택합니다. 이 검증은 전체 수동 접근성 검사를 대체하지 않습니다.

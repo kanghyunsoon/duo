@@ -66,7 +66,7 @@ export function App() {
       <nav aria-label={t("app.duo")}>
         <p className="brand"><Trans i18nKey="app.duo_project_direction_console" components={{ c0: <span className="muted small" /> }} /></p>
         <label className="language-picker">{t("app.language")}
-          <select aria-label={t("app.language")} value={i18n.resolvedLanguage ?? "ko"} onChange={(e) => { void changeLanguage(e.target.value as Language); }}>
+          <select aria-label={t("app.language")} value={i18n.resolvedLanguage ?? "en"} onChange={(e) => { void changeLanguage(e.target.value as Language); }}>
             <option value="ko" lang="ko">한국어</option>
             <option value="en" lang="en">English</option>
           </select>
