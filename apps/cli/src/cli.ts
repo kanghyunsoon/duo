@@ -8,7 +8,7 @@
  */
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { packageInfo as analyzer } from "@duo-director/analyzer";
-import { CLI_NAME, createDiagnostic, packageInfo as core, PRODUCT_NAME, SUPPORTED_SCHEMA_VERSIONS, type Diagnostic, type PackageInfo } from "@duo-director/core";
+import { CLI_NAME, packageInfo as core, PRODUCT_NAME, SUPPORTED_SCHEMA_VERSIONS, type Diagnostic, type PackageInfo } from "@duo-director/core";
 import { appendRuntimeMetric, packageInfo as director } from "@duo-director/director";
 import { GRAPH_SCHEMA_VERSION, packageInfo as graph } from "@duo-director/graph";
 import { AGENT_IDS, isAgentId, NPX_LAUNCHER, packageInfo as integration, PATH_LAUNCHER } from "@duo-director/integration";
@@ -24,7 +24,7 @@ import { reviewCommand } from "./commands/review.js";
 import { setupCommand } from "./commands/setup.js";
 import { agentSetupSteps } from "./commands/setup-agents.js";
 import { uiCommand } from "./commands/ui.js";
-import { CliFailure, usage, type Env } from "./commands/shared.js";
+import { caughtDiagnostics, caughtLines, usage, type Env } from "./commands/shared.js";
 import { statsCommand } from "./commands/stats.js";
 import { statusCommand } from "./commands/status.js";
 import type { Io } from "./io.js";
@@ -203,8 +203,8 @@ export async function run(argv: readonly string[], io: Io): Promise<number> {
   try {
     outcome = await dispatch(env, command, parsed.positionals, v);
   } catch (error) {
-    const diagnostics = error instanceof CliFailure ? error.diagnostics : [createDiagnostic("CLI_USAGE_INVALID", (error as Error).message)];
-    outcome = failed(command, EXIT.ERROR, diagnostics, diagnostics.map((d) => `${d.code}: ${d.message}`), null, { status: "failed" });
+    const diagnostics = caughtDiagnostics(error);
+    outcome = failed(command, EXIT.ERROR, diagnostics, caughtLines(locale, diagnostics), null, { status: "failed" });
   }
   // Metrics are a separate, local observation: a failed write warns and never changes the result.
   const extra: Diagnostic[] = [];

@@ -25,7 +25,7 @@ import { padColumns } from "../terminal-width.js";
 import { EXIT, type Outcome } from "../output.js";
 import { doctorPayload, renderDoctor } from "./doctor.js";
 import { askQuestions, parseAnswers } from "./init.js";
-import { CliFailure, diagLines, humanActor, interactive, progress, withReader, withRegistry, withWriter, type Env } from "./shared.js";
+import { caughtDiagnostics, caughtLines, CliFailure, diagLines, humanActor, interactive, progress, withReader, withRegistry, withWriter, type Env } from "./shared.js";
 
 export interface SetupOptions {
   readonly repair: boolean;
@@ -98,8 +98,8 @@ export async function setupCommand(env: Env, options: SetupOptions, agentSteps: 
   try {
     return await runSetup(env, options, agentSteps, state);
   } catch (error) {
-    const diagnostics = error instanceof CliFailure ? error.diagnostics : [createDiagnostic("CLI_USAGE_INVALID", error instanceof Error ? error.message : String(error))];
-    const human = diagLines(diagnostics);
+    const diagnostics = caughtDiagnostics(error);
+    const human = caughtLines(env.locale, diagnostics);
     if (state.applied) human.push(t(env.locale, "setup.resume", { step: "setup", command: state.resume ?? "duoctl setup" }));
     return {
       command: "setup", exitCode: EXIT.ERROR, diagnostics, human,

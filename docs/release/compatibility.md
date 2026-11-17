@@ -148,6 +148,7 @@
 | 분류 | 내용 |
 |---|---|
 | Behavior correction | JSON 문법 오류가 있는 가장 가까운 `tsconfig.json`·`jsconfig.json`(#205): Windows에서 `duoctl init`·`duoctl index`가 TypeScript `Debug Failure`로 실패하던 것(CLI `CLI_USAGE_INVALID`, exit 1)을 고쳐, 의미 오류만 있는 config처럼 index를 끝내고 그 config의 `TSCONFIG_INVALID`(warning)를 index state에 남긴다. 다른 OS는 이전에도 같았다. 같은 config에서 위치만 다른 같은 문장의 오류는 메시지에 위치가 없어 한 번만 남긴다. 해석 결과·graph·index-state 형식·`duo.*/1` 그대로 |
+| 오류 분류 | CLI가 명령의 예상하지 못한 예외를 새 진단 `CLI_INTERNAL_ERROR`(error, additive)로 보고한다(#220). 0.4.0-rc.2까지는 `CLI_USAGE_INVALID`였다. 종료 코드 1, `--json` envelope 모양, `CliFailure`가 가진 원래 코드, 실제 명령줄 오류의 `CLI_USAGE_INVALID`, setup의 `applied`·`resume`은 같다. 메시지의 알려진 credential 형식은 `[REDACTED]`로 바뀐다. crash를 `CLI_USAGE_INVALID`로 맞추던 script는 새 코드를 보게 된다 |
 
 ## 0.3.3 변경 분류 (T78, H-87)
 
