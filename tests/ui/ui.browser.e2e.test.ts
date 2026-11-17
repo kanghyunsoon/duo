@@ -444,6 +444,23 @@ describe("DUO UI in a browser (T18.1)", () => {
     await page.close();
   });
 
+  it("renders preview and production Work map with malformed optional task fields", async (ctx) => {
+    if (browser === undefined) return ctx.skip();
+    const r = repo("review/app");
+    r.write(".duo-project/runtime/work-tasks.json", JSON.stringify({ format: "duo.work-tasks/2", tasks: [{
+      id: "invalid-preview", agent: "Codex", name: "Malformed preview", updatedAt: new Date().toISOString(), status: "active",
+      changedFiles: "not an array", referencedFiles: [42, null, "../outside"], providedContext: { recordedAt: "invalid", items: "bad" },
+    }] }));
+    const { page, server, errors } = await open(r.root);
+    await page.goto(`${server.origin}/session-preview`);
+    await page.getByRole("heading", { name: "[Codex] Malformed preview", exact: true }).waitFor();
+    await page.getByRole("region", { name: "Session changed and referenced files graph" }).waitFor();
+    await page.goto(`${server.origin}/work`);
+    await page.locator(".react-flow__node").filter({ hasText: "Malformed preview" }).waitFor();
+    expect(errors).toEqual([]);
+    await page.close();
+  });
+
   it("shows a newly recorded session and completes it without reloading", async (ctx) => {
     if (browser === undefined) return ctx.skip();
     const r=repo("review/app"); const {page,server,errors}=await open(r.root);

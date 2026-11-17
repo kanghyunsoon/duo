@@ -46,3 +46,7 @@ UI에서 허용하는 쓰기는 Human의 Decision Proposal **Confirm**과 **Reje
 - **Search / Entity**: Requirement ID, Decision ID, Symbol, File, Review ID를 찾고 URL로 직접 열 수 있다. Source viewer는 evidence slice만 제공한다.
 
 Refresh는 사용자 요청 또는 화면 전환 시에만 수행한다. 1초 polling, watcher, 자동 Index는 사용하지 않는다. 기본 LLM은 disabled이고, semantic Review는 사용자가 명시적으로 켤 때만 선택된 evidence slice를 전송한다.
+
+### Session preview task records
+
+`/session-preview` remains a preview: production session capture is not connected. Optional stored `changedFiles`, `referencedFiles` and `providedContext` are sanitized once in `readTasks` before task-list, Work map and completion responses. Path lists accept normalized repository-relative strings only, deduplicate entries, reject paths longer than 1,024 characters and retain at most 200 paths each. Context requires a parseable timestamp and an items array; malformed fields/items are omitted without dropping the task. At most 50 items are returned, with refs bounded to 256 characters and kinds to 64. Display strings are secret-redacted before truncation; text excerpts contain at most 500 characters including an ellipsis. Existing `duo.work-tasks/2` records without these fields keep their output contract.
