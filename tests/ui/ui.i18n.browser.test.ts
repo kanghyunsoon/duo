@@ -61,6 +61,30 @@ async function mock(page: Page) {
   });
 }
 
+it("opens the dedicated coverage table through navigation and direct URLs in both languages", async (ctx) => {
+  if (browser === undefined) return ctx.skip();
+  for (const [language, title] of [["en", "Analysis coverage"], ["ko", "분석 범위"]] as const) {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(5_000);
+    try {
+      await mock(page);
+      await page.addInitScript((value) => localStorage.setItem("duo.ui.language", value), language);
+      await page.goto(`${origin}/overview`);
+      await page.getByRole("navigation").getByRole("link", { name: title, exact: true }).click();
+      expect(new URL(page.url()).pathname).toBe("/coverage");
+      await page.getByRole("heading", { name: title, level: 1, exact: true }).waitFor();
+      await page.getByRole("table").waitFor();
+      expect(await page.getByRole("table").count()).toBe(1);
+      await page.goto(`${origin}/coverage`);
+      await page.getByRole("heading", { name: title, level: 1, exact: true }).waitFor();
+      await page.getByRole("table").waitFor();
+      expect(await page.getByRole("table").getByRole("row").count()).toBe(2);
+      await page.goto(`${origin}/session-preview`);
+      await page.getByRole("note").filter({ hasText: language === "en" ? "Preview · Session file capture is not yet connected." : "미리보기 · 세션 파일 수집 기능은 아직 연결되지 않았습니다." }).waitFor();
+    } finally { await page.close(); }
+  }
+}, 30_000);
+
 it("switches language in place, preserves form input and persists across reloads", async (ctx) => {
   if (browser === undefined) return ctx.skip();
   const page = await browser.newPage();
@@ -119,7 +143,7 @@ it("renders every route in both languages with the bundled resources", async (ct
     const routes = [
       ["/overview", "개요", "Overview"], ["/direction", "프로젝트 방향", "Direction"],
       ["/decisions", "결정 대기", "Pending decisions"], ["/work", "작업 맵", "Work map"],
-      ["/graph?node=REQ-001", "그래프", "Graph"], ["/coverage", "개요", "Overview"],
+      ["/graph?node=REQ-001", "그래프", "Graph"], ["/coverage", "분석 범위", "Analysis coverage"],
       ["/context", "컨텍스트 검사기", "Context Inspector"], ["/review", "리뷰", "Review"],
       ["/reviews", "리뷰 이력", "Review history"], ["/search?q=hello", "검색", "Search"],
       ["/entity/REQ-001", "REQ-001", "REQ-001"], ["/reviews/review-1", "리뷰 review-1", "Review review-1"],
@@ -168,7 +192,7 @@ it("keeps sidebar navigation available when collapsed and persists the preferenc
     await page.getByRole("heading",{name:"작업 맵",exact:true,level:1}).waitFor();
     await page.reload();
     await page.getByRole("button",{name:"사이드바 펼치기",exact:true}).waitFor();
-    expect(await page.getByRole("navigation").getByRole("link",{name:"분석 범위",exact:true}).count()).toBe(0);
+    expect(await page.getByRole("navigation").getByRole("link",{name:"분석 범위",exact:true}).count()).toBe(1);
     expect(await page.getByRole("navigation").getByRole("link",{name:"컨텍스트",exact:true}).count()).toBe(1);
     expect(await page.getByRole("navigation").getByRole("link",{name:"그래프",exact:true}).count()).toBe(1);
     await page.getByRole("button",{name:"사이드바 펼치기",exact:true}).click();

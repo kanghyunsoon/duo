@@ -1,5 +1,6 @@
 /** Bundled UI messages; no network translation requests. */
 export const en = {
+  "session.preview_notice": "Preview · Session file capture is not yet connected.",
   "sidebar.expand": "Expand sidebar",
   "sidebar.collapse": "Collapse sidebar",
 

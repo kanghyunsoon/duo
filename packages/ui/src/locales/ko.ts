@@ -1,5 +1,6 @@
 /** Bundled UI messages; no network translation requests. */
 export const ko = {
+  "session.preview_notice": "미리보기 · 세션 파일 수집 기능은 아직 연결되지 않았습니다.",
   "sidebar.expand": "사이드바 펼치기",
   "sidebar.collapse": "사이드바 접기",
 

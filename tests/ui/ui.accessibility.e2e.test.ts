@@ -623,7 +623,7 @@ describe("DUO UI accessibility audit 297", () => {
       await navPage.goto(new URL("/overview", server.origin).href);
       await navPage.keyboard.press("Tab");
       const navFirst = await navPage.evaluate(() => (document.activeElement as HTMLAnchorElement | null)?.getAttribute("href"));
-      const expectedNavigation = ["button:Collapse sidebar", "select:Language", "/overview", "/direction", "/decisions", "/work", "/graph", "/context", "/review", "/reviews", "/search"];
+      const expectedNavigation = ["button:Collapse sidebar", "select:Language", "/overview", "/direction", "/decisions", "/work", "/graph", "/coverage", "/context", "/review", "/reviews", "/search"];
       const actualNavigation: string[] = [];
       for (let index = 0; index < expectedNavigation.length; index++) {
         await navPage.keyboard.press("Tab");
