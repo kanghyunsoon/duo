@@ -9,7 +9,7 @@ This report documents the design, verification, and Windows 11 benchmark measure
 1. Global install (`npm install -g --prefix <dir>`) in `tests/distribution/dist.e2e.test.ts` `beforeAll` and `scripts/release/conformance.mjs`.
 2. Project-local install (`npm install -D <tarballPath>`) to verify `npx --no-install duoctl`.
 
-Issue #37 noted that `npm install <local-tarball.tgz>` has hit 180s timeouts on Windows runners and proposed **Option 3**: serving the already-built `.tgz` from a throwaway `127.0.0.1` HTTP registry (`startLocalNpmRegistry`) and installing `@duo-director/cli@<version> --registry=http://127.0.0.1:<port>`. PR #206 switched the `beforeAll` global install (`npm install -g`) in `tests/distribution/dist.e2e.test.ts` to `startLocalNpmRegistry({ tarballPath: pack.tarball })`, and this follow-up switches the project-local `npx` install (`npm install -D`) to `startLocalNpmRegistry` as well (while `scripts/release/conformance.mjs` and `tests/workspace/local-registry.test.ts` continue to cover the direct `.tgz` file specifier).
+Issue #37 noted that `npm install <local-tarball.tgz>` has hit 180s timeouts on Windows runners and proposed **Option 3**: serving the already-built `.tgz` from a throwaway `127.0.0.1` HTTP registry (`startLocalNpmRegistry`) and installing `@duo-director/cli@<version> --registry=http://127.0.0.1:<port>`. PR #206 switched the `beforeAll` global install (`npm install -g`) in `tests/distribution/dist.e2e.test.ts` to `startLocalNpmRegistry({ tarballPath: pack.tarball })`, and this follow-up (#222) switches the project-local `npx` install (`npm install -D`) to `startLocalNpmRegistry` as well. The direct `.tgz` global install is still checked on every CI run by `scripts/release/conformance.mjs` (`npm install -g --prefix <prefix> <pack.tarball>`); the direct `.tgz` project-local install now runs only in the opt-in `O3` benchmark (`DUO_BENCH_LOCAL_REGISTRY=1` in `tests/workspace/local-registry.test.ts`).
 
 ## Architecture of `startLocalNpmRegistry` (`tests/distribution/local-registry.ts`)
 
@@ -89,10 +89,11 @@ When `npm install @duo-director/cli@0.4.0-rc.1 --registry=http://127.0.0.1:<port
 | Post-#206 (3) | `43779204360` | `280aae2` | **`30.2 s`** (`30,203 ms`, registry) | `84.9 s` (`84,909 ms`, `.tgz`) | **2.81x faster** |
 | Post-#206 (4) | `43785190133` | `efded41` | **`32.6 s`** (`32,628 ms`, registry) | `99.1 s` (`99,057 ms`, `.tgz`) | **3.04x faster** |
 | Post-#206 (5) | `43802458731` | `a84329f` | **`60.3 s`** (`60,332 ms`, registry) | `171.4 s` (`171,397 ms`, `.tgz`) | **2.84x faster** |
+| PR #222 (both registry) | `43994776826` | `c5cb5dd` (#222) | **`58.0 s`** (`57,970 ms`, registry) | **`54.8 s`** (`54,812 ms`, registry) | **0.95x (parity)** |
 
 2. **Both `dist.e2e.test.ts` installs now use `startLocalNpmRegistry`**:
    - Both `beforeAll` (`npm install -g --prefix <prefix>`) and `project-local install` (`npm install -D`) in `tests/distribution/dist.e2e.test.ts` now install `@duo-director/cli@<version>` from `startLocalNpmRegistry({ tarballPath: pack.tarball })`, assert `formatNpmFailure` on error, and verify that every package request to the local registry returned HTTP `200` (enforcing the H-65 `404` guard on both install surfaces).
-   - Direct `.tgz` file specifier installation remains covered by `scripts/release/conformance.mjs` (`npm install -g --prefix <prefix> <pack.tarball>`) and `tests/workspace/local-registry.test.ts`.
+   - The direct `.tgz` global install is still checked on every CI run by `scripts/release/conformance.mjs` (`npm install -g --prefix <prefix> <pack.tarball>`); the direct `.tgz` project-local install now runs only in the opt-in `O3` benchmark (`DUO_BENCH_LOCAL_REGISTRY=1` in `tests/workspace/local-registry.test.ts`).
 3. **Fast regression suite in `tests/workspace/local-registry.test.ts`**:
    - The default suite (`O1` + `O2`) runs in under 2 seconds using a synthetic scoped tarball and continuously verifies `readPackageJsonFromTarball`, `startLocalNpmRegistry`, and `npm install --registry=<local-url>` + `npx --no-install duoctl`.
    - The 6-install `.dist` benchmark (`O3`) remains opt-in via `DUO_BENCH_LOCAL_REGISTRY=1` so `pnpm test` stays fast.
