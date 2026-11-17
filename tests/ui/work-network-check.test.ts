@@ -19,6 +19,7 @@ it("recovers the real work map after a network interruption", async () => {
     catch { browser = await chromium.launch({ channel: "msedge", headless: true }); }
   }
   const context = await browser.newContext();
+  await context.addInitScript(() => window.localStorage.setItem("duo.ui.language", "en"));
   try {
     const page = await context.newPage();
     await page.goto(server.launchUrl);

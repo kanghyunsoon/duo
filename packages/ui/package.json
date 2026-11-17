@@ -23,6 +23,8 @@
     "react-dom": "19.3.0"
   },
   "dependencies": {
-    "@xyflow/react": "^12.12.0"
+    "@xyflow/react": "^12.12.0",
+    "i18next": "^27.1.1",
+    "react-i18next": "^18.0.1"
   }
 }

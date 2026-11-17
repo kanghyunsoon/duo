@@ -215,6 +215,7 @@ Promise<{ context: BrowserContext; page: Page; server: DuoUiServer }> {
     server = await startDuoUiServer({ root: isolatedRoot, version: "ui-a11y-audit", registry, llm: new LLMProviderPool({}) });
     servers.push(server);
     context = await browser.newContext({ viewport, colorScheme });
+    await context.addInitScript(() => window.localStorage.setItem("duo.ui.language", "en"));
     contexts.push(context);
     serverByContext.set(context, server);
     const page = await context.newPage();
@@ -615,11 +616,14 @@ describe("DUO UI accessibility audit 297", () => {
       await navPage.goto(new URL("/overview", server.origin).href);
       await navPage.keyboard.press("Tab");
       const navFirst = await navPage.evaluate(() => (document.activeElement as HTMLAnchorElement | null)?.getAttribute("href"));
-      const expectedNavigation = ["/overview", "/direction", "/decisions", "/work", "/graph", "/coverage", "/context", "/review", "/reviews", "/search"];
+      const expectedNavigation = ["select:Language", "/overview", "/direction", "/decisions", "/work", "/graph", "/coverage", "/context", "/review", "/reviews", "/search"];
       const actualNavigation: string[] = [];
       for (let index = 0; index < expectedNavigation.length; index++) {
         await navPage.keyboard.press("Tab");
-        actualNavigation.push(await navPage.evaluate(() => (document.activeElement as HTMLAnchorElement | null)?.getAttribute("href") ?? "unidentified"));
+        actualNavigation.push(await navPage.evaluate(() => {
+          const element = document.activeElement;
+          return element instanceof HTMLSelectElement ? `select:${element.getAttribute("aria-label")}` : element?.getAttribute("href") ?? "unidentified";
+        }));
       }
       await navPage.keyboard.press("Enter");
       await navPage.waitForURL(/\/search$/u, { timeout: 5_000 }).catch(() => undefined);
