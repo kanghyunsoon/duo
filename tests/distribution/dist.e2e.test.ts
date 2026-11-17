@@ -55,7 +55,7 @@ beforeAll(async () => {
     const t = performance.now();
     const r = npm(["install", "-g", "--prefix", prefix, registry.packageSpec, `--registry=${registry.url}`, "--no-audit", "--no-fund", "--loglevel=error"], prefix, isolatedEnv([]));
     const elapsedMs = Math.round(performance.now() - t);
-    // #37: the global install via the throwaway local registry, to compare with the project-local tarball install phases.
+    // #37: the global install via the throwaway local registry, to compare with the project-local install phases.
     console.log(`global install (ms): ${elapsedMs}`);
     if (r.status !== 0) throw new Error(formatNpmFailure("npm install -g", r, elapsedMs));
     const pkgRequests = registry.requests.filter((q) => q.url !== "/npm");
@@ -417,8 +417,16 @@ describe("project-local install (npx --no-install duoctl)", () => {
     try {
       const p = project();
       const local = isolatedEnv([]); // no global duoctl on PATH
-      const inst = timed("npmInstall", () => npm(["install", "-D", pack.tarball, "--no-audit", "--no-fund", "--loglevel=error"], p.root, local));
-      expect(inst.status, formatNpmFailure("npm install -D", inst, phases.npmInstall)).toBe(0);
+      const registry = await startLocalNpmRegistry({ tarballPath: pack.tarball });
+      try {
+        const inst = timed("npmInstall", () => npm(["install", "-D", registry.packageSpec, `--registry=${registry.url}`, "--no-audit", "--no-fund", "--loglevel=error"], p.root, local));
+        expect(inst.status, formatNpmFailure("npm install -D", inst, phases.npmInstall)).toBe(0);
+        const pkgRequests = registry.requests.filter((q) => q.url !== "/npm");
+        expect(pkgRequests.length, JSON.stringify(registry.requests)).toBeGreaterThanOrEqual(1);
+        expect(pkgRequests.every((q) => q.statusCode === 200), JSON.stringify(registry.requests)).toBe(true);
+      } finally {
+        await registry.close();
+      }
       // The same runtime tree as the global install: inside the package, nothing hoisted into the project (H-65).
       const tree = timed("compareTree", () => compareInstalledTree(path.join(p.root, "node_modules", "@duo-director", "cli"), path.join(p.root, "node_modules")));
       expect([...tree.mismatches, ...tree.extra, ...tree.outside]).toEqual([]);
