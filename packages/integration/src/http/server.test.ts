@@ -16,7 +16,7 @@ import { indexRepository, openProjectGraphReader, openProjectGraphStore } from "
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { LLMProviderPool } from "../llm/factory.js";
 import { CONTENT_SECURITY_POLICY, locateUiAssets, startDuoUiServer, type DuoUiServer } from "./server.js";
-import { completeWorkTask, listWorkTasks, touchWorkTask } from "./work-map.js";
+import { completeWorkTask, listWorkTasks, TASK_PREVIEW_LIMITS, touchWorkTask } from "./work-map.js";
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 300_000 });
 const FIXTURE = fileURLToPath(new URL("../../../../fixtures/review/app/", import.meta.url));
@@ -79,6 +79,71 @@ afterAll(async () => {
 });
 
 describe("work map projection", () => {
+  it("sanitizes optional preview records across all task HTTP responses and preserves old v2 records", async () => {
+    const file = path.join(root, ".duo-project/runtime/work-tasks.json");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const previous = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : undefined;
+    const base = { id: "12345678-1234-4123-8123-123456789abc", agent: "Codex", name: "Preview validation", updatedAt: "2026-11-17T00:00:00Z", status: "active", identitySource: "manual" };
+    const write = (fields: Record<string, unknown>) => fs.writeFileSync(file, JSON.stringify({ format: "duo.work-tasks/2", tasks: [{ ...base, ...fields }] }));
+    const taskList = async () => {
+      const response = await get("/api/work-tasks");
+      expect(response.status).toBe(200);
+      return (response.json().data.tasks as Record<string, unknown>[])[0];
+    };
+    try {
+      write({});
+      expect(await taskList()).toEqual(base);
+      const key = "sk-proj-DUO84CANARY0123456789abcdef";
+      write({ changedFiles: ["./src/a.ts", "src\\a.ts", 42, "../x", "/etc/passwd", "C:\\x", "", ".", "src/.."],
+        referencedFiles: ["src/./b.ts"], providedContext: { recordedAt: base.updatedAt, items: [
+          { ref: "file:a", kind: "source", text: `${"a".repeat(480)} ${key} ${"b".repeat(600)}` },
+          { ref: "bad", kind: "source" }, null,
+        ] } });
+      const expected = { changedFiles: ["src/a.ts"], referencedFiles: ["src/b.ts"], providedContext: {
+        recordedAt: "2026-11-17T00:00:00.000Z", items: [{ ref: "file:a", kind: "source", text: `${"a".repeat(480)} [REDACTED] ${"b".repeat(7)}…` }],
+      } };
+      expect(await taskList()).toEqual({ ...base, ...expected });
+      const map = await get("/api/work-map");
+      expect(map.status).toBe(200);
+      expect((map.json().data.nodes as { id: string }[]).find((node) => node.id === `task:${base.id}`)).toMatchObject(expected);
+      const completed = await post("/api/work-task-complete", { id: base.id });
+      expect(completed.status).toBe(200);
+      expect(completed.json().data.task).toMatchObject({ ...expected, status: "completed" });
+      for (const response of [map, completed, await get("/api/work-tasks")]) expect(response.body).not.toContain(key);
+
+      for (const fields of [
+        { changedFiles: "src/a.ts", referencedFiles: 1, providedContext: "bad" },
+        { providedContext: { recordedAt: "not a date", items: [] } },
+        { providedContext: { recordedAt: base.updatedAt, items: "bad" } },
+        { providedContext: [] },
+      ]) {
+        write(fields);
+        expect(await taskList()).toEqual(base);
+        expect((await get("/api/work-map")).status).toBe(200);
+      }
+      write({ changedFiles: [false, null], providedContext: { recordedAt: base.updatedAt, items: [{ ref: "missing-text", kind: "source" }] } });
+      expect(await taskList()).toEqual({ ...base, changedFiles: [], providedContext: { recordedAt: "2026-11-17T00:00:00.000Z", items: [] } });
+
+      const limits = TASK_PREVIEW_LIMITS;
+      write({ changedFiles: ["x".repeat(limits.pathLength + 1), "x".repeat(limits.pathLength), ...Array.from({ length: limits.paths + 1 }, (_, i) => `src/${i}.ts`)],
+        referencedFiles: Array.from({ length: limits.paths + 1 }, (_, i) => `ref/${i}.ts`),
+        providedContext: { recordedAt: base.updatedAt, items: Array.from({ length: limits.items + 1 }, () => ({ ref: "r".repeat(limits.refLength + 1),
+          kind: "k".repeat(limits.kindLength + 1), text: "t".repeat(limits.textLength + 1) })) } });
+      const bounded = await taskList();
+      expect(bounded?.changedFiles).toHaveLength(limits.paths);
+      expect((bounded?.changedFiles as string[])[0]).toHaveLength(limits.pathLength);
+      expect(bounded?.referencedFiles).toHaveLength(limits.paths);
+      const context = bounded?.providedContext as { items: { ref: string; kind: string; text: string }[] };
+      expect(context.items).toHaveLength(limits.items);
+      expect(context.items[0]?.ref).toHaveLength(limits.refLength);
+      expect(context.items[0]?.kind).toHaveLength(limits.kindLength);
+      expect(context.items[0]?.text).toHaveLength(limits.textLength);
+      expect(context.items[0]?.text.endsWith("…")).toBe(true);
+    } finally {
+      if (previous === undefined) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, previous);
+    }
+  });
+
   it("keys active MCP work by normalized full text, retains IDs on repeat, and starts a new ID after completion", () => {
     const session = "identity-policy-session";
     const first = touchWorkTask(root, "Codex", "  Inspect launch\r\npath  ", new Date("2026-10-21T00:00:00Z"), { duoSessionId: session });
@@ -323,7 +388,10 @@ describe("session and transport security (T18.1)", () => {
     const js = await get("/assets/app.js");
     expect(js.status).toBe(200);
     expect(js.headers["content-type"]).toMatch(/text\/javascript/u);
-    for (const r of [page, js, await get("/api/overview")]) {
+    const font = await get("/assets/PretendardVariable.woff2");
+    expect(font.status).toBe(200);
+    expect(font.headers["content-type"]).toBe("font/woff2");
+    for (const r of [page, js, font, await get("/api/overview")]) {
       expect(r.headers["content-security-policy"]).toBe(CONTENT_SECURITY_POLICY);
       expect(r.headers["access-control-allow-origin"]).toBeUndefined();
       expect(r.headers["x-content-type-options"]).toBe("nosniff");

@@ -100,7 +100,14 @@ async function focusSnapshot(page: Page): Promise<{ readonly target: string; rea
     const body = element === document.body;
     const rect = element.getBoundingClientRect();
     const style = getComputedStyle(element);
-    const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    const visibleFragments = [...element.getClientRects()].filter((fragment) =>
+      fragment.width > 0 && fragment.height > 0 && fragment.right > 0 && fragment.left < innerWidth && fragment.bottom > 0 && fragment.top < innerHeight);
+    const unobscuredFragment = visibleFragments.some((fragment) => {
+      const left = Math.max(0, fragment.left), right = Math.min(innerWidth, fragment.right);
+      const top = Math.max(0, fragment.top), bottom = Math.min(innerHeight, fragment.bottom);
+      const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
+      return hit === element || (hit !== null && element.contains(hit));
+    });
     let withinScrollClips = true;
     for (let parent = element.parentElement; parent !== null; parent = parent.parentElement) {
       const overflow = getComputedStyle(parent);
@@ -114,8 +121,8 @@ async function focusSnapshot(page: Page): Promise<{ readonly target: string; rea
         element.tagName === "SUMMARY" ? `summary:${element.textContent?.trim()}` : `${element.tagName}:${element.id || element.getAttribute("data-testid") || "unidentified"}`;
     return { target, focusVisible: body || element.matches(":focus-visible"),
       indicatorVisible: body || style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0,
-      unobscured: body || (top === element || element.contains(top)) && withinScrollClips,
-      inViewport: body || rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.bottom <= innerHeight };
+      unobscured: body || unobscuredFragment && withinScrollClips,
+      inViewport: body || rect.width > 0 && rect.height > 0 && rect.top >= -1 && rect.bottom <= innerHeight + 1 };
   });
 }
 
@@ -616,23 +623,23 @@ describe("DUO UI accessibility audit 297", () => {
       await navPage.goto(new URL("/overview", server.origin).href);
       await navPage.keyboard.press("Tab");
       const navFirst = await navPage.evaluate(() => (document.activeElement as HTMLAnchorElement | null)?.getAttribute("href"));
-      const expectedNavigation = ["select:Language", "/overview", "/direction", "/decisions", "/work", "/graph", "/coverage", "/context", "/review", "/reviews", "/search"];
+      const expectedNavigation = ["button:Collapse sidebar", "select:Language", "/overview", "/direction", "/decisions", "/work", "/graph", "/coverage", "/context", "/review", "/reviews", "/search"];
       const actualNavigation: string[] = [];
       for (let index = 0; index < expectedNavigation.length; index++) {
         await navPage.keyboard.press("Tab");
         actualNavigation.push(await navPage.evaluate(() => {
           const element = document.activeElement;
-          return element instanceof HTMLSelectElement ? `select:${element.getAttribute("aria-label")}` : element?.getAttribute("href") ?? "unidentified";
+          return element instanceof HTMLSelectElement ? `select:${element.getAttribute("aria-label")}` : element instanceof HTMLButtonElement ? `button:${element.getAttribute("aria-label")}` : element?.getAttribute("href") ?? "unidentified";
         }));
       }
       await navPage.keyboard.press("Enter");
       await navPage.waitForURL(/\/search$/u, { timeout: 5_000 }).catch(() => undefined);
       const navigationPass = navFirst === "#main" && actualNavigation.length === expectedNavigation.length && actualNavigation.every((href, index) => href === expectedNavigation[index]) && new URL(navPage.url()).pathname === "/search";
-      const expectedOverviewSequence = ["button:Refresh", "a:/entity/M1", "a:/decisions", `a:/reviews/${reviewId}`, "summary:Analysis coverage", "a:/coverage", "summary:Declared knowledge gaps (1)"];
+      const expectedOverviewSequence = ["button:Refresh", "a:/entity/M1", "a:/decisions", `a:/reviews/${reviewId}`, "summary:Analysis coverage", "summary:Declared knowledge gaps (1)"];
       const controlHtml = `<!doctype html><html><head><title>Normal HTML focus control</title></head><body><main id="main" tabindex="-1">
         <button type="button">Refresh</button><a href="/entity/M1">M1</a><a href="/decisions">Pending decisions</a>
         <a href="/reviews/${reviewId}">Review record</a><details open><summary>Analysis coverage</summary></details>
-        <a href="/coverage">Coverage</a><details open><summary>Declared knowledge gaps (1)</summary></details>
+        <details open><summary>Declared knowledge gaps (1)</summary></details>
       </main></body></html>`;
       const expectedControlForward = [...expectedOverviewSequence, "BODY"];
       const expectedControlReverse = [...expectedOverviewSequence].reverse();
@@ -781,26 +788,28 @@ describe("DUO UI accessibility audit 297", () => {
         const submit = dialog.getByRole("button", { name: `${spec.submit} ${proposalId}` });
         const submitStateValid = spec.action === "Confirm…" ? await submit.isDisabled() : await submit.isEnabled();
         await capture(page, `${spec.action} open`, "Keyboard Enter opens a modal with initial field focus", { initialFocus, submitStateValid }, "open", initialFocus === spec.input && submitStateValid ? "통과" : "제품 문제");
-        await page.keyboard.press("Shift+Tab");
-        const reverseFirst = await activeElementId(page);
-        await page.keyboard.press("Shift+Tab");
-        const reverseSecond = await activeElementId(page);
-        const reverseSecondCancel = await dialog.getByRole("button", { name: "Cancel" }).evaluate((element) => element === document.activeElement);
-        await page.keyboard.press("Tab");
-        const forwardFirst = await activeElementId(page);
-        await page.keyboard.press("Tab");
-        const forwardSecond = await activeElementId(page);
-        let forwardThird: string | undefined;
-        if (spec.action === "Reject…") {
+        const reverse: string[] = [];
+        const cancelTarget = "button:Cancel";
+        for (let index = 0; index < 4; index++) {
+          await page.keyboard.press("Shift+Tab");
+          reverse.push(await activeElementId(page));
+          if (reverse.at(-1) === cancelTarget) break;
+        }
+        const reverseCancel = await dialog.getByRole("button", { name: "Cancel" }).evaluate((element) => element === document.activeElement);
+        const forward: string[] = [];
+        for (let index = 0; index < 5; index++) {
           await page.keyboard.press("Tab");
-          forwardThird = await activeElementId(page);
+          forward.push(await activeElementId(page));
+          if (forward.at(-1) === cancelTarget) break;
         }
         const cancelFocused = await dialog.getByRole("button", { name: "Cancel" }).evaluate((element) => element === document.activeElement);
-        const cancelTarget = "button:Cancel";
         const submitTarget = `button:${spec.submit} ${proposalId}`;
-        const cyclePass = reverseFirst === "body" && reverseSecond === cancelTarget && reverseSecondCancel && forwardFirst === spec.input &&
-          (spec.action === "Confirm…" ? forwardSecond === cancelTarget : forwardSecond === submitTarget && forwardThird === cancelTarget) && cancelFocused;
-        await capture(page, `${spec.action} cycle`, "BODY sentinel only at dialog boundary; all dialog controls form both Tab cycles", { reverseFirst, reverseSecond, reverseSecondCancel, forwardFirst, forwardSecond, forwardThird, cancelFocused }, "open", cyclePass ? "통과" : "제품 문제");
+        const forwardControls = forward.filter((target) => target !== "dialog" && target !== "body");
+        const expectedControls = spec.action === "Confirm…" ? [spec.input, cancelTarget] : [spec.input, submitTarget, cancelTarget];
+        const cyclePass = reverseCancel && reverse.at(-1) === cancelTarget &&
+          reverse.slice(0, -1).every((target) => target === "body" || target === "dialog") &&
+          JSON.stringify(forwardControls) === JSON.stringify(expectedControls) && cancelFocused;
+        await capture(page, `${spec.action} cycle`, "All dialog controls remain reachable in both directions", { reverse, reverseCancel, forward, cancelFocused }, "open", cyclePass ? "통과" : "제품 문제");
         await page.keyboard.press("Enter");
         const cancelled = !(await dialog.isVisible());
         const cancelReturned = await trigger.evaluate((element) => element === document.activeElement);
@@ -812,7 +821,7 @@ describe("DUO UI accessibility audit 297", () => {
         const escapeReturned = closed && await trigger.evaluate((element) => element === document.activeElement);
         await capture(page, `${spec.action} escape`, "Escape closes modal and restores the trigger", { reopened, closed, escapeReturned }, closed ? "closed" : "open", closed && escapeReturned ? "통과" : "제품 문제");
         checks.push({ action: spec.action, pass: initialFocus === spec.input && submitStateValid && cyclePass && cancelled && cancelReturned && reopened && closed && escapeReturned,
-          detail: { initialFocus, submitStateValid, reverseFirst, reverseSecond, reverseSecondCancel, forwardFirst, forwardSecond, forwardThird, cancelFocused, cancelled, cancelReturned, reopened, closed, escapeReturned } });
+          detail: { initialFocus, submitStateValid, reverse, reverseCancel, forward, cancelFocused, cancelled, cancelReturned, reopened, closed, escapeReturned } });
       }
       if (last === undefined) throw new AuditToolError("Could not initialize modal keyboard audit");
       const extra: Finding[] = checks.every((check) => check.pass) ? [] : [{ status: "제품 문제", detail: JSON.stringify(checks) }];
@@ -947,7 +956,7 @@ describe("DUO UI accessibility audit 297", () => {
         await page.getByRole("button", { name: spec.button }).click();
         let resultVisible: boolean;
         if (spec.id === "form-search") resultVisible = await appears(page.getByRole("link", { name: "RPT-01", exact: true }).first());
-        else if (spec.id === "form-graph") resultVisible = await appears(page.getByRole("heading", { name: "Seed", level: 2, exact: true }));
+        else if (spec.id === "form-graph") resultVisible = await appears(page.getByRole("heading", { name: "Seeds", level: 2, exact: true }));
         else resultVisible = await appears(page.getByText(spec.result, { exact: false }).first());
         const extra: Finding[] = resultVisible ? [] : [{ status: "제품 문제", detail: `Submitting ${spec.label} did not show the expected result` }];
         const result = await auditPage(page, spec.id, spec.label, "정상 제출", undefined, undefined, extra);

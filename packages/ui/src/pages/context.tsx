@@ -11,7 +11,7 @@ function Items(props: { readonly items: readonly PacketItem[] }) {
   if (props.items.length === 0) return <Empty>{t("context.none")}</Empty>;
   return (
     <ol className="packet-items">{props.items.map((i) => (
-      <li key={i.id}><div><Link to={entityPath(i.ref)}>{i.ref}</Link> <span className="muted"><Trans i18nKey="context.rank_tokens" components={{ v0: <>{String((i.rank) ?? "")}</>, v1: <>{i.level}</>, v2: <>{String((i.tokens) ?? "")}</> }} /></span></div><pre className="slice">{i.text}</pre></li>
+      <li key={i.id}><div><Link to={entityPath(i.ref)}>{i.ref}</Link> <span className="muted"><Trans i18nKey="context.rank_tokens" components={{ v0: <>{String((i.rank) ?? "")}</>, v1: <>{i.level}</>, v2: <>{String((i.tokens) ?? "")}</> }} /></span></div><pre className="slice" tabIndex={0}>{i.text}</pre></li>
     ))}</ol>
   );
 }

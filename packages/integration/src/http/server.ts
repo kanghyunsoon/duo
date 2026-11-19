@@ -46,7 +46,7 @@ const TYPES: Readonly<Record<string, string>> = {
   ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".woff2": "font/woff2", ".json": "application/json; charset=utf-8",
 };
 /** SPA routes that return index.html (deep links survive a refresh). */
-const PAGES = /^\/(?:|overview|direction|graph|work|context|review|reviews(?:\/[\w.-]+)?|decisions|coverage|search|entity\/.+)$/u;
+const PAGES = /^\/(?:|overview|direction|graph|work|session-preview|context|review|reviews(?:\/[\w.-]+)?|decisions|coverage|search|entity\/.+)$/u;
 
 /** The bundled UI: dist/ui next to the published bundle, or packages/ui/dist/app in the workspace. */
 export function locateUiAssets(): string | undefined {

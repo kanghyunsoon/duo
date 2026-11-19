@@ -16,11 +16,13 @@ if (path.relative(here, out).startsWith("..") || path.relative(here, out) === ""
 }
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
+fs.copyFileSync(path.join(here, "src", "PretendardVariable.woff2"), path.join(out, "PretendardVariable.woff2"));
 const result = await build({
   absWorkingDir: here,
   entryPoints: { app: "src/main.tsx" },
   outdir: out,
   bundle: true,
+  external: ["/assets/PretendardVariable.woff2"],
   format: "esm",
   platform: "browser",
   target: ["es2022", "chrome120", "firefox120", "safari17"],
@@ -50,6 +52,7 @@ for (const input of Object.keys(result.metafile.inputs)) {
   if (licenseFile === undefined) throw new Error(`${name} is bundled into the UI but ships no LICENSE file`);
   packages.set(name, { name, version: meta.version, license: meta.license, text: fs.readFileSync(path.join(dir, licenseFile), "utf8") });
 }
+packages.set("pretendard", { name: "pretendard", version: "1.3.9", license: "OFL-1.1", text: fs.readFileSync(path.join(here, "PRETENDARD-LICENSE.txt"), "utf8") });
 const licenses = [...packages.values()].sort((a, b) => (a.name < b.name ? -1 : 1));
 fs.writeFileSync(path.join(here, "dist", "licenses.json"), `${JSON.stringify({ format: "duo.ui-licenses/1", packages: licenses }, null, 2)}\n`);
 fs.writeFileSync(path.join(out, "index.html"), [
@@ -63,7 +66,7 @@ fs.writeFileSync(path.join(out, "index.html"), [
   '<link rel="stylesheet" href="/assets/app.css">',
   '<script type="module" src="/assets/app.js"></script>',
   "</head>",
-  '<body><div id="root"></div><noscript>The DUO UI needs JavaScript.</noscript></body>',
+  '<body><div id="root"></div><noscript>DUO UI를 사용하려면 JavaScript를 활성화하세요. The DUO UI needs JavaScript.</noscript></body>',
   "</html>",
   "",
 ].join("\n"));

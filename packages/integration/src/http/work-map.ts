@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { definitionRef, fileRef, guardWrite, nodeId, parseNodeId, STATE_DIR_NAME, symlinkOnPath, type RepoPath } from "@duo-director/core";
+import { definitionRef, fileRef, guardWrite, normalizeRepoPath, nodeId, parseNodeId, STATE_DIR_NAME, symlinkOnPath, type RepoPath } from "@duo-director/core";
 import { redactSecrets } from "@duo-director/director";
 import { GRAPH_REVISION_KEY, inspectIndex, traverse } from "@duo-director/graph";
 import { projectContext } from "../operations/context.js";
@@ -96,6 +96,9 @@ export interface WorkTask {
   readonly worktreeId?: string;
   readonly identitySource?: "duo" | "manual" | "legacy";
   readonly startedAt?: string;
+  readonly changedFiles?: readonly RepoPath[];
+  readonly referencedFiles?: readonly RepoPath[];
+  readonly providedContext?: { readonly recordedAt: string; readonly items: readonly { readonly ref: string; readonly kind: string; readonly text: string }[] };
   readonly review?: { readonly digest: string; readonly verdict?: string; readonly claimCount: number; readonly observedAt: string };
   readonly updatedAt: string;
   readonly status: "active" | "disconnected" | "completed";
@@ -111,6 +114,9 @@ export interface WorkMapNode {
   readonly worktreeId?: string;
   readonly branch?: string;
   readonly targetRef?: string;
+  readonly changedFiles?: WorkTask["changedFiles"];
+  readonly referencedFiles?: WorkTask["referencedFiles"];
+  readonly providedContext?: WorkTask["providedContext"];
   readonly review?: WorkTask["review"];
   readonly source?: { readonly path: string; readonly startLine?: number };
 }
@@ -170,13 +176,56 @@ function withTaskLock<T>(root: string, operation: () => T, maxWaitMs = 5000): T 
   finally { fs.closeSync(descriptor); fs.rmSync(target, { force: true }); }
 }
 
+/** Bounds for optional preview records read from local task storage. */
+export const TASK_PREVIEW_LIMITS = { paths: 200, pathLength: 1024, items: 50, refLength: 256, kindLength: 64, textLength: 500 } as const;
+
+function previewPaths(value: unknown): readonly RepoPath[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const paths = new Set<RepoPath>();
+  for (const entry of value) {
+    if (typeof entry !== "string" || entry.length > TASK_PREVIEW_LIMITS.pathLength) continue;
+    const normalized = normalizeRepoPath(entry).value;
+    if (normalized !== undefined) paths.add(normalized);
+    if (paths.size >= TASK_PREVIEW_LIMITS.paths) break;
+  }
+  return [...paths];
+}
+
+function previewContext(value: unknown): WorkTask["providedContext"] {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const context = value as Record<string, unknown>;
+  if (typeof context.recordedAt !== "string" || !Number.isFinite(Date.parse(context.recordedAt)) || !Array.isArray(context.items)) return undefined;
+  const items: { ref: string; kind: string; text: string }[] = [];
+  for (const entry of context.items as unknown[]) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue;
+    const item = entry as Record<string, unknown>;
+    if (typeof item.ref !== "string" || typeof item.kind !== "string" || typeof item.text !== "string") continue;
+    // Redact before truncating so a credential straddling the excerpt boundary cannot leak.
+    const text = redactLabel(item.text);
+    items.push({ ref: redactLabel(item.ref).slice(0, TASK_PREVIEW_LIMITS.refLength),
+      kind: redactLabel(item.kind).slice(0, TASK_PREVIEW_LIMITS.kindLength),
+      text: text.length > TASK_PREVIEW_LIMITS.textLength ? `${text.slice(0, TASK_PREVIEW_LIMITS.textLength - 1)}…` : text });
+    if (items.length >= TASK_PREVIEW_LIMITS.items) break;
+  }
+  return { recordedAt: new Date(context.recordedAt).toISOString(), items };
+}
+
 function readTasks(root: string): WorkTask[] {
   const raw = readJson(root, TASKS);
   const rows = Array.isArray(raw) ? raw : typeof raw === "object" && raw !== null && "tasks" in raw && Array.isArray(raw.tasks) ? raw.tasks : [];
   const tasks = rows.filter((x): x is WorkTask => typeof x === "object" && x !== null &&
     typeof x.id === "string" && typeof x.agent === "string" && typeof x.name === "string" &&
     typeof x.updatedAt === "string" && (x.status === "active" || x.status === "disconnected" || x.status === "completed"))
-    .map((task) => ({ ...task, agent: redactLabel(task.agent), name: redactLabel(task.name), identitySource: task.identitySource ?? "legacy" }));
+    .map((task) => {
+      // Remove raw optional fields before spreading: invalid values must not survive into any API response.
+      const { changedFiles: rawChanged, referencedFiles: rawReferenced, providedContext: rawContext, ...base } = task;
+      const changedFiles = previewPaths(rawChanged);
+      const referencedFiles = previewPaths(rawReferenced);
+      const providedContext = previewContext(rawContext);
+      return { ...base, agent: redactLabel(task.agent), name: redactLabel(task.name), identitySource: task.identitySource ?? "legacy",
+        ...(changedFiles === undefined ? {} : { changedFiles }), ...(referencedFiles === undefined ? {} : { referencedFiles }),
+        ...(providedContext === undefined ? {} : { providedContext }) };
+    });
   return tasks;
 }
 
@@ -317,6 +366,9 @@ export async function projectWorkMap(root: string, selectedId: string | undefine
     ref: t.id, updatedAt: t.updatedAt, status: t.status, branch,
     ...(t.worktreeId === undefined ? {} : { worktreeId: t.worktreeId }),
     ...(t.targetRef === undefined ? {} : { targetRef: t.targetRef }),
+    ...(t.changedFiles === undefined ? {} : { changedFiles: t.changedFiles }),
+    ...(t.referencedFiles === undefined ? {} : { referencedFiles: t.referencedFiles }),
+    ...(t.providedContext === undefined ? {} : { providedContext: t.providedContext }),
     ...(t.review === undefined ? {} : { review: t.review }) }));
   const worktreeNode = `worktree:${currentWorktree}`;
   nodes.push({ id: worktreeNode, type: "worktree", label: `Worktree · ${branch}`, ref: currentWorktree, worktreeId: currentWorktree, branch });

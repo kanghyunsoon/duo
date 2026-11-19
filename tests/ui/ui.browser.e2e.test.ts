@@ -130,6 +130,136 @@ describe("DUO UI in a browser (T18.1)", () => {
     expect(errors).toEqual([]);
   });
 
+  it("shows live agent work, review, file changes and completion without refreshing", async (ctx) => {
+    if (browser === undefined) return ctx.skip();
+    const liveUpdateTimeoutMs = 30_000;
+    const r = repo("review/app");
+    await r.index();
+    const { page, server, errors } = await open(r.root);
+    const mapResponses: { at: number; revision: string | undefined; review: unknown; durationMs: number | undefined }[] = [];
+    const revisionResponses: { at: number; revision: string | undefined; durationMs: number | undefined }[] = [];
+    page.on("response", async (response) => {
+      const endpoint = new URL(response.url()).pathname;
+      if (!response.ok() || (endpoint !== "/api/work-map" && endpoint !== "/api/work-revision")) return;
+      const result = await response.json().catch(() => undefined) as
+        { data?: { revision?: string; nodes?: { type: string; review?: unknown }[] }; meta?: { durationMs?: number } } | undefined;
+      if (result === undefined) return;
+      if (endpoint === "/api/work-map") mapResponses.push({ at: Date.now(), revision: result.data?.revision,
+        review: result.data?.nodes?.find((n) => n.type === "task")?.review, durationMs: result.meta?.durationMs });
+      else revisionResponses.push({ at: Date.now(), revision: result.data?.revision, durationMs: result.meta?.durationMs });
+    });
+    await page.goto(`${server.origin}/work`);
+    await see(page, "Add a work item to explore its DUO neighbourhood.");
+    const session = "live-graph-session";
+    const name = "Live graph probe";
+    const targetRef = nodeId(definitionRef("issue", "AUTH-7"));
+    const timings: Record<string, number> = {};
+    const start = Date.now();
+    const task = touchWorkTask(r.root, "Codex", name, new Date(), { duoSessionId: session, targetRef });
+    expect(task).toBeDefined();
+    const node = page.locator(".react-flow__node").filter({ hasText: `[Codex] ${name}` });
+    try { await node.waitFor({ timeout: liveUpdateTimeoutMs }); }
+    catch (error) {
+      const currentMap = await page.evaluate("fetch('/api/work-map').then(r => r.json()).then(r => r.data)") as { nodes?: { type: string; label: string }[] };
+      console.log(`WORK_MAP_TASK_DEBUG ${JSON.stringify({ mapResponses, revisionResponses,
+        serverTask: currentMap.nodes?.find((n) => n.type === "task"), page: await page.locator(".work-page").textContent(), errors })}`);
+      throw error;
+    }
+    timings.taskVisibleMs = Date.now() - start;
+    await node.click();
+    await page.locator(".work-detail").getByRole("heading", { name: `[Codex] ${name}` }).waitFor();
+    expect(await page.locator(".work-detail").textContent()).toContain(targetRef);
+    await page.evaluate(`(() => {
+      const blankMs = [];
+      let absentAt;
+      const observer = new MutationObserver(() => {
+        const present = document.querySelector(".react-flow__node") !== null;
+        if (!present && absentAt === undefined) absentAt = performance.now();
+        else if (present && absentAt !== undefined) { blankMs.push(performance.now() - absentAt); absentAt = undefined; }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      window.workGraphProbe = { blankMs, observer };
+    })()`);
+
+    const reviewStart = Date.now();
+    recordWorkReview(r.root, session, task?.id ?? "", { digest: "live-graph-review", verdict: "ASK", claimCount: 2 }, new Date());
+    try { await page.getByText("Review ASK · 2 claims").waitFor({ timeout: liveUpdateTimeoutMs }); }
+    catch (error) {
+      const currentMap = await page.evaluate("fetch('/api/work-map').then(r => r.json()).then(r => r.data)") as { nodes?: { type: string; review?: unknown }[] };
+      const stored = JSON.parse(fs.readFileSync(path.join(r.root, ".duo-project/runtime/work-tasks.json"), "utf8")) as { tasks: { review?: unknown }[] };
+      console.log(`WORK_MAP_REVIEW_DEBUG ${JSON.stringify({ mapResponses, revisionResponses,
+        detail: await page.locator(".work-detail").textContent(), storedReview: stored.tasks[0]?.review,
+        serverReview: currentMap.nodes?.find((n) => n.type === "task")?.review, errors })}`);
+      throw error;
+    }
+    timings.reviewVisibleMs = Date.now() - reviewStart;
+
+    const fileStart = Date.now();
+    r.write("live-graph-probe.txt", "changed while the page is open\n");
+    await page.locator(".react-flow__node").filter({ hasText: "live-graph-probe.txt" }).waitFor({ timeout: liveUpdateTimeoutMs });
+    await page.getByText("Index stale").waitFor({ timeout: liveUpdateTimeoutMs });
+    timings.fileVisibleMs = Date.now() - fileStart;
+    const blankMs = await page.evaluate(`(() => {
+      window.workGraphProbe?.observer.disconnect();
+      return window.workGraphProbe?.blankMs ?? [];
+    })()`) as number[];
+
+    const completeStart = Date.now();
+    completeWorkTask(r.root, task?.id ?? "", new Date());
+    await node.waitFor({ state: "detached", timeout: liveUpdateTimeoutMs });
+    timings.completedVisibleMs = Date.now() - completeStart;
+
+    const sharedA = touchWorkTask(r.root, "Codex", "Shared review label\nvariant alpha", new Date(), { duoSessionId: session });
+    const sharedB = touchWorkTask(r.root, "Codex", "Shared review label\nvariant beta", new Date(), { duoSessionId: session });
+    expect(sharedA?.id).not.toBe(sharedB?.id);
+    recordWorkReview(r.root, session, sharedA?.id ?? "", { digest: "digest-alpha", verdict: "PASS", claimCount: 1 }, new Date());
+    recordWorkReview(r.root, session, sharedB?.id ?? "", { digest: "digest-beta", verdict: "BLOCK", claimCount: 2 }, new Date());
+    const nodeA = page.locator(`.react-flow__node[data-id="task:${sharedA?.id}"]`);
+    const nodeB = page.locator(`.react-flow__node[data-id="task:${sharedB?.id}"]`);
+    await nodeA.waitFor({ timeout: liveUpdateTimeoutMs });
+    await nodeB.waitFor({ timeout: liveUpdateTimeoutMs });
+    await nodeA.click();
+    await page.getByText("Review PASS · 1 claims · digest-alpha").waitFor({ timeout: liveUpdateTimeoutMs });
+    await nodeB.click();
+    await page.getByText("Review BLOCK · 2 claims · digest-beta").waitFor({ timeout: liveUpdateTimeoutMs });
+    expect(mapResponses.length).toBeGreaterThanOrEqual(4);
+    expect(Math.max(0, ...blankMs)).toBeLessThan(500);
+    expect(errors).toEqual([]);
+    console.log(`WORK_MAP_LIVE_METRICS ${JSON.stringify({ ...timings, blankMs, mapResponses: mapResponses.length,
+      revisionResponses: revisionResponses.length,
+      maxMapDurationMs: Math.max(...mapResponses.map((r) => r.durationMs ?? 0)),
+      maxRevisionDurationMs: Math.max(...revisionResponses.map((r) => r.durationMs ?? 0)) })}`);
+  });
+
+  it("keeps primary actions and selected navigation readable in the light theme", async (ctx) => {
+    if (browser === undefined) return ctx.skip();
+    const r = repo("review/app"); await r.index();
+    const { page, server } = await open(r.root);
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto(`${server.origin}/review`);
+    await page.getByRole("button", { name: "Review changes", exact: true }).waitFor();
+    const result = await new AxeBuilder({ page }).include('nav a[aria-current="page"]').include("main button").withRules(["color-contrast"]).analyze();
+    expect(result.violations).toEqual([]);
+  });
+
+  it("adds a session and shows only changed/reference file categories", async (ctx) => {
+    if (browser === undefined) return ctx.skip();
+    const r = repo("review/app"); await r.index();
+    const { page, server, errors } = await open(r.root);
+    await page.goto(`${server.origin}/session-preview`);
+    await page.getByText("No recorded sessions yet.", {exact:true}).waitFor();
+    await page.locator(".session-add > summary").click();
+    await page.getByLabel("Work name", {exact:true}).fill("Refresh flow");
+    await page.getByRole("button", {name:"Add work",exact:true}).click();
+    await page.getByRole("heading", {name:"[Codex] Refresh flow",exact:true}).waitFor();
+    await page.getByText("No recorded file changes.",{exact:true}).waitFor();
+    await page.getByText("No file references recorded.",{exact:true}).waitFor();
+    expect(await page.locator(".session-root-node").count()).toBe(1);
+    expect(await page.locator(".react-flow__edge").count()).toBe(0);
+    const accessibility = await new AxeBuilder({page}).withRules(["nested-interactive"]).analyze();
+    expect(accessibility.violations).toEqual([]); expect(errors).toEqual([]);
+  });
+
   it("keeps mobile pages and Decision dialogs within the viewport", async (ctx) => {
     if (browser === undefined) return ctx.skip();
     const r = repo("review/app");
@@ -314,105 +444,32 @@ describe("DUO UI in a browser (T18.1)", () => {
     await page.close();
   });
 
-  it("shows live agent work, review, file changes and completion without refreshing", async (ctx) => {
+  it("renders preview and production Work map with malformed optional task fields", async (ctx) => {
     if (browser === undefined) return ctx.skip();
-    const liveUpdateTimeoutMs = 30_000;
     const r = repo("review/app");
-    await r.index();
+    r.write(".duo-project/runtime/work-tasks.json", JSON.stringify({ format: "duo.work-tasks/2", tasks: [{
+      id: "invalid-preview", agent: "Codex", name: "Malformed preview", updatedAt: new Date().toISOString(), status: "active",
+      changedFiles: "not an array", referencedFiles: [42, null, "../outside"], providedContext: { recordedAt: "invalid", items: "bad" },
+    }] }));
     const { page, server, errors } = await open(r.root);
-    const mapResponses: { at: number; revision: string | undefined; review: unknown; durationMs: number | undefined }[] = [];
-    const revisionResponses: { at: number; revision: string | undefined; durationMs: number | undefined }[] = [];
-    page.on("response", async (response) => {
-      const endpoint = new URL(response.url()).pathname;
-      if (!response.ok() || (endpoint !== "/api/work-map" && endpoint !== "/api/work-revision")) return;
-      const result = await response.json().catch(() => undefined) as
-        { data?: { revision?: string; nodes?: { type: string; review?: unknown }[] }; meta?: { durationMs?: number } } | undefined;
-      if (result === undefined) return;
-      if (endpoint === "/api/work-map") mapResponses.push({ at: Date.now(), revision: result.data?.revision,
-        review: result.data?.nodes?.find((n) => n.type === "task")?.review, durationMs: result.meta?.durationMs });
-      else revisionResponses.push({ at: Date.now(), revision: result.data?.revision, durationMs: result.meta?.durationMs });
-    });
+    await page.goto(`${server.origin}/session-preview`);
+    await page.getByRole("heading", { name: "[Codex] Malformed preview", exact: true }).waitFor();
+    await page.getByRole("region", { name: "Session changed and referenced files graph" }).waitFor();
     await page.goto(`${server.origin}/work`);
-    await see(page, "Add a work item to explore its DUO neighbourhood.");
-    const session = "live-graph-session";
-    const name = "Live graph probe";
-    const targetRef = nodeId(definitionRef("issue", "AUTH-7"));
-    const timings: Record<string, number> = {};
-    const start = Date.now();
-    const task = touchWorkTask(r.root, "Codex", name, new Date(), { duoSessionId: session, targetRef });
-    expect(task).toBeDefined();
-    const node = page.locator(".react-flow__node").filter({ hasText: `[Codex] ${name}` });
-    try { await node.waitFor({ timeout: liveUpdateTimeoutMs }); }
-    catch (error) {
-      const currentMap = await page.evaluate("fetch('/api/work-map').then(r => r.json()).then(r => r.data)") as { nodes?: { type: string; label: string }[] };
-      console.log(`WORK_MAP_TASK_DEBUG ${JSON.stringify({ mapResponses, revisionResponses,
-        serverTask: currentMap.nodes?.find((n) => n.type === "task"), page: await page.locator(".work-page").textContent(), errors })}`);
-      throw error;
-    }
-    timings.taskVisibleMs = Date.now() - start;
-    await node.click();
-    await page.locator(".work-detail").getByRole("heading", { name: `[Codex] ${name}` }).waitFor();
-    expect(await page.locator(".work-detail").textContent()).toContain(targetRef);
-    await page.evaluate(`(() => {
-      const blankMs = [];
-      let absentAt;
-      const observer = new MutationObserver(() => {
-        const present = document.querySelector(".react-flow__node") !== null;
-        if (!present && absentAt === undefined) absentAt = performance.now();
-        else if (present && absentAt !== undefined) { blankMs.push(performance.now() - absentAt); absentAt = undefined; }
-      });
-      observer.observe(document.body, { childList: true, subtree: true });
-      window.workGraphProbe = { blankMs, observer };
-    })()`);
-
-    const reviewStart = Date.now();
-    recordWorkReview(r.root, session, task?.id ?? "", { digest: "live-graph-review", verdict: "ASK", claimCount: 2 }, new Date());
-    try { await page.getByText("Review ASK · 2 claims").waitFor({ timeout: liveUpdateTimeoutMs }); }
-    catch (error) {
-      const currentMap = await page.evaluate("fetch('/api/work-map').then(r => r.json()).then(r => r.data)") as { nodes?: { type: string; review?: unknown }[] };
-      const stored = JSON.parse(fs.readFileSync(path.join(r.root, ".duo-project/runtime/work-tasks.json"), "utf8")) as { tasks: { review?: unknown }[] };
-      console.log(`WORK_MAP_REVIEW_DEBUG ${JSON.stringify({ mapResponses, revisionResponses,
-        detail: await page.locator(".work-detail").textContent(), storedReview: stored.tasks[0]?.review,
-        serverReview: currentMap.nodes?.find((n) => n.type === "task")?.review, errors })}`);
-      throw error;
-    }
-    timings.reviewVisibleMs = Date.now() - reviewStart;
-
-    const fileStart = Date.now();
-    r.write("live-graph-probe.txt", "changed while the page is open\n");
-    await page.locator(".react-flow__node").filter({ hasText: "live-graph-probe.txt" }).waitFor({ timeout: liveUpdateTimeoutMs });
-    await page.getByText("Index stale").waitFor({ timeout: liveUpdateTimeoutMs });
-    timings.fileVisibleMs = Date.now() - fileStart;
-    const blankMs = await page.evaluate(`(() => {
-      window.workGraphProbe?.observer.disconnect();
-      return window.workGraphProbe?.blankMs ?? [];
-    })()`) as number[];
-
-    const completeStart = Date.now();
-    completeWorkTask(r.root, task?.id ?? "", new Date());
-    await node.waitFor({ state: "detached", timeout: liveUpdateTimeoutMs });
-    timings.completedVisibleMs = Date.now() - completeStart;
-
-    const sharedA = touchWorkTask(r.root, "Codex", "Shared review label\nvariant alpha", new Date(), { duoSessionId: session });
-    const sharedB = touchWorkTask(r.root, "Codex", "Shared review label\nvariant beta", new Date(), { duoSessionId: session });
-    expect(sharedA?.id).not.toBe(sharedB?.id);
-    recordWorkReview(r.root, session, sharedA?.id ?? "", { digest: "digest-alpha", verdict: "PASS", claimCount: 1 }, new Date());
-    recordWorkReview(r.root, session, sharedB?.id ?? "", { digest: "digest-beta", verdict: "BLOCK", claimCount: 2 }, new Date());
-    const nodeA = page.locator(`.react-flow__node[data-id="task:${sharedA?.id}"]`);
-    const nodeB = page.locator(`.react-flow__node[data-id="task:${sharedB?.id}"]`);
-    await nodeA.waitFor({ timeout: liveUpdateTimeoutMs });
-    await nodeB.waitFor({ timeout: liveUpdateTimeoutMs });
-    await nodeA.click();
-    await page.getByText("Review PASS · 1 claims · digest-alpha").waitFor({ timeout: liveUpdateTimeoutMs });
-    await nodeB.click();
-    await page.getByText("Review BLOCK · 2 claims · digest-beta").waitFor({ timeout: liveUpdateTimeoutMs });
-    expect(mapResponses.length).toBeGreaterThanOrEqual(4);
-    expect(Math.max(0, ...blankMs)).toBeLessThan(500);
+    await page.locator(".react-flow__node").filter({ hasText: "Malformed preview" }).waitFor();
     expect(errors).toEqual([]);
-    console.log(`WORK_MAP_LIVE_METRICS ${JSON.stringify({ ...timings, blankMs, mapResponses: mapResponses.length,
-      revisionResponses: revisionResponses.length,
-      maxMapDurationMs: Math.max(...mapResponses.map((r) => r.durationMs ?? 0)),
-      maxRevisionDurationMs: Math.max(...revisionResponses.map((r) => r.durationMs ?? 0)) })}`);
+    await page.close();
+  });
+
+  it("shows a newly recorded session and completes it without reloading", async (ctx) => {
+    if (browser === undefined) return ctx.skip();
+    const r=repo("review/app"); const {page,server,errors}=await open(r.root);
+    await page.goto(`${server.origin}/session-preview`); await page.getByText("No recorded sessions yet.",{exact:true}).waitFor();
+    touchWorkTask(r.root,"Codex","Live session",new Date(),{duoSessionId:"live-session"});
+    await page.getByRole("heading",{name:"[Codex] Live session",exact:true}).waitFor({timeout:30000});
+    await page.getByRole("button",{name:"Mark completed",exact:true}).click();
+    await page.getByText("No recorded sessions yet.",{exact:true}).waitFor();
+    expect(errors).toEqual([]);
   });
 
   it("supports keyboard skip navigation and native decision-dialog focus handling", async (ctx) => {
@@ -472,8 +529,9 @@ describe("DUO UI in a browser (T18.1)", () => {
     expect(await page.getByRole("alert").count()).toBe(0);
 
     await nav(page, "Direction");
+    await page.locator("details.section > summary").filter({hasText:"Requirements"}).click();
     await page.getByRole("link", { name: "RPT-01", exact: true }).first().waitFor();
-    const d010 = page.getByRole("row").filter({ hasText: "D-010" }).first();
+    const d010 = page.locator(".decision-row").filter({ hasText: "D-010" }).first();
     expect(await d010.textContent()).toContain("CONFIRMED");
 
     await nav(page, "Context");
@@ -513,7 +571,7 @@ describe("DUO UI in a browser (T18.1)", () => {
     await see(page, "No proposal is waiting for a human.");
 
     await nav(page, "Direction");
-    const confirmedRow = page.getByRole("row").filter({ hasText: decisionId }).first();
+    const confirmedRow = page.locator(".decision-row").filter({ hasText: decisionId }).first();
     await confirmedRow.waitFor();
     expect(await confirmedRow.textContent()).toContain("CONFIRMED");
 
@@ -542,6 +600,12 @@ describe("DUO UI in a browser (T18.1)", () => {
     await page.reload();
     await page.getByRole("heading", { name: "RPT-01", level: 1 }).waitFor();
     await see(page, "Definition source");
+    const explore = page.getByRole("link", { name: "Explore in the graph", exact: true });
+    expect(await explore.getAttribute("href")).toBe("/graph?node=RPT-01");
+    await explore.click();
+    await page.getByRole("heading", { name: "Graph", level: 1 }).waitFor();
+    expect(new URL(page.url()).searchParams.get("node")).toBe("RPT-01");
+    await page.getByRole("heading", { name: "Seeds", level: 2, exact: true }).waitFor();
 
     expect(foreign).toEqual([]);
     expect(errors).toEqual([]);
@@ -589,7 +653,7 @@ describe("DUO UI in a browser (T18.1)", () => {
     const { page, errors } = await open(r.root);
     await see(page, "Semantic assistance unavailable · OPENAI_API_KEY is not set");
     expect(await page.getByRole("alert").count()).toBe(0);
-    await nav(page, "Analysis coverage");
+    await page.locator("details.section > summary").filter({hasText:"Analysis coverage"}).click();
     const row = async (language: string) => (await page.getByRole("row").filter({ has: page.getByRole("rowheader", { name: language, exact: true }) }).first().textContent()) ?? "";
     await page.getByRole("rowheader", { name: "typescript" }).waitFor();
     expect(await row("typescript")).toContain("L2 · partial semantics");
