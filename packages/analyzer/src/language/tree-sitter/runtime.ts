@@ -48,9 +48,16 @@ export const defaultGrammarLocator: GrammarLocator = (id) => {
 
 /**
  * web-tree-sitter keeps one WASM runtime per process, so it is initialized once and never
- * reconfigured. Languages and parsers are not global: each analyzer owns its own.
+ * reconfigured. Parsers are not global: each analyzer owns its own.
  */
 let runtimeReady: Promise<void> | undefined;
+
+/**
+ * Grammars from the default locator, loaded once per process and shared by every analyzer. web-tree-sitter
+ * never unloads a loaded grammar, so loading them again for each registry (one per MCP tool call) grew the
+ * process until the WASM function table overflowed.
+ */
+const defaultGrammars = new Map<GrammarId, { readonly language: Language; readonly digest: string }>();
 
 function initRuntime(): Promise<void> {
   runtimeReady ??= Parser.init().catch((error: unknown) => {
@@ -89,6 +96,12 @@ export async function loadGrammarSet(ids: readonly GrammarId[], locate: GrammarL
   const digests = new Map<GrammarId, string>();
   const diagnostics: Diagnostic[] = [];
   for (const id of ids) {
+    const cached = locate === defaultGrammarLocator ? defaultGrammars.get(id) : undefined;
+    if (cached !== undefined) {
+      languages.set(id, cached.language);
+      digests.set(id, cached.digest);
+      continue;
+    }
     let source: Uint8Array;
     try {
       const located = locate(id);
@@ -105,8 +118,10 @@ export async function loadGrammarSet(ids: readonly GrammarId[], locate: GrammarL
           `Grammar "${id}" has ABI ${abi}; web-tree-sitter supports ${MIN_COMPATIBLE_VERSION}..${LANGUAGE_VERSION}`));
         continue;
       }
+      const digest = createHash("sha256").update(source).digest("hex");
       languages.set(id, language);
-      digests.set(id, createHash("sha256").update(source).digest("hex"));
+      digests.set(id, digest);
+      if (locate === defaultGrammarLocator) defaultGrammars.set(id, { language, digest });
     } catch (error) {
       diagnostics.push(createDiagnostic("ANALYZER_INIT_FAILED",
         `Grammar "${id}" could not be loaded (web-tree-sitter ABI ${MIN_COMPATIBLE_VERSION}..${LANGUAGE_VERSION}): ${message(error)}`));
