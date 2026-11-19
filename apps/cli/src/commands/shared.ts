@@ -1,6 +1,7 @@
 /** Helpers shared by the CLI commands (T15): environment, analyzer registry, graph access, actor. */
 import { createDefaultAnalyzerRegistry, readGitUserName, type AnalyzerRegistry } from "@duo-director/analyzer";
 import { createDiagnostic, loadProjectTruth, type DecisionActor, type Diagnostic, type LoadedProject, type ParseResult } from "@duo-director/core";
+import { redactSecrets } from "@duo-director/director";
 import { openProjectGraphReader, withProjectGraphWriter, type GraphStore } from "@duo-director/graph";
 import type { Io } from "../io.js";
 import { t, type Locale } from "../messages.js";
@@ -36,6 +37,24 @@ export class CliFailure extends Error {
   constructor(readonly diagnostics: readonly Diagnostic[]) {
     super(diagnostics.map((d) => `${d.code}: ${d.message}`).join("; "));
   }
+}
+
+/**
+ * Diagnostics for an exception caught by a command catch-all (#220). A CliFailure keeps its own codes;
+ * anything else is a DUO defect (CLI_INTERNAL_ERROR), never CLI_USAGE_INVALID. The message keeps the
+ * original text without the stack, with known credential formats redacted.
+ */
+export function caughtDiagnostics(error: unknown): readonly Diagnostic[] {
+  if (error instanceof CliFailure) return error.diagnostics;
+  const message = error instanceof Error ? error.message : String(error);
+  return [createDiagnostic("CLI_INTERNAL_ERROR", redactSecrets(message).text)];
+}
+
+/** Human lines for caught diagnostics: the error lines, plus one line asking to report an internal error. */
+export function caughtLines(locale: Locale, diagnostics: readonly Diagnostic[]): string[] {
+  const lines = diagLines(diagnostics);
+  if (diagnostics.some((d) => d.code === "CLI_INTERNAL_ERROR")) lines.push(t(locale, "cli.internal-error"));
+  return lines;
 }
 
 /** Opens the graph for reading only (creates nothing). */

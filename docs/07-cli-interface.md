@@ -59,6 +59,8 @@ Operational failure와 Review verdict를 섞지 않는다. Verdict는 `--fail-on
 
 install은 init 전이면 5(`AGENT_NOT_INITIALIZED`), verify 실패면 1이다.
 
+명령이 예상하지 못한 예외로 끝나면 `CLI_INTERNAL_ERROR`(종료 코드 1, #220)다. 잘못된 명령줄의 `CLI_USAGE_INVALID`와 구분하며, 메시지는 원래 예외 메시지(stack 없음, 알려진 credential 형식은 `[REDACTED]`)이고 사람 출력은 DUO 버그로 알려 달라는 한 줄을 더한다. `--json` envelope 모양은 같다. setup에서 쓰기를 시작한 뒤라면 `applied: true`와 `resume`을 그대로 반환한다.
+
 Project Truth를 일부만 읽을 수 있거나 현재 Decision 집합이 모순되면(T40, H-82: lock 불일치, lifecycle 모순, Decision처럼 보이는 Markdown) review와 context는 verdict·Packet 없이 1(\`PROJECT_TRUTH_INVALID\`와 각 파일 진단)이고, doctor는 \`truth.project: invalid\`로 6, status는 0이지만 \`Truth errors\` 줄과 파일을 보인다(JSON \`truth.errors\`). \`decision list\`는 읽지 못한 파일을 따로 적고 confirm·reject는 거부된다. Informed confirm preview는 forbids가 있으면 \`Forbids scope  repository-wide (governs does not narrow forbids)\` 줄을 보인다(T40 N3).
 
 ## Agent 연결 (install)

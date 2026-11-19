@@ -308,6 +308,38 @@ describe("duoctl setup: the agent step interface (for Jira -319)", () => {
     expect(unchanged.result).toMatchObject({ status: "unchanged", steps: { agents: { fake: { status: "existing" } } } });
     expect(t3.prompts).toEqual([]);
   });
+
+  it("an unexpected exception is CLI_INTERNAL_ERROR (#220): before the confirmation nothing is written, after it the resume stays", async () => {
+    const r = repo();
+    const before = snapshot(r.root);
+    const crashingPlan: SetupAgentStep = { id: "fake", plan: () => Promise.reject(new TypeError("Cannot read properties of undefined (reading 'mcp')")), apply: () => Promise.reject(new Error("never applied")) };
+    const t = terminal(r.root, { tty: true, answers: ["y", "y", "y", "y"] });
+    const refused = await setupCommand(env(r.root, t), { repair: false, answersFromStdin: false }, [crashingPlan]);
+    expect(refused.exitCode).toBe(1);
+    expect(refused.diagnostics).toEqual([expect.objectContaining({ code: "CLI_INTERNAL_ERROR", message: "Cannot read properties of undefined (reading 'mcp')" })]);
+    expect(refused.result).toEqual({ status: "failed", applied: false });
+    expect(refused.metric).toBeUndefined();
+    expect(refused.human.join("\n")).toContain("internal DUO error, not a problem with your command line");
+    expect(refused.human.join("\n")).not.toContain("run: duoctl setup");
+    expect(t.prompts.filter(isConfirm)).toHaveLength(0);
+    expect(snapshot(r.root)).toEqual(before);
+
+    // A step result that breaks the interface is thrown outside the step's own try, after the confirmation.
+    const broken: SetupAgentStep = { id: "fake", plan: fakeStep().plan, apply: () => Promise.resolve({ ok: true, diagnostics: [], lines: undefined as unknown as string[], remaining: [] }) };
+    const crashed = await setupCommand(env(r.root, terminal(r.root, { tty: true, answers: ["y", "", "", "y"] })), { repair: false, answersFromStdin: false }, [broken]);
+    expect(crashed.exitCode).toBe(1);
+    expect(crashed.diagnostics.map((d) => d.code)).toEqual(["CLI_INTERNAL_ERROR"]);
+    expect(crashed.result).toEqual({ status: "failed", applied: true, resume: "duoctl setup" });
+    expect(crashed.metric).toEqual({ status: "failed" });
+    expect(crashed.human.join("\n")).toContain("internal DUO error");
+    expect(crashed.human.join("\n")).toContain("run: duoctl setup");
+    expect(fs.existsSync(path.join(r.root, ".duo-project/project.yaml"))).toBe(true);
+    const truth = snapshot(r.root, truthFiles);
+
+    const finished = await setupCommand(env(r.root, terminal(r.root, { tty: true, answers: ["y"] })), { repair: false, answersFromStdin: false }, [fakeStep()]);
+    expect(finished.result).toMatchObject({ status: "set-up", steps: { truth: { status: "existing" }, agents: { fake: { status: "ok" } } } });
+    expect(snapshot(r.root, truthFiles)).toEqual(truth);
+  });
 });
 
 describe("duoctl setup: metrics follow the confirmation (T183 follow-up)", () => {
