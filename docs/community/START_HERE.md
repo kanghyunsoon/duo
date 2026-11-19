@@ -2,7 +2,7 @@
 
 DUO is a local-first CLI and MCP server that reviews code changes against engineering Decisions a person confirmed. It is not a code generator, a security sandbox or an authenticated team permission system.
 
-You do not need to understand every package to contribute. Documentation, reproducible bug reports, tests and small UX fixes all help. This page is for contributors outside the core team, who work from a fork without write access.
+You do not need to understand every package to contribute. Documentation, reproducible bug reports, tests and small UX fixes all help. This page is for outside contributors, who work from a fork without write access.
 
 ## 1. Pick a task
 
@@ -51,7 +51,7 @@ git push origin docs/my-first-fix
 Open a pull request from your fork to **`kanghyunsoon/duo` base `next`**. Fill in the template: the linked issue, what changed, how you tested it and any change users would see.
 
 - Keep it to one problem.
-- A reviewer who is not the author approves, CI passes on all three systems, then a maintainer merges. Push fixes to the same branch when reviewers ask for changes.
+- The maintainer reviews your pull request and merges it after CI passes on all three systems. Push fixes to the same branch when the maintainer asks for changes.
 - Agents may propose Decisions; only a person confirms them. Never weaken a Decision or a test expectation to get a PASS.
 - Never post credentials, tokens or private project files. Report vulnerabilities privately as described in [SECURITY.md](../../SECURITY.md).
 
@@ -60,7 +60,7 @@ Open a pull request from your fork to **`kanghyunsoon/duo` base `next`**. Fill i
 - Claim before you start: comment on the issue with what you plan to change and wait until a maintainer assigns it to you, so two people do not work on the same thing.
 - Ask questions in Korean or English. Write issue and pull request titles, descriptions and code comments in English.
 - AI coding tools are fine. You are responsible for what you submit: understand it, run the checks and answer review questions. Fill in the AI assistance line of the pull request template.
-- CI for contributors outside the team starts after a maintainer reads the change and approves the run, again after each new push. "Changes requested" is a normal step; push fixes to the same branch.
+- CI for outside contributors starts after a maintainer reads the change and approves the run, again after each new push. "Changes requested" is a normal step; push fixes to the same branch.
 - Changes to sensitive files get a stricter review, for example workflows, `package.json`, the lockfile, `scripts/`, the CLI or the agent and MCP integration (full list in CONTRIBUTING). Say why the change is needed.
 - If nobody replies within a week, leave one follow-up comment on the same issue or pull request. Do not open a duplicate issue.
 - Merging is not guaranteed. While a release is frozen, approved pull requests may wait until it ships.

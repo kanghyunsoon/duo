@@ -2,6 +2,8 @@
 
 DUO 6인 팀(T82)이 처음 기여를 시작할 때 읽는 문서다. 역할과 첫 작업, 2주 일정은 [roles-and-plan.md](roles-and-plan.md)에 있다. 외부 기여자 규칙은 [CONTRIBUTING.md](../../CONTRIBUTING.md)가 기준이고, 이 문서는 팀 운영에 필요한 내용을 더한다.
 
+> **2026-11-19부터는 maintainer 한 명이 운영한다(H-107).** 팀 개발 기간이 끝나 DUO는 maintainer kanghyunsoon이 혼자 개발한다. 리뷰와 병합은 §3a를 따르며, 작성자가 아닌 사람의 승인(독립 리뷰)은 병합 조건이 아니다. 팀 역할, 첫 작업, 일정은 팀 기간의 기록으로 남겨 둔다.
+
 ## 1. DUO가 하는 일
 
 DUO는 coding agent가 일하는 저장소에 사람이 확정한 설계 결정(Decision)과 Project Truth를 두고, agent에게 필요한 Context를 주고, 코드 변경이 확정된 Decision을 어기는지 review한다. Agent는 Decision을 제안만 하고, 확정·거절·대체는 사람이 한다.
@@ -39,74 +41,57 @@ DUO는 coding agent가 일하는 저장소에 사람이 확정한 설계 결정(
    ```
 4. PR template의 항목을 채운다(아래 §4).
 5. CI `verify` 3 OS(Windows·Ubuntu·macOS)를 기다린다. Ubuntu·macOS는 10~15분, Windows는 40~60분 걸린다. Windows에서 `project-local install (npx --no-install duoctl)` 테스트 하나만 시간 초과로 실패하면 알려진 문제 #37이다. 로그를 PR에 링크하고 maintainer에게 재실행을 요청한다. 다른 실패는 PR에서 고친다.
-6. 준비되면 Draft를 "Ready for review"로 바꾸고, 작성자가 아닌 팀원 1명에게 review를 요청한다. 바뀐 경로의 영역 책임자에게는 CODEOWNERS가 자동으로 요청한다(§3a). Reviewer는 §3a "리뷰 기록"대로 확인하고 Approve 또는 Request changes를 남긴다.
-7. 일반 PR은 영역 책임자(작성자가 아닌 사람) 또는 maintainer가 squash merge한다. §5의 변경은 maintainer가 merge한다(maintainer가 쓴 PR은 §3a 규칙 4). 작성자는 자기 PR을 merge하지 않는다(§3a).
+6. 준비되면 Draft를 "Ready for review"로 바꾼다. 외부 기여자의 PR은 maintainer가 리뷰한다(§3a).
+7. Maintainer가 §3a 절차대로 squash merge한다. Maintainer가 쓴 PR에도 독립 승인은 필요 없다(H-107).
 
 막히면(blocked) Issue에 무엇을 시도했고 무엇이 막혔는지 적고 `help wanted`를 요청한다. 하루 넘게 혼자 붙잡지 않는다. 질문은 Issue 댓글이나 [Discussions](https://github.com/kanghyunsoon/duo/discussions)에 남긴다. 보안 취약점은 공개 Issue가 아니라 [SECURITY.md](../../SECURITY.md)의 비공개 신고를 쓴다.
 
-## 3a. 영역 책임자와 리뷰(T178)
+## 3a. 리뷰와 병합(maintainer 1인 운영, H-107)
 
-리뷰와 일반 PR merge를 maintainer 한 명에게 몰지 않기 위해 영역별 책임자를 둔다. [.github/CODEOWNERS](../../.github/CODEOWNERS)가 바뀐 경로의 책임자에게 리뷰를 자동으로 요청한다. 이 파일은 권고용이다: `next` ruleset은 code owner 승인을 요구하지 않으므로(`require_code_owner_review: false`) 작성자가 아닌 write 권한 팀원 누구의 승인이든 유효하다.
+2026-11-19부터 DUO는 maintainer kanghyunsoon 한 명이 개발한다. 작성자가 아닌 사람의 승인(독립 리뷰)은 병합 조건이 아니다. 대신 3개 OS CI와 maintainer의 자기 검토 기록으로 품질을 지킨다. 팀 개발 기간(T178~2026-11-18)에 쓰던 영역 책임자, 독립 리뷰, 48시간 재배정 규칙은 더 이상 적용하지 않으며, 그 내용은 이 문서의 git 기록에 남아 있다.
 
-| 영역 | 경로 | 책임자(1차 리뷰) |
-|---|---|---|
-| Core / Decision | `packages/core/` | kanghyunsoon, strdeok |
-| Analyzer / Review | `packages/analyzer/`, `packages/director/` | kang987654, ghkim1632 |
-| Graph / Indexing | `packages/graph/` | kang987654, kanghyunsoon |
-| MCP / Integration, CLI | `packages/integration/`, `apps/cli/` | Alexjung0115, strdeok(integration), kanghyunsoon(CLI) |
-| UI / UX | `packages/ui/`, `tests/ui/` | strdeok, Alexjung0115 |
-| CI / Test | `tests/`, `bench/`, `fixtures/`, `vitest*.config.ts`, `.github/workflows/` | ghkim1632, s2vn9wxx |
-| Docs / Community | `docs/`, `docs/community/`, `CONTRIBUTING.md`, `README*.md`, Issue·PR template | s2vn9wxx, ghkim1632 |
+### Maintainer가 쓴 PR
 
-위 표에 없는 경로(`tsconfig*`, `eslint.config.js`, `scripts/` 등 저장소 설정)는 기본값으로 maintainer에게 요청된다.
+1. `next`에서 branch를 만들어 PR로 올린다. `next`에 직접 push하지 않는다.
+2. 현재 HEAD에서 CI `verify`가 Windows·Ubuntu·macOS 모두 통과해야 한다. 로그 근거 없이 실패를 flaky로 치지 않는다.
+3. 병합 전에 PR 댓글로 자기 검토 기록을 남긴다. 검토한 HEAD SHA, 바뀐 범위, 직접 실행한 테스트와 CI 결과, 남은 항목(없으면 "없음")을 적는다. 보안, 동시성(lock, 여러 process), 파일 쓰기·삭제·경로, Decision·verdict 의미를 바꾸는 PR은 수정 전후 동작을 직접 재현해 결과를 함께 적는다.
+4. 리뷰 스레드를 모두 resolve한다.
+5. 기록한 HEAD 그대로 병합한다: `gh pr merge <번호> --squash --match-head-commit <HEAD SHA>`.
+6. 병합 직후 그 squash commit에서 `next` CI 3 OS가 통과했는지 확인하고 나서 다음 PR을 병합한다. 실패하면 다음 병합을 멈추고 그 실패부터 고친다.
 
-규칙:
+### 외부 기여자와 이전 팀원의 PR
 
-1. 영역 책임자가 먼저 리뷰한다. 책임자가 작성자면 같은 영역의 다른 책임자나 다른 팀원이 리뷰한다.
-2. 작성자는 자기 PR을 승인하거나 merge하지 않는다.
-3. 작성자가 아닌 사람의 승인과 CI `verify` 3 OS 통과가 있으면, §5에 해당하지 않는 일반 PR은 영역 책임자(작성자 아님) 또는 maintainer가 squash merge한다.
-4. §5의 변경(Decision 권한·형식·verdict 의미, release, 보안, 유료 실행, 외부 모집)과 `.github/workflows/`, 패키지 manifest·lockfile, `scripts/release/`, `docs/conflicts.md`의 변경은 maintainer가 최종 판단한다. 다른 팀원이 쓴 이런 PR은 작성자가 아닌 사람의 정식 Approve 뒤 maintainer가 최종 판단하고 직접 merge한다. Maintainer가 직접 쓴 이런 PR은 작성자가 아닌 사람의 정식 Approve와, HEAD SHA를 적은 maintainer의 최종 승인 댓글이 모두 있어야 한다. 이 PR의 merge 담당(Assignee)은 최종 승인 댓글이 올라온 뒤에 지정하고, 그 전에는 Assignee를 두지 않는다. 그 뒤 작성자가 아닌 write 권한 팀원이 merge한다. merge 담당은 merge 직전에 최종 승인 댓글의 HEAD SHA가 PR의 현재 HEAD와 같은지 확인하고, 다르거나 댓글이 없으면 merge하지 않는다. 다른 리뷰어의 Approve나 이전 HEAD의 최종 승인은 이를 대신하지 않는다. 최종 승인 뒤 새 push가 있으면 둘 다 다시 받는다. 최종 승인 댓글은 maintainer 본인이 직접 쓴다. maintainer 계정으로 일하는 agent나 자동화는 maintainer가 그 PR의 최종 판단을 명시적으로 위임한 경우에만 이 댓글을 게시하고 위임된 merge를 하며, 그 댓글에 위임으로 게시했다는 사실을 적는다.
-5. 리뷰 요청 뒤 48시간 안에 응답이 없으면 작성자가 아래 "리뷰 지연 처리"대로 다른 적격 리뷰어 1명에게 다시 요청한다. 같은 사람에게 반복해서 멘션하지 않는다.
-6. Maintainer가 자리를 비우면 3의 일반 PR은 영역 책임자가 계속 merge한다. 4의 변경, release, npm publish, tag, ruleset, 관리자 권한은 maintainer가 돌아올 때까지 기다린다.
-7. 리뷰 요청과 merge 담당을 구분한다. 리뷰 요청(Reviewers)은 검토할 사람에게만 보내고, 일반 PR은 독립 리뷰어 1명이면 충분하다. merge 담당은 PR의 Assignees에 1명을 지정한다. 작성자는 제외하고, 규칙 3·4의 자격이 있는 사람이어야 한다. 규칙 4의 PR은 규칙 4대로 정한다(maintainer가 쓴 PR은 최종 승인 뒤 지정, 다른 팀원이 쓴 PR은 maintainer). 그 밖의 PR은 작성자가 지정하고, 작성자가 지정할 권한이 없으면 승인한 리뷰어가 지정한다. 승인이 끝나면 남은 리뷰 요청은 작성자나 merge 담당이 Remove한다.
+- Maintainer가 리뷰하고 Approve 또는 Request changes를 남긴다. 리뷰 본문에는 검토한 HEAD SHA, 확인한 범위, 직접 실행한 테스트를 적는다.
+- [CONTRIBUTING.md](../../CONTRIBUTING.md)의 민감한 파일은 한 줄씩 읽는다. 외부 기여자의 workflow 실행은 변경을 읽은 뒤에 승인한다.
+- 병합 조건은 위의 2, 4, 5, 6과 같다.
+- 작성자의 branch는 maintainer가 고치지 않는다. 작성자가 더 이상 진행하지 않으면 maintainer branch에서 이어 작업하고, 원래 PR을 링크하고 원 작성자를 `Co-authored-by`로 남긴다.
+
+### 팀 기간에 남은 리뷰
+
+팀 기간에 남은 Request changes 때문에 PR을 병합할 수 없으면, maintainer가 지적한 항목이 현재 HEAD에 모두 반영됐는지 확인한다. 반영된 것이 확인되면 그 근거를 PR에 적고, 사유를 붙여 GitHub의 dismiss로 정리한다. 반영되지 않은 지적은 dismiss하지 않고 먼저 고친다.
+
+### Maintainer가 결정할 변경(§5)
+
+§5의 변경도 독립 승인 없이 maintainer가 결정한다. 정책이 바뀌면 [docs/conflicts.md](../conflicts.md)에 Human Decision을 먼저 기록하고 구현을 병합한다. Release, npm publish, tag, GitHub Release는 [docs/release/checklist.md](../release/checklist.md)와 release 스크립트(`release:preflight`, `release:authorization`)를 지금 그대로 따른다.
+
+### Agent
+
+Maintainer 계정으로 일하는 coding agent는 maintainer가 지시한 작업에 한해 같은 절차로 PR을 병합할 수 있다. 이때 자기 검토 기록에 agent가 작성했다는 사실을 적는다. 유료 agent 실행, release, publish, ruleset 변경에는 작업마다 maintainer의 명시적 지시가 있어야 한다.
 
 ### GitHub가 강제하는 것과 운영 규칙
 
-`next` ruleset(`next-integration`)이 실제로 막는 것과 사람이 지키는 규칙을 구분한다.
-
 | 항목 | ruleset이 강제 | 운영 규칙 |
 |---|---|---|
-| 승인 | 작성자가 아닌 사람의 승인 1개, 마지막 push를 하지 않은 사람의 승인 | 영역 책임자가 먼저 리뷰 |
-| 새 push | 기존 Approve는 자동으로 무효. Request changes는 남으므로 그 리뷰어가 다시 리뷰해야 merge된다 | 수정 commit과 근거를 답글로 남기고 그 리뷰어에게 한 번 다시 요청 |
-| CI | `verify` Windows·Ubuntu·macOS 통과 | 실패는 로그 근거 없이 flaky로 보지 않는다 |
-| 리뷰 스레드 | 모두 resolve | 스레드는 연 사람이 resolve한다 |
-| Merge | squash만, write 권한자는 조건을 채우면 누구나(작성자도 막지 않는다) | 작성자는 merge하지 않는다. merge 담당은 Assignee(규칙 7) |
-| Maintainer 전용 경로 | 강제하지 않는다(code owner 승인 요구 없음) | 규칙 4: 정식 Approve와 현재 HEAD를 적은 maintainer의 최종 승인 댓글. merge 담당은 최종 승인 뒤 지정하고 merge 직전에 HEAD 일치를 확인한다 |
-| Draft | 리뷰 요청 없음. Ready로 바꿀 때 CODEOWNERS가 요청 | Ready 전에 CI를 확인 |
-| 관리자 bypass | admin은 가능 | 쓰지 않는다 |
+| 승인 | 요구하지 않는다(`next-integration`의 `required_approving_review_count: 0`) | 병합 전에 자기 검토 기록을 남긴다(외부 PR은 maintainer 리뷰) |
+| CI | `verify` Windows·Ubuntu·macOS 필수 | 병합한 squash commit의 `next` CI를 확인한 뒤 다음 병합 |
+| 리뷰 스레드 | 모두 resolve | |
+| Merge | squash만 | `--match-head-commit`으로 검토한 HEAD만 병합 |
+| 삭제·force push | `branches-immutable`이 `main`·`next`에서 막는다 | |
+| `main` | `main-stable`이 모든 갱신을 막는다. admin bypass로만 옮길 수 있다 | release 때만 fast-forward로 옮긴다. 그 release의 Human Decision을 기록한 뒤 |
+| Release tag | `release-tags-create`, `release-tags-immutable` | release 절차대로 |
+| `next`에서 admin bypass | admin은 가능 | 쓰지 않는다(필수 CI를 건너뛰므로) |
 
-### 리뷰 지연 처리(48시간)
-
-- **기준 시각:** PR timeline의 "requested a review" 시각이다. Ready 전환 때 CODEOWNERS가 보낸 요청도 포함하고, 새 push 뒤 다시 요청했다면 그 시각부터 센다. 그 리뷰어의 Approve, Request changes, Comment review나 PR 댓글이 응답이다.
-- **지연이 아닌 경우:** Draft PR, 해결하지 않은 Request changes(작성자 수정 대기), 다른 PR의 merge를 기다리는 PR(본문에 적는다), 리뷰어가 다음 진행 예정일을 적었고 그 날이 지나지 않은 PR은 재배정하지 않는다.
-- **재배정:** 작성자가 48시간 넘은 요청을 Remove하고 1명에게 다시 요청한다. 같은 영역의 다른 책임자를 먼저 고르고, 없거나 바쁘면 대기 리뷰가 가장 적은 write 팀원을 고른다. 작성자 자신과 이 PR에서 이미 지연된 사람은 고르지 않는다. 바꾼 이유(이전 요청 시각, 새 리뷰어)를 PR에 한 줄 남긴다.
-- **작성자가 처리하지 못할 때:** 작성자가 48시간을 더 넘겨 처리하지 않으면 영역 책임자나 maintainer가 같은 방법으로 재배정한다.
-- **첫 응답 이후:** Approve나 Request changes 없이 Comment로만 답한 리뷰어는 다음 진행 예정일을 적는다. 예정일은 최대 48시간 뒤다. 예정일이 없거나 그 날이 지나면 위와 같이 재배정한다. 수정을 push하고 Request changes를 남긴 리뷰어에게 다시 요청하면 그 시각부터 48시간을 다시 센다. 재검토가 없어도 그 Request changes를 다른 사람이 dismiss하지 않는다. 작성자가 maintainer에게 알리고 maintainer가 처리를 정한다. 작성자 수정 대기가 7일을 넘으면 작성자는 PR을 Draft로 바꾸거나 다음 진행 예정일을 적는다.
-- **업무량:** 한 사람에게 열린 리뷰 요청은 3개 이하로 유지한다. 다른 사람의 대기 수는 `gh pr list --search "review-requested:<login> draft:false" --json number --jq length`로, 자기 목록은 `gh pr list --search "review-requested:@me draft:false"`로 본다.
-
-### 리뷰 기록
-
-리뷰어는 리뷰 본문에 다음을 남긴 뒤 Approve 또는 Request changes를 제출한다. Comment review는 승인으로 세지 않으므로, 승인하려면 Approve로 제출한다.
-
-- 검토한 HEAD SHA
-- 검토 범위: 본 파일, 수용 기준, 관련 회귀 테스트
-- 직접 실행한 테스트와 CI에서 확인한 결과를 나눠 적는다
-- 발견한 문제와 남은 항목(없으면 "없음")
-- 판단: Approve 또는 Request changes
-
-CI 3 OS가 통과한 PR에서 전체 CI나 `pnpm verify`를 다시 돌리지 않는다. 바뀐 부분의 테스트만 직접 실행한다. 보안, 동시성(lock, 여러 process), 파일 시스템 쓰기·삭제·경로, Decision·verdict 의미를 바꾸는 PR은 리뷰어가 실패 사례나 수정 전후 동작을 직접 재현하고 그 결과를 적는다. CI는 실패한 job만 다시 실행한다.
-
-이 규칙은 기존 write 권한 안에서 운영한다. 관리자 권한, npm publish, tag, release, ruleset은 바뀌지 않는다.
+이전 팀원의 write 권한은 열린 PR을 정리한 뒤 triage로 낮춘다(H-107). 그 전에도 팀원은 위 절차를 따르고, 병합은 maintainer가 한다.
 
 ## 4. PR에 쓸 것
 
@@ -121,7 +106,7 @@ CI 3 OS가 통과한 PR에서 전체 CI나 `pnpm verify`를 다시 돌리지 않
 
 ## 5. Maintainer 승인이 필요한 변경
 
-아래는 review 1명과 CI만으로 merge하지 않는다. Issue에서 maintainer의 명시적 승인을 먼저 받는다.
+아래는 CI 통과만으로 merge하지 않는다. Maintainer가 결정하고, 정책이 바뀌면 [docs/conflicts.md](../conflicts.md)에 Human Decision을 먼저 기록한다(§3a).
 
 - Decision authority와 RBAC: 누가 Decision을 확정·거절·대체하는지, `DECISION_PERMISSIONS`
 - Project Truth 형식, Decision Lock, 공개 `/1` 형식
