@@ -1,6 +1,6 @@
 /**
  * The default analyzer registry (T18.0): TypeScript, JavaScript, Java, C#, C++, Python. Every grammar
- * loads once when the registry is created and is reused for every file. The caller disposes it.
+ * loads once per process and is reused for every file and registry. The caller disposes it.
  */
 import { failure, success, type ParseResult } from "@duo-director/core";
 import { createAnalyzerRegistry, type AnalyzerRegistry } from "./registry.js";

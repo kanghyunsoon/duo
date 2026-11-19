@@ -60,4 +60,22 @@ describe("analyzer registry (AC-005-04)", () => {
     // The digest covers every analyzer: removing one changes it.
     expect(createAnalyzerRegistry(registry.analyzers.filter((a) => a.id !== "java")).digest()).not.toBe(registry.digest());
   });
+
+  it("keeps working when a long-lived process creates the default registry for every request", async () => {
+    // The MCP server creates one per tool call. web-tree-sitter never unloads a grammar, so loading the grammars
+    // again for each registry used to exhaust the WASM function table at about the 172nd registry.
+    let digest: string | undefined;
+    for (let i = 0; i < 250; i++) {
+      const created = await createDefaultAnalyzerRegistry();
+      const registry = created.value;
+      if (registry === undefined) throw new Error(created.diagnostics.map((d) => d.message).join("; "));
+      digest ??= registry.digest();
+      expect(registry.digest()).toBe(digest);
+      if (i === 249) {
+        const analyzed = registry.analyze({ path: "src/a.ts" as RepoPath, content: new TextEncoder().encode("export class A { run() { return 1; } }\n") });
+        expect(analyzed.value?.symbols.map((s) => s.qualifiedName)).toEqual(["A", "A.run"]);
+      }
+      registry.dispose();
+    }
+  });
 });
