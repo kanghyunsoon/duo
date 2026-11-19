@@ -9,7 +9,7 @@ This report documents the design, verification, and Windows 11 benchmark measure
 1. Global install (`npm install -g --prefix <dir>`) in `tests/distribution/dist.e2e.test.ts` `beforeAll` and `scripts/release/conformance.mjs`.
 2. Project-local install (`npm install -D <tarballPath>`) to verify `npx --no-install duoctl`.
 
-Issue #37 noted that `npm install <local-tarball.tgz>` has hit 180s timeouts on Windows runners and proposed **Option 3**: serving the already-built `.tgz` from a throwaway `127.0.0.1` HTTP registry (`startLocalNpmRegistry`) and installing `@duo-director/cli@<version> --registry=http://127.0.0.1:<port>`. In this PR, `tests/distribution/dist.e2e.test.ts` switches its `beforeAll` global install (`npm install -g`) to `startLocalNpmRegistry({ tarballPath: pack.tarball })` (asserting HTTP `200` on every registry request and `0` third-party `404` fetches) while retaining the direct `.tgz` file specifier in the project-local `npx` test so both installation paths remain covered in E2E.
+Issue #37 noted that `npm install <local-tarball.tgz>` has hit 180s timeouts on Windows runners and proposed **Option 3**: serving the already-built `.tgz` from a throwaway `127.0.0.1` HTTP registry (`startLocalNpmRegistry`) and installing `@duo-director/cli@<version> --registry=http://127.0.0.1:<port>`. PR #206 switched the `beforeAll` global install (`npm install -g`) in `tests/distribution/dist.e2e.test.ts` to `startLocalNpmRegistry({ tarballPath: pack.tarball })`, and this follow-up (#222) switches the project-local `npx` install (`npm install -D`) to `startLocalNpmRegistry` as well. The direct `.tgz` global install is still checked on every CI run by `scripts/release/conformance.mjs` (`npm install -g --prefix <prefix> <pack.tarball>`); the direct `.tgz` project-local install now runs only in the opt-in `O3` benchmark (`DUO_BENCH_LOCAL_REGISTRY=1` in `tests/workspace/local-registry.test.ts`).
 
 ## Architecture of `startLocalNpmRegistry` (`tests/distribution/local-registry.ts`)
 
@@ -74,11 +74,26 @@ When `npm install @duo-director/cli@0.4.0-rc.1 --registry=http://127.0.0.1:<port
 | Enforces H-65 offline bundled dependency completeness | Only if `--offline` is also passed or network is absent | Yes — any unbundled dependency request hits local registry and fails immediately with `404` |
 | Tests offline `.tgz` file specifier path | Yes | No |
 
-### Applied in this PR
+### Applied in `tests/distribution/dist.e2e.test.ts` and `next` Windows CI observations
 
-1. **`tests/distribution/dist.e2e.test.ts` global install switched to `startLocalNpmRegistry`**:
-   - `beforeAll` starts `startLocalNpmRegistry({ tarballPath: pack.tarball })`, runs `npm install -g --prefix <prefix> @duo-director/cli@<version> --registry=<local-url>`, and asserts that every package request to the local registry returned HTTP `200` (enforcing the H-65 `404` guard on every `test:dist` run).
-   - The project-local `npx` test continues to run `npm install -D <pack.tarball>`, so `dist.e2e.test.ts` covers both the registry specifier path and the direct `.tgz` file specifier path.
-2. **Fast regression suite in `tests/workspace/local-registry.test.ts`**:
+1. **Post-#206 `next` Windows CI comparison (`verify (windows-latest, node 24)`)**:
+   - After PR #206 switched the `beforeAll` global install to `startLocalNpmRegistry` while leaving the project-local install on `npm install -D <pack.tarball>`, the 5 consecutive `next` runs showed a consistent **2.76–3.04x** speedup on the global registry install relative to the project-local `.tgz` install on the same runner:
+
+| Phase | Run ID | `next` commit | Global install (`beforeAll`) | Project-local `npmInstall` (`npm install -D`) | Same-runner ratio |
+|---|---|---|---:|---:|---:|
+| Pre-#206 | `43338982005` | `943d46d` | `325.6 s` (`.tgz`) | `306.7 s` (`.tgz`) | 0.94x |
+| Pre-#206 | `43347214193` | `f0c1342` | `141.8 s` (`.tgz`) | `134.8 s` (`.tgz`) | 0.95x |
+| Pre-#206 | `43351153997` | `6841fcb` | `221.9 s` (`.tgz`) | `212.7 s` (`.tgz`) | 0.96x |
+| Post-#206 (1) | `43385762539` | `3847ce2` (#206) | **`42.2 s`** (`42,190 ms`, registry) | `116.5 s` (`116,473 ms`, `.tgz`) | **2.76x faster** |
+| Post-#206 (2) | `43388949691` | `183edd8` | **`46.6 s`** (`46,627 ms`, registry) | `138.9 s` (`138,896 ms`, `.tgz`) | **2.98x faster** |
+| Post-#206 (3) | `43779204360` | `280aae2` | **`30.2 s`** (`30,203 ms`, registry) | `84.9 s` (`84,909 ms`, `.tgz`) | **2.81x faster** |
+| Post-#206 (4) | `43785190133` | `efded41` | **`32.6 s`** (`32,628 ms`, registry) | `99.1 s` (`99,057 ms`, `.tgz`) | **3.04x faster** |
+| Post-#206 (5) | `43802458731` | `a84329f` | **`60.3 s`** (`60,332 ms`, registry) | `171.4 s` (`171,397 ms`, `.tgz`) | **2.84x faster** |
+| PR #222 (both registry) | `43994776826` | `c5cb5dd` (#222) | **`58.0 s`** (`57,970 ms`, registry) | **`54.8 s`** (`54,812 ms`, registry) | **0.95x (parity)** |
+
+2. **Both `dist.e2e.test.ts` installs now use `startLocalNpmRegistry`**:
+   - Both `beforeAll` (`npm install -g --prefix <prefix>`) and `project-local install` (`npm install -D`) in `tests/distribution/dist.e2e.test.ts` now install `@duo-director/cli@<version>` from `startLocalNpmRegistry({ tarballPath: pack.tarball })`, assert `formatNpmFailure` on error, and verify that every package request to the local registry returned HTTP `200` (enforcing the H-65 `404` guard on both install surfaces).
+   - The direct `.tgz` global install is still checked on every CI run by `scripts/release/conformance.mjs` (`npm install -g --prefix <prefix> <pack.tarball>`); the direct `.tgz` project-local install now runs only in the opt-in `O3` benchmark (`DUO_BENCH_LOCAL_REGISTRY=1` in `tests/workspace/local-registry.test.ts`).
+3. **Fast regression suite in `tests/workspace/local-registry.test.ts`**:
    - The default suite (`O1` + `O2`) runs in under 2 seconds using a synthetic scoped tarball and continuously verifies `readPackageJsonFromTarball`, `startLocalNpmRegistry`, and `npm install --registry=<local-url>` + `npx --no-install duoctl`.
    - The 6-install `.dist` benchmark (`O3`) remains opt-in via `DUO_BENCH_LOCAL_REGISTRY=1` so `pnpm test` stays fast.
