@@ -4,6 +4,7 @@ import path from "node:path";
 import type { RepoPath } from "@duo-director/core";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { createTempRepo, makeTempDir, removeTempDirs, type TempRepo } from "../testing/git-repo.js";
+import * as gitExec from "./exec.js";
 import { computeCoChangeCandidates, extractIssueKeys } from "./history.js";
 import { openGitProvider, type GitProvider } from "./provider.js";
 
@@ -64,6 +65,17 @@ describe("repository state", () => {
     expect(staged.map((d) => [d.path, d.kind, d.hunks.map((h) => [h.oldStart, h.oldLines, h.newStart, h.newLines])])).toEqual([["new.txt", "added", [[0, 0, 1, 1]]]]);
     expect((await value(git.getDiff({ from: "HEAD", to: "WORKTREE", files: [{ path: p("new.txt") }] }))).map((d) => d.kind)).toEqual(["added"]);
     expect(await value(git.blobProvenance())).toEqual([{ path: "new.txt", indexBlobOid: expect.stringMatching(/^[0-9a-f]{40}$/) }]);
+  });
+
+  it("reads HEAD metadata without walking commit history", async () => {
+    const git = await provider(historyRepo());
+    const run = vi.spyOn(gitExec, "runGit");
+    try {
+      expect(await value(git.repositoryHead())).toEqual({ objectFormat: "sha1", headOid: C2, branch: "main", detached: false, unborn: false, shallow: false });
+      expect(run.mock.calls.map(([, args]) => args[0])).toEqual(["status", "rev-parse"]);
+    } finally {
+      run.mockRestore();
+    }
   });
 
   it("reports HEAD, branch, identity and detached HEAD", async () => {

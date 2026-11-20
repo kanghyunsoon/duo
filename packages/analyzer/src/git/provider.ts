@@ -34,9 +34,13 @@ const DIFF_FLAGS = [
   "--inter-hunk-context=0", "--src-prefix=a/", "--dst-prefix=b/", "--ignore-submodules=none", "--submodule=short", "--no-relative",
 ];
 
+type GitRepositoryHead = Omit<GitRepositoryState, "rootCommitOids">;
+
 export interface GitProvider {
   /** Absolute work tree root on this host. Not part of any domain value. */
   readonly root: string;
+  /** Current HEAD metadata, without walking commit history. */
+  repositoryHead(): Promise<ParseResult<GitRepositoryHead>>;
   repositoryState(): Promise<ParseResult<GitRepositoryState>>;
   /** Status of every changed, deleted or untracked (not ignored) path: staged and unstaged axes. */
   listWorkingTreeChanges(): Promise<ParseResult<GitWorkingTreeChange[]>>;
@@ -99,7 +103,7 @@ class Provider implements GitProvider {
     return r.value;
   }
 
-  async repositoryState(): Promise<ParseResult<GitRepositoryState>> {
+  async repositoryHead(): Promise<ParseResult<GitRepositoryHead>> {
     const [status, meta] = await Promise.all([
       this.git("status", ["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=no", "--ignore-submodules=all"]),
       this.git("rev-parse", ["rev-parse", "--show-object-format", "--is-shallow-repository"]),
@@ -114,12 +118,6 @@ class Provider implements GitProvider {
     }
     const [format = "sha1", shallow = "false"] = meta.value.split(/\r?\n/u);
     const unborn = header.oid === undefined;
-    let rootCommitOids: string[] = [];
-    if (!unborn) {
-      const roots = await this.git("rev-list", ["rev-list", "--max-parents=0", "HEAD"]);
-      if (!roots.ok) return failure([gitFailed("git rev-list", roots)]);
-      rootCommitOids = roots.value.split(/\r?\n/u).filter((l) => l !== "").sort(compareUtf8);
-    }
     return success({
       objectFormat: format.trim() === "sha256" ? "sha256" : "sha1",
       ...(header.oid === undefined ? {} : { headOid: header.oid }),
@@ -127,8 +125,17 @@ class Provider implements GitProvider {
       detached: header.head === undefined,
       unborn,
       shallow: shallow.trim() === "true",
-      rootCommitOids,
     });
+  }
+
+  async repositoryState(): Promise<ParseResult<GitRepositoryState>> {
+    const head = await this.repositoryHead();
+    if (head.value === undefined) return failure(head.diagnostics);
+    if (head.value.unborn) return success({ ...head.value, rootCommitOids: [] });
+    const roots = await this.git("rev-list", ["rev-list", "--max-parents=0", "HEAD"]);
+    if (!roots.ok) return failure([gitFailed("git rev-list", roots)]);
+    const rootCommitOids = roots.value.split(/\r?\n/u).filter((l) => l !== "").sort(compareUtf8);
+    return success({ ...head.value, rootCommitOids });
   }
 
   async listWorkingTreeChanges(): Promise<ParseResult<GitWorkingTreeChange[]>> {
