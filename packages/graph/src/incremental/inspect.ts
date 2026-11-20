@@ -175,7 +175,7 @@ export async function inspectIndex(root: string, options: InspectOptions): Promi
   }
 
   const git = await openGitProvider(rootDir, { workTree });
-  const repo = git.value === undefined ? undefined : (await git.value.repositoryState()).value;
+  const repo = git.value === undefined ? undefined : (await git.value.repositoryHead()).value;
   const recordedHead = previous?.history?.headOid;
   const wouldRecomputeHistory = repo?.headOid !== undefined
     && (previous?.history === undefined || recordedHead !== repo.headOid || previous.history.shallow !== repo.shallow);
