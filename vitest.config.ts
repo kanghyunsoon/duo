@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
-import { CONFORMANCE_FILES, DEFER_CONFORMANCE_ENV } from "./vitest.conformance-files.js";
+import { CONFORMANCE_FILES, DEFER_CONFORMANCE_ENV, MCP_RECOVERY_FILE } from "./vitest.conformance-files.js";
 
 // 테스트는 빌드 없이 소스를 직접 읽는다. @duo-director/* 이름을 각 패키지의 src/index.ts로 연결한다.
 const packages = ["core", "analyzer", "graph", "director", "integration", "ui"];
@@ -44,11 +44,16 @@ export default defineConfig({
         test: {
           name: "duo",
           include: ["packages/*/src/**/*.test.ts", "packages/*/src/**/*.test.tsx", "apps/*/src/**/*.test.ts", "tests/**/*.test.ts", "bench/value-validation/**/*.test.mjs"],
-          exclude: [...exclude, ...agentLaunch],
+          exclude: [...exclude, ...agentLaunch, MCP_RECOVERY_FILE],
           sequence: { groupOrder: 0 },
         },
       },
       ...(agentLaunchRun.length === 0 ? [] : [{ extends: true, test: { name: "agent-launch", include: agentLaunchRun, exclude, sequence: { groupOrder: 1 } } }]),
+      // Packed conformance schedules this separately when the workspace suite defers it.
+      ...(deferConformance ? [] : [{
+        extends: true,
+        test: { name: "mcp-recovery", include: [MCP_RECOVERY_FILE], sequence: { groupOrder: 2 } },
+      }]),
     ],
   },
 });
