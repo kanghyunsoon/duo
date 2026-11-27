@@ -1,3 +1,6 @@
+/** Runs after the other projects so O3's cancellation and recovery checks have a consistent scheduling window. */
+export const MCP_RECOVERY_FILE = "tests/mcp/failure-recovery.e2e.test.ts";
+
 /**
  * The files release conformance runs against the installed release candidate (vitest.conformance.config.ts, started
  * by scripts/release/conformance.mjs with DUO_CONFORMANCE_CLI). Plain pnpm test runs the same files against the
