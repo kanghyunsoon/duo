@@ -23,6 +23,7 @@ export function DecisionsPage() {
   const done = (text: string, error = false) => { setMessage({ text, error }); reload(); };
   return (
     <Page title={t("decisions.pending_decisions")} onRefresh={reload} durationMs={load.state === "ok" ? load.durationMs : undefined}>
+      <p role="note" className="muted">{t("decisions.local_workspace_notice")}</p>
       <p className="muted"><Trans i18nKey="decisions.ai_may_propose_only_a_human_confirms" components={{ c0: <Command children="" /> }} /></p>
       {message === undefined ? null : <p role={message.error ? "alert" : "status"} className={message.error ? "box box-error" : "box box-ok"}>{message.text}</p>}
       {load.state === "loading" ? <Loading /> : load.state === "error" ? <ErrorBox error={load.error} /> : <Body data={load.data} done={done} />}

@@ -79,6 +79,7 @@ export const en = {
   "coverage.file_level_analysis_path_fingerprint_git_history": "File-level analysis: path, fingerprint, Git history and diff, Truth references. <v0/>",
   "coverage.limitations_follow_from_these_values_syntactic_imports": "Limitations follow from these values: \"syntactic\" imports do not link files, \"syntactic\" calls have no CALLS edges, \"partial\" resolves only what syntax makes certain. A missing edge is not proof that a relation does not exist.",
   "decisions.pending_decisions": "Pending decisions",
+  "decisions.local_workspace_notice": "Local only. Changes to Project Truth require a human Decision.",
   "decisions.ai_may_propose_only_a_human_confirms": "AI may propose; only a human confirms or rejects. Actions here use the same DecisionService as <c0>duoctl decision</c0> with your Git user name as the actor label (not an authentication).",
   "decisions.not_a_duo_project_yet_run_duoctl": "Not a DUO project yet: run duoctl init.",
   "decisions.pending": "Pending",

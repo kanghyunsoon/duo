@@ -79,6 +79,7 @@ export const ko = {
   "coverage.file_level_analysis_path_fingerprint_git_history": "파일 단위 분석: 경로, 지문, Git 이력과 변경 사항, Truth 참조. <v0/>",
   "coverage.limitations_follow_from_these_values_syntactic_imports": "분석값에 따른 한계: syntactic import는 파일을 연결하지 않고, syntactic 호출에는 CALLS 연결이 없습니다. partial은 구문으로 확실히 알 수 있는 항목만 해석합니다. 연결이 없다고 해서 관계가 없다는 뜻은 아닙니다.",
   "decisions.pending_decisions": "결정 대기",
+  "decisions.local_workspace_notice": "로컬에서만 동작합니다. Project Truth를 변경하려면 사람이 결정을 내려야 합니다.",
   "decisions.ai_may_propose_only_a_human_confirms": "AI는 제안할 수 있지만 확정과 거절은 사람만 할 수 있습니다. 여기서는 <c0>duoctl decision</c0>과 같은 DecisionService를 사용합니다. Git 사용자 이름은 작업자 표시용이며 인증 수단이 아닙니다.",
   "decisions.not_a_duo_project_yet_run_duoctl": "아직 DUO 프로젝트가 아닙니다. duoctl init을 실행하세요.",
   "decisions.pending": "대기 중",

@@ -85,6 +85,26 @@ it("opens the dedicated coverage table through navigation and direct URLs in bot
   }
 }, 30_000);
 
+it.for([
+  ["en", "Pending decisions", "Local only. Changes to Project Truth require a human Decision."],
+  ["ko", "결정 대기", "로컬에서만 동작합니다. Project Truth를 변경하려면 사람이 결정을 내려야 합니다."],
+] as const)("shows the Decision boundary with the sidebar notice closed in %s", { timeout: 15_000 }, async ([language, title, notice], ctx) => {
+  if (browser === undefined) return ctx.skip();
+  const page = await browser.newPage();
+  page.setDefaultTimeout(5_000);
+  try {
+    await mock(page);
+    await page.addInitScript((value) => localStorage.setItem("duo.ui.language", value), language);
+    await page.goto(`${origin}/decisions`);
+    const content = page.getByRole("main");
+    await content.getByRole("heading", { name: title, level: 1, exact: true }).waitFor();
+    expect(await page.locator(".nav-info").getAttribute("open")).toBeNull();
+    const boundary = content.getByRole("note").filter({ hasText: notice });
+    await boundary.waitFor({ state: "visible" });
+    expect(await boundary.textContent()).toBe(notice);
+  } finally { await page.close(); }
+});
+
 it("switches language in place, preserves form input and persists across reloads", async (ctx) => {
   if (browser === undefined) return ctx.skip();
   const page = await browser.newPage();
