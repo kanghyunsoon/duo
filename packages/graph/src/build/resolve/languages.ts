@@ -62,6 +62,7 @@ export function createLanguageModuleResolver(options: LanguageResolverOptions): 
     // (a changed pyproject.toml or setup.cfg re-resolves them; added or removed files already do).
     configFiles: (fromPath) => (TS_EXTENSION.test(fromPath) ? ts.configFiles(fromPath) : PY_EXTENSION.test(fromPath) ? pythonRoots().metadata : []),
     nearestConfig: (fromPath) => (TS_EXTENSION.test(fromPath) ? ts.nearestConfig?.(fromPath) : undefined),
+    absentConfigs: () => ts.absentConfigs?.() ?? [],
     configDiagnostics: (configPath, opts) => (isPythonMetadataFile(configPath) ? [] : ts.configDiagnostics(configPath, opts)),
     resolve(request) {
       if (request.syntax?.computed === true) return { status: "unresolved", reason: "computed-specifier" };

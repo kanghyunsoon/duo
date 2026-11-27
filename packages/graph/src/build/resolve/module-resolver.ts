@@ -63,6 +63,11 @@ export interface ModuleResolver {
    */
   nearestConfig?(fromPath: RepoPath): RepoPath | undefined;
   /**
+   * The tsconfig.json/jsconfig.json candidates probed in this run that did not exist, UTF-8 order (#151 Stage B). A
+   * candidate is probed only on the way from a resolved file's directory up to its nearest config.
+   */
+  absentConfigs?(): readonly RepoPath[];
+  /**
    * Problems of one config file (the nearest config of some file), recorded when it was read.
    * Undefined when it was not read in this run, unless load is set (reading a config is cheap and
    * resolves nothing). Lets an incremental build report the same persistent diagnostics (T08.1).

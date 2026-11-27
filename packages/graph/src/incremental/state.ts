@@ -25,8 +25,10 @@ export const INDEX_STATE_FORMAT = "duo-index-state";
  * diagnostics are kept, so readers (Review) reuse the Indexer's findings instead of recomputing them.
  * 4 (T18.0): per-file analyzer identity, the registry's analyzer identities and digest, language
  * module resolution claims.
+ * 5 (#151 Stage B): absentConfigs, the tsconfig.json/jsconfig.json candidates the resolver probed and found absent. A
+ * v4 state is incompatible (rebuilt once by an explicit index); there is no partial migration.
  */
-export const INDEX_STATE_VERSION = 4;
+export const INDEX_STATE_VERSION = 5;
 /** Graph metadata key that holds the token of the state the graph was written with. */
 export const INDEX_STATE_TOKEN_KEY = "index_state_token";
 export const GRAPH_REVISION_KEY = "graph_revision";
@@ -67,6 +69,11 @@ export interface IndexState {
    * and for nearest configs their diagnostics (reported again while the config is not re-read).
    */
   readonly configs: Readonly<Record<string, { readonly contentHash: string; readonly diagnostics?: readonly Diagnostic[] }>>;
+  /**
+   * tsconfig.json/jsconfig.json candidates the module resolver probed and found absent, UTF-8 order (#151 Stage B). One
+   * that exists later is a changed config. A missing extends target is not recorded (known limitation).
+   */
+  readonly absentConfigs: readonly RepoPath[];
   readonly truthScope: string;
   readonly history?: { readonly headOid: string; readonly shallow: boolean; readonly summary: HistorySummary };
   /** Repository state the Project node was built from (T08.1: a branch switch without a new commit is visible). */
@@ -137,6 +144,7 @@ const indexState = z.strictObject({
   historyWindow: z.number().int().positive(),
   files: z.array(fileState),
   configs: z.record(z.string(), z.strictObject({ contentHash: hash, diagnostics: z.array(storedDiagnostic).optional() })),
+  absentConfigs: z.array(repoPath),
   truthScope: hash,
   history: z.strictObject({ headOid: z.string(), shallow: z.boolean(), summary: historySummary }).optional(),
   git: z.strictObject({ headOid: z.string().optional(), branch: z.string().optional(), detached: z.boolean() }).optional(),
